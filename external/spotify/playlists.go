@@ -263,7 +263,7 @@ func (p *SpotifyProvider) AddTrackToPlaylist(ctx context.Context, playlistID str
 	body, _ := json.Marshal(map[string]any{"uris": []string{trackURI}})
 	path := fmt.Sprintf("/v1/playlists/%s/items", playlistID)
 
-	resp, err := p.webAPIWithBody(ctx, "POST", path, nil, bytes.NewReader(body), "application/json", http.StatusOK, http.StatusCreated)
+	resp, err := p.webAPIWithRetry(ctx, "POST", path, nil, bytes.NewReader(body), "application/json", http.StatusOK, http.StatusCreated)
 	if err != nil {
 		return fmt.Errorf("spotify: add track: %w", err)
 	}
@@ -286,7 +286,7 @@ func (p *SpotifyProvider) CreatePlaylist(ctx context.Context, name string) (stri
 
 	body, _ := json.Marshal(map[string]any{"name": name, "public": false})
 
-	resp, err := p.webAPIWithBody(ctx, "POST", "/v1/me/playlists", nil, bytes.NewReader(body), "application/json", http.StatusOK, http.StatusCreated)
+	resp, err := p.webAPIWithRetry(ctx, "POST", "/v1/me/playlists", nil, bytes.NewReader(body), "application/json", http.StatusOK, http.StatusCreated)
 	if err != nil {
 		return "", fmt.Errorf("spotify: create playlist: %w", err)
 	}

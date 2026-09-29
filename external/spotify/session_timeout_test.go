@@ -36,7 +36,7 @@ func TestWebRequestsTimeOut(t *testing.T) {
 		{
 			name: "web api",
 			call: func() error {
-				_, err := staticSession().webApiWithBody(context.Background(), http.MethodGet, "/v1/me", nil, nil, "")
+				_, err := staticSession().webAPIOnce(context.Background(), http.MethodGet, "/v1/me", nil, nil, "")
 				return err
 			},
 		},

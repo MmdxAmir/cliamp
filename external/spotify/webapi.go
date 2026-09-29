@@ -20,13 +20,14 @@ import (
 
 // webAPI calls the Spotify Web API via the session with retry on 429.
 func (p *SpotifyProvider) webAPI(ctx context.Context, method, path string, query url.Values) (*http.Response, error) {
-	return p.webAPIWithBody(ctx, method, path, query, nil, "", http.StatusOK)
+	return p.webAPIWithRetry(ctx, method, path, query, nil, "", http.StatusOK)
 }
 
-// webAPIWithBody is like webAPI but accepts an optional request body, content type,
+// webAPIWithRetry is like webAPI but accepts an optional request body, content type,
 // and a set of acceptable HTTP status codes (e.g. 200, 201). Retries 429 with
-// exponential backoff (honoring Retry-After when present).
-func (p *SpotifyProvider) webAPIWithBody(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string, acceptStatus ...int) (*http.Response, error) {
+// exponential backoff (honoring Retry-After when present). Each attempt goes
+// through Session.webAPIOnce.
+func (p *SpotifyProvider) webAPIWithRetry(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string, acceptStatus ...int) (*http.Response, error) {
 	const maxRetries = 8
 
 	// Capture the session once: Close can clear p.session while a request
@@ -54,7 +55,7 @@ func (p *SpotifyProvider) webAPIWithBody(ctx context.Context, method, path strin
 			reqBody = bytes.NewReader(bodyBytes)
 		}
 
-		resp, err := sess.webApiWithBody(ctx, method, path, query, reqBody, contentType)
+		resp, err := sess.webAPIOnce(ctx, method, path, query, reqBody, contentType)
 		if err != nil {
 			return nil, err
 		}
@@ -99,14 +100,16 @@ func (p *SpotifyProvider) webAPIWithBody(ctx context.Context, method, path strin
 	return nil, p.rateLimitError(path, fmt.Sprintf("still limited after %d retries", maxRetries))
 }
 
-// webApiWithBody calls the Spotify Web API using the OAuth2 access token.
+// webAPIOnce sends one Web API request with the OAuth2 access token. It does
+// not retry a 429 and does not check the status, so provider code calls
+// SpotifyProvider.webAPIWithRetry instead.
 //
 // The spclient/login5 token from librespot is NOT accepted by the Web API
 // for endpoints like /v1/search and /v1/me/playlists — Spotify returns
 // misleading errors ("Invalid limit", 429) instead of a clear auth failure.
 // So if there is no OAuth2 token source, fail loudly with ErrNeedsAuth
 // rather than attempting the call with the wrong token.
-func (s *Session) webApiWithBody(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string) (*http.Response, error) {
+func (s *Session) webAPIOnce(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string) (*http.Response, error) {
 	s.mu.RLock()
 	ts := s.tokenSource
 	s.mu.RUnlock()
@@ -139,7 +142,7 @@ func (s *Session) webApiWithBody(ctx context.Context, method, path string, query
 	return webHTTPClient.Do(req)
 }
 
-// maxRateLimitWait is the longest Retry-After that webAPIWithBody waits for.
+// maxRateLimitWait is the longest Retry-After that webAPIWithRetry waits for.
 const maxRateLimitWait = time.Minute
 
 // waitExceedsDeadline reports whether ctx expires before wait ends.

@@ -597,7 +597,7 @@ func (s *Session) initPlayer() error {
 // independently of that lifetime.
 //
 // Holds s.mu.RLock() across the librespot network call. Multiple concurrent
-// NewStream / webApi callers can run in parallel (RLock is shared), so rapid
+// NewStream / webAPIOnce callers can run in parallel (RLock is shared), so rapid
 // track skipping does not serialize. reconnect() and Close() take the full
 // Lock and will wait for in-flight callers to finish before tearing down the
 // player — without this, the swap could call oldPlayer.Close() while we are
@@ -649,7 +649,7 @@ func (s *Session) ReconnectInteractive(ctx context.Context) error {
 // window where s.sess/s.player are nil (which would crash concurrent callers).
 //
 // The swap-and-teardown phase is done under s.mu (full Lock), which waits for
-// any in-flight NewStream / webApi RLockers to drain. This guarantees that
+// any in-flight NewStream / webAPIOnce RLockers to drain. This guarantees that
 // oldPlayer.Close() is never called while a NewStream is still using the
 // old player pointer.
 func (s *Session) reconnect(ctx context.Context, build func(context.Context, string) (*Session, error)) error {
@@ -663,7 +663,7 @@ func (s *Session) reconnect(ctx context.Context, build func(context.Context, str
 	}
 
 	// Swap and tear down the old session under a single write lock so
-	// in-flight NewStream / webApi calls finish before oldPlayer.Close()
+	// in-flight NewStream / webAPIOnce calls finish before oldPlayer.Close()
 	// runs. The expensive build() above happened lock-free.
 	s.mu.Lock()
 	oldPlayer := s.player

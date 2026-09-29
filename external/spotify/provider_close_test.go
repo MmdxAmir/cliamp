@@ -12,7 +12,7 @@ import (
 )
 
 // TestCloseDuringPlaylists runs Close next to a Web API load. Run it with
-// -race: webAPIWithBody must read p.session under p.mu, and a load that
+// -race: webAPIWithRetry must read p.session under p.mu, and a load that
 // loses the session must report ErrNeedsAuth instead of a nil dereference.
 func TestCloseDuringPlaylists(t *testing.T) {
 	// Without stored credentials, ensureSession cannot rebuild the session.
