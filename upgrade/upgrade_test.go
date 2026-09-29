@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -51,7 +52,7 @@ func installTestClient(t *testing.T, serverURL string) {
 		Transport: rewriter{target: u, rt: oldAPI.Transport},
 	}
 	downloadClient = &http.Client{
-		Timeout:   10 * time.Second,
+		Timeout:   oldDownload.Timeout,
 		Transport: rewriter{target: u, rt: oldDownload.Transport},
 	}
 	t.Cleanup(func() { httpClient, downloadClient = oldAPI, oldDownload })
@@ -265,6 +266,93 @@ func TestDownloadOutlivesAPITimeout(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(target); string(got) != string(newContent) {
 		t.Errorf("target content = %q, want %q", got, newContent)
+	}
+}
+
+// TestDownloadIdleTimeout verifies that the binary download has no total
+// time limit, and that it fails when the server sends nothing for the idle
+// timeout.
+func TestDownloadIdleTimeout(t *testing.T) {
+	newContent := []byte("NEW BINARY BYTES FOR A SLOW LINK")
+	// stall blocks until the client gives up. The fallback ends the handler
+	// when the client does not.
+	stall := func(r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	}
+	for _, tc := range []struct {
+		name        string
+		handler     http.HandlerFunc
+		wantStalled bool
+	}{
+		{
+			name: "slow body that keeps sending",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Length", strconv.Itoa(len(newContent)))
+				// 16 chunks with 50 ms between them take longer than the
+				// idle timeout, but no single gap reaches it.
+				for chunk := range slices.Chunk(newContent, 2) {
+					_, _ = w.Write(chunk)
+					w.(http.Flusher).Flush()
+					time.Sleep(50 * time.Millisecond)
+				}
+			},
+		},
+		{
+			name: "body stops sending",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Length", strconv.Itoa(len(newContent)))
+				_, _ = w.Write(newContent[:4])
+				w.(http.Flusher).Flush()
+				stall(r)
+			},
+			wantStalled: true,
+		},
+		{
+			name: "server sends no headers",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				stall(r)
+			},
+			wantStalled: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			target := filepath.Join(dir, "cliamp")
+			if err := os.WriteFile(target, []byte("OLD"), 0o755); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+			srv := httptest.NewServer(tc.handler)
+			defer srv.Close()
+			installTestClient(t, srv.URL)
+			oldIdle := downloadIdleTimeout
+			downloadIdleTimeout = 300 * time.Millisecond
+			t.Cleanup(func() { downloadIdleTimeout = oldIdle })
+
+			start := time.Now()
+			err := downloadAndReplace(srv.URL+"/cliamp-linux-amd64", target, testHash(newContent))
+			got, _ := os.ReadFile(target)
+			if !tc.wantStalled {
+				if err != nil {
+					t.Fatalf("downloadAndReplace: %v", err)
+				}
+				if string(got) != string(newContent) {
+					t.Errorf("target content = %q, want %q", got, newContent)
+				}
+				return
+			}
+			if !errors.Is(err, errDownloadStalled) {
+				t.Fatalf("err = %v, want %v", err, errDownloadStalled)
+			}
+			if elapsed := time.Since(start); elapsed > 3*time.Second {
+				t.Errorf("stalled download took %s, want it to end after the idle timeout", elapsed)
+			}
+			if string(got) != "OLD" {
+				t.Errorf("target content = %q, want the original binary", got)
+			}
+		})
 	}
 }
 
