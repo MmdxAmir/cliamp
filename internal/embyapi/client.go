@@ -33,7 +33,8 @@ const (
 	// albumPageSize is the number of albums one /Items request asks for. An
 	// album item is about 1.5 KB, so a page stays far below maxResponseBody.
 	albumPageSize = 500
-	// albumMaxPages stops the paging loop if a server ignores startIndex.
+	// albumMaxPages stops the paging loop if a server never sends a short
+	// page.
 	albumMaxPages = 1000
 )
 
@@ -388,6 +389,7 @@ func (c *Client) AlbumsByLibrary(libraryID string) ([]Album, error) {
 	}
 
 	var out []Album
+	var prevFirstID string
 	for page := 0; page < albumMaxPages; page++ {
 		params := url.Values{
 			"userId":                 {userID},
@@ -404,6 +406,16 @@ func (c *Client) AlbumsByLibrary(libraryID string) ([]Album, error) {
 		var resp itemsResponseDTO
 		if err := c.get("/Items", params, &resp); err != nil {
 			return nil, err
+		}
+		// A page that starts with the album that started the page before
+		// it means that the server ignored startIndex. Each further page
+		// would repeat the first one.
+		if len(resp.Items) > 0 {
+			firstID := resp.Items[0].ID
+			if firstID != "" && firstID == prevFirstID {
+				return nil, fmt.Errorf("%s: /Items: server ignored startIndex %d", c.dialect.name(), page*albumPageSize)
+			}
+			prevFirstID = firstID
 		}
 		for _, it := range resp.Items {
 			out = append(out, albumFromItem(it))

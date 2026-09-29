@@ -877,26 +877,56 @@ func TestAlbumsByLibraryPages(t *testing.T) {
 	}
 }
 
-// TestAlbumsByLibraryStopsWhenServerIgnoresLimit verifies that a server which
-// returns the whole library in one response is not asked for a second page.
-func TestAlbumsByLibraryStopsWhenServerIgnoresLimit(t *testing.T) {
-	requests := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests++
-		resp := itemsResponseDTO{}
-		for i := range albumPageSize + 1 {
-			resp.Items = append(resp.Items, itemDTO{ID: "album-" + strconv.Itoa(i)})
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer srv.Close()
-
-	albums, err := NewJellyfinClient(srv.URL, "tok", "user-1", "", "").AlbumsByLibrary("lib-1")
-	if err != nil {
-		t.Fatalf("AlbumsByLibrary() error: %v", err)
+// TestAlbumsByLibraryStopsWhenServerIgnoresPaging verifies that
+// AlbumsByLibrary stops paging when a server ignores limit or startIndex.
+func TestAlbumsByLibraryStopsWhenServerIgnoresPaging(t *testing.T) {
+	tests := []struct {
+		name string
+		// pageLen is the number of albums the server sends on every
+		// request. Each response starts at album-0.
+		pageLen      int
+		wantAlbums   int
+		wantRequests int
+		wantErr      string
+	}{
+		{
+			name:         "server ignores limit",
+			pageLen:      albumPageSize + 1,
+			wantAlbums:   albumPageSize + 1,
+			wantRequests: 1,
+		},
+		{
+			name:         "server ignores startIndex",
+			pageLen:      albumPageSize,
+			wantRequests: 2,
+			wantErr:      "jellyfin: /Items: server ignored startIndex",
+		},
 	}
-	if len(albums) != albumPageSize+1 || requests != 1 {
-		t.Fatalf("got %d albums in %d requests, want %d albums in 1 request", len(albums), requests, albumPageSize+1)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requests := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				resp := itemsResponseDTO{}
+				for i := range tt.pageLen {
+					resp.Items = append(resp.Items, itemDTO{ID: "album-" + strconv.Itoa(i)})
+				}
+				json.NewEncoder(w).Encode(resp)
+			}))
+			defer srv.Close()
+
+			albums, err := NewJellyfinClient(srv.URL, "tok", "user-1", "", "").AlbumsByLibrary("lib-1")
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("AlbumsByLibrary() error = %v, want %q", err, tt.wantErr)
+				}
+			} else if err != nil {
+				t.Fatalf("AlbumsByLibrary() error: %v", err)
+			}
+			if len(albums) != tt.wantAlbums || requests != tt.wantRequests {
+				t.Fatalf("got %d albums in %d requests, want %d albums in %d requests", len(albums), requests, tt.wantAlbums, tt.wantRequests)
+			}
+		})
 	}
 }
 
