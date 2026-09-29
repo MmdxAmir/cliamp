@@ -526,7 +526,7 @@ func (m *Model) handleV2Mode(jobs *ipc.JobStore, jobID string, request ipc.Reque
 
 func (m *Model) handleV2LibraryRequest(ctx context.Context, jobs *ipc.JobStore, jobID string, request ipc.Request) tea.Cmd {
 	reply := make(chan ipc.Response, 1)
-	cmd := m.handleIPCLibrary(ipc.LibraryRequestMsg{
+	cmd := m.handleIPCLibrary(ipcLibraryRequest{
 		Op: request.Cmd, Provider: request.Provider, Playlist: request.Playlist, Query: request.Query,
 		Artist: request.Artist, Album: request.Album, Sort: request.Sort, Offset: request.Offset,
 		Limit: request.Limit, Index: request.Index, NewName: request.NewName, Track: request.Track, Tracks: request.Tracks, Context: ctx, Reply: reply,
@@ -539,13 +539,13 @@ func (m *Model) handleV2DeferredRequest(ctx context.Context, jobs *ipc.JobStore,
 	var cmd tea.Cmd
 	switch request.Cmd {
 	case "url.load":
-		cmd = m.handleIPCURL(ipc.URLRequestMsg{URL: request.Path, Play: request.Play, Context: ctx, Reply: reply})
+		cmd = m.handleIPCURL(ipcURLRequest{URL: request.Path, Play: request.Play, Context: ctx, Reply: reply})
 	case "save":
-		cmd = m.handleIPCSave(ipc.SaveRequestMsg{Reply: reply})
+		cmd = m.handleIPCSave(ipcSaveRequest{Reply: reply})
 	case "lyrics":
-		cmd = m.handleIPCLyrics(ipc.LyricsRequestMsg{Reply: reply})
+		cmd = m.handleIPCLyrics(ipcLyricsRequest{Reply: reply})
 	default:
-		cmd = m.handleIPCHistory(ipc.HistoryRequestMsg{Op: request.Cmd, Limit: request.Limit, Reply: reply})
+		cmd = m.handleIPCHistory(ipcHistoryRequest{Op: request.Cmd, Limit: request.Limit, Reply: reply})
 	}
 	return tea.Batch(cmd, waitV2ResponseCmd(ctx, jobs, jobID, reply))
 }

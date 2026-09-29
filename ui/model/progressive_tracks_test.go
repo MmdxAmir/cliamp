@@ -297,7 +297,7 @@ func TestIPCProviderLoadRetiresAnInFlightPagedLoad(t *testing.T) {
 
 	reply := make(chan ipc.Response, 1)
 	m.handleIPCProviderLoad(ipcProviderLoadResult{
-		request: ipc.LibraryRequestMsg{Reply: reply},
+		request: ipcLibraryRequest{Reply: reply},
 		tracks:  pageOf("ipc-1", "ipc-2"),
 		loaded:  "other",
 	})

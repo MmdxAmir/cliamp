@@ -366,7 +366,7 @@ func TestIPCTrackInfoBookmarkReportsFavorite(t *testing.T) {
 	prov := fixedTracksProvider{commandsTestProvider{name: "Fixed"}, []playlist.Track{{Path: "/playlist.mp3"}, legacy}}
 	m.providers = append(m.providers, ProviderEntry{Key: "fixed", Name: "Fixed", Provider: prov})
 	reply := make(chan ipc.Response, 1)
-	cmd := m.handleIPCLibrary(ipc.LibraryRequestMsg{Op: "provider.tracks", Provider: "fixed", Playlist: "any", Reply: reply})
+	cmd := m.handleIPCLibrary(ipcLibraryRequest{Op: "provider.tracks", Provider: "fixed", Playlist: "any", Reply: reply})
 	m.favSet = nil
 	runCmd(cmd)
 	tracks := (<-reply).Tracks
@@ -394,7 +394,7 @@ func TestIPCBookmarkAliasTogglesFavorite(t *testing.T) {
 			}
 			for _, want := range []bool{true, false} {
 				reply := make(chan ipc.Response, 1)
-				runCmd(m.handleIPCLibrary(ipc.LibraryRequestMsg{Op: "playlist.bookmark", Provider: "local", Playlist: "Mix", Track: tc.track, Reply: reply}))
+				runCmd(m.handleIPCLibrary(ipcLibraryRequest{Op: "playlist.bookmark", Provider: "local", Playlist: "Mix", Track: tc.track, Reply: reply}))
 				response := <-reply
 				if response.OK != tc.wantOK {
 					t.Fatalf("response = %+v, want OK=%v", response, tc.wantOK)

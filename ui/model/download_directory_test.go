@@ -28,7 +28,7 @@ func TestSaveUsesConfiguredDirectory(t *testing.T) {
 			m.SetDownloadsDirectory(destination)
 			if viaIPC {
 				reply := make(chan ipc.Response, 1)
-				cmd := m.handleIPCSave(ipc.SaveRequestMsg{Reply: reply})
+				cmd := m.handleIPCSave(ipcSaveRequest{Reply: reply})
 				if cmd == nil {
 					t.Fatal("no save command")
 				}

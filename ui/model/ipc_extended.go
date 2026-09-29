@@ -17,8 +17,54 @@ import (
 	"github.com/bjarneo/cliamp/tracksave"
 )
 
+// ipcLibraryRequest carries a provider or saved-playlist operation to
+// handleIPCLibrary. Reply receives the result of the job.
+type ipcLibraryRequest struct {
+	Op       string
+	Provider string
+	Playlist string
+	Query    string
+	Artist   string
+	Album    string
+	Sort     string
+	Offset   int
+	Limit    int
+	Index    int
+	NewName  string
+	Track    *ipc.TrackInfo
+	Tracks   []ipc.TrackInfo
+	Context  context.Context
+	Reply    chan ipc.Response
+}
+
+// ipcURLRequest carries url.load to handleIPCURL. Play starts the first
+// added track even when something already plays. Without it the URL is
+// appended and plays only when the player was idle.
+type ipcURLRequest struct {
+	URL     string
+	Play    bool
+	Context context.Context
+	Reply   chan ipc.Response
+}
+
+// ipcSaveRequest, ipcLyricsRequest and ipcHistoryRequest carry the save,
+// lyrics, history and history.clear operations.
+type ipcSaveRequest struct {
+	Reply chan ipc.Response
+}
+
+type ipcLyricsRequest struct {
+	Reply chan ipc.Response
+}
+
+type ipcHistoryRequest struct {
+	Op    string
+	Limit int
+	Reply chan ipc.Response
+}
+
 type ipcProviderLoadResult struct {
-	request  ipc.LibraryRequestMsg
+	request  ipcLibraryRequest
 	tracks   []playlist.Track
 	provider string // Name of the provider that served the tracks
 	loaded   string
@@ -26,7 +72,7 @@ type ipcProviderLoadResult struct {
 }
 
 type ipcURLLoadResult struct {
-	request ipc.URLRequestMsg
+	request ipcURLRequest
 	tracks  []playlist.Track
 	err     error
 }
@@ -41,7 +87,7 @@ type ipcFeedLoadResult struct {
 	err      error
 }
 
-func (m *Model) handleIPCURL(request ipc.URLRequestMsg) tea.Cmd {
+func (m *Model) handleIPCURL(request ipcURLRequest) tea.Cmd {
 	return func() tea.Msg {
 		tracks, err := resolve.URL(request.URL)
 		return ipcURLLoadResult{request: request, tracks: tracks, err: err}
@@ -84,7 +130,7 @@ func (m *Model) handleIPCURLResult(result ipcURLLoadResult) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleIPCSave(request ipc.SaveRequestMsg) tea.Cmd {
+func (m *Model) handleIPCSave(request ipcSaveRequest) tea.Cmd {
 	track, index := m.currentPlaybackTrack()
 	if index < 0 {
 		request.Reply <- ipc.Response{OK: false, Error: "nothing to save"}
@@ -148,7 +194,7 @@ func (m *Model) handleIPCFeedLoad(result ipcFeedLoadResult) tea.Cmd {
 	return cmd
 }
 
-func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
+func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 	if request.Context != nil && request.Context.Err() != nil {
 		return nil
 	}
@@ -559,7 +605,7 @@ func ipcPage[T any](items []T, offset, limit, max int) ([]T, int) {
 	return items[offset:end], total
 }
 
-func (m *Model) handleIPCLyrics(request ipc.LyricsRequestMsg) tea.Cmd {
+func (m *Model) handleIPCLyrics(request ipcLyricsRequest) tea.Cmd {
 	track, idx := m.currentPlaybackTrack()
 	if idx < 0 {
 		request.Reply <- ipc.Response{OK: false, Error: "no current track"}
@@ -584,7 +630,7 @@ func (m *Model) handleIPCLyrics(request ipc.LyricsRequestMsg) tea.Cmd {
 	}
 }
 
-func (m *Model) handleIPCHistory(request ipc.HistoryRequestMsg) tea.Cmd {
+func (m *Model) handleIPCHistory(request ipcHistoryRequest) tea.Cmd {
 	favorite := m.trackFavoriteLookup(false)
 	return func() tea.Msg {
 		if m.historyStore == nil {
