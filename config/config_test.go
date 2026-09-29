@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 )
@@ -336,12 +337,65 @@ func TestParseEQ(t *testing.T) {
 			val:  "[]",
 			want: [10]float64{},
 		},
+		{
+			name: "comment after the list",
+			val:  "[1, 2, 3] # bass up",
+			want: [10]float64{1, 2, 3, 0, 0, 0, 0, 0, 0, 0},
+		},
+		{
+			name: "tab before the comment",
+			val:  "[1, 2]\t# bass up",
+			want: [10]float64{1, 2, 0, 0, 0, 0, 0, 0, 0, 0},
+		},
+		{
+			name: "comment with a bracket and commas",
+			val:  "[1, 2] # see [3], 4",
+			want: [10]float64{1, 2, 0, 0, 0, 0, 0, 0, 0, 0},
+		},
+		{
+			name: "comment after a list without brackets",
+			val:  "1, 2, 3 # bass up",
+			want: [10]float64{1, 2, 3, 0, 0, 0, 0, 0, 0, 0},
+		},
+		{
+			name: "comment without whitespace is not a comment",
+			val:  "[1, 2]#x",
+			want: [10]float64{1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := parseEQ(tt.val)
 			if got != tt.want {
 				t.Errorf("parseEQ(%q) = %v, want %v", tt.val, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseStringSlice(t *testing.T) {
+	tests := []struct {
+		name string
+		val  string
+		want []string
+	}{
+		{name: "brackets and quotes", val: `["Music", "Jazz"]`, want: []string{"Music", "Jazz"}},
+		{name: "no brackets", val: `Music, Jazz`, want: []string{"Music", "Jazz"}},
+		{name: "empty", val: `[]`, want: []string{}},
+		{name: "comment after the list", val: `["Music", "Jazz"] # two`, want: []string{"Music", "Jazz"}},
+		{name: "tab before the comment", val: "['Music']\t# one", want: []string{"Music"}},
+		{name: "hash inside a quoted item", val: `["Jazz # Blues"] # one`, want: []string{"Jazz # Blues"}},
+		{name: "bracket inside a quoted item", val: `["a]b", "c"] # two`, want: []string{"a]b", "c"}},
+		{name: "escaped quote inside an item", val: `["a\"]", "c"] # two`, want: []string{`a"]`, "c"}},
+		{name: "comment after a quoted last item", val: `Music, "Jazz" # two`, want: []string{"Music", "Jazz"}},
+		{name: "unquoted last item keeps its hash", val: `Music, Jazz # two`, want: []string{"Music", "Jazz # two"}},
+		{name: "comment without whitespace is not a comment", val: `["Music"]#x`, want: []string{`"Music"]#x`}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseStringSlice(tt.val)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("parseStringSlice(%q) = %q, want %q", tt.val, got, tt.want)
 			}
 		})
 	}

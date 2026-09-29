@@ -1370,11 +1370,47 @@ func abs(x int) int {
 	return x
 }
 
+// listItems returns the items of a list value without the square brackets
+// and without a # comment after the closing bracket. The list ends at the
+// first ] outside quotes, and whitespace must separate the comment from it.
+// A value that does not start with [ is returned unchanged.
+func listItems(val string) string {
+	if !strings.HasPrefix(val, "[") {
+		return val
+	}
+	if end := listEnd(val); end > 0 && isComment(val[end+1:]) {
+		return val[1:end]
+	}
+	return strings.Trim(val, "[]")
+}
+
+// listEnd returns the index of the first ] outside quotes in val, or -1. A
+// backslash inside double quotes hides the next byte, as in unquote.
+func listEnd(val string) int {
+	var quote byte
+	for i := 1; i < len(val); i++ {
+		c := val[i]
+		switch {
+		case quote == '"' && c == '\\':
+			i++
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == ']':
+			return i
+		}
+	}
+	return -1
+}
+
 // parseStringSlice parses a comma-separated list of strings, optionally
 // wrapped in square brackets (e.g. `["Music", "Jazz"]` or `Music, Jazz`).
 // Each element is trimmed and unquoted like a single string value.
 func parseStringSlice(val string) []string {
-	val = strings.Trim(val, "[]")
+	val = listItems(val)
 	parts := strings.Split(val, ",")
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
@@ -1389,13 +1425,15 @@ func parseStringSlice(val string) []string {
 // parseEQ parses a TOML-style array like [0, 1.5, -2, ...] into 10 bands.
 func parseEQ(val string) [10]float64 {
 	var bands [10]float64
-	val = strings.Trim(val, "[]")
+	val = listItems(val)
 	parts := strings.Split(val, ",")
 	for i, p := range parts {
 		if i >= 10 {
 			break
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(p), 64); err == nil {
+		// scalar drops a comment after the last band of a list without
+		// brackets.
+		if v, err := strconv.ParseFloat(scalar(strings.TrimSpace(p)), 64); err == nil {
 			bands[i] = max(min(v, 12), -12)
 		}
 	}
