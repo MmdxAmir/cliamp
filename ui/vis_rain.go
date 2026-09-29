@@ -95,7 +95,7 @@ func (v *Visualizer) renderRain(bands []float64) string {
 				}
 				col++
 			}
-			if b < bandCount-1 {
+			if bandGapAfter(bandCount, b) {
 				if curTag != -1 {
 					flushStyleRun(&sb, &run, curTag)
 					curTag = -1

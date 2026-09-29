@@ -1,23 +1,23 @@
 # FNV-64a hash of every frame that TestVisualizerGoldenFrames renders.
 # Regenerate: go test ./ui -run TestVisualizerGoldenFrames -update-vis-golden
 Bars 48x9 5cd9cda8b879ae56
-Bars 13x3 29014521be5456d4
+Bars 13x3 15659e16d74f0b89
 BarsDot 48x9 440c830b5fd1ecf5
-BarsDot 13x3 b0e87bbe00fd0d43
+BarsDot 13x3 565cc541d161da15
 Rain 48x9 b4131594742bc3a2
-Rain 13x3 bee259ce48942bca
+Rain 13x3 d02f28429aaa8a84
 BarsOutline 48x9 cdbf76d7e3e49ec1
-BarsOutline 13x3 8f519d93c828647d
+BarsOutline 13x3 58afb4f6e4215a85
 Bricks 48x9 11d1b25e029181e9
-Bricks 13x3 fff06e8b727de125
+Bricks 13x3 3828e8bff1e78ca5
 Columns 48x9 38fa342e4e171e94
-Columns 13x3 29014521be5456d4
+Columns 13x3 15659e16d74f0b89
 ClassicPeak 48x9 dbf8559d15e59500
 ClassicPeak 13x3 c221464b10347696
 Wave 48x9 0cac55d2c93683db
 Wave 13x3 5efc9941262f40c3
 Scatter 48x9 70a849c955f43813
-Scatter 13x3 844b616084365cbc
+Scatter 13x3 2446ab4cbba0acfd
 Flame 48x9 a1885d224fd5f1e5
 Flame 13x3 fc86eb3280422c84
 Retro 48x9 0018e7b83ef24969
@@ -25,9 +25,9 @@ Retro 13x3 130ec4293a3f813c
 Pulse 48x9 6ed21949ae04ea84
 Pulse 13x3 941dd8e6b4fef769
 Matrix 48x9 2b540b54a7d4d847
-Matrix 13x3 b42706fb56e95182
+Matrix 13x3 0cd111db296dd3a7
 Binary 48x9 64332c40d04f4d40
-Binary 13x3 d944611da7631340
+Binary 13x3 918d34f677a14942
 Sakura 48x9 610c39d06d370cdb
 Sakura 13x3 cff57b0a9bbb72b6
 Firework 48x9 518b9cb5502f30d2

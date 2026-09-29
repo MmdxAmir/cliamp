@@ -80,7 +80,7 @@ func (v *Visualizer) renderMatrix(bands []float64) string {
 				}
 				col++
 			}
-			if b < bandCount-1 {
+			if bandGapAfter(bandCount, b) {
 				if tag != -1 {
 					flushStyleRun(&sb, &run, tag)
 					tag = -1

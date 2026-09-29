@@ -50,7 +50,7 @@ func (v *Visualizer) renderBinary(bands []float64) string {
 				run.WriteByte(ch)
 				col++
 			}
-			if b < bandCount-1 {
+			if bandGapAfter(bandCount, b) {
 				if tag != -1 {
 					flushStyleRun(&sb, &run, tag)
 					tag = -1

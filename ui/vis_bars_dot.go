@@ -41,7 +41,7 @@ func (v *Visualizer) renderBarsDot(bands []float64) string {
 				run.WriteRune(braille)
 			}
 
-			if b < bandCount-1 {
+			if bandGapAfter(bandCount, b) {
 				// Gap character inherits current style run.
 				run.WriteByte(' ')
 			}

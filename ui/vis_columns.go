@@ -29,7 +29,7 @@ func (v *Visualizer) renderColumns(bands []float64) string {
 				content.WriteString(fracBlock(level, rowBottom, rowTop))
 			}
 			offset += bandCols[b]
-			if b < bandCount-1 {
+			if bandGapAfter(bandCount, b) {
 				content.WriteByte(' ')
 			}
 		}

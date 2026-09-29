@@ -38,7 +38,7 @@ func (v *Visualizer) renderScatter(bands []float64) string {
 
 				content.WriteRune(braille)
 			}
-			if b < bandCount-1 {
+			if bandGapAfter(bandCount, b) {
 				content.WriteByte(' ')
 			}
 		}

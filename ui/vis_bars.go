@@ -19,7 +19,7 @@ func (v *Visualizer) renderBars(bands []float64) string {
 			for range bw {
 				content.WriteString(block)
 			}
-			if i < bandCount-1 {
+			if bandGapAfter(bandCount, i) {
 				content.WriteByte(' ')
 			}
 		}

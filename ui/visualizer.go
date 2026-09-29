@@ -88,25 +88,45 @@ var brailleBit = [4][2]rune{
 	{0x40, 0x80}, // row 3
 }
 
+// visBandLayout returns how many bands get columns at the current PanelWidth
+// and how many one-column gaps fit between them. The bands take priority, so
+// a narrow panel keeps every band it can and drops gaps first.
+func visBandLayout(totalBands int) (visible, gaps int) {
+	if totalBands <= 0 || PanelWidth <= 0 {
+		return 0, 0
+	}
+	visible = min(totalBands, PanelWidth)
+	gaps = min(visible-1, max(0, PanelWidth-visible))
+	return visible, gaps
+}
+
 // visBandWidth returns the character width for band b. At narrow widths only
-// the leading visible bands receive columns; final frame fitting clips the
-// legacy inter-band gaps emitted by older renderers.
+// the leading visible bands receive columns. Together with the gaps that
+// bandGapAfter places, the bands fill PanelWidth exactly.
 func visBandWidth(totalBands, b int) int {
-	if totalBands <= 0 || b < 0 || b >= totalBands || PanelWidth <= 0 {
+	visible, gaps := visBandLayout(totalBands)
+	if b < 0 || b >= visible {
 		return 0
 	}
-	visibleBands := min(totalBands, PanelWidth)
-	if b >= visibleBands {
-		return 0
-	}
-	gapCount := min(visibleBands-1, max(0, PanelWidth-visibleBands))
-	bandCols := PanelWidth - gapCount
-	base := bandCols / visibleBands
-	extra := bandCols % visibleBands
+	bandCols := PanelWidth - gaps
+	base := bandCols / visible
+	extra := bandCols % visible
 	if b < extra {
 		return base + 1
 	}
 	return base
+}
+
+// bandGapAfter reports whether a one-column gap follows band b. When fewer
+// gaps fit than there are slots between the visible bands, the gaps are spread
+// evenly over the slots.
+func bandGapAfter(totalBands, b int) bool {
+	visible, gaps := visBandLayout(totalBands)
+	slots := visible - 1
+	if b < 0 || b >= slots || gaps <= 0 {
+		return false
+	}
+	return (b+1)*gaps/slots > b*gaps/slots
 }
 
 // interpolateBandColumns builds per-column levels by interpolating between neighboring bands.

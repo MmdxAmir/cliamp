@@ -25,7 +25,7 @@ func (v *Visualizer) renderBricks(bands []float64) string {
 					content.WriteByte(' ')
 				}
 			}
-			if i < bandCount-1 {
+			if bandGapAfter(bandCount, i) {
 				content.WriteByte(' ')
 			}
 		}
