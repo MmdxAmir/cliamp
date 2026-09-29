@@ -254,10 +254,10 @@ func TestV2SettingsOperations(t *testing.T) {
 		{name: "speed", op: "speed", params: ipc.Request{Value: 1.5}, want: ipc.Response{OK: true, Speed: 1.5}, wantSaved: map[string]string{"speed": "1.50"}},
 		{name: "speed zero", op: "speed", want: ipc.Response{Error: ipc.V2ErrorCodeInvalidParams}},
 		{name: "speed adjust", op: "speed.adjust", params: ipc.Request{Value: 0.25}, want: ipc.Response{OK: true, Speed: 1.25}, wantSaved: map[string]string{"speed": "1.25"}},
-		{name: "eq band", op: "eq", params: ipc.Request{Band: 3, Value: 4}, want: ipc.Response{OK: true, EQPreset: "Custom"}},
+		{name: "eq band", op: "eq", params: ipc.Request{Band: 3, Value: 4}, want: ipc.Response{OK: true, EQPreset: "Custom"}, wantSaved: map[string]string{"eq_preset": `"Custom"`, "eq": "[0, 0, 0, 4, 0, 0, 0, 0, 0, 0]"}},
 		{name: "eq band out of range", op: "eq", params: ipc.Request{Band: eqBandCount, Value: 4}, want: ipc.Response{Error: ipc.V2ErrorCodeInvalidParams}},
-		{name: "eq preset", op: "eq", params: ipc.Request{Name: "rock"}, want: ipc.Response{OK: true, EQPreset: "Rock"}},
-		{name: "eq custom curve", op: "eq", params: ipc.Request{Name: "custom"}, want: ipc.Response{OK: true, EQPreset: "Custom"}},
+		{name: "eq preset", op: "eq", params: ipc.Request{Name: "rock"}, want: ipc.Response{OK: true, EQPreset: "Rock"}, wantSaved: map[string]string{"eq_preset": `"Rock"`, "eq": "[0, 0, 0, 0, 0, 0, 0, 0, 0, 0]"}},
+		{name: "eq custom curve", op: "eq", params: ipc.Request{Name: "custom"}, want: ipc.Response{OK: true, EQPreset: "Custom"}, wantSaved: map[string]string{"eq_preset": `"Custom"`, "eq": "[0, 0, 0, 0, 0, 0, 0, 0, 0, 0]"}},
 		{name: "eq unknown preset", op: "eq", params: ipc.Request{Name: "rokc"}, want: ipc.Response{Error: ipc.V2ErrorCodeNotFound}},
 		{name: "theme", op: "theme", params: ipc.Request{Name: "dracula"}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `"dracula"`}},
 		{name: "theme default", op: "theme", params: ipc.Request{Name: "default"}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `""`}},
@@ -282,6 +282,7 @@ func TestV2SettingsOperations(t *testing.T) {
 			if got := runV2(t, &m, tc.op, tc.params); !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("response = %+v, want %+v", got, tc.want)
 			}
+			m.flushPendingEQSave() // The EQ save waits for a debounce.
 			if !maps.Equal(saver.saved, tc.wantSaved) {
 				t.Fatalf("saved = %v, want %v", saver.saved, tc.wantSaved)
 			}
