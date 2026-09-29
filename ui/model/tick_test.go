@@ -6,14 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/ui"
 
 	tea "charm.land/bubbletea/v2"
 )
-
-var sharedPlayer player.Engine
 
 type stereoFakeEngine struct {
 	*playbackFakeEngine
@@ -69,16 +66,6 @@ func (f *samplingFakeEngine) StereoSamplesInto(dst [][2]float64) int {
 func TestMain(m *testing.M) {
 	os.Unsetenv("CLIAMP_CONFIG_DIR")
 	os.Unsetenv("XDG_CONFIG_HOME")
-
-	sr := player.DeviceSampleRate()
-	if sr <= 0 {
-		sr = 44100
-	}
-	p, err := player.New(player.Quality{SampleRate: sr, BufferMs: 100, ResampleQuality: 1})
-	if err == nil {
-		sharedPlayer = p
-		defer p.Close()
-	}
 	os.Exit(m.Run())
 }
 
@@ -87,17 +74,15 @@ func TestMain(m *testing.M) {
 // rather than ui.TickSlow / ui.TickFast. This is what lets the CPU sit in a
 // low P-state between user actions (issue #92 and follow-ups).
 func TestTickIntervalStoppedUsesIdle(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
+	p := &playbackFakeEngine{}
 	m := Model{
-		player:    sharedPlayer,
-		vis:       ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		player:    p,
+		vis:       ui.NewVisualizer(float64(p.SampleRate())),
 		playlist:  playlist.New(),
 		termTitle: terminalTitleState{},
 	}
 
-	if sharedPlayer.IsPlaying() {
+	if p.IsPlaying() {
 		t.Fatal("expected player to be stopped")
 	}
 	if !m.isFullyIdle() {
@@ -112,12 +97,10 @@ func TestTickIntervalStoppedUsesIdle(t *testing.T) {
 // message keeps us off the idle cadence — otherwise the message would linger
 // up to TickIdle past its expiry.
 func TestTickIntervalPendingStatusUsesSlow(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
+	p := &playbackFakeEngine{}
 	m := Model{
-		player:   sharedPlayer,
-		vis:      ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		player:   p,
+		vis:      ui.NewVisualizer(float64(p.SampleRate())),
 		playlist: playlist.New(),
 	}
 	m.status.Show("hello", statusTTL(2*time.Second))

@@ -41,6 +41,7 @@ type playbackFakeEngine struct {
 	preloadGeneration   uint64
 	hasPreload          bool
 	eqBands             [eqBandCount]float64
+	speed               float64 // 0 reads as the default speed 1.0
 }
 
 func (f *playbackFakeEngine) Play(path string, _ time.Duration) error {
@@ -140,8 +141,6 @@ func (f *playbackFakeEngine) SetVolumeMin(float64)                   {}
 func (f *playbackFakeEngine) VolumeMin() float64                     { return -50 }
 func (f *playbackFakeEngine) SetVolume(float64)                      {}
 func (f *playbackFakeEngine) Volume() float64                        { return 0 }
-func (f *playbackFakeEngine) SetSpeed(float64)                       {}
-func (f *playbackFakeEngine) Speed() float64                         { return 1 }
 func (f *playbackFakeEngine) ToggleMono()                            {}
 func (f *playbackFakeEngine) Mono() bool                             { return false }
 func (f *playbackFakeEngine) SetEQBand(band int, gain float64)       { f.eqBands[band] = gain }
@@ -153,6 +152,15 @@ func (f *playbackFakeEngine) SamplesInto([]float64) int              { return 0 
 func (f *playbackFakeEngine) WaveformSamplesInto([]float64) int      { return 0 }
 func (f *playbackFakeEngine) StereoSamplesInto([][2]float64) int     { return 0 }
 func (f *playbackFakeEngine) SampleRate() int                        { return 44100 }
+
+// SetSpeed clamps like player.Player, so the speed keys see the same limits.
+func (f *playbackFakeEngine) SetSpeed(ratio float64) { f.speed = max(min(ratio, 2.0), 0.25) }
+func (f *playbackFakeEngine) Speed() float64 {
+	if f.speed == 0 {
+		return 1
+	}
+	return f.speed
+}
 
 func TestApplyResumeRestartsMixcloudAtSavedPosition(t *testing.T) {
 	track := playlist.Track{
