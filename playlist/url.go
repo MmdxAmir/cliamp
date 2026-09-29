@@ -36,6 +36,22 @@ func matchSearchPrefix(path, name string) bool {
 	return true
 }
 
+// hostOf parses path as a URL and returns its host in lower case, without a
+// leading "www." or "m.". ok is false when path is not a URL or does not parse.
+func hostOf(path string) (host string, u *url.URL, ok bool) {
+	if !IsURL(path) {
+		return "", nil, false
+	}
+	u, err := url.Parse(path)
+	if err != nil {
+		return "", nil, false
+	}
+	host = strings.ToLower(u.Hostname())
+	host = strings.TrimPrefix(host, "www.")
+	host = strings.TrimPrefix(host, "m.")
+	return host, u, true
+}
+
 // IsM3U reports whether the path points to an M3U playlist file (URL or local).
 func IsM3U(path string) bool {
 	if IsURL(path) {
@@ -82,13 +98,10 @@ func IsYouTubeURL(path string) bool {
 	if IsYTSearch(path) {
 		return false
 	}
-	u, err := url.Parse(path)
-	if err != nil {
+	host, _, ok := hostOf(path)
+	if !ok {
 		return false
 	}
-	host := strings.ToLower(u.Hostname())
-	host = strings.TrimPrefix(host, "www.")
-	host = strings.TrimPrefix(host, "m.")
 	switch host {
 	case "youtube.com", "youtu.be":
 		return true
@@ -99,32 +112,14 @@ func IsYouTubeURL(path string) bool {
 // IsYouTubeMusicURL reports whether the URL points to YouTube Music (music.youtube.com).
 // These URLs require yt-dlp rather than the native YouTube API client.
 func IsYouTubeMusicURL(path string) bool {
-	if !IsURL(path) {
-		return false
-	}
-	u, err := url.Parse(path)
-	if err != nil {
-		return false
-	}
-	host := strings.ToLower(u.Hostname())
-	host = strings.TrimPrefix(host, "www.")
-	host = strings.TrimPrefix(host, "m.")
-	return host == "music.youtube.com"
+	host, _, ok := hostOf(path)
+	return ok && host == "music.youtube.com"
 }
 
 // IsMixcloudURL reports whether path is a Mixcloud website URL.
 func IsMixcloudURL(path string) bool {
-	if !IsURL(path) {
-		return false
-	}
-	u, err := url.Parse(path)
-	if err != nil {
-		return false
-	}
-	host := strings.ToLower(u.Hostname())
-	host = strings.TrimPrefix(host, "www.")
-	host = strings.TrimPrefix(host, "m.")
-	return host == "mixcloud.com"
+	host, _, ok := hostOf(path)
+	return ok && host == "mixcloud.com"
 }
 
 // IsYTDL reports whether the URL points to a site supported by yt-dlp
@@ -140,13 +135,10 @@ func IsYTDL(path string) bool {
 	if IsYTSearch(path) {
 		return true
 	}
-	u, err := url.Parse(path)
-	if err != nil {
+	host, _, ok := hostOf(path)
+	if !ok {
 		return false
 	}
-	host := strings.ToLower(u.Hostname())
-	host = strings.TrimPrefix(host, "www.")
-	host = strings.TrimPrefix(host, "m.")
 	switch host {
 	case "soundcloud.com",
 		"mixcloud.com",
@@ -169,17 +161,8 @@ func IsYTDL(path string) bool {
 
 // IsXiaoyuzhouEpisode reports whether the URL points to a Xiaoyuzhou episode page.
 func IsXiaoyuzhouEpisode(path string) bool {
-	if !IsURL(path) {
-		return false
-	}
-	u, err := url.Parse(path)
-	if err != nil {
-		return false
-	}
-	host := strings.ToLower(u.Hostname())
-	host = strings.TrimPrefix(host, "www.")
-	host = strings.TrimPrefix(host, "m.")
-	if host != "xiaoyuzhoufm.com" {
+	host, u, ok := hostOf(path)
+	if !ok || host != "xiaoyuzhoufm.com" {
 		return false
 	}
 	return strings.HasPrefix(strings.ToLower(u.Path), "/episode/")
