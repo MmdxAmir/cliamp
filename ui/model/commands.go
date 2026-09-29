@@ -80,11 +80,13 @@ type feedsLoadedMsg struct {
 	tracks   []playlist.Track
 	urls     []string // original source URLs that produced these tracks
 	autoPlay bool     // whether to start playback automatically
+	err      error
 }
 
 // feedTrackResolvedMsg carries episodes resolved from a feed track in the playlist.
 type feedTrackResolvedMsg struct {
 	tracks []playlist.Track
+	err    error
 }
 
 // lyricsLoadedMsg carries parsed LRC output.
@@ -234,20 +236,14 @@ func fetchYTDLBatchCmd(gen uint64, pageURL string, start, count int) tea.Cmd {
 func resolveFeedTrackCmd(feedURL string) tea.Cmd {
 	return func() tea.Msg {
 		tracks, err := resolve.Remote([]string{feedURL})
-		if err != nil {
-			return err
-		}
-		return feedTrackResolvedMsg{tracks: tracks}
+		return feedTrackResolvedMsg{tracks: tracks, err: err}
 	}
 }
 
 func resolveRemoteCmd(urls []string, autoPlay bool) tea.Cmd {
 	return func() tea.Msg {
 		tracks, err := resolve.Remote(urls)
-		if err != nil {
-			return err
-		}
-		return feedsLoadedMsg{tracks: tracks, urls: urls, autoPlay: autoPlay}
+		return feedsLoadedMsg{tracks: tracks, urls: urls, autoPlay: autoPlay, err: err}
 	}
 }
 
@@ -258,7 +254,7 @@ func resolveURLCmd(rawURL string, autoPlay bool) tea.Cmd {
 	return func() tea.Msg {
 		tracks, err := resolve.URL(rawURL)
 		if err != nil {
-			return fmt.Errorf("resolving URL: %w", err)
+			return feedsLoadedMsg{err: fmt.Errorf("resolving URL: %w", err)}
 		}
 		return feedsLoadedMsg{tracks: tracks, urls: []string{rawURL}, autoPlay: autoPlay}
 	}

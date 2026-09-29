@@ -1372,7 +1372,7 @@ func TestStopKeepsErrorShownDuringReconnect(t *testing.T) {
 	}
 	player.drained = false
 	failure := errors.New("provider failed")
-	updated, _ = m.Update(failure)
+	updated, _ = m.Update(feedTrackResolvedMsg{err: failure})
 	m = updated.(Model)
 	m.handleKey(tea.KeyPressMsg{Text: "s"})
 

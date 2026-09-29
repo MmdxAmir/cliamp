@@ -670,6 +670,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case feedTrackResolvedMsg:
 		m.feedLoading = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
 		if len(msg.tracks) == 0 {
 			m.status.Warning("No episodes found in feed.", statusTTLDefault)
 			return m, nil
@@ -695,6 +699,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case feedsLoadedMsg:
 		m.feedLoading = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
 		if len(msg.tracks) > 0 {
 			m.playlist.Add(msg.tracks...)
 			m.loadedPlaylist = ""
@@ -756,6 +764,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case fbTracksResolvedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
 		if len(msg.tracks) == 0 {
 			m.status.Warning("No audio files found", statusTTLDefault)
 			return m, nil
@@ -885,19 +897,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			m.status.Errorf(statusTTLShort, "Save failed: %s", msg.err)
 		}
-		return m, nil
-
-	case error:
-		if errors.Is(msg, playlist.ErrNeedsAuth) {
-			m.provLoading = false
-			m.provSignIn = true
-			m.err = nil
-			return m, nil
-		}
-		m.err = msg
-		m.provLoading = false
-		m.feedLoading = false
-		m.buffering = false
 		return m, nil
 
 	case spotSearchResultsMsg:

@@ -29,6 +29,7 @@ type fbTracksResolvedMsg struct {
 	replace        bool
 	toPlaylist     bool
 	targetPlaylist string
+	err            error
 }
 
 func (m *Model) fbCount() int {
@@ -549,7 +550,7 @@ func (m *Model) fbConfirm(replace bool) tea.Cmd {
 	return func() tea.Msg {
 		r, err := resolve.Args(paths)
 		if err != nil {
-			return err
+			return fbTracksResolvedMsg{err: err}
 		}
 		return fbTracksResolvedMsg{tracks: r.Tracks, replace: replace, targetPlaylist: target}
 	}
@@ -590,7 +591,7 @@ func (m *Model) fbConfirmToPlaylist() tea.Cmd {
 	return func() tea.Msg {
 		r, err := resolve.Args(paths)
 		if err != nil {
-			return err
+			return fbTracksResolvedMsg{err: err}
 		}
 		return fbTracksResolvedMsg{tracks: r.Tracks, toPlaylist: true}
 	}
