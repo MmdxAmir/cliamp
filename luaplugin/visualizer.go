@@ -8,9 +8,10 @@ import (
 )
 
 // renderTimeout bounds one render call. RenderVis runs on the UI goroutine,
-// so a slow render must not delay the frame. It is a var so tests can change
-// it.
-var renderTimeout = 20 * time.Millisecond
+// so a slow render must not delay the frame for long. The limit leaves room
+// for a full-screen render on a slow CPU, which can take more than 20 ms. It
+// is a var so tests can change it.
+var renderTimeout = 50 * time.Millisecond
 
 // luaVis wraps a Lua visualizer plugin, caching function references
 // for render() and optional init()/destroy() callbacks.

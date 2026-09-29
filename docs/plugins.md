@@ -464,7 +464,7 @@ cliamp.log.debug("response: " .. body)
 
 cliamp writes logs to `~/.config/cliamp/plugins.log`. Each line has a timestamp and the installed name of the plugin as the prefix, for example `[now-playing]`.
 
-cliamp also logs the Lua errors of event hooks, key bindings, commands, timers, exec callbacks, and visualizer callbacks to this file. A callback that fails again with the same error logs it once. cliamp logs it again after the callback succeeds or fails with a different error. A visualizer `render` runs on each frame, so cliamp logs only its first error until cliamp restarts. cliamp does not write plugin errors to the terminal.
+cliamp also logs the Lua errors of event hooks, key bindings, commands, timers, exec callbacks, and visualizer callbacks to this file. A callback that fails again with the same error logs it once. cliamp logs it again after the callback succeeds or fails with a different error. A visualizer `render` runs on each frame, so cliamp logs only its first error and its first timeout until cliamp restarts. The log entry for a timeout names the time limit. cliamp does not write plugin errors to the terminal.
 
 ### cliamp.player control (requires permissions)
 
@@ -664,7 +664,7 @@ end
 | `p:init(rows, cols)` | Setup when selected | No |
 | `p:destroy()` | Cleanup when deselected | No |
 
-`render` has a 20 ms limit for each frame. If it runs longer or fails, cliamp shows the previous frame. cliamp also shows the previous frame while another callback of the same plugin runs, so a slow hook does not delay the UI. cliamp runs `init` and `destroy` in order with the events of the plugin, and `render` shows the previous frame until `init` has run.
+`render` has a 50 ms limit for each frame. If it runs longer or fails, cliamp shows the previous frame. cliamp also shows the previous frame while another callback of the same plugin runs, so a slow hook does not delay the UI. cliamp runs `init` and `destroy` in order with the events of the plugin, and `render` shows the previous frame until `init` has run.
 
 ## Sandbox
 

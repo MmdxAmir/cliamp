@@ -1535,18 +1535,22 @@ func TestCallbackErrorsAreLogged(t *testing.T) {
 
 // Callback errors go to plugins.log only. A write to stderr corrupts the TUI.
 // A render runs on each frame, so it logs its first error once, even when it
-// fails only on some frames.
+// fails only on some frames. A render timeout has its own log entry, so it
+// does not hide a later Lua error.
 func TestRenderErrorsLogOnceAndSkipStderr(t *testing.T) {
-	setRenderTimeout(t, time.Second)
 	tests := []struct {
-		name   string
-		render string
+		name         string
+		limit        time.Duration
+		render       string
+		wantTimeouts int
 	}{
-		{"fails on alternate frames", `if frame % 2 == 0 then error("render failed " .. frame) end`},
-		{"fails on each frame", `error("render failed")`},
+		{"fails on alternate frames", time.Second, `if frame % 2 == 0 then error("render failed " .. frame) end`, 0},
+		{"fails on each frame", time.Second, `error("render failed")`, 0},
+		{"a timeout does not hide a later error", 50 * time.Millisecond, `if frame == 0 then while true do end end error("render failed")`, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			setRenderTimeout(t, tt.limit)
 			var stderr bytes.Buffer
 			defer log.SetOutput(log.Writer())
 			log.SetOutput(&stderr)
@@ -1570,6 +1574,10 @@ func TestRenderErrorsLogOnceAndSkipStderr(t *testing.T) {
 			data, _ := os.ReadFile(logPath)
 			if got := strings.Count(string(data), "render failed"); got != 1 {
 				t.Errorf("plugins.log has %d render errors, want 1:\n%s", got, data)
+			}
+			timeout := "render error: did not finish in " + tt.limit.String()
+			if got := strings.Count(string(data), timeout); got != tt.wantTimeouts {
+				t.Errorf("plugins.log has %d render timeouts, want %d:\n%s", got, tt.wantTimeouts, data)
 			}
 		})
 	}

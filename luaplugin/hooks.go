@@ -82,8 +82,9 @@ const renderLabel = "render"
 // nothing, because the stop is not an error of the plugin. It logs a Lua
 // error under label, but only when the error differs from the last one logged
 // for label. Thus a timer that fails each time logs once. A render runs on
-// each frame, so it logs only its first error while the plugin is loaded.
-// Otherwise a render that fails on some frames fills plugins.log.
+// each frame, so it logs only its first error and its first timeout while the
+// plugin is loaded. Otherwise a render that fails on some frames fills
+// plugins.log. A timeout error names the limit.
 func (m *Manager) callLocked(p *Plugin, label string, timeout time.Duration, nret int, build callBuilder) (lua.LValue, error) {
 	if p.closed || m.ctx.Err() != nil {
 		return lua.LNil, errClosed
@@ -102,17 +103,22 @@ func (m *Manager) callLocked(p *Plugin, label string, timeout time.Duration, nre
 			return lua.LNil, errClosed
 		}
 		// A timeout stops the VM at a different line each time, so key it by
-		// the context error and not by the Lua message.
-		key := err.Error()
+		// the context error and not by the Lua message. A render timeout has
+		// its own slot, so one slow frame does not hide a later Lua error.
+		slot, key := label, err.Error()
 		if ctx.Err() != nil {
 			key = ctx.Err().Error()
+			err = fmt.Errorf("did not finish in %v: %w", timeout, err)
+			if label == renderLabel {
+				slot = renderLabel + " timeout"
+			}
 		}
-		prev, logged := p.lastErr[label]
+		prev, logged := p.lastErr[slot]
 		if !logged || (prev != key && label != renderLabel) {
 			if p.lastErr == nil {
 				p.lastErr = make(map[string]string)
 			}
-			p.lastErr[label] = key
+			p.lastErr[slot] = key
 			m.logHookErr(p.installName, label, err)
 		}
 		return lua.LNil, err
