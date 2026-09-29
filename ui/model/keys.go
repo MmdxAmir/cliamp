@@ -1200,16 +1200,14 @@ func (m *Model) handleJumpKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.status.Warning(m.jumpErr, statusTTLDefault)
 			return nil
 		}
-		if err := m.player.Seek(target - m.player.Position()); err != nil {
+		cmd, err := m.trySeekAbsolute(target)
+		if err != nil {
 			m.jumpErr = "Seek failed: " + err.Error()
 			m.status.Warning(m.jumpErr, statusTTLDefault)
 			return nil
 		}
-		// finishSeek notifies plugins as well as MPRIS, matching every other
-		// completed seek; the previous manual block skipped Lua plugins.
-		m.finishSeek()
 		m.closeJumpMode()
-		return nil
+		return cmd
 	}
 
 	if m.editText("jump", &m.jumpInput, msg) {

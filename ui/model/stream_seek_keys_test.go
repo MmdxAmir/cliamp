@@ -57,20 +57,6 @@ func assertDeferredStreamSeek(t *testing.T, eng *fakeEngine, cmd tea.Cmd, positi
 	assertStreamSeekCmd(t, eng, cmd, want)
 }
 
-func assertImmediateStreamSeek(t *testing.T, eng *fakeEngine, cmd tea.Cmd, want time.Duration) {
-	t.Helper()
-
-	if cmd != nil {
-		t.Fatalf("cmd = %v, want nil for synchronous seek", cmd)
-	}
-	if len(eng.seekCalls) != 1 {
-		t.Fatalf("Seek call count = %d, want 1", len(eng.seekCalls))
-	}
-	if got := eng.seekCalls[0]; got != want {
-		t.Fatalf("Seek arg = %v, want %v", got, want)
-	}
-}
-
 func TestDeferredHTTPStreamSeek(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -78,6 +64,7 @@ func TestDeferredHTTPStreamSeek(t *testing.T) {
 		settlePos  time.Duration
 		want       time.Duration
 		invoke     func(*Model) tea.Cmd
+		check      func(*testing.T, *Model)
 	}{
 		{
 			name:      "right key",
@@ -97,29 +84,11 @@ func TestDeferredHTTPStreamSeek(t *testing.T) {
 				return cmd
 			},
 		},
-	}
-
-	for _, tt := range cases {
-		t.Run(tt.name, func(t *testing.T) {
-			eng := newFakeEngine(true, tt.initialPos)
-			m := Model{player: eng}
-
-			cmd := tt.invoke(&m)
-			assertDeferredStreamSeek(t, eng, cmd, tt.settlePos, tt.want)
-		})
-	}
-}
-
-func TestImmediateHTTPStreamSeek(t *testing.T) {
-	cases := []struct {
-		name   string
-		want   time.Duration
-		invoke func(*Model) tea.Cmd
-		check  func(*testing.T, *Model)
-	}{
 		{
-			name: "jump enter",
-			want: 7 * time.Second,
+			name:       "jump enter",
+			initialPos: 3 * time.Second,
+			settlePos:  5 * time.Second,
+			want:       5 * time.Second,
 			invoke: func(m *Model) tea.Cmd {
 				m.jumping = true
 				m.jumpInput = "10"
@@ -136,8 +105,10 @@ func TestImmediateHTTPStreamSeek(t *testing.T) {
 			},
 		},
 		{
-			name: "ipc seek",
-			want: 4 * time.Second,
+			name:       "seek message",
+			initialPos: 3 * time.Second,
+			settlePos:  5 * time.Second,
+			want:       4 * time.Second,
 			invoke: func(m *Model) tea.Cmd {
 				_, cmd := m.Update(playback.SeekMsg{Offset: 4 * time.Second})
 				return cmd
@@ -147,14 +118,14 @@ func TestImmediateHTTPStreamSeek(t *testing.T) {
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newFakeEngine(true, 3*time.Second)
+			eng := newFakeEngine(true, tt.initialPos)
 			m := Model{player: eng}
 
 			cmd := tt.invoke(&m)
 			if tt.check != nil {
 				tt.check(t, &m)
 			}
-			assertImmediateStreamSeek(t, eng, cmd, tt.want)
+			assertDeferredStreamSeek(t, eng, cmd, tt.settlePos, tt.want)
 		})
 	}
 }

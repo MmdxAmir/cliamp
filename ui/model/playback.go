@@ -120,8 +120,7 @@ func (m *Model) prevTrack() tea.Cmd {
 	if m.player.Position() > 3*time.Second {
 		if m.player.Seekable() {
 			// Seekable media rewinds in place; non-seekable streams must be restarted.
-			m.player.Seek(-m.player.Position())
-			return nil
+			return m.seekAbsolute(0)
 		}
 		track, idx := m.currentPlaybackTrack()
 		if idx >= 0 {
@@ -732,7 +731,7 @@ func (m *Model) applyResume() tea.Cmd {
 		return nil
 	}
 	target := m.clampPosition(time.Duration(m.resume.secs) * time.Second)
-	if playlist.IsMixcloudURL(track.Path) && m.player.IsYTDLSeek() {
+	if m.player.IsYTDLSeek() {
 		m.seek.active = true
 		m.seek.inFlight = true
 		m.seek.pending = false

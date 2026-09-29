@@ -173,16 +173,13 @@ func (m *Model) handleV2Request(msg V2RequestMsg) tea.Cmd {
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true, Volume: m.player.Volume()})
 		return nil
 	case "seek":
-		_ = m.player.Seek(secondsDuration(request.Value))
-		m.notifyAll()
+		cmd := m.seekRelative(secondsDuration(request.Value), 0)
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
-		return nil
+		return cmd
 	case "seek.absolute":
-		position, _ := m.player.PositionAndDuration()
-		_ = m.player.Seek(secondsDuration(request.Value) - position)
-		m.notifyAll()
+		cmd := m.seekAbsolute(secondsDuration(request.Value))
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
-		return nil
+		return cmd
 	case "speed":
 		if request.Value <= 0 || math.IsNaN(request.Value) || math.IsInf(request.Value, 0) {
 			m.failV2Job(msg.Jobs, msg.JobID, v2InvalidParamsError())

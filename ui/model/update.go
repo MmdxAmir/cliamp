@@ -1073,9 +1073,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(refresh, cmd)
 
 	case playback.SeekMsg:
-		_ = m.player.Seek(msg.Offset)
-		m.notifyAll()
-		return m, nil
+		cmd := m.seekRelative(msg.Offset, 0)
+		return m, cmd
 
 	case playback.SetPositionMsg:
 		cmd := m.seekAbsolute(msg.Position)
