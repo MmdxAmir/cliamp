@@ -59,3 +59,49 @@ func TestLoadRejectsTamperedManifest(t *testing.T) {
 		t.Fatal("Load accepted unsupported manifest")
 	}
 }
+
+func TestRevoke(t *testing.T) {
+	tests := []struct {
+		name     string
+		approved []string
+		revoke   string
+		want     []string // approvals left
+		noFile   bool     // the manifest must not exist afterwards
+	}{
+		{name: "approved plugin", approved: []string{"a", "b"}, revoke: "a", want: []string{"b"}},
+		{name: "plugin without approval", approved: []string{"b"}, revoke: "a", want: []string{"b"}},
+		{name: "no manifest", revoke: "a", noFile: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, name := range tt.approved {
+				path := filepath.Join(dir, name+".lua")
+				if err := os.WriteFile(path, []byte(name), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := Approve(dir, name, path); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := Revoke(dir, tt.revoke); err != nil {
+				t.Fatalf("Revoke: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, manifestName)); tt.noFile && !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("manifest stat error = %v, want no manifest", err)
+			}
+			m, err := Load(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(m.Plugins) != len(tt.want) {
+				t.Fatalf("approvals = %v, want %v", m.Plugins, tt.want)
+			}
+			for _, name := range tt.want {
+				if _, ok := m.Plugins[name]; !ok {
+					t.Errorf("approval of %s is gone, want it kept", name)
+				}
+			}
+		})
+	}
+}

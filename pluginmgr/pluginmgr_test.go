@@ -253,6 +253,44 @@ func TestRemoveDirectory(t *testing.T) {
 	}
 }
 
+// Remove also revokes the approval, so a copy of the old file is untrusted.
+func TestRemoveRevokesTrust(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		path string
+	}{
+		{"single file", "foo.lua"},
+		{"directory", "foo/init.lua"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			home := withTempHome(t)
+			pluginDir := filepath.Join(home, ".config", "cliamp", "plugins")
+			path := filepath.Join(pluginDir, tt.path)
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(`plugin.register({name = "foo", type = "hook"})`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := plugintrust.Approve(pluginDir, "foo", path); err != nil {
+				t.Fatal(err)
+			}
+			silenceOutput(t)
+
+			if err := Remove("foo"); err != nil {
+				t.Fatalf("Remove: %v", err)
+			}
+			m, err := plugintrust.Load(pluginDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := m.Plugins["foo"]; ok {
+				t.Errorf("trust manifest still approves foo after Remove")
+			}
+		})
+	}
+}
+
 func TestRemoveMissing(t *testing.T) {
 	withTempHome(t)
 	err := Remove("ghost")

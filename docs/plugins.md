@@ -17,10 +17,10 @@ cliamp plugins                          # show help
 cliamp plugins list                     # list installed plugins
 cliamp plugins install <source>         # install a plugin
 cliamp plugins trust <name>             # approve installed plugin contents
-cliamp plugins remove <name>            # remove a plugin
+cliamp plugins remove <name>            # remove a plugin and its approval
 ```
 
-The install and trust commands show the source, SHA-256, declared permissions, and implicit file-system and network access before the prompt. In a non-interactive environment, use `--yes` only after you review the same content independently. cliamp stores approvals in `plugins/.trust.json`. Editing a plugin changes its hash and disables it until you approve it again. If `plugins/.trust.json` does not parse, cliamp treats every plugin as untrusted and logs the error to `plugins.log`. To recover, delete the file and approve each plugin again.
+The install and trust commands show the source, SHA-256, declared permissions, and implicit file-system and network access before the prompt. In a non-interactive environment, use `--yes` only after you review the same content independently. cliamp stores approvals in `plugins/.trust.json`. Editing a plugin changes its hash and disables it until you approve it again. Removing a plugin also removes its approval. If `plugins/.trust.json` does not parse, cliamp treats every plugin as untrusted and logs the error to `plugins.log`. To recover, delete the file and approve each plugin again.
 
 The install and trust commands check the `plugin.register()` call the same way the player does. They reject a plugin that the player cannot load, such as a plugin with an unknown permission name or without `type`. The check runs the plugin file with a stand-in `cliamp` table that does nothing, so the plugin cannot do any work before you approve it.
 

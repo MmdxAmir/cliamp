@@ -224,7 +224,7 @@ func displayPermissions(perms []string) string {
 	return strings.Join(perms, ", ")
 }
 
-// Remove deletes a plugin by name.
+// Remove deletes a plugin by name and revokes its approval.
 func Remove(name string) error {
 	if err := validateName(name); err != nil {
 		return err
@@ -236,24 +236,28 @@ func Remove(name string) error {
 
 	// Try single file first, then directory.
 	filePath := filepath.Join(dir, name+".lua")
+	dirPath := filepath.Join(dir, name)
+	var removed string
 	if _, err := os.Stat(filePath); err == nil {
 		if err := os.Remove(filePath); err != nil {
 			return fmt.Errorf("removing plugin: %w", err)
 		}
-		fmt.Fprintf(output, "Removed %s\n", filePath)
-		return nil
-	}
-
-	dirPath := filepath.Join(dir, name)
-	if info, err := os.Stat(dirPath); err == nil && info.IsDir() {
+		removed = filePath
+	} else if info, err := os.Stat(dirPath); err == nil && info.IsDir() {
 		if err := os.RemoveAll(dirPath); err != nil {
 			return fmt.Errorf("removing plugin directory: %w", err)
 		}
-		fmt.Fprintf(output, "Removed %s\n", dirPath)
-		return nil
+		removed = dirPath
+	} else {
+		return fmt.Errorf("plugin %q not found", name)
 	}
+	fmt.Fprintf(output, "Removed %s\n", removed)
 
-	return fmt.Errorf("plugin %q not found", name)
+	// A stale approval would trust a later file with the same content.
+	if err := plugintrust.Revoke(dir, name); err != nil {
+		return fmt.Errorf("revoke plugin approval: %w", err)
+	}
+	return nil
 }
 
 func download(url string) ([]byte, error) {

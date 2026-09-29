@@ -83,6 +83,20 @@ func Approve(dir, name, path string) (string, error) {
 	return hash, nil
 }
 
+// Revoke removes the approval of name. It leaves the manifest as it is when
+// the manifest has no approval for name.
+func Revoke(dir, name string) error {
+	m, err := Load(dir)
+	if err != nil {
+		return err
+	}
+	if _, ok := m.Plugins[name]; !ok {
+		return nil
+	}
+	delete(m.Plugins, name)
+	return Save(dir, m)
+}
+
 func Verify(m Manifest, name, path string) error {
 	want, ok := m.Plugins[name]
 	if !ok {
