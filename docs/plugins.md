@@ -532,6 +532,7 @@ handle:alive()                            -- --> boolean
 **Safety rules:**
 
 - The binary must be in the allowlist. Argv is argv. No shell or expansion is used.
+- The read-only paths of `cliamp.fs` apply only to `cliamp.fs` and to `cwd`. With the exec permission, `yt-dlp` or `ffmpeg` can write to any path that you can write. Examples are the `--exec` option of `yt-dlp` and an output path of `ffmpeg`.
 - `args` must be a flat array of strings. cliamp rejects nested tables and non-strings.
 - The subprocess environment contains only `PATH`, `HOME`, and `LANG`. cliamp does not pass the other variables of its environment. This does not hide secrets from the plugin, which can read each variable with `os.getenv()`.
 - Output is limited to 4 MiB per process, for stdout and stderr together. cliamp silently drops later lines.
@@ -693,13 +694,15 @@ You can use `os.time()`, `os.date()`, `os.clock()`, and `os.getenv()`.
 - `~/.local/share/cliamp/`
 - `~/Music/cliamp/`
 
-These paths in `~/.config/cliamp/` stay read-only, so a plugin cannot approve plugins, change the exec allowlist, or hide its log:
+These paths in `~/.config/cliamp/` stay read-only for `cliamp.fs` and for the `cwd` of `cliamp.exec`:
 
 - `plugins/`, which contains the plugin files and `plugins/.trust.json`
 - `config.toml`
 - `radios.toml`
 - `cliamp.sock`
 - `plugins.log`
+
+Thus a plugin cannot use `cliamp.fs` to approve plugins, change the exec allowlist, or hide its log. A plugin with the exec permission can still write to any path that you can write through `yt-dlp` or `ffmpeg`. Approve a plugin that declares the exec permission only when you trust it.
 
 Writing outside these directories, or to a read-only path, raises a Lua error. cliamp resolves symlinks and blocks directory traversal (`..`) before it checks the path. The `cwd` of `cliamp.exec` follows the same rules.
 
