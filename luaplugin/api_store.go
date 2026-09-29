@@ -112,7 +112,7 @@ func registerStoreAPI(L *lua.LState, cliamp *lua.LTable, pluginName string) {
 			L.Push(lua.LNil)
 			return 1
 		}
-		L.Push(jsonToLua(L, v))
+		L.Push(toLua(L, v))
 		return 1
 	}))
 

@@ -93,12 +93,7 @@ func (m *Manager) RenderVis(name string, bands [10]float64, rows, cols int, fram
 	defer vis.plugin.mu.Unlock()
 
 	ret, _ := m.callLocked(vis.plugin, "render", hookTimeout, 1, func(L *lua.LState) (*lua.LFunction, []lua.LValue) {
-		// Build bands table (1-indexed).
-		tbl := L.NewTable()
-		for i, b := range bands {
-			tbl.RawSetInt(i+1, lua.LNumber(b))
-		}
-		return vis.render, []lua.LValue{vis.obj, tbl, lua.LNumber(frame), lua.LNumber(rows), lua.LNumber(cols)}
+		return vis.render, []lua.LValue{vis.obj, floatsToTable(L, bands[:]), lua.LNumber(frame), lua.LNumber(rows), lua.LNumber(cols)}
 	})
 	if str, ok := ret.(lua.LString); ok {
 		vis.last = string(str)

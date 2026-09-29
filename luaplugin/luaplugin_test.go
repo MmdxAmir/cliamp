@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -780,6 +781,73 @@ func TestDataToTableNested(t *testing.T) {
 	}
 	if floats.Len() != 3 {
 		t.Fatalf("floats length = %d, want 3", floats.Len())
+	}
+}
+
+func TestPlayerEQBands(t *testing.T) {
+	bands := [10]float64{1, 2, 3, 4, 5, 6, 7, 8, 9, -10}
+	tests := []struct {
+		name  string
+		state StateProvider
+		want  []any
+	}{
+		{"no provider", StateProvider{}, nil},
+		{"provider", StateProvider{EQBands: func() [10]float64 { return bands }},
+			[]any{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, -10.0}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+			cliamp := L.NewTable()
+			registerPlayerAPI(L, cliamp, &tt.state)
+			L.SetGlobal("cliamp", cliamp)
+			if err := L.DoString(`_G.bands = cliamp.player.eq_bands()`); err != nil {
+				t.Fatal(err)
+			}
+			tbl := L.GetGlobal("bands").(*lua.LTable)
+			if tt.want == nil {
+				if n := tbl.Len(); n != 0 {
+					t.Fatalf("eq_bands() has %d values, want 0", n)
+				}
+				return
+			}
+			if got := luaToGo(tbl); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("eq_bands() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// Event payloads, JSON and the store share one converter, so a slice in an
+// event becomes a Lua array and not its fmt string.
+func TestDataToTableValues(t *testing.T) {
+	tests := []struct {
+		name string
+		in   any
+		want any // the value after a round trip through luaToGo
+	}{
+		{"nil", nil, nil},
+		{"bool", true, true},
+		{"string", "hi", "hi"},
+		{"int", 42, 42.0},
+		{"int64", int64(-7), -7.0},
+		{"float64", 3.5, 3.5},
+		{"float slice", []float64{1, 2}, []any{1.0, 2.0}},
+		{"string slice", []string{"a", "b"}, []any{"a", "b"}},
+		{"any slice", []any{"a", 1.0, []any{true}}, []any{"a", 1.0, []any{true}}},
+		{"map", map[string]any{"k": []any{"v"}}, map[string]any{"k": []any{"v"}}},
+		{"other type", struct{ A int }{1}, "{1}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+			tbl := dataToTable(L, map[string]any{"v": tt.in})
+			if got := luaToGo(tbl.RawGetString("v")); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("value = %#v, want %#v", got, tt.want)
+			}
+		})
 	}
 }
 

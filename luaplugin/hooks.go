@@ -202,13 +202,16 @@ func dataToTable(L *lua.LState, data map[string]any) *lua.LTable {
 		return tbl
 	}
 	for k, v := range data {
-		tbl.RawSetString(k, goToLua(L, v))
+		tbl.RawSetString(k, toLua(L, v))
 	}
 	return tbl
 }
 
-// goToLua converts a Go value to a Lua value.
-func goToLua(L *lua.LState, v any) lua.LValue {
+// toLua converts a Go value to a Lua value. It covers event payloads and the
+// values that cliamp.json and cliamp.store decode. A map becomes a table with
+// string keys, and a slice becomes an array. Any other type becomes its fmt
+// string.
+func toLua(L *lua.LState, v any) lua.LValue {
 	switch val := v.(type) {
 	case nil:
 		return lua.LNil
@@ -225,12 +228,30 @@ func goToLua(L *lua.LState, v any) lua.LValue {
 	case map[string]any:
 		return dataToTable(L, val)
 	case []float64:
+		return floatsToTable(L, val)
+	case []string:
 		tbl := L.NewTable()
-		for i, f := range val {
-			tbl.RawSetInt(i+1, lua.LNumber(f))
+		for i, s := range val {
+			tbl.RawSetInt(i+1, lua.LString(s))
+		}
+		return tbl
+	case []any:
+		tbl := L.NewTable()
+		for i, item := range val {
+			tbl.RawSetInt(i+1, toLua(L, item))
 		}
 		return tbl
 	default:
 		return lua.LString(fmt.Sprintf("%v", val))
 	}
+}
+
+// floatsToTable converts numbers such as the 10 EQ or spectrum bands to a Lua
+// array.
+func floatsToTable(L *lua.LState, vals []float64) *lua.LTable {
+	tbl := L.CreateTable(len(vals), 0)
+	for i, f := range vals {
+		tbl.RawSetInt(i+1, lua.LNumber(f))
+	}
+	return tbl
 }
