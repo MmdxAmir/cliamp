@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 const (
@@ -63,7 +65,7 @@ func newClient(clientID, clientSecret string) *client {
 		clientSecret: clientSecret,
 		baseURL:      apiBaseURL,
 		tokenURL:     defaultTokenURL,
-		http:         &http.Client{Timeout: 30 * time.Second},
+		http:         httpclient.NewAPI(30 * time.Second),
 	}
 }
 

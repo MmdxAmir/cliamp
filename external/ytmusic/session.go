@@ -13,6 +13,7 @@ import (
 	"github.com/bjarneo/cliamp/internal/authurl"
 	"github.com/bjarneo/cliamp/internal/browser"
 	"github.com/bjarneo/cliamp/internal/credstore"
+	"github.com/bjarneo/cliamp/internal/httpclient"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -42,7 +43,7 @@ const CallbackPort = 19873
 
 // oauthHTTPClient sends OAuth token requests. The timeout stops a stalled
 // token endpoint from blocking a provider call without limit.
-var oauthHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var oauthHTTPClient = httpclient.NewAPI(30 * time.Second)
 
 // oauthContext makes oauth2 send its token requests through oauthHTTPClient.
 func oauthContext(ctx context.Context) context.Context {
