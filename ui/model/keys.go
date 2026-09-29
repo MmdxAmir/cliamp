@@ -687,23 +687,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "f":
 		return m.togglePlaylistStar()
 
-	case "n":
-		if m.focus == focusPlaylist && m.plCursor >= 0 && m.plCursor < m.playlist.Len() && m.favMgr != nil {
-			track, ok := m.playlist.Track(m.plCursor)
-			if !ok {
-				return nil
-			}
-			if _, err := m.favMgr.ToggleFavorite(track); err != nil {
-				m.status.Errorf(statusTTLDefault, "Favorite failed: %s", err)
-				return nil
-			}
-			m.refreshFavSet()
-			// The provider pane renders Favorites counts from Playlists();
-			// re-pull so it reflects the toggle. The manager list refreshes
-			// itself on open.
-			return m.fetchProviderPlaylists()
-		}
-
 	case "shift+up":
 		if m.focus == focusPlaylist && m.plCursor > 0 {
 			if m.playlist.Move(m.plCursor, m.plCursor-1) {
@@ -2141,36 +2124,15 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "D":
 		m.plMgrOpenDirs()
 	case "f":
-		if name := plMgrVirtualPlaylistName(m.plManager.selPlaylist); name != "" {
-			m.status.Warningf(statusTTLDefault, "%s does not support bookmarks", name)
-			return nil
-		}
-		if bs, ok := m.localProvider.(provider.BookmarkSetter); ok {
-			realIdx := m.plMgrTrackRealIndex(m.plManager.cursor)
-			if realIdx >= 0 && realIdx < len(m.plManager.tracks) {
-				track := m.plManager.tracks[realIdx]
-				if err := bs.SetBookmarkByPath(m.plManager.selPlaylist, track.Path); err != nil {
-					m.status.Errorf(statusTTLDefault, "Save failed: %s", err)
-					return nil
-				}
-				m.plManager.tracks[realIdx].Bookmark = !m.plManager.tracks[realIdx].Bookmark
-				if m.plManager.tracks[realIdx].Bookmark {
-					m.status.Showf(statusTTLDefault, "★ %s", track.DisplayName())
-				} else {
-					m.status.Showf(statusTTLDefault, "☆ %s", track.DisplayName())
-				}
-			}
-		}
-	case "n":
 		if m.favMgr != nil {
 			realIdx := m.plMgrTrackRealIndex(m.plManager.cursor)
 			if realIdx >= 0 && realIdx < len(m.plManager.tracks) {
 				track := m.plManager.tracks[realIdx]
-				if _, err := m.favMgr.ToggleFavorite(track); err != nil {
+				cmd, err := m.toggleTrackFavorite(track)
+				if err != nil {
 					m.status.Errorf(statusTTLDefault, "Favorite failed: %s", err)
 					return nil
 				}
-				m.refreshFavSet()
 				// Inside the Favorites screen a toggle re-reads the store so
 				// the rows mirror it: an unfavorite drops the row, a
 				// re-favorite restores it.
@@ -2180,7 +2142,7 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 				if m.plManager.visible {
 					m.plMgrRefreshList()
 				}
-				return m.fetchProviderPlaylists()
+				return cmd
 			}
 		}
 	case "d":

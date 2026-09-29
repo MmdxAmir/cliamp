@@ -358,12 +358,15 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 		}
 		return ipcMutationCmd(request.Context, request.Reply, func() error { return saver.SavePlaylist(request.Playlist, tracks) })
 	case "playlist.bookmark":
-		bookmarks, ok := entry.Provider.(provider.BookmarkSetter)
-		if !ok || request.Track == nil {
-			request.Reply <- ipc.Response{OK: false, Error: "provider does not support bookmarks"}
+		// playlist.bookmark keeps its name for old scripts. It toggles the ♥
+		// favorite of the track, as f does.
+		if request.Track == nil {
+			request.Reply <- ipc.Response{OK: false, Error: "track is required"}
 			return nil
 		}
-		return ipcMutationCmd(request.Context, request.Reply, func() error { return bookmarks.SetBookmarkByPath(request.Playlist, request.Track.Path) })
+		cmd, err := m.toggleTrackFavorite(ipcTrackFromInfo(*request.Track))
+		request.Reply <- ipcResponseError(err)
+		return cmd
 	case "provider.playlists":
 		return func() tea.Msg {
 			items, err := ipcProviderPlaylistInfos(entry)

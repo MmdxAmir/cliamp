@@ -1109,6 +1109,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pluginQueueAddedMsg:
 		return m, m.appendPluginTracks(msg.tracks...)
 
+	case trackFavoriteSyncedMsg:
+		m.handleTrackFavoriteSynced(msg)
+		return m, nil
+
 	case ShowStatusMsg:
 		ttl := statusTTLDefault
 		if msg.Duration > 0 {

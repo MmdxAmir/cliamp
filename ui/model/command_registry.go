@@ -110,15 +110,12 @@ var commandRegistry = []commandSpec{
 	{Mode: commandModeMain, Keys: []string{"shift+up", "shift+down"}, KeyLabel: "Shift+Up Down", Label: "Move track up/down", Keymap: true},
 	{Mode: commandModeMain, Keys: []string{"h", "l"}, KeyLabel: "h l", Label: "EQ cursor left/right", Keymap: true},
 	{Mode: commandModeMain, Keys: []string{"enter"}, KeyLabel: "Enter", Label: "Play selected track", Keymap: true, ContextHelp: true, Primary: true},
-	{Mode: commandModeMain, Keys: []string{"f"}, KeyLabel: "f", Label: "Bookmark track / Favorite station", LabelFor: func(m Model) string {
+	{Mode: commandModeMain, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite track / station", LabelFor: func(m Model) string {
 		if m.selectedPlaylistStarAction() == starRadioFavorite {
 			return "Favorite station"
 		}
-		return "Bookmark track"
+		return "Favorite track"
 	}, Enabled: func(m Model) bool { return m.selectedPlaylistStarAction() != starUnavailable }, Keymap: true, ContextHelp: true, Prominent: true},
-	{Mode: commandModeMain, Keys: []string{"n"}, KeyLabel: "n", Label: "Favorite track", Enabled: func(m Model) bool {
-		return m.focus == focusPlaylist && m.playlist != nil && m.favMgr != nil && m.plCursor >= 0 && m.plCursor < m.playlist.Len()
-	}, Keymap: true, ContextHelp: true},
 	{Mode: commandModeMain, Keys: []string{"a"}, KeyLabel: "a", Label: "Toggle queue (play next)", Keymap: true, ContextHelp: true},
 	{Mode: commandModeMain, Keys: []string{"A"}, KeyLabel: "A", Label: "Queue manager", Keymap: true},
 	{Mode: commandModeMain | commandModeProvider, Keys: []string{"F"}, KeyLabel: "F", Label: "Subscribed shows", Enabled: func(m Model) bool { return m.hasSubscriptions() }, Keymap: true},
@@ -224,6 +221,11 @@ var commandRegistry = []commandSpec{
 			m.spotSearch.cursor >= 0 && m.spotSearch.cursor < len(m.spotSearch.results) &&
 			m.spotSearch.results[m.spotSearch.cursor].IsAlbum() && m.spotSearch.results[m.spotSearch.cursor].AlbumID() != ""
 	}},
+	{Mode: commandModeSpotSearch, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite track", ContextHelp: true, Prominent: true, Enabled: func(m Model) bool {
+		return m.favMgr != nil && m.spotSearch.screen == spotSearchResults && !m.spotSearchBusy() &&
+			m.spotSearch.cursor >= 0 && m.spotSearch.cursor < len(m.spotSearch.results) &&
+			!m.spotSearch.results[m.spotSearch.cursor].IsAlbum()
+	}},
 	{Mode: commandModeEQ, Keys: []string{"up", "down"}, KeyLabel: "Up Down", Label: "Gain", ContextHelp: true},
 	{Mode: commandModeSpeed, Keys: []string{"left", "right"}, KeyLabel: "Left Right", Label: "Speed", ContextHelp: true},
 	{Mode: commandModeVolume, Keys: []string{"left", "right", "up", "down", "h", "l", "k", "j"}, KeyLabel: "Arrows", Label: "Volume +/-1dB", ContextHelp: true, Primary: true},
@@ -245,6 +247,10 @@ var commandRegistry = []commandSpec{
 		idx := m.selectedNavRawIndex(len(m.navBrowser.albums))
 		return ok && m.navView() == navViewAlbums && !m.navBrowser.loading && !m.navBrowser.albumLoading &&
 			idx >= 0 && m.navBrowser.albums[idx].ID != ""
+	}},
+	{Mode: commandModeNavBrowser, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite track", ContextHelp: true, Prominent: true, Enabled: func(m Model) bool {
+		return m.favMgr != nil && m.navView() == navViewTracks && !m.navBrowser.confirmReplace &&
+			m.selectedNavRawIndex(len(m.navBrowser.tracks)) >= 0
 	}},
 	{Mode: commandModeNavBrowser, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite genre", LabelFor: func(m Model) string {
 		if genre, ok := m.selectedNavGenre(); ok && genre.Favorite {
@@ -291,8 +297,8 @@ var commandRegistry = []commandSpec{
 			return false
 		}
 	}},
-	{Mode: commandModePlaylistManager, Keys: []string{"f", "n"}, KeyLabel: "f/n", Label: "★/" + favHeart, ContextHelp: true, Enabled: func(m Model) bool {
-		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
+	{Mode: commandModePlaylistManager, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite", ContextHelp: true, Enabled: func(m Model) bool {
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks && m.favMgr != nil
 	}},
 	{Mode: commandModePlaylistManager, Keys: []string{"[", "]"}, KeyLabel: "[ ]", Label: "Reorder", ContextHelp: true, Enabled: func(m Model) bool {
 		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks

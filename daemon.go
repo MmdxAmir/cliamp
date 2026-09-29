@@ -15,6 +15,7 @@ import (
 
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/external/local"
+	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/internal/resume"
@@ -119,6 +120,7 @@ type daemon struct {
 	playlist        *playlist.Playlist
 	localProv       *local.Provider
 	providers       []model.ProviderEntry
+	favSync         favorites.SyncQueue // orders provider favorite calls
 	vis             *ui.Visualizer
 	historyStore    *history.Store
 	historyTrack    string
@@ -754,16 +756,22 @@ func (d *daemon) handleLibrary(m ipc.LibraryRequestMsg) {
 		}
 		replyError(m.Reply, saver.SavePlaylist(m.Playlist, tracks))
 	case "playlist.bookmark":
+		// playlist.bookmark keeps its name for old scripts. It toggles the ♥
+		// favorite of the track, as f does in the TUI.
 		if m.Track == nil {
 			reply(m.Reply, ipc.Response{OK: false, Error: "track is required"})
 			return
 		}
-		bookmarks, ok := entry.Provider.(providerapi.BookmarkSetter)
-		if !ok {
-			reply(m.Reply, ipc.Response{OK: false, Error: "provider does not support bookmarks"})
+		if d.localProv == nil {
+			reply(m.Reply, ipc.Response{OK: false, Error: "favorites are not available"})
 			return
 		}
-		replyError(m.Reply, bookmarks.SetBookmarkByPath(m.Playlist, m.Track.Path))
+		track := trackFromInfo(*m.Track)
+		favorite, err := d.localProv.ToggleFavorite(track)
+		replyError(m.Reply, err)
+		if err == nil {
+			d.syncTrackFavorite(track, favorite)
+		}
 	case "provider.playlists":
 		items, err := providerPlaylistInfos(entry)
 		if err != nil {
@@ -993,6 +1001,28 @@ func (d *daemon) provider(key string) (model.ProviderEntry, bool) {
 		}
 	}
 	return model.ProviderEntry{}, false
+}
+
+// syncTrackFavorite copies a favorite change to the first provider that owns
+// track, in the background. The local favorite stays when the call fails.
+func (d *daemon) syncTrackFavorite(track playlist.Track, favorite bool) {
+	for _, entry := range d.providers {
+		fav, ok := entry.Provider.(providerapi.TrackFavoriter)
+		if !ok || !fav.CanFavoriteTrack(track) {
+			continue
+		}
+		run := d.favSync.Enqueue(track.Path, func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			return fav.SetTrackFavorite(ctx, track, favorite)
+		})
+		go func() {
+			if _, err := run(); err != nil {
+				applog.Warn("%s did not save the favorite for %q: %v", entry.Name, track.Title, err)
+			}
+		}()
+		return
+	}
 }
 
 func (d *daemon) handleLyrics(m ipc.LyricsRequestMsg) {
