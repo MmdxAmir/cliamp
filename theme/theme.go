@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"cmp"
 	"embed"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -15,6 +16,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/appdir"
 )
 
@@ -155,17 +157,29 @@ func Find(name string) (Theme, bool) {
 
 // LoadAll loads built-in themes and user custom themes from
 // ~/.config/cliamp/themes/*.toml. User themes override built-in
-// themes with the same name. Returns a sorted list.
+// themes with the same name. Returns a sorted list. It logs each
+// theme file that it skips, with the reason.
 func LoadAll() []Theme {
+	themes, errs := loadAll()
+	for _, err := range errs {
+		applog.Warn("theme: %v", err)
+	}
+	return themes
+}
+
+// loadAll returns the sorted themes and one error for each theme file
+// that it skips.
+func loadAll() ([]Theme, []error) {
 	themes := make(map[string]Theme)
 
 	// Load embedded built-in themes (lower priority).
-	loadFS(builtinThemes, "themes", themes)
+	errs := loadFS(builtinThemes, "themes", "built-in themes", themes)
 
 	// Load user custom themes (override built-in if same name).
 	dir, err := appdir.Dir()
 	if err == nil {
-		loadFS(os.DirFS(filepath.Join(dir, "themes")), ".", themes)
+		userDir := filepath.Join(dir, "themes")
+		errs = append(errs, loadFS(os.DirFS(userDir), ".", userDir, themes)...)
 	}
 
 	// Sort by name.
@@ -176,30 +190,48 @@ func LoadAll() []Theme {
 	slices.SortFunc(result, func(a, b Theme) int {
 		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
-	return result
+	return result, errs
 }
 
 // loadFS parses the .toml files in dir of fsys and stores each valid theme
-// in themes under its lower-case file name.
-func loadFS(fsys fs.FS, dir string, themes map[string]Theme) {
+// in themes under its lower-case file name. It returns one error for each
+// file that it skips. where names the directory in these errors. A missing
+// directory is not an error.
+func loadFS(fsys fs.FS, dir, where string, themes map[string]Theme) []error {
 	entries, err := fs.ReadDir(fsys, dir)
-	if err != nil {
-		return
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
 	}
+	if err != nil {
+		return []error{fmt.Errorf("read %s: %w", where, err)}
+	}
+	var errs []error
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".toml") {
 			continue
 		}
-		name := strings.TrimSuffix(e.Name(), ".toml")
-		f, err := fsys.Open(path.Join(dir, e.Name()))
-		if err != nil {
-			continue
+		if err := loadFile(fsys, path.Join(dir, e.Name()), themes); err != nil {
+			errs = append(errs, fmt.Errorf("skip %s in %s: %w", e.Name(), where, err))
 		}
-		t, err := Parse(name, f)
-		f.Close()
-		if err != nil || t.Validate() != nil {
-			continue
-		}
-		themes[strings.ToLower(name)] = t
 	}
+	return errs
+}
+
+// loadFile parses and validates one theme file and stores it in themes.
+func loadFile(fsys fs.FS, file string, themes map[string]Theme) error {
+	f, err := fsys.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	name := strings.TrimSuffix(path.Base(file), ".toml")
+	t, err := Parse(name, f)
+	if err != nil {
+		return err
+	}
+	if err := t.Validate(); err != nil {
+		return err
+	}
+	themes[strings.ToLower(name)] = t
+	return nil
 }

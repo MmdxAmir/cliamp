@@ -19,9 +19,15 @@ mkdir -p ~/.config/cliamp/themes
 ```
 
 Each file needs all six foreground colors as `#RRGGBB` hex values. Add `bg` to
-set a background. Omit it to keep the terminal background. cliamp ignores
-incomplete or malformed custom themes. The file name without `.toml` is the
-theme name.
+set a background. Omit it to keep the terminal background. The file name
+without `.toml` is the theme name.
+
+cliamp skips an incomplete or malformed custom theme. It writes the file name
+and the reason to `~/.config/cliamp/cliamp.log`, for example:
+
+```
+level=WARN msg="theme: skip mytheme.toml in /home/you/.config/cliamp/themes: theme \"mytheme\": accent must be #RRGGBB"
+```
 
 ### Example: `~/.config/cliamp/themes/solarized.toml`
 

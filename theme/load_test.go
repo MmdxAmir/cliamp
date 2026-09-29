@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/bjarneo/cliamp/applog"
 )
 
 func TestLoadAllIncludesBuiltinThemes(t *testing.T) {
@@ -156,10 +158,56 @@ func TestLoadAllIgnoresInvalidUserTheme(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	for _, th := range LoadAll() {
+	themes, errs := loadAll()
+	for _, th := range themes {
 		if th.Name == "broken" {
 			t.Fatal("invalid custom theme was loaded")
 		}
+	}
+	if len(errs) != 1 {
+		t.Fatalf("loadAll() errors = %v, want 1 error for broken.toml", errs)
+	}
+	want := `skip broken.toml in ` + userDir + `: theme "broken": accent must be #RRGGBB`
+	if got := errs[0].Error(); got != want {
+		t.Errorf("loadAll() error = %q, want %q", got, want)
+	}
+}
+
+func TestLoadAllLogsSkippedTheme(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	userDir := filepath.Join(home, ".config", "cliamp", "themes")
+	if err := os.MkdirAll(userDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "broken.toml"), []byte(`accent = "blue"`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	logPath := filepath.Join(t.TempDir(), "cliamp.log")
+	closeLog, err := applog.Init(logPath, applog.LevelWarn)
+	if err != nil {
+		t.Fatalf("applog.Init: %v", err)
+	}
+	t.Cleanup(func() { _ = closeLog() })
+
+	LoadAll()
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	for _, want := range []string{"level=WARN", "broken.toml in " + userDir, "accent must be #RRGGBB"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("log = %q, want it to contain %q", data, want)
+		}
+	}
+}
+
+func TestLoadAllBuiltinThemesHaveNoErrors(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if _, errs := loadAll(); len(errs) != 0 {
+		t.Errorf("loadAll() errors = %v, want none for the built-in themes", errs)
 	}
 }
 
@@ -245,9 +293,10 @@ red = "#dc322f"
 	}
 
 	tests := []struct {
-		name  string
-		files fstest.MapFS
-		want  map[string]Theme
+		name    string
+		files   fstest.MapFS
+		want    map[string]Theme
+		wantErr []string
 	}{
 		{
 			name:  "good theme",
@@ -265,6 +314,26 @@ red = "#dc322f"
 			name:  "broken theme",
 			files: fstest.MapFS{"themes/broken.toml": {Data: []byte(`accent = "blue"`)}},
 			want:  map[string]Theme{},
+			wantErr: []string{
+				`skip broken.toml in test dir: theme "broken": accent must be #RRGGBB`,
+			},
+		},
+		{
+			name: "line too long",
+			files: fstest.MapFS{
+				"themes/long.toml":      {Data: []byte("# " + strings.Repeat("x", 70000))},
+				"themes/Solarized.toml": {Data: []byte(good)},
+			},
+			want: map[string]Theme{"solarized": named("Solarized")},
+			wantErr: []string{
+				"skip long.toml in test dir: bufio.Scanner: token too long",
+			},
+		},
+		{
+			name:    "theme dir is a file",
+			files:   fstest.MapFS{"themes": {Data: []byte(good)}},
+			want:    map[string]Theme{},
+			wantErr: []string{"read test dir: "},
 		},
 		{
 			name: "non-toml file and nested dir",
@@ -283,9 +352,17 @@ red = "#dc322f"
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := make(map[string]Theme)
-			loadFS(tt.files, "themes", got)
+			errs := loadFS(tt.files, "themes", "test dir", got)
 			if !maps.Equal(got, tt.want) {
 				t.Errorf("loadFS() themes = %+v, want %+v", got, tt.want)
+			}
+			if len(errs) != len(tt.wantErr) {
+				t.Fatalf("loadFS() errors = %v, want %d errors", errs, len(tt.wantErr))
+			}
+			for i, err := range errs {
+				if !strings.HasPrefix(err.Error(), tt.wantErr[i]) {
+					t.Errorf("loadFS() error %d = %q, want prefix %q", i, err, tt.wantErr[i])
+				}
 			}
 		})
 	}
