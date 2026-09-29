@@ -99,3 +99,24 @@ func TestTrackFromItem(t *testing.T) {
 		}
 	})
 }
+
+func TestAlbumFromItemYear(t *testing.T) {
+	tests := []struct {
+		releaseDate string
+		want        int
+	}{
+		{releaseDate: "1994-02-01", want: 1994},
+		{releaseDate: "1994-02", want: 1994},
+		{releaseDate: "1994", want: 1994},
+		{releaseDate: "", want: 0},
+		{releaseDate: "n/a", want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.releaseDate, func(t *testing.T) {
+			got := albumFromItem(&spotifyAlbumItem{ID: "al", Name: "Album", ReleaseDate: tt.releaseDate})
+			if got.Year != tt.want {
+				t.Errorf("Year = %d, want %d", got.Year, tt.want)
+			}
+		})
+	}
+}
