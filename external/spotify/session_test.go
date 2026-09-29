@@ -16,6 +16,8 @@ import (
 
 	librespotPlayer "github.com/devgianlu/go-librespot/player"
 	"golang.org/x/oauth2"
+
+	"github.com/bjarneo/cliamp/playlist"
 )
 
 type tokenSourceFunc func() (*oauth2.Token, error)
@@ -399,5 +401,61 @@ func TestLoadStoredCredsFile(t *testing.T) {
 	want := storedCreds{Username: "user", Data: []byte("play"), DeviceID: "device", RefreshToken: "refresh"}
 	if got.Username != want.Username || !slices.Equal(got.Data, want.Data) || got.DeviceID != want.DeviceID || got.RefreshToken != want.RefreshToken {
 		t.Errorf("Load() = %+v, want %+v", got, want)
+	}
+}
+
+func TestSessionBearer(t *testing.T) {
+	t.Parallel()
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	refreshErr := errors.New("token endpoint down")
+	tests := []struct {
+		name      string
+		ctx       context.Context
+		source    func() (*oauth2.Token, error) // nil means no token source
+		want      string
+		wantErr   error
+		wantCalls int
+	}{
+		{
+			name:      "token",
+			ctx:       context.Background(),
+			source:    func() (*oauth2.Token, error) { return &oauth2.Token{AccessToken: "token"}, nil },
+			want:      "token",
+			wantCalls: 1,
+		},
+		{name: "no token source", ctx: context.Background(), wantErr: playlist.ErrNeedsAuth},
+		{
+			name:      "refresh fails",
+			ctx:       context.Background(),
+			source:    func() (*oauth2.Token, error) { return nil, refreshErr },
+			wantErr:   refreshErr,
+			wantCalls: 1,
+		},
+		{
+			name:    "ended context sends no refresh",
+			ctx:     cancelled,
+			source:  func() (*oauth2.Token, error) { return &oauth2.Token{AccessToken: "token"}, nil },
+			wantErr: context.Canceled,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			s := &Session{}
+			if tt.source != nil {
+				s.tokenSource = tokenSourceFunc(func() (*oauth2.Token, error) {
+					calls++
+					return tt.source()
+				})
+			}
+			got, err := s.bearer(tt.ctx)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("bearer() error = %v, want %v", err, tt.wantErr)
+			}
+			if got != tt.want || calls != tt.wantCalls {
+				t.Errorf("bearer() = %q after %d token calls, want %q after %d", got, calls, tt.want, tt.wantCalls)
+			}
+		})
 	}
 }
