@@ -63,6 +63,7 @@ func unquote(s string) string {
 	}
 	q := s[0]
 	var b strings.Builder
+	closed := false
 	for i := 1; i < len(s); i++ {
 		c := s[i]
 		if q == '"' && c == '\\' && i+1 < len(s) && (s[i+1] == '\\' || s[i+1] == '"') {
@@ -74,12 +75,19 @@ func unquote(s string) string {
 			if isComment(s[i+1:]) {
 				return b.String()
 			}
+			closed = true
 			break
 		}
 		b.WriteByte(c)
 	}
-	// The closing quote is missing or text follows it. Strip the outer pair
-	// and keep the rest as typed.
+	// The closing quote is missing, as in "Tokyo Night or 'abc". Strip the
+	// opening quote and any stray quote at the end, and keep the rest as
+	// typed.
+	if !closed {
+		return strings.TrimRight(s[1:], `"'`)
+	}
+	// Text follows the closing quote. Strip the outer pair and keep the rest
+	// as typed.
 	if s[len(s)-1] == q {
 		return s[1 : len(s)-1]
 	}
