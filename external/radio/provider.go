@@ -177,6 +177,8 @@ func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 	}
 
 	// Places: the listener's own country first, then whatever they pinned.
+	// Place IDs use the place, not its position, so a pin change cannot change
+	// another row's identity. Favorites follow the same rule with URLs.
 	for i, place := range p.placesLocked() {
 		name := place.Name
 		if i == 0 && place.ID() == p.homeLocked().ID() {
@@ -185,7 +187,7 @@ func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 			name = "★ " + name
 		}
 		out = append(out, playlist.PlaylistInfo{
-			ID:   fmt.Sprintf("p:%d", i),
+			ID:   "p:" + place.ID(),
 			Name: name,
 		})
 	}
@@ -245,20 +247,16 @@ func (p *Provider) Tracks(id string) ([]playlist.Track, error) {
 		return []playlist.Track{stationTrack(station)}, nil
 	}
 
-	prefix, idx, err := parseStationID(id)
-	if err != nil {
-		return nil, err
-	}
-
 	// A place is not a station: it expands to that country's or region's
 	// stations, so next and previous scan through them. The directory call
 	// runs off the provider lock, which the UI needs to render the pane.
-	if prefix == "p" {
-		place, ok := p.placeAt(idx)
-		if !ok {
-			return nil, errors.New("invalid place index")
-		}
-		return p.GenreTracks(place.ID(), SortVotes)
+	if placeID, ok := strings.CutPrefix(id, "p:"); ok {
+		return p.GenreTracks(placeID, SortVotes)
+	}
+
+	prefix, idx, err := parseStationID(id)
+	if err != nil {
+		return nil, err
 	}
 
 	p.mu.Lock()
@@ -338,17 +336,6 @@ func StationFromTrack(track playlist.Track) (CatalogStation, bool) {
 		Country: track.Meta("radio.country"), Codec: track.Meta("radio.codec"),
 		Bitrate: bitrate, State: track.Meta("radio.state"), Homepage: track.Meta("radio.homepage"),
 	}, true
-}
-
-// placeAt returns the place at index idx of the pane's Countries section.
-func (p *Provider) placeAt(idx int) (Place, bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	places := p.placesLocked()
-	if idx < 0 || idx >= len(places) {
-		return Place{}, false
-	}
-	return places[idx], true
 }
 
 // AppendCatalog adds catalog stations fetched from the Radio Browser API.
