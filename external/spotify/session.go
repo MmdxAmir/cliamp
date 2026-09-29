@@ -6,10 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"runtime/debug"
 	"sync"
@@ -619,46 +617,6 @@ func (s *Session) NewStream(ctx context.Context, spotID librespot.SpotifyId, bit
 		}
 		return s.player.NewStream(ctx, client, spotID, bitrate, positionMs)
 	})
-}
-
-// webApiWithBody calls the Spotify Web API using the OAuth2 access token.
-//
-// The spclient/login5 token from librespot is NOT accepted by the Web API
-// for endpoints like /v1/search and /v1/me/playlists — Spotify returns
-// misleading errors ("Invalid limit", 429) instead of a clear auth failure.
-// So if there is no OAuth2 token source, fail loudly with ErrNeedsAuth
-// rather than attempting the call with the wrong token.
-func (s *Session) webApiWithBody(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string) (*http.Response, error) {
-	s.mu.RLock()
-	ts := s.tokenSource
-	s.mu.RUnlock()
-
-	if ts == nil {
-		return nil, fmt.Errorf("spotify: web api token unavailable, sign in again: %w", playlist.ErrNeedsAuth)
-	}
-	tok, err := ts.Token()
-	if err != nil {
-		return nil, fmt.Errorf("refresh access token: %w", err)
-	}
-	token := tok.AccessToken
-
-	u, _ := url.Parse("https://api.spotify.com")
-	u = u.JoinPath(path)
-	if query != nil {
-		u.RawQuery = query.Encode()
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-
-	return webHTTPClient.Do(req)
 }
 
 // Close releases all session and player resources.
