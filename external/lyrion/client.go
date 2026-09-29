@@ -12,7 +12,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"github.com/bjarneo/cliamp/config"
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -169,16 +169,11 @@ func (c *Client) request(ctx context.Context, command []any, out any) error {
 		return fmt.Errorf("lyrion: %s: http status %s", c.url, resp.Status)
 	}
 
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
-	if err != nil {
-		return fmt.Errorf("lyrion: %s: %w", c.url, err)
-	}
-
 	var env struct {
 		Result json.RawMessage `json:"result"`
 		Error  any             `json:"error"`
 	}
-	if err := json.Unmarshal(raw, &env); err != nil {
+	if err := httpclient.ReadJSON(resp.Body, maxResponseBody, &env); err != nil {
 		return fmt.Errorf("lyrion: %s: decode response: %w", c.url, err)
 	}
 	if env.Error != nil {

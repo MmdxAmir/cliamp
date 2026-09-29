@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -648,11 +649,7 @@ func (c *Client) get(p string, params url.Values, out any) error {
 		}
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
-	if err != nil {
-		return fmt.Errorf("%s: %s: %w", c.dialect.name(), p, err)
-	}
-	if err := json.Unmarshal(body, out); err != nil {
+	if err := httpclient.ReadJSON(resp.Body, maxResponseBody, out); err != nil {
 		return fmt.Errorf("%s: %s: %w", c.dialect.name(), p, err)
 	}
 	return nil
@@ -727,13 +724,8 @@ func (c *Client) ensureAuth() error {
 		return fmt.Errorf("%s: auth: http status %s", c.dialect.name(), resp.Status)
 	}
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
-	if err != nil {
-		return fmt.Errorf("%s: auth: %w", c.dialect.name(), err)
-	}
-
 	var out authResponseDTO
-	if err := json.Unmarshal(data, &out); err != nil {
+	if err := httpclient.ReadJSON(resp.Body, maxResponseBody, &out); err != nil {
 		return fmt.Errorf("%s: auth: %w", c.dialect.name(), err)
 	}
 	if out.AccessToken == "" {

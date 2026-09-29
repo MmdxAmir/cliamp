@@ -1,4 +1,5 @@
-// Package httpclient provides a shared HTTP client configured for audio streaming.
+// Package httpclient provides a shared HTTP client configured for audio
+// streaming and helpers that read API response bodies.
 package httpclient
 
 import (

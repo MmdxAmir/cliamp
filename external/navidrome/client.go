@@ -242,16 +242,11 @@ func (c *NavidromeClient) subsonicGetContext(ctx context.Context, endpoint strin
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("navidrome: %s: http status %s", endpoint, resp.Status)
 	}
-	// Read one byte past the cap so an oversized response is reported rather
-	// than silently truncated: io.LimitReader alone would cut mid-object and
-	// hand json.Unmarshal a partial body, which fails as the opaque
-	// "unexpected end of JSON input".
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody+1))
+	// The body is decoded twice, once for the error envelope and once into
+	// result, so read the bytes here rather than through ReadJSON.
+	body, err := httpclient.ReadBody(resp.Body, maxResponseBody)
 	if err != nil {
 		return fmt.Errorf("navidrome: %s: %w", endpoint, err)
-	}
-	if len(body) > maxResponseBody {
-		return fmt.Errorf("navidrome: %s: response exceeds %d bytes", endpoint, maxResponseBody)
 	}
 	// Check for API-level errors.
 	var env struct {

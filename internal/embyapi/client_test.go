@@ -3,8 +3,10 @@ package embyapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/bjarneo/cliamp/internal/appmeta"
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -783,4 +786,35 @@ func TestIsStreamURL(t *testing.T) {
 	if IsStreamURL("https://x/Items/abc") {
 		t.Fatal("non-download URL should not be a stream URL")
 	}
+}
+
+// TestGetReportsOversizedResponse verifies that a response body over the read
+// limit fails with the size error instead of a truncated JSON error.
+func TestGetReportsOversizedResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A valid JSON document with padding that crosses the limit.
+		io.WriteString(w, `{"Items":[],"Pad":"`)
+		io.Copy(w, io.LimitReader(zeroReader{}, maxResponseBody))
+		io.WriteString(w, `"}`)
+	}))
+	defer srv.Close()
+
+	c := NewJellyfinClient(srv.URL, "tok", "user-1", "", "")
+	_, err := c.AlbumsByLibrary("lib-1")
+	if !errors.Is(err, httpclient.ErrTooLarge) {
+		t.Fatalf("AlbumsByLibrary() error = %v, want httpclient.ErrTooLarge", err)
+	}
+	if !strings.Contains(err.Error(), "jellyfin: /Items") {
+		t.Fatalf("error %q does not name the dialect and path", err)
+	}
+}
+
+// zeroReader returns an endless stream of ASCII zero digits.
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = '0'
+	}
+	return len(p), nil
 }
