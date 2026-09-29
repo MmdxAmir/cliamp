@@ -847,6 +847,15 @@ func (p *SpotifyProvider) webAPI(ctx context.Context, method, path string, query
 func (p *SpotifyProvider) webAPIWithBody(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string, acceptStatus ...int) (*http.Response, error) {
 	const maxRetries = 8
 
+	// Capture the session once: Close can clear p.session while a request
+	// still runs.
+	p.mu.Lock()
+	sess := p.session
+	p.mu.Unlock()
+	if sess == nil {
+		return nil, playlist.ErrNeedsAuth
+	}
+
 	// Buffer the body so it can be replayed on retry.
 	var bodyBytes []byte
 	if body != nil {
@@ -863,7 +872,7 @@ func (p *SpotifyProvider) webAPIWithBody(ctx context.Context, method, path strin
 			reqBody = bytes.NewReader(bodyBytes)
 		}
 
-		resp, err := p.session.webApiWithBody(ctx, method, path, query, reqBody, contentType)
+		resp, err := sess.webApiWithBody(ctx, method, path, query, reqBody, contentType)
 		if err != nil {
 			return nil, err
 		}
