@@ -115,13 +115,15 @@ func (m *Model) SetLowPower(v bool) { m.lowPower = v }
 
 // SetHeadless runs the Model with no screen, as cliamp --daemon does. View
 // returns an empty view, Init does not ask for the window size, and the tick
-// uses the low-power cadence. The layout is the one of an 80x24 terminal, so
-// the visualizer keeps a size for spectrum.get.
+// uses the low-power cadence. The layout is the one of an 80x24 terminal
+// with the focus on the playlist, so the visualizer keeps a size and stays
+// in the layout for spectrum.get.
 func (m *Model) SetHeadless(v bool) {
 	m.headless = v
 	if v {
 		m.lowPower = true
 		m.termTitle.introActive = false
+		m.focus = focusPlaylist
 		m.recomputeLayout()
 	}
 }

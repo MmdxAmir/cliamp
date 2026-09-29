@@ -661,7 +661,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	if cfg.Playlist != "" && len(resolved.Tracks) == 0 && len(resolved.Pending) == 0 {
 		m.SetLoadedPlaylist(cfg.Playlist)
 	}
-	if len(resolved.Tracks) == 0 && len(resolved.Pending) == 0 && pl.Len() == 0 {
+	if !daemon && len(resolved.Tracks) == 0 && len(resolved.Pending) == 0 && pl.Len() == 0 {
 		m.StartInProvider()
 	}
 	if cfg.EQPreset != "" && cfg.EQPreset != "Custom" {

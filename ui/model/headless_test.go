@@ -205,17 +205,27 @@ func TestHeadlessZeroSizePlayNextDrain(t *testing.T) {
 // bands of its last tick.
 func TestHeadlessSpectrumAnalyzesOnRequest(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		headless  bool
-		wantBands bool
+		name          string
+		headless      bool
+		providerFirst bool
+		wantBands     bool
 	}{
 		{name: "headless", headless: true, wantBands: true},
+		{name: "headless after a start in the provider pane", headless: true, providerFirst: true, wantBands: true},
 		{name: "TUI without a tick"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := &headlessEngine{tone: true}
 			engine.playing = true
-			m := newHeadlessModel(t, engine, nil, playlist.Track{Path: "/music/one.flac", Title: "One"})
+			providers := []ProviderEntry{{Key: "local", Name: "Local", Provider: commandsTestProvider{name: "Local"}}}
+			m := newHeadlessModel(t, engine, providers, playlist.Track{Path: "/music/one.flac", Title: "One"})
+			if tc.providerFirst {
+				// run starts an empty queue in the provider pane before it
+				// makes the Model headless.
+				m.headless = false
+				m.StartInProvider()
+				m.SetHeadless(true)
+			}
 			m.headless = tc.headless
 
 			reply := make(chan V2RequestResult, 1)
