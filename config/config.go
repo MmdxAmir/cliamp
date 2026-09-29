@@ -163,6 +163,27 @@ func (n NavidromeConfig) IsSet() bool {
 	return n.URL != "" && n.User != "" && n.Password != ""
 }
 
+// set applies one key of the [navidrome] section.
+func (n *NavidromeConfig) set(key, val string) {
+	switch key {
+	case "url":
+		n.URL = parseString(val)
+	case "user":
+		n.User = parseString(val)
+	case "password":
+		n.Password = parseString(val)
+	case "browse_sort":
+		n.BrowseSort = parseString(val)
+	case "format":
+		n.Format = parseString(val)
+	case "scrobble":
+		// Opt-out: only mark disabled when the value is explicitly false.
+		if v, ok := parseBool(val); ok {
+			n.ScrobbleDisabled = !v
+		}
+	}
+}
+
 // LyrionConfig holds settings for a Lyrion Music Server (LMS) instance.
 // User and Password are optional — they are only needed when the server has
 // password protection enabled.
@@ -179,6 +200,22 @@ type LyrionConfig struct {
 // optional, so the URL alone is enough to construct a client.
 func (l LyrionConfig) IsSet() bool {
 	return l.URL != ""
+}
+
+// set applies one key of the [lyrion] section.
+func (l *LyrionConfig) set(key, val string) {
+	switch key {
+	case "url":
+		l.URL = parseString(val)
+	case "user":
+		l.User = parseString(val)
+	case "password":
+		l.Password = parseString(val)
+	case "show_unplayable":
+		if v, ok := parseBool(val); ok {
+			l.ShowUnplayable = v
+		}
+	}
 }
 
 // SpotifyConfig holds settings for the Spotify provider. Requires a Spotify
@@ -208,6 +245,22 @@ func (s SpotifyConfig) ResolveClientID(fallbackID string) string {
 	return fallbackID
 }
 
+// set applies one key of the [spotify] section.
+func (s *SpotifyConfig) set(key, val string) {
+	switch key {
+	case "enabled":
+		if v, ok := parseBool(val); ok {
+			s.Disabled = !v
+		}
+	case "client_id":
+		s.ClientID = parseString(val)
+	case "bitrate":
+		if v, ok := parseInt(val); ok {
+			s.Bitrate = v
+		}
+	}
+}
+
 // QobuzConfig holds settings for the Qobuz provider. Requires a paid Qobuz
 // subscription (Studio/Sublime). The app_id, signing secrets and OAuth private
 // key are scraped automatically from the Qobuz web player, so no developer
@@ -222,6 +275,20 @@ type QobuzConfig struct {
 // is enough; credentials are scraped from the Qobuz web player automatically.
 func (q QobuzConfig) IsSet() bool {
 	return !q.Disabled && q.Enabled
+}
+
+// set applies one key of the [qobuz] section.
+func (q *QobuzConfig) set(key, val string) {
+	switch key {
+	case "enabled":
+		if v, ok := parseBool(val); ok {
+			q.Disabled = !v
+		}
+	case "quality":
+		if v, ok := parseInt(val); ok {
+			q.Quality = v
+		}
+	}
 }
 
 // TidalConfig holds settings for the Tidal provider. Requires a paid Tidal
@@ -241,6 +308,22 @@ type TidalConfig struct {
 // is enough — built-in fallback client credentials are used when none are set.
 func (t TidalConfig) IsSet() bool {
 	return !t.Disabled && t.Enabled
+}
+
+// set applies one key of the [tidal] section.
+func (t *TidalConfig) set(key, val string) {
+	switch key {
+	case "enabled":
+		if v, ok := parseBool(val); ok {
+			t.Disabled = !v
+		}
+	case "client_id":
+		t.ClientID = parseString(val)
+	case "client_secret":
+		t.ClientSecret = parseString(val)
+	case "quality":
+		t.Quality = parseString(val)
+	}
 }
 
 // YouTubeMusicConfig holds settings for the YouTube Music provider.
@@ -287,6 +370,26 @@ func (y YouTubeMusicConfig) ResolveCredentials(fallbackFn func() (string, string
 	return "", ""
 }
 
+// set applies one key of the [ytmusic] section.
+func (y *YouTubeMusicConfig) set(key, val string) {
+	switch key {
+	case "enabled":
+		if v, ok := parseBool(val); ok {
+			y.Disabled = !v
+		}
+	case "client_id":
+		y.ClientID = parseString(val)
+	case "client_secret":
+		y.ClientSecret = parseString(val)
+	case "cookies_from":
+		y.CookiesFrom = strings.TrimSpace(parseString(val))
+	case "expand_playlist":
+		if v, ok := parseBool(val); ok {
+			y.ExpandPlaylist = &v
+		}
+	}
+}
+
 // RadioConfig holds settings for the built-in Radio provider. Radio is always
 // enabled, so this block only tunes it.
 type RadioConfig struct {
@@ -298,9 +401,24 @@ type RadioConfig struct {
 	Country string
 }
 
+// set applies one key of the [radio] section.
+func (r *RadioConfig) set(key, val string) {
+	switch key {
+	case "country":
+		r.Country = strings.TrimSpace(parseString(val))
+	}
+}
+
 // PodcastConfig tunes the always-available public podcast directory.
 type PodcastConfig struct {
 	Country string // two-letter country code for Apple charts (default "us")
+}
+
+// set applies one key of the [podcast] section.
+func (p *PodcastConfig) set(key, val string) {
+	if key == "country" {
+		p.Country = strings.TrimSpace(parseString(val))
+	}
 }
 
 // SoundCloudConfig holds settings for the SoundCloud provider.
@@ -316,6 +434,20 @@ type SoundCloudConfig struct {
 
 // IsSet reports whether the SoundCloud provider should be shown.
 func (s SoundCloudConfig) IsSet() bool { return s.Enabled }
+
+// set applies one key of the [soundcloud] section.
+func (s *SoundCloudConfig) set(key, val string) {
+	switch key {
+	case "enabled":
+		if v, ok := parseBool(val); ok {
+			s.Enabled = v
+		}
+	case "user":
+		s.User = parseString(val)
+	case "cookies_from":
+		s.CookiesFrom = strings.TrimSpace(parseString(val))
+	}
+}
 
 // MixcloudConfig holds settings for the Mixcloud provider. Public discovery
 // works with only enabled=true. Username adds public account views; an access
@@ -335,6 +467,33 @@ type MixcloudConfig struct {
 // IsSet reports whether the Mixcloud provider should be shown.
 func (m MixcloudConfig) IsSet() bool { return m.Enabled }
 
+// set applies one key of the [mixcloud] section.
+func (m *MixcloudConfig) set(key, val string) {
+	switch key {
+	case "enabled":
+		if v, ok := parseBool(val); ok {
+			m.Enabled = v
+		}
+	case "username":
+		m.Username = strings.TrimSpace(parseString(val))
+	case "access_token":
+		m.AccessToken = strings.TrimSpace(parseString(val))
+	case "cookies_from":
+		m.CookiesFrom = strings.TrimSpace(parseString(val))
+	case "styles":
+		m.Styles = parseStringSlice(val)
+		m.StylesSet = true
+	case "max_items":
+		if v, ok := parseInt(val); ok {
+			m.MaxItems = v
+		}
+	case "stream_creators":
+		if v, ok := parseInt(val); ok {
+			m.StreamCreators = v
+		}
+	}
+}
+
 // NetEaseConfig holds settings for the NetEase Cloud Music provider.
 // The provider is opt-in and can reuse an existing browser session through
 // yt-dlp's --cookies-from-browser support.
@@ -347,6 +506,20 @@ type NetEaseConfig struct {
 // IsSet reports whether the NetEase provider should be shown.
 func (n NetEaseConfig) IsSet() bool { return n.Enabled }
 
+// set applies one key of the [netease] section.
+func (n *NetEaseConfig) set(key, val string) {
+	switch key {
+	case "enabled":
+		if v, ok := parseBool(val); ok {
+			n.Enabled = v
+		}
+	case "cookies_from":
+		n.CookiesFrom = strings.TrimSpace(parseString(val))
+	case "user_id":
+		n.UserID = parseString(val)
+	}
+}
+
 // YandexConfig holds settings for the Yandex Music provider.
 // The provider is opt-in and authenticates with a personal OAuth token
 // obtained from https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d
@@ -357,6 +530,18 @@ type YandexConfig struct {
 
 // IsSet reports whether the Yandex provider should be shown.
 func (y YandexConfig) IsSet() bool { return y.Enabled && strings.TrimSpace(y.Token) != "" }
+
+// set applies one key of the [yandex] section.
+func (y *YandexConfig) set(key, val string) {
+	switch key {
+	case "enabled":
+		if v, ok := parseBool(val); ok {
+			y.Enabled = v
+		}
+	case "token":
+		y.Token = parseString(val)
+	}
+}
 
 // PlexConfig holds credentials for a Plex Media Server.
 // Both URL and Token must be non-empty for a client to be constructed.
@@ -369,6 +554,18 @@ type PlexConfig struct {
 // IsSet reports whether both Plex credentials are present.
 func (p PlexConfig) IsSet() bool {
 	return p.URL != "" && p.Token != ""
+}
+
+// set applies one key of the [plex] section.
+func (p *PlexConfig) set(key, val string) {
+	switch key {
+	case "url":
+		p.URL = parseString(val)
+	case "token":
+		p.Token = parseString(val)
+	case "libraries":
+		p.Libraries = parseStringSlice(val)
+	}
 }
 
 // JellyfinConfig holds credentials for a Jellyfin server.
@@ -387,6 +584,22 @@ func (j JellyfinConfig) IsSet() bool {
 	return j.URL != "" && (j.Token != "" || (j.User != "" && j.Password != ""))
 }
 
+// set applies one key of the [jellyfin] section.
+func (j *JellyfinConfig) set(key, val string) {
+	switch key {
+	case "url":
+		j.URL = parseString(val)
+	case "token":
+		j.Token = parseString(val)
+	case "user":
+		j.User = parseString(val)
+	case "password":
+		j.Password = parseString(val)
+	case "user_id":
+		j.UserID = parseString(val)
+	}
+}
+
 // EmbyConfig holds credentials for an Emby server.
 // URL is required. Authenticate either with Token, or with User+Password.
 // UserID is optional and can be discovered lazily.
@@ -401,6 +614,22 @@ type EmbyConfig struct {
 // IsSet reports whether the Emby provider is configured.
 func (e EmbyConfig) IsSet() bool {
 	return e.URL != "" && (e.Token != "" || (e.User != "" && e.Password != ""))
+}
+
+// set applies one key of the [emby] section.
+func (e *EmbyConfig) set(key, val string) {
+	switch key {
+	case "url":
+		e.URL = parseString(val)
+	case "token":
+		e.Token = parseString(val)
+	case "user":
+		e.User = parseString(val)
+	case "password":
+		e.Password = parseString(val)
+	case "user_id":
+		e.UserID = parseString(val)
+	}
 }
 
 // AudiobookshelfConfig holds credentials for an Audiobookshelf server.
@@ -418,9 +647,32 @@ func (a AudiobookshelfConfig) IsSet() bool {
 	return a.URL != "" && (a.Token != "" || (a.User != "" && a.Password != ""))
 }
 
+// set applies one key of the [audiobookshelf] section.
+func (a *AudiobookshelfConfig) set(key, val string) {
+	switch key {
+	case "url":
+		a.URL = parseString(val)
+	case "token":
+		a.Token = parseString(val)
+	case "user":
+		a.User = parseString(val)
+	case "password":
+		a.Password = parseString(val)
+	case "libraries":
+		a.Libraries = parseStringSlice(val)
+	}
+}
+
 // DownloadsConfig selects the directory for saved audio. Empty uses ~/Music/cliamp.
 type DownloadsConfig struct {
 	Directory string
+}
+
+// set applies one key of the [downloads] section.
+func (d *DownloadsConfig) set(key, val string) {
+	if key == "directory" {
+		d.Directory = parseString(val)
+	}
 }
 
 // Config holds user preferences loaded from the config file.
@@ -545,16 +797,12 @@ func Load() (Config, error) {
 				cfg.Tidal.Enabled = true
 			}
 			// Initialize plugin sub-maps for [plugins] and [plugins.*] sections.
-			if section == "plugins" || strings.HasPrefix(section, "plugins.") {
+			if name, ok := pluginSection(section); ok {
 				if cfg.Plugins == nil {
 					cfg.Plugins = make(map[string]map[string]string)
 				}
-				pluginName := strings.TrimPrefix(section, "plugins.")
-				if pluginName == "plugins" {
-					pluginName = "" // top-level [plugins] section
-				}
-				if _, ok := cfg.Plugins[pluginName]; !ok {
-					cfg.Plugins[pluginName] = make(map[string]string)
+				if _, ok := cfg.Plugins[name]; !ok {
+					cfg.Plugins[name] = make(map[string]string)
 				}
 			}
 			continue
@@ -569,341 +817,182 @@ func Load() (Config, error) {
 
 		switch section {
 		case "downloads":
-			if key == "directory" {
-				cfg.Downloads.Directory = parseString(val)
-			}
+			cfg.Downloads.set(key, val)
 		case "navidrome":
-			switch key {
-			case "url":
-				cfg.Navidrome.URL = parseString(val)
-			case "user":
-				cfg.Navidrome.User = parseString(val)
-			case "password":
-				cfg.Navidrome.Password = parseString(val)
-			case "browse_sort":
-				cfg.Navidrome.BrowseSort = parseString(val)
-			case "format":
-				cfg.Navidrome.Format = parseString(val)
-			case "scrobble":
-				// Opt-out: only mark disabled when the value is explicitly false.
-				if v, ok := parseBool(val); ok {
-					cfg.Navidrome.ScrobbleDisabled = !v
-				}
-			}
+			cfg.Navidrome.set(key, val)
 		case "lyrion":
-			switch key {
-			case "url":
-				cfg.Lyrion.URL = parseString(val)
-			case "user":
-				cfg.Lyrion.User = parseString(val)
-			case "password":
-				cfg.Lyrion.Password = parseString(val)
-			case "show_unplayable":
-				if v, ok := parseBool(val); ok {
-					cfg.Lyrion.ShowUnplayable = v
-				}
-			}
+			cfg.Lyrion.set(key, val)
 		case "spotify":
-			switch key {
-			case "enabled":
-				if v, ok := parseBool(val); ok {
-					cfg.Spotify.Disabled = !v
-				}
-			case "client_id":
-				cfg.Spotify.ClientID = parseString(val)
-			case "bitrate":
-				if v, ok := parseInt(val); ok {
-					cfg.Spotify.Bitrate = v
-				}
-			}
+			cfg.Spotify.set(key, val)
 		case "qobuz":
-			switch key {
-			case "enabled":
-				if v, ok := parseBool(val); ok {
-					cfg.Qobuz.Disabled = !v
-				}
-			case "quality":
-				if v, ok := parseInt(val); ok {
-					cfg.Qobuz.Quality = v
-				}
-			}
+			cfg.Qobuz.set(key, val)
 		case "tidal":
-			switch key {
-			case "enabled":
-				if v, ok := parseBool(val); ok {
-					cfg.Tidal.Disabled = !v
-				}
-			case "client_id":
-				cfg.Tidal.ClientID = parseString(val)
-			case "client_secret":
-				cfg.Tidal.ClientSecret = parseString(val)
-			case "quality":
-				cfg.Tidal.Quality = parseString(val)
-			}
+			cfg.Tidal.set(key, val)
 		case "ytmusic":
-			switch key {
-			case "enabled":
-				if v, ok := parseBool(val); ok {
-					cfg.YouTubeMusic.Disabled = !v
-				}
-			case "client_id":
-				cfg.YouTubeMusic.ClientID = parseString(val)
-			case "client_secret":
-				cfg.YouTubeMusic.ClientSecret = parseString(val)
-			case "cookies_from":
-				cfg.YouTubeMusic.CookiesFrom = strings.TrimSpace(parseString(val))
-			case "expand_playlist":
-				if v, ok := parseBool(val); ok {
-					cfg.YouTubeMusic.ExpandPlaylist = &v
-				}
-			}
+			cfg.YouTubeMusic.set(key, val)
 		case "plex":
-			switch key {
-			case "url":
-				cfg.Plex.URL = parseString(val)
-			case "token":
-				cfg.Plex.Token = parseString(val)
-			case "libraries":
-				cfg.Plex.Libraries = parseStringSlice(val)
-			}
+			cfg.Plex.set(key, val)
 		case "radio":
-			switch key {
-			case "country":
-				cfg.Radio.Country = strings.TrimSpace(parseString(val))
-			}
+			cfg.Radio.set(key, val)
 		case "podcast":
-			if key == "country" {
-				cfg.Podcast.Country = strings.TrimSpace(parseString(val))
-			}
+			cfg.Podcast.set(key, val)
 		case "soundcloud":
-			switch key {
-			case "enabled":
-				if v, ok := parseBool(val); ok {
-					cfg.SoundCloud.Enabled = v
-				}
-			case "user":
-				cfg.SoundCloud.User = parseString(val)
-			case "cookies_from":
-				cfg.SoundCloud.CookiesFrom = strings.TrimSpace(parseString(val))
-			}
+			cfg.SoundCloud.set(key, val)
 		case "mixcloud":
-			switch key {
-			case "enabled":
-				if v, ok := parseBool(val); ok {
-					cfg.Mixcloud.Enabled = v
-				}
-			case "username":
-				cfg.Mixcloud.Username = strings.TrimSpace(parseString(val))
-			case "access_token":
-				cfg.Mixcloud.AccessToken = strings.TrimSpace(parseString(val))
-			case "cookies_from":
-				cfg.Mixcloud.CookiesFrom = strings.TrimSpace(parseString(val))
-			case "styles":
-				cfg.Mixcloud.Styles = parseStringSlice(val)
-				cfg.Mixcloud.StylesSet = true
-			case "max_items":
-				if v, ok := parseInt(val); ok {
-					cfg.Mixcloud.MaxItems = v
-				}
-			case "stream_creators":
-				if v, ok := parseInt(val); ok {
-					cfg.Mixcloud.StreamCreators = v
-				}
-			}
+			cfg.Mixcloud.set(key, val)
 		case "netease":
-			switch key {
-			case "enabled":
-				if v, ok := parseBool(val); ok {
-					cfg.NetEase.Enabled = v
-				}
-			case "cookies_from":
-				cfg.NetEase.CookiesFrom = strings.TrimSpace(parseString(val))
-			case "user_id":
-				cfg.NetEase.UserID = parseString(val)
-			}
+			cfg.NetEase.set(key, val)
 		case "yandex":
-			switch key {
-			case "enabled":
-				if v, ok := parseBool(val); ok {
-					cfg.Yandex.Enabled = v
-				}
-			case "token":
-				cfg.Yandex.Token = parseString(val)
-			}
+			cfg.Yandex.set(key, val)
 		case "jellyfin":
-			switch key {
-			case "url":
-				cfg.Jellyfin.URL = parseString(val)
-			case "token":
-				cfg.Jellyfin.Token = parseString(val)
-			case "user":
-				cfg.Jellyfin.User = parseString(val)
-			case "password":
-				cfg.Jellyfin.Password = parseString(val)
-			case "user_id":
-				cfg.Jellyfin.UserID = parseString(val)
-			}
+			cfg.Jellyfin.set(key, val)
 		case "emby":
-			switch key {
-			case "url":
-				cfg.Emby.URL = parseString(val)
-			case "token":
-				cfg.Emby.Token = parseString(val)
-			case "user":
-				cfg.Emby.User = parseString(val)
-			case "password":
-				cfg.Emby.Password = parseString(val)
-			case "user_id":
-				cfg.Emby.UserID = parseString(val)
-			}
+			cfg.Emby.set(key, val)
 		case "audiobookshelf":
-			switch key {
-			case "url":
-				cfg.Audiobookshelf.URL = parseString(val)
-			case "token":
-				cfg.Audiobookshelf.Token = parseString(val)
-			case "user":
-				cfg.Audiobookshelf.User = parseString(val)
-			case "password":
-				cfg.Audiobookshelf.Password = parseString(val)
-			case "libraries":
-				cfg.Audiobookshelf.Libraries = parseStringSlice(val)
-			}
+			cfg.Audiobookshelf.set(key, val)
 		default:
-			// Handle [plugins] and [plugins.*] sections.
-			if section == "plugins" || strings.HasPrefix(section, "plugins.") {
-				pluginName := strings.TrimPrefix(section, "plugins.")
-				if pluginName == "plugins" {
-					pluginName = "" // top-level [plugins] section
+			if name, ok := pluginSection(section); ok {
+				if m, ok := cfg.Plugins[name]; ok {
+					m[key] = parseString(val)
 				}
-				if cfg.Plugins != nil {
-					if m, ok := cfg.Plugins[pluginName]; ok {
-						m[key] = parseString(val)
-					}
-				}
-				continue
-			}
-			switch key {
-			case "volume":
-				if v, ok := parseFloat(val); ok {
-					cfg.Volume = v
-				}
-			case "volume_min":
-				if v, ok := parseFloat(val); ok {
-					cfg.VolumeMin = v
-				}
-			case "vis_volume_linked":
-				if v, ok := parseBool(val); ok {
-					cfg.VisVolumeLinked = v
-				}
-			case "repeat":
-				val = parseString(val)
-				switch strings.ToLower(val) {
-				case "all", "one", "off":
-					cfg.Repeat = strings.ToLower(val)
-				}
-			case "shuffle":
-				if v, ok := parseBool(val); ok {
-					cfg.Shuffle = v
-				}
-			case "mono":
-				if v, ok := parseBool(val); ok {
-					cfg.Mono = v
-				}
-			case "auto_play":
-				if v, ok := parseBool(val); ok {
-					cfg.AutoPlay = v
-				}
-			case "seek_large_step_sec":
-				if v, ok := parseInt(val); ok {
-					cfg.SeekStepLarge = v
-				}
-			case "lyrics_offset_ms":
-				if v, ok := parseInt(val); ok {
-					cfg.LyricsOffsetMs = v
-				}
-			case "eq":
-				cfg.EQ = parseEQ(val)
-			case "eq_preset":
-				cfg.EQPreset = parseString(val)
-			case "theme":
-				cfg.Theme = parseString(val)
-			case "provider":
-				cfg.Provider = strings.ToLower(parseString(val))
-			case "visualizer":
-				cfg.Visualizer = parseString(val)
-			case "vis_rows":
-				if v, ok := parseInt(val); ok {
-					cfg.VisRows = v
-				}
-			case "sample_rate":
-				if v, ok := parseInt(val); ok {
-					cfg.SampleRate = v
-				}
-			case "buffer_ms":
-				if v, ok := parseInt(val); ok {
-					cfg.BufferMs = v
-				}
-			case "resample_quality":
-				if v, ok := parseInt(val); ok {
-					cfg.ResampleQuality = v
-				}
-			case "bit_depth":
-				if v, ok := parseInt(val); ok {
-					cfg.BitDepth = v
-				}
-			case "speed":
-				if v, ok := parseFloat(val); ok {
-					cfg.Speed = v
-				}
-			case "simplified":
-				if v, ok := parseBool(val); ok {
-					cfg.Simplified = v
-				}
-			case "hide_help_bar":
-				if v, ok := parseBool(val); ok {
-					cfg.HideHelpBar = v
-				}
-			case "hide_settings_pane":
-				if v, ok := parseBool(val); ok {
-					cfg.HideSettingsPane = v
-				}
-			case "show_metadata":
-				if v, ok := parseBool(val); ok {
-					cfg.ShowMetadata = v
-				}
-			case "expanded":
-				if v, ok := parseBool(val); ok {
-					cfg.Expanded = v
-				}
-			case "audio_device":
-				cfg.AudioDevice = parseString(val)
-			case "initial_directory":
-				cfg.InitialDirectory = parseString(val)
-			case "padding_horizontal":
-				if v, ok := parseInt(val); ok {
-					cfg.PaddingH = v
-				}
-			case "padding_vertical":
-				if v, ok := parseInt(val); ok {
-					cfg.PaddingV = v
-				}
-			case "log_level":
-				lvl := strings.ToLower(parseString(val))
-				switch lvl {
-				case "debug", "info", "warn", "warning", "error":
-					cfg.LogLevel = lvl
-				}
-			case "low_power":
-				if v, ok := parseBool(val); ok {
-					cfg.LowPower = v
-				}
+			} else {
+				cfg.setTopLevel(key, val)
 			}
 		}
 	}
 
 	cfg.clamp()
 	return cfg, scanner.Err()
+}
+
+// pluginSection returns the plugin name of a [plugins] or [plugins.<name>]
+// section. The top-level [plugins] section has the empty name.
+func pluginSection(section string) (string, bool) {
+	if section == "plugins" {
+		return "", true
+	}
+	return strings.CutPrefix(section, "plugins.")
+}
+
+// setTopLevel applies one top-level key. Keys under an unknown section also
+// land here.
+func (c *Config) setTopLevel(key, val string) {
+	switch key {
+	case "volume":
+		if v, ok := parseFloat(val); ok {
+			c.Volume = v
+		}
+	case "volume_min":
+		if v, ok := parseFloat(val); ok {
+			c.VolumeMin = v
+		}
+	case "vis_volume_linked":
+		if v, ok := parseBool(val); ok {
+			c.VisVolumeLinked = v
+		}
+	case "repeat":
+		val = parseString(val)
+		switch strings.ToLower(val) {
+		case "all", "one", "off":
+			c.Repeat = strings.ToLower(val)
+		}
+	case "shuffle":
+		if v, ok := parseBool(val); ok {
+			c.Shuffle = v
+		}
+	case "mono":
+		if v, ok := parseBool(val); ok {
+			c.Mono = v
+		}
+	case "auto_play":
+		if v, ok := parseBool(val); ok {
+			c.AutoPlay = v
+		}
+	case "seek_large_step_sec":
+		if v, ok := parseInt(val); ok {
+			c.SeekStepLarge = v
+		}
+	case "lyrics_offset_ms":
+		if v, ok := parseInt(val); ok {
+			c.LyricsOffsetMs = v
+		}
+	case "eq":
+		c.EQ = parseEQ(val)
+	case "eq_preset":
+		c.EQPreset = parseString(val)
+	case "theme":
+		c.Theme = parseString(val)
+	case "provider":
+		c.Provider = strings.ToLower(parseString(val))
+	case "visualizer":
+		c.Visualizer = parseString(val)
+	case "vis_rows":
+		if v, ok := parseInt(val); ok {
+			c.VisRows = v
+		}
+	case "sample_rate":
+		if v, ok := parseInt(val); ok {
+			c.SampleRate = v
+		}
+	case "buffer_ms":
+		if v, ok := parseInt(val); ok {
+			c.BufferMs = v
+		}
+	case "resample_quality":
+		if v, ok := parseInt(val); ok {
+			c.ResampleQuality = v
+		}
+	case "bit_depth":
+		if v, ok := parseInt(val); ok {
+			c.BitDepth = v
+		}
+	case "speed":
+		if v, ok := parseFloat(val); ok {
+			c.Speed = v
+		}
+	case "simplified":
+		if v, ok := parseBool(val); ok {
+			c.Simplified = v
+		}
+	case "hide_help_bar":
+		if v, ok := parseBool(val); ok {
+			c.HideHelpBar = v
+		}
+	case "hide_settings_pane":
+		if v, ok := parseBool(val); ok {
+			c.HideSettingsPane = v
+		}
+	case "show_metadata":
+		if v, ok := parseBool(val); ok {
+			c.ShowMetadata = v
+		}
+	case "expanded":
+		if v, ok := parseBool(val); ok {
+			c.Expanded = v
+		}
+	case "audio_device":
+		c.AudioDevice = parseString(val)
+	case "initial_directory":
+		c.InitialDirectory = parseString(val)
+	case "padding_horizontal":
+		if v, ok := parseInt(val); ok {
+			c.PaddingH = v
+		}
+	case "padding_vertical":
+		if v, ok := parseInt(val); ok {
+			c.PaddingV = v
+		}
+	case "log_level":
+		lvl := strings.ToLower(parseString(val))
+		switch lvl {
+		case "debug", "info", "warn", "warning", "error":
+			c.LogLevel = lvl
+		}
+	case "low_power":
+		if v, ok := parseBool(val); ok {
+			c.LowPower = v
+		}
+	}
 }
 
 // Save updates only the given key in the existing config file, preserving
