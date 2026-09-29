@@ -1,31 +1,40 @@
 package luaplugin
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
+
+	"github.com/bjarneo/cliamp/internal/plugintrust"
 )
 
 // newTestManager returns a Manager ready for testing (no disk I/O).
 func newTestManager() *Manager {
-	return &Manager{
-		hooks:        make(map[string][]*luaHook),
-		keyBinds:     make(map[string][]*luaHook),
-		keyBindDescs: make(map[string]KeyBinding),
-		commands:     make(map[string]map[string]*luaHook),
-		visMap:       make(map[string]*luaVis),
-		timers:       newTimerManager(),
-		execs:        newExecManager(defaultAllowedBinaries),
-	}
+	return newManager(defaultAllowedBinaries, nil)
 }
 
-// loadTestPlugin writes a Lua script to a temp file, loads it into the manager,
-// and appends it to m.plugins if registration succeeded.
+// setRenderTimeout sets renderTimeout until the test ends. A test that needs
+// a render to succeed sets a long limit, so a slow runner cannot fail it.
+func setRenderTimeout(t *testing.T, d time.Duration) {
+	t.Helper()
+	old := renderTimeout
+	renderTimeout = d
+	t.Cleanup(func() { renderTimeout = old })
+}
+
+// loadTestPlugin writes a Lua script to a temp file and loads it into the
+// manager. loadPlugin adds the plugin to m.plugins if registration succeeded.
 func loadTestPlugin(t *testing.T, m *Manager, name, code string) *Plugin {
 	return loadTestPluginWithConfig(t, m, name, code, nil)
 }
@@ -40,9 +49,6 @@ func loadTestPluginWithConfig(t *testing.T, m *Manager, name, code string, cfg m
 	p, err := m.loadPlugin(path, name, cfg)
 	if err != nil {
 		t.Fatalf("loadPlugin(%s): %v", name, err)
-	}
-	if p != nil {
-		m.plugins = append(m.plugins, p)
 	}
 	return p
 }
@@ -94,6 +100,126 @@ func TestLoadPluginWithoutRegisterReturnsNil(t *testing.T) {
 
 	if p != nil {
 		t.Fatalf("expected nil plugin for script without register, got %+v", p)
+	}
+}
+
+func TestRegisterWithoutTypeReportsError(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{"no type", `plugin.register({name = "y"})`},
+		{"empty type", `plugin.register({name = "y", type = ""})`},
+		{"unknown type", `plugin.register({name = "y", type = "visualiser"})`},
+		{"number type", `plugin.register({name = "y", type = 1})`},
+		{"no type with a hook", `
+			local p = plugin.register({name = "y"})
+			p:on("track.change", function() end)
+		`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			path := filepath.Join(t.TempDir(), "y.lua")
+			if err := os.WriteFile(path, []byte(tt.code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			p, err := m.loadPlugin(path, "y", nil)
+			if p != nil {
+				t.Errorf("loadPlugin() plugin = %+v, want nil", p)
+			}
+			if err == nil || !strings.Contains(err.Error(), `needs type = "hook" or "visualizer"`) {
+				t.Errorf("loadPlugin() error = %v, want the missing type", err)
+			}
+			if n := len(m.hooks["track.change"]); n != 0 {
+				t.Errorf("hooks[track.change] = %d, want 0", n)
+			}
+		})
+	}
+}
+
+// A display name belongs to the first plugin that registers it. A later
+// plugin with the same name fails to load. A plugin that registers again under
+// a new name keeps the old name too.
+func TestDuplicateDisplayNameRejected(t *testing.T) {
+	setRenderTimeout(t, time.Second)
+	type file struct{ name, code string }
+	tests := []struct {
+		name     string
+		first    file
+		second   file
+		wantErr  string
+		wantVis  []string
+		wantName string
+	}{
+		{
+			name:    "same name",
+			first:   file{"a", `plugin.register({name = "dup", type = "hook"})`},
+			second:  file{"b", `plugin.register({name = "dup", type = "hook"})`},
+			wantErr: `plugin name "dup" is already used by plugin "a"`,
+		},
+		{
+			name:    "name matches the default name of another plugin",
+			first:   file{"dup", `plugin.register({type = "hook"})`},
+			second:  file{"b", `plugin.register({name = "dup", type = "hook"})`},
+			wantErr: `plugin name "dup" is already used by plugin "dup"`,
+		},
+		{
+			name:    "default name matches the name of another plugin",
+			first:   file{"a", `plugin.register({name = "dup", type = "hook"})`},
+			second:  file{"dup", `plugin.register({type = "hook"})`},
+			wantErr: `plugin name "dup" is already used by plugin "a"`,
+		},
+		{
+			name: "visualizers with the same name",
+			first: file{"a", `
+				local p = plugin.register({name = "bars", type = "visualizer"})
+				function p:render() return "a" end`},
+			second: file{"b", `
+				local p = plugin.register({name = "bars", type = "visualizer"})
+				function p:render() return "b" end`},
+			wantErr: `plugin name "bars" is already used by plugin "a"`,
+			wantVis: []string{"bars"},
+		},
+		{
+			name:    "register again under a new name",
+			first:   file{"a", `plugin.register({name = "one", type = "hook"}); plugin.register({name = "two", type = "hook"})`},
+			second:  file{"b", `plugin.register({name = "one", type = "hook"})`},
+			wantErr: `plugin name "one" is already used by plugin "a"`,
+		},
+		{
+			name:     "different names",
+			first:    file{"a", `plugin.register({name = "one", type = "hook"})`},
+			second:   file{"b", `plugin.register({name = "two", type = "hook"})`},
+			wantName: "two",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			loadTestPlugin(t, m, tt.first.name, tt.first.code)
+			path := filepath.Join(t.TempDir(), tt.second.name+".lua")
+			if err := os.WriteFile(path, []byte(tt.second.code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			p, err := m.loadPlugin(path, tt.second.name, nil)
+			if tt.wantErr != "" {
+				if p != nil || err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("loadPlugin() = %v, %v, want an error with %q", p, err, tt.wantErr)
+				}
+			} else if err != nil || p == nil || p.Name != tt.wantName {
+				t.Fatalf("loadPlugin() = %v, %v, want a plugin named %q", p, err, tt.wantName)
+			}
+			m.finalizeVisualizers()
+			if got := m.Visualizers(); tt.wantVis != nil && !slices.Equal(got, tt.wantVis) {
+				t.Errorf("Visualizers() = %v, want %v", got, tt.wantVis)
+			}
+			if tt.wantVis != nil {
+				if got := m.RenderVis("bars", [10]float64{}, 1, 1, 1); got != "a" {
+					t.Errorf("RenderVis() = %q, want the frame of the first plugin", got)
+				}
+			}
+		})
 	}
 }
 
@@ -167,6 +293,100 @@ func TestLoadPluginCleanupStopsPendingTimers(t *testing.T) {
 			if _, err := os.Stat(path); !os.IsNotExist(err) {
 				t.Fatalf("timer callback wrote %q after cleanup, err=%v", path, err)
 			}
+		})
+	}
+}
+
+// A plugin that fails to load after it started a process must not deadlock
+// startup. Cleanup waits for the process, and its callbacks need the lock.
+func TestLoadFailureWithPendingExecDoesNotHang(t *testing.T) {
+	sleepBin, sleepArgs := execSleepCommand(10)
+	echoBin, echoArgs, _ := execOutputCommand()
+	tests := []struct {
+		name string
+		code string
+	}{
+		{"on_exit of a process that cleanup stops", fmt.Sprintf(`
+			cliamp.exec.run(%q, {%s}, {on_exit = function() end})
+			error("boom")
+		`, sleepBin, luaStringList(sleepArgs))},
+		{"on_stdout line that waits for the lock", fmt.Sprintf(`
+			cliamp.exec.run(%q, {%s}, {on_stdout = function() end, on_exit = function() end})
+			cliamp.sleep(0.2)
+			error("boom")
+		`, echoBin, luaStringList(echoArgs))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			m.execs = newExecManager(execTestAllowedBinaries())
+			path := filepath.Join(t.TempDir(), "failing.lua")
+			code := `plugin.register({name = "failing", type = "hook", permissions = {"exec"}})` + tt.code
+			if err := os.WriteFile(path, []byte(code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			done := make(chan error, 1)
+			go func() {
+				_, err := m.loadPlugin(path, "failing", nil)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				if err == nil || !strings.Contains(err.Error(), "boom") {
+					t.Fatalf("loadPlugin() error = %v, want boom", err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("loadPlugin did not return after a load error with a pending exec callback")
+			}
+		})
+	}
+}
+
+// The top-level chunk of a plugin has a time limit, so a plugin that loops
+// or sleeps at load cannot hang startup.
+func TestLoadTimesOut(t *testing.T) {
+	defer func(d time.Duration) { loadTimeout = d }(loadTimeout)
+	loadTimeout = 200 * time.Millisecond
+
+	tests := []struct {
+		name    string
+		code    string
+		wantErr bool
+	}{
+		{"busy loop before register", `while true do end`, true},
+		{"busy loop after register", `plugin.register({name = "slow", type = "hook"}) while true do end`, true},
+		{"sleep after register", `plugin.register({name = "slow", type = "hook"}) cliamp.sleep(10)`, true},
+		{"sleep before register", `cliamp.sleep(10) plugin.register({name = "slow", type = "hook"})`, true},
+		{"short sleep within the limit", `cliamp.sleep(0.01) plugin.register({name = "slow", type = "hook"})`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			path := filepath.Join(t.TempDir(), "slow.lua")
+			if err := os.WriteFile(path, []byte(tt.code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() {
+				_, err := m.loadPlugin(path, "slow", nil)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				if tt.wantErr && (err == nil || !strings.Contains(err.Error(), "load did not finish")) {
+					t.Fatalf("loadPlugin() error = %v, want the load time limit", err)
+				}
+				if !tt.wantErr && err != nil {
+					t.Fatalf("loadPlugin() error = %v", err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("loadPlugin did not return after the load time limit")
+			}
+			if !tt.wantErr && m.plugins[0].L.Context() != nil {
+				t.Error("the loaded plugin keeps the load context")
+			}
+			m.Close()
 		})
 	}
 }
@@ -498,23 +718,22 @@ func TestTimerCancel(t *testing.T) {
 }
 
 func TestVisualizerPlugin(t *testing.T) {
+	setRenderTimeout(t, time.Second)
 	m := newTestManager()
 	loadTestPlugin(t, m, "test-vis", `
 		local v = plugin.register({name = "test-vis", type = "visualizer"})
-		_G.init_called = false
-		_G.destroy_called = false
 		v.init = function(self, rows, cols)
-			_G.init_called = true
 			_G.init_rows = rows
 		end
 		v.render = function(self, bands, frame, rows, cols)
 			return "frame-" .. tostring(frame)
 		end
 		v.destroy = function(self)
-			_G.destroy_called = true
+			_G.destroyed = true
 		end
 	`)
 	m.finalizeVisualizers()
+	defer m.Close()
 
 	names := m.Visualizers()
 	if len(names) != 1 || names[0] != "test-vis" {
@@ -524,13 +743,7 @@ func TestVisualizerPlugin(t *testing.T) {
 	m.InitVis("test-vis", 8, 40)
 
 	vis := m.visMap["test-vis"]
-	vis.plugin.mu.Lock()
-	initCalled := vis.plugin.L.GetGlobal("init_called")
-	vis.plugin.mu.Unlock()
-
-	if initCalled != lua.LTrue {
-		t.Fatal("init callback was not called")
-	}
+	waitGlobal(t, vis.plugin, "init_rows")
 
 	got := m.RenderVis("test-vis", [10]float64{}, 8, 40, 42)
 	if got != "frame-42" {
@@ -538,17 +751,94 @@ func TestVisualizerPlugin(t *testing.T) {
 	}
 
 	m.DestroyVis("test-vis")
+	waitGlobal(t, vis.plugin, "destroyed")
+}
 
-	vis.plugin.mu.Lock()
-	destroyCalled := vis.plugin.L.GetGlobal("destroy_called")
-	vis.plugin.mu.Unlock()
+// waitGlobal waits until the Lua global name of p is set.
+func waitGlobal(t *testing.T, p *Plugin, name string) {
+	t.Helper()
+	waitExec(t, p, p.L, name, time.Second)
+}
 
-	if destroyCalled != lua.LTrue {
-		t.Fatal("destroy callback was not called")
+// InitVis and DestroyVis run on the UI goroutine. They must return at once
+// while a hook of the plugin holds the lock, because that hook can wait for
+// the UI goroutine. The call runs after the lock is free.
+func TestVisLifecycleCallsDoNotBlock(t *testing.T) {
+	tests := []struct {
+		name   string
+		call   func(m *Manager)
+		global string
+	}{
+		{"init", func(m *Manager) { m.InitVis("life-vis", 8, 40) }, "init_rows"},
+		{"destroy", func(m *Manager) { m.DestroyVis("life-vis") }, "destroyed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			p := loadTestPlugin(t, m, "life-vis", `
+				local v = plugin.register({name = "life-vis", type = "visualizer"})
+				function v:init(rows, cols) init_rows = rows end
+				function v:render(bands, frame) return "frame-" .. frame end
+				function v:destroy() destroyed = true end
+			`)
+			m.finalizeVisualizers()
+			defer m.Close()
+
+			p.mu.Lock()
+			done := make(chan struct{})
+			go func() {
+				tt.call(m)
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(100 * time.Millisecond):
+				t.Error("the call waited for the plugin lock")
+			}
+			p.mu.Unlock()
+			waitGlobal(t, p, tt.global)
+		})
+	}
+}
+
+// RenderVis must not run render before a queued init has run.
+func TestRenderVisWaitsForInit(t *testing.T) {
+	setRenderTimeout(t, time.Second)
+	m := newTestManager()
+	p := loadTestPlugin(t, m, "init-vis", `
+		local v = plugin.register({name = "init-vis", type = "visualizer"})
+		local ready = false
+		function v:init() ready = true end
+		function v:render()
+			if ready then return "ready" end
+			return "early"
+		end
+	`)
+	m.finalizeVisualizers()
+	defer m.Close()
+
+	// Hold the queue of the plugin, so init waits behind this call.
+	release := make(chan struct{})
+	m.mu.RLock()
+	m.enqueue(p, "block", func() { <-release })
+	m.mu.RUnlock()
+
+	m.InitVis("init-vis", 8, 40)
+	if got := m.RenderVis("init-vis", [10]float64{}, 8, 40, 1); got != "" {
+		t.Errorf("RenderVis() = %q while init waits, want the empty last frame", got)
+	}
+	close(release)
+	deadline := time.Now().Add(time.Second)
+	for m.RenderVis("init-vis", [10]float64{}, 8, 40, 2) != "ready" {
+		if time.Now().After(deadline) {
+			t.Fatal("RenderVis() did not render after init ran")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
 func TestRenderVisReusesLastOnError(t *testing.T) {
+	setRenderTimeout(t, time.Second)
 	m := newTestManager()
 	loadTestPlugin(t, m, "err-vis", `
 		local v = plugin.register({name = "err-vis", type = "visualizer"})
@@ -572,6 +862,76 @@ func TestRenderVisReusesLastOnError(t *testing.T) {
 	got2 := m.RenderVis("err-vis", [10]float64{}, 8, 40, 2)
 	if got2 != "ok-1" {
 		t.Fatalf("frame 2 (error) = %q, want %q (reused)", got2, "ok-1")
+	}
+}
+
+// RenderVis runs on the UI goroutine. When another callback of the plugin
+// holds the lock, it returns the last frame at once instead of waiting.
+func TestRenderVisReturnsLastFrameWhenPluginBusy(t *testing.T) {
+	setRenderTimeout(t, time.Second)
+	m := newTestManager()
+	p := loadTestPlugin(t, m, "busy-vis", `
+		local v = plugin.register({name = "busy-vis", type = "visualizer"})
+		function v:render(bands, frame) return "frame-" .. frame end
+	`)
+	m.finalizeVisualizers()
+	defer m.Close()
+	if got := m.RenderVis("busy-vis", [10]float64{}, 8, 40, 1); got != "frame-1" {
+		t.Fatalf("RenderVis() = %q, want frame-1", got)
+	}
+
+	p.mu.Lock()
+	done := make(chan string, 1)
+	go func() { done <- m.RenderVis("busy-vis", [10]float64{}, 8, 40, 2) }()
+	select {
+	case got := <-done:
+		if got != "frame-1" {
+			t.Errorf("RenderVis() = %q, want the last frame frame-1", got)
+		}
+	case <-time.After(time.Second):
+		t.Error("RenderVis waited for the plugin lock")
+	}
+	p.mu.Unlock()
+	if got := m.RenderVis("busy-vis", [10]float64{}, 8, 40, 3); got != "frame-3" {
+		t.Errorf("RenderVis() = %q, want frame-3 after the lock is free", got)
+	}
+}
+
+// A render that runs past renderTimeout stops, and RenderVis returns the last
+// frame.
+func TestRenderVisTimeout(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"busy loop", "while true do end"},
+		{"sleep", "cliamp.sleep(10)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			loadTestPlugin(t, m, "slow-vis", `
+				local v = plugin.register({name = "slow-vis", type = "visualizer"})
+				function v:render(bands, frame)
+					if frame > 1 then `+tt.body+` end
+					return "frame-" .. frame
+				end
+			`)
+			m.finalizeVisualizers()
+			defer m.Close()
+			setRenderTimeout(t, time.Second)
+			m.RenderVis("slow-vis", [10]float64{}, 8, 40, 1)
+
+			renderTimeout = 20 * time.Millisecond
+			start := time.Now()
+			got := m.RenderVis("slow-vis", [10]float64{}, 8, 40, 2)
+			if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+				t.Errorf("RenderVis() took %v, want about %v", elapsed, renderTimeout)
+			}
+			if got != "frame-1" {
+				t.Errorf("RenderVis() = %q, want the last frame frame-1", got)
+			}
+		})
 	}
 }
 
@@ -627,6 +987,73 @@ func TestDataToTableNested(t *testing.T) {
 	}
 }
 
+func TestPlayerEQBands(t *testing.T) {
+	bands := [10]float64{1, 2, 3, 4, 5, 6, 7, 8, 9, -10}
+	tests := []struct {
+		name  string
+		state StateProvider
+		want  []any
+	}{
+		{"no provider", StateProvider{}, nil},
+		{"provider", StateProvider{EQBands: func() [10]float64 { return bands }},
+			[]any{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, -10.0}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+			cliamp := L.NewTable()
+			registerPlayerAPI(L, cliamp, &tt.state)
+			L.SetGlobal("cliamp", cliamp)
+			if err := L.DoString(`_G.bands = cliamp.player.eq_bands()`); err != nil {
+				t.Fatal(err)
+			}
+			tbl := L.GetGlobal("bands").(*lua.LTable)
+			if tt.want == nil {
+				if n := tbl.Len(); n != 0 {
+					t.Fatalf("eq_bands() has %d values, want 0", n)
+				}
+				return
+			}
+			if got := luaToGo(tbl); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("eq_bands() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// Event payloads, JSON and the store share one converter, so a slice in an
+// event becomes a Lua array and not its fmt string.
+func TestDataToTableValues(t *testing.T) {
+	tests := []struct {
+		name string
+		in   any
+		want any // the value after a round trip through luaToGo
+	}{
+		{"nil", nil, nil},
+		{"bool", true, true},
+		{"string", "hi", "hi"},
+		{"int", 42, 42.0},
+		{"int64", int64(-7), -7.0},
+		{"float64", 3.5, 3.5},
+		{"float slice", []float64{1, 2}, []any{1.0, 2.0}},
+		{"string slice", []string{"a", "b"}, []any{"a", "b"}},
+		{"any slice", []any{"a", 1.0, []any{true}}, []any{"a", 1.0, []any{true}}},
+		{"map", map[string]any{"k": []any{"v"}}, map[string]any{"k": []any{"v"}}},
+		{"other type", struct{ A int }{1}, "{1}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+			tbl := dataToTable(L, map[string]any{"v": tt.in})
+			if got := luaToGo(tbl.RawGetString("v")); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("value = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConcurrentEmitSafety(t *testing.T) {
 	m := newTestManager()
 	p := loadTestPlugin(t, m, "concurrent", `
@@ -650,5 +1077,522 @@ func TestConcurrentEmitSafety(t *testing.T) {
 
 	if count != 20 {
 		t.Fatalf("count after 20 concurrent emits = %v, want 20", count)
+	}
+}
+
+// recorder collects values that a plugin passes to the global record().
+type recorder struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+// install sets the global record() in the VM of p.
+func (r *recorder) install(p *Plugin) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.L.SetGlobal("record", p.L.NewFunction(func(L *lua.LState) int {
+		r.mu.Lock()
+		r.seen = append(r.seen, L.CheckString(1))
+		r.mu.Unlock()
+		return 0
+	}))
+}
+
+func (r *recorder) values() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.seen)
+}
+
+// wait returns the recorded values once there are n of them.
+func (r *recorder) wait(t *testing.T, n int) []string {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got := r.values()
+		if len(got) >= n || time.Now().After(deadline) {
+			return got
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// Each plugin gets its events and key presses in the order cliamp sent them.
+// Before the queue, each event ran in its own goroutine, and the plugin lock
+// does not wake goroutines in order.
+func TestEmitPreservesOrderPerPlugin(t *testing.T) {
+	// Both rows send 200 calls, which fits the queue, so none may drop.
+	tests := []struct {
+		name string
+		n    int
+		keys bool
+	}{
+		{"events", 200, false},
+		{"events and key presses", 100, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			m.SetReservedKeys(map[string]bool{})
+			p := loadTestPlugin(t, m, "order", `
+				local p = plugin.register({name = "order", type = "hook", permissions = {"keymap"}})
+				p:on("ev", function(data) record(tostring(data.n)) end)
+				p:bind("ctrl+y", function(key) record(key) end)
+			`)
+			var rec recorder
+			rec.install(p)
+
+			var want []string
+			for i := 1; i <= tt.n; i++ {
+				m.Emit("ev", map[string]any{"n": i})
+				want = append(want, fmt.Sprint(i))
+				if tt.keys {
+					m.EmitKey("ctrl+y")
+					want = append(want, "ctrl+y")
+				}
+			}
+			got := rec.wait(t, len(want))
+			if len(got) != len(want) {
+				t.Fatalf("plugin saw %d calls, want %d", len(got), len(want))
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Fatalf("call %d = %s, want %s: the plugin saw its calls out of order", i+1, got[i], want[i])
+				}
+			}
+		})
+	}
+}
+
+// A plugin that falls behind drops new events instead of growing a goroutine
+// for each one. One burst of drops logs one line.
+func TestEmitDropsWhenQueueFull(t *testing.T) {
+	m := newTestManager()
+	logPath := filepath.Join(t.TempDir(), pluginLogName)
+	m.logger = newPluginLogger(logPath)
+	p := loadTestPlugin(t, m, "slow", `
+		local p = plugin.register({name = "slow", type = "hook"})
+		p:on("ev", function(data) record(tostring(data.n)) end)
+	`)
+	var rec recorder
+	rec.install(p)
+
+	// Hold the plugin lock, so the worker blocks on the first event. Wait
+	// until the worker took it, then fill the queue and send 10 more.
+	p.mu.Lock()
+	m.Emit("ev", map[string]any{"n": 1})
+	for len(p.queue) > 0 {
+		time.Sleep(time.Millisecond)
+	}
+	for i := 2; i <= eventQueueSize+11; i++ {
+		m.Emit("ev", map[string]any{"n": i})
+	}
+	p.mu.Unlock()
+
+	want := eventQueueSize + 1
+	got := rec.wait(t, want)
+	time.Sleep(20 * time.Millisecond) // let an extra event arrive if one was kept
+	got = rec.values()
+	if len(got) != want {
+		t.Fatalf("plugin saw %d events, want %d", len(got), want)
+	}
+	for i, v := range got {
+		if v != fmt.Sprint(i+1) {
+			t.Fatalf("event %d = %s, want %d: the queue must keep the first events", i, v, i+1)
+		}
+	}
+
+	m.Emit("ev", map[string]any{"n": "after"})
+	if got := rec.wait(t, len(got)+1); got[len(got)-1] != "after" {
+		t.Fatalf("last event = %s, want the event sent after the queue drained", got[len(got)-1])
+	}
+	m.Close()
+	data, _ := os.ReadFile(logPath)
+	if n := strings.Count(string(data), "ev handler dropped"); n != 1 {
+		t.Fatalf("plugins.log has %d drop warnings, want 1:\n%s", n, data)
+	}
+}
+
+// Close runs the events that are already queued, then app.quit.
+func TestCloseRunsQueuedEventsBeforeQuit(t *testing.T) {
+	m := newTestManager()
+	p := loadTestPlugin(t, m, "quit-order", `
+		local p = plugin.register({name = "quit-order", type = "hook"})
+		p:on("ev", function(data) record(tostring(data.n)) end)
+		p:on("app.quit", function() record("quit") end)
+	`)
+	var rec recorder
+	rec.install(p)
+
+	p.mu.Lock()
+	var want []string
+	for i := 1; i <= 10; i++ {
+		m.Emit("ev", map[string]any{"n": i})
+		want = append(want, fmt.Sprint(i))
+	}
+	done := make(chan struct{})
+	go func() {
+		m.Close()
+		close(done)
+	}()
+	p.mu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not return")
+	}
+	if got := rec.values(); !slices.Equal(got, append(want, "quit")) {
+		t.Fatalf("plugin saw %v, want the queued events and then quit", got)
+	}
+}
+
+// Close stops the run of queued events after closeDrainBudget, so a slow
+// plugin with a full queue cannot hold up quit. app.quit still runs.
+func TestCloseBoundsQueueDrain(t *testing.T) {
+	defer func(d time.Duration) { hookTimeout = d }(hookTimeout)
+	hookTimeout = 200 * time.Millisecond
+	defer func(d time.Duration) { closeDrainBudget = d }(closeDrainBudget)
+	closeDrainBudget = 50 * time.Millisecond
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"sleep", "cliamp.sleep(0.2)"},
+		{"busy loop", "while true do end"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			p := loadTestPlugin(t, m, "slow-events", `
+				local p = plugin.register({name = "slow-events", type = "hook"})
+				p:on("ev", function() record("ev") `+tt.body+` end)
+				p:on("app.quit", function() record("quit") end)
+			`)
+			var rec recorder
+			rec.install(p)
+			const events = 20
+			for range events {
+				m.Emit("ev", nil)
+			}
+
+			start := time.Now()
+			m.Close()
+			if elapsed := time.Since(start); elapsed > time.Second {
+				t.Errorf("Close() took %v, want less than 1s", elapsed)
+			}
+			got := rec.values()
+			if len(got) == 0 || got[len(got)-1] != "quit" {
+				t.Fatalf("plugin saw %v, want app.quit last", got)
+			}
+			if n := len(got) - 1; n >= events {
+				t.Errorf("plugin ran %d of %d queued events, want Close to drop the rest", n, events)
+			}
+		})
+	}
+}
+
+func TestNewTreatsBadTrustManifestAsUntrusted(t *testing.T) {
+	const code = `plugin.register({name = "hello", type = "hook"})`
+	tests := []struct {
+		name     string
+		manifest func(hash string) string
+		bad      bool
+	}{
+		{"not JSON", func(string) string { return "{" }, true},
+		{"null plugins map", func(string) string { return `{"version":1,"plugins":null}` }, true},
+		{"unsupported version with a matching hash", func(hash string) string {
+			return `{"version":2,"plugins":{"hello":"` + hash + `"}}`
+		}, true},
+		{"valid manifest without the approval", func(string) string { return `{"version":1,"plugins":{}}` }, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			cfg := filepath.Join(home, ".config", "cliamp")
+			dir := filepath.Join(cfg, "plugins")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "hello.lua")
+			if err := os.WriteFile(path, []byte(code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			hash, err := plugintrust.HashFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, ".trust.json"), []byte(tt.manifest(hash)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			m, err := New(nil, nil)
+			if m == nil {
+				t.Fatal("New returned a nil Manager")
+			}
+			defer m.Close()
+			if got := m.PluginCount(); got != 0 {
+				t.Errorf("PluginCount() = %d, want 0", got)
+			}
+			if err == nil || !strings.Contains(err.Error(), "hello: "+plugintrust.ErrUntrusted.Error()) {
+				t.Fatalf("New() error = %v, want hello as untrusted", err)
+			}
+			// cliamp plugins trust fails while the manifest does not load, so
+			// the error names the file to delete instead.
+			recovery := "delete " + filepath.Join(dir, ".trust.json") + " and approve each plugin again"
+			hint := "run `cliamp plugins trust hello`"
+			if got := strings.Contains(err.Error(), "trust manifest"); got != tt.bad {
+				t.Errorf("New() error = %v, want the manifest error: %v", err, tt.bad)
+			}
+			if got := strings.Contains(err.Error(), recovery); got != tt.bad {
+				t.Errorf("New() error = %v, want the recovery step %q: %v", err, recovery, tt.bad)
+			}
+			if got := strings.Contains(err.Error(), hint); got == tt.bad {
+				t.Errorf("New() error = %v, want the hint %q: %v", err, hint, !tt.bad)
+			}
+			log, _ := os.ReadFile(filepath.Join(cfg, pluginLogName))
+			if got := strings.Contains(string(log), "trust manifest"); got != tt.bad {
+				t.Errorf("plugins.log = %q, want the manifest error: %v", log, tt.bad)
+			}
+		})
+	}
+}
+
+// Close must wait for a timer callback that runs, then close the VM. Before
+// it took the plugin lock, the callback kept running on the closed VM and
+// crashed the process.
+func TestCloseDuringTimerCallback(t *testing.T) {
+	for i := range 20 {
+		m := newTestManager()
+		loadTestPlugin(t, m, fmt.Sprintf("busy-timer-%d", i), `
+			plugin.register({name = "busy-timer", type = "hook"})
+			cliamp.timer.every(0.001, function()
+				local x = 0
+				for n = 1, 20000 do x = x + n end
+			end)
+		`)
+		time.Sleep(20 * time.Millisecond)
+		m.Close()
+	}
+	// Give a callback that outlived Close the time to touch its VM.
+	time.Sleep(50 * time.Millisecond)
+}
+
+func TestCloseBoundsQuitHook(t *testing.T) {
+	defer func(d time.Duration) { hookTimeout = d }(hookTimeout)
+	hookTimeout = 50 * time.Millisecond
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"busy loop", "while true do end"},
+		{"sleep", "cliamp.sleep(10)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			loadTestPlugin(t, m, "slow-quit", `
+				local p = plugin.register({name = "slow-quit", type = "hook"})
+				p:on("app.quit", function() `+tt.body+` end)
+			`)
+			done := make(chan struct{})
+			go func() {
+				m.Close()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("Close did not return while an app.quit hook ran")
+			}
+		})
+	}
+}
+
+// Close stops Lua that still runs after app.quit: an IPC command, or a timer
+// callback. Before, Close waited up to 5 minutes for a command and 5 seconds
+// for a timer callback.
+func TestCloseStopsRunningLua(t *testing.T) {
+	tests := []struct {
+		name    string
+		code    string
+		command bool
+	}{
+		{"command loop", `p:command("run", function() while true do end end)`, true},
+		{"command sleep", `p:command("run", function() while true do cliamp.sleep(10) end end)`, true},
+		{"timer loop", `cliamp.timer.after(0.001, function() while true do end end)`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			p := loadTestPlugin(t, m, "spin", `
+				local p = plugin.register({name = "spin", type = "hook"})
+				`+tt.code)
+			cmdErr := make(chan error, 1)
+			if tt.command {
+				go func() {
+					_, err := m.EmitCommand("spin", "run", nil)
+					cmdErr <- err
+				}()
+			}
+			// Wait until the Lua call holds the plugin lock.
+			deadline := time.Now().Add(time.Second)
+			for p.mu.TryLock() {
+				p.mu.Unlock()
+				if time.Now().After(deadline) {
+					t.Fatal("the Lua call did not start")
+				}
+				time.Sleep(time.Millisecond)
+			}
+
+			done := make(chan struct{})
+			go func() {
+				m.Close()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("Close did not stop the running Lua call")
+			}
+			if tt.command {
+				if err := <-cmdErr; !errors.Is(err, errClosed) {
+					t.Errorf("EmitCommand() error = %v, want %v", err, errClosed)
+				}
+			}
+		})
+	}
+}
+
+// Every entry point must be safe after Close and must not run Lua.
+func TestCallsAfterClose(t *testing.T) {
+	m := newTestManager()
+	loadTestPlugin(t, m, "closed", `
+		local p = plugin.register({name = "closed", type = "visualizer", permissions = {"keymap"}})
+		p:on("test.event", function() end)
+		p:bind("ctrl+y", function() end)
+		p:command("ping", function() return "pong" end)
+		function p:init() end
+		function p:render() return "frame" end
+		function p:destroy() end
+	`)
+	m.finalizeVisualizers()
+	m.Close()
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{"Emit", func() error { m.Emit("test.event", nil); return nil }},
+		{"EmitSync", func() error { m.EmitSync("test.event", nil); return nil }},
+		{"EmitKey", func() error {
+			if m.EmitKey("ctrl+y") {
+				return fmt.Errorf("EmitKey() = true, want false")
+			}
+			return nil
+		}},
+		{"EmitCommand", func() error {
+			if out, err := m.EmitCommand("closed", "ping", nil); err == nil {
+				return fmt.Errorf("EmitCommand() = %q, nil, want an error", out)
+			}
+			return nil
+		}},
+		{"InitVis", func() error { m.InitVis("closed", 8, 40); return nil }},
+		{"RenderVis", func() error {
+			if got := m.RenderVis("closed", [10]float64{}, 8, 40, 1); got != "" {
+				return fmt.Errorf("RenderVis() = %q, want the empty last frame", got)
+			}
+			return nil
+		}},
+		{"DestroyVis", func() error { m.DestroyVis("closed"); return nil }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.call(); err != nil {
+				t.Error(err)
+			}
+			m.wg.Wait()
+		})
+	}
+}
+
+// Timer callback errors reach plugins.log. An error that repeats is logged
+// once, so a fast timer cannot flood the log.
+func TestCallbackErrorsAreLogged(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{"timer.after", `cliamp.timer.after(0.001, function() error("callback failed") end)`},
+		{"timer.every repeats one error", `cliamp.timer.every(0.001, function() error("callback failed") end)`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			logPath := filepath.Join(t.TempDir(), pluginLogName)
+			m.logger = newPluginLogger(logPath)
+			loadTestPlugin(t, m, "failing", `
+				plugin.register({name = "failing", type = "hook"})
+				`+tt.code)
+			time.Sleep(50 * time.Millisecond)
+			m.Close()
+
+			data, _ := os.ReadFile(logPath)
+			if got := strings.Count(string(data), "callback failed"); got != 1 {
+				t.Fatalf("plugins.log has %d entries for the error, want 1:\n%s", got, data)
+			}
+		})
+	}
+}
+
+// Callback errors go to plugins.log only. A write to stderr corrupts the TUI.
+// A render runs on each frame, so it logs its first error once, even when it
+// fails only on some frames. A render timeout has its own log entry, so it
+// does not hide a later Lua error.
+func TestRenderErrorsLogOnceAndSkipStderr(t *testing.T) {
+	tests := []struct {
+		name         string
+		limit        time.Duration
+		render       string
+		wantTimeouts int
+	}{
+		{"fails on alternate frames", time.Second, `if frame % 2 == 0 then error("render failed " .. frame) end`, 0},
+		{"fails on each frame", time.Second, `error("render failed")`, 0},
+		{"a timeout does not hide a later error", 50 * time.Millisecond, `if frame == 0 then while true do end end error("render failed")`, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setRenderTimeout(t, tt.limit)
+			var stderr bytes.Buffer
+			defer log.SetOutput(log.Writer())
+			log.SetOutput(&stderr)
+
+			m := newTestManager()
+			logPath := filepath.Join(t.TempDir(), pluginLogName)
+			m.logger = newPluginLogger(logPath)
+			loadTestPlugin(t, m, "flaky-vis", `
+				local v = plugin.register({name = "flaky-vis", type = "visualizer"})
+				function v:render(bands, frame) `+tt.render+` return "ok" end
+			`)
+			m.finalizeVisualizers()
+			for frame := range uint64(10) {
+				m.RenderVis("flaky-vis", [10]float64{}, 8, 40, frame)
+			}
+			m.Close()
+
+			if stderr.Len() != 0 {
+				t.Errorf("stderr = %q, want nothing", stderr.String())
+			}
+			data, _ := os.ReadFile(logPath)
+			if got := strings.Count(string(data), "render failed"); got != 1 {
+				t.Errorf("plugins.log has %d render errors, want 1:\n%s", got, data)
+			}
+			timeout := "render error: did not finish in " + tt.limit.String()
+			if got := strings.Count(string(data), timeout); got != tt.wantTimeouts {
+				t.Errorf("plugins.log has %d render timeouts, want %d:\n%s", got, tt.wantTimeouts, data)
+			}
+		})
 	}
 }

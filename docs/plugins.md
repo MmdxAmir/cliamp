@@ -17,10 +17,12 @@ cliamp plugins                          # show help
 cliamp plugins list                     # list installed plugins
 cliamp plugins install <source>         # install a plugin
 cliamp plugins trust <name>             # approve installed plugin contents
-cliamp plugins remove <name>            # remove a plugin
+cliamp plugins remove <name>            # remove a plugin and its approval
 ```
 
-The install and trust commands show the source, SHA-256, declared permissions, and implicit file-system and network access before the prompt. In a non-interactive environment, use `--yes` only after you review the same content independently. cliamp stores approvals in `plugins/.trust.json`. Editing a plugin changes its hash and disables it until you approve it again. cliamp rejects unknown permission names.
+The install and trust commands show the source, SHA-256, declared permissions, and implicit file-system and network access before the prompt. In a non-interactive environment, use `--yes` only after you review the same content independently. cliamp stores approvals in `plugins/.trust.json`. Editing a plugin changes its hash and disables it until you approve it again. Removing a plugin also removes its approval. If `plugins/.trust.json` does not parse, cliamp treats every plugin as untrusted and logs the error to `plugins.log`. To recover, delete the file and approve each plugin again.
+
+The install and trust commands check the `plugin.register()` call the same way the player does. They reject a plugin whose `plugin.register()` call the player rejects, such as a call with an unknown permission name, or without `type = "hook"` or `type = "visualizer"`. The check runs the plugin file with a stand-in `cliamp` table that does nothing, so the plugin cannot do any work before you approve it.
 
 ### Install sources
 
@@ -132,20 +134,22 @@ url = "https://example.com/hook"
     helpers.lua
 ```
 
-The directory name is the plugin name. cliamp loads only `init.lua` automatically.
+The directory name is the plugin name. cliamp loads only `init.lua` automatically. If `myplugin.lua` and `myplugin/init.lua` both exist, cliamp and `cliamp plugins` use `myplugin.lua`.
 
 ## Registration
 
-Each plugin must call `plugin.register()`. cliamp silently skips files that do not call it.
+Each plugin must call `plugin.register()`. cliamp skips files that do not call it. The `type` field is required. A `plugin.register()` call without `type = "hook"` or `type = "visualizer"` is a load error. cliamp shows the error at startup and does not load the plugin. The top-level code of the plugin file must finish in 5 seconds. A plugin that runs longer at load is a load error.
 
 ```lua
 local p = plugin.register({
-    name        = "myplugin",           -- required
-    type        = "hook",               -- "hook" or "visualizer"
+    name        = "myplugin",           -- unique; default: the installed name
+    type        = "hook",               -- required: "hook" or "visualizer"
     version     = "1.0.0",             -- optional
     description = "What it does",       -- optional
 })
 ```
+
+Each loaded plugin must have its own `name`. cliamp loads plugins in the order of their installed names. If a plugin registers a name that an earlier plugin already uses, cliamp reports a load error and does not load it. If you omit `name`, cliamp uses the installed name: the file name without `.lua`, or the directory name. Commands, key binding descriptions, and visualizer modes use `name`. Config, trust, `cliamp.store`, event topics, and `plugins.log` use the installed name.
 
 The returned `p` object provides these methods:
 
@@ -207,7 +211,9 @@ and the `status` command already exposes playback metadata.
 
 ## Events
 
-Use `p:on(event, callback)` to subscribe to events. Callbacks run in goroutines and time out after 5 seconds.
+Use `p:on(event, callback)` to subscribe to events. Each plugin gets its events and key presses one at a time, in the order cliamp sent them. Different plugins run in parallel. Each callback times out after 5 seconds.
+
+Up to 256 events and key presses can wait for one plugin. If a plugin falls further behind, cliamp drops its new events and key presses until it catches up, and logs one warning to `plugins.log`. At shutdown, cliamp runs the events that wait for up to 2 seconds and drops the rest. Then it runs the `app.quit` handlers one at a time, with the same 5 second limit. After that, cliamp stops each command, timer callback, and exec callback that still runs.
 
 ### Available events
 
@@ -278,6 +284,22 @@ List registered commands with `cliamp plugins commands`. A command can run for u
 ## Lua API
 
 All APIs are in the global `cliamp` table.
+
+### Errors and permission denials
+
+Each function reports a failure in one fixed way:
+
+- A function that returns a value returns `nil` and an error message. Examples are `cliamp.fs.read`, `cliamp.http.get`, `cliamp.json.decode`, `cliamp.store.set`, `cliamp.exec.run`, `cliamp.queue.add(track)`, and `p:publish`.
+- `p:bind` returns `false` and a reason.
+- The controls in `cliamp.player`, and `cliamp.queue.add(path)`, `jump`, `remove`, and `move`, return nothing.
+- A bad argument raises a Lua error. `cliamp.fs.write`, `append`, `remove`, and `mkdir` also raise a Lua error for a path outside the allowed write directories. Use `pcall` to catch it. `cliamp.exec.run` returns `nil, "cwd not in write allowlist"` for such a `cwd`.
+
+If a plugin calls a function that needs a permission it did not declare, the function does nothing and returns its usual failure result. cliamp logs one warning to `plugins.log` for each missing permission.
+
+```lua
+local ok, err = pcall(cliamp.fs.write, "/etc/motd", "text")
+if not ok then cliamp.log.warn(err) end
+```
 
 ### cliamp.player (read-only)
 
@@ -384,7 +406,7 @@ cliamp.fs.mkdir(path)             -- create directory (recursive)
 cliamp.fs.listdir(path)           --> {names}, err
 ```
 
-You can write only to the system temp directory (`/tmp/` on Unix), `~/.config/cliamp/`, `~/.local/share/cliamp/`, and `~/Music/cliamp/`. You can read from any path. On Windows, when `HOME` is unset, the config directory resolves to `%APPDATA%\cliamp`.
+You can write only to the system temp directory (`/tmp/` on Unix), `~/.config/cliamp/`, `~/.local/share/cliamp/`, and `~/Music/cliamp/`. In `~/.config/cliamp/`, you cannot write to the `plugins/` directory, `config.toml`, `radios.toml`, `cliamp.sock`, or `plugins.log`. You can read from any path. On Windows, when `HOME` is unset, the config directory resolves to `%APPDATA%\cliamp`.
 
 ### cliamp.json
 
@@ -400,8 +422,10 @@ use the same conversion.
 ### cliamp.store
 
 This is a persistent key/value store for each plugin. Strings, numbers,
-booleans, and tables survive restarts. No permission is required. Each plugin
-can access only its own namespace, so it cannot read another plugin's keys.
+booleans, and tables survive restarts. No permission is required. cliamp keys
+each store by the installed name, and `cliamp.store` reaches only the store of
+the calling plugin. The store is not secret. Another plugin can read or change
+the store file with `cliamp.fs`. Do not keep secrets in it.
 
 ```lua
 cliamp.store.set(key, value)   -- value: string|number|boolean|table
@@ -438,7 +462,9 @@ cliamp.log.error("request failed: " .. err)
 cliamp.log.debug("response: " .. body)
 ```
 
-cliamp writes logs to `~/.config/cliamp/plugins.log`. Each line has a timestamp and the `[plugin-name]` prefix.
+cliamp writes logs to `~/.config/cliamp/plugins.log`. Each line has a timestamp and the installed name of the plugin as the prefix, for example `[now-playing]`.
+
+cliamp also logs the Lua errors of event hooks, key bindings, commands, timers, exec callbacks, and visualizer callbacks to this file. A callback that fails again with the same error logs it once. cliamp logs it again after the callback succeeds or fails with a different error. A visualizer `render` runs on each frame, so cliamp logs only its first error and its first timeout until cliamp restarts. The log entry for a timeout names the time limit. cliamp does not write plugin errors to the terminal.
 
 ### cliamp.player control (requires permissions)
 
@@ -506,12 +532,15 @@ handle:alive()                            -- --> boolean
 **Safety rules:**
 
 - The binary must be in the allowlist. Argv is argv. No shell or expansion is used.
+- The read-only paths of `cliamp.fs` apply only to `cliamp.fs` and to `cwd`. With the exec permission, `yt-dlp` or `ffmpeg` can write to any path that you can write. Examples are the `--exec` option of `yt-dlp` and an output path of `ffmpeg`.
 - `args` must be a flat array of strings. cliamp rejects nested tables and non-strings.
-- The subprocess environment contains only `PATH`, `HOME`, and `LANG`. cliamp does not pass parent-environment secrets.
+- The subprocess environment contains only `PATH`, `HOME`, and `LANG`. cliamp does not pass the other variables of its environment. This does not hide secrets from the plugin, which can read each variable with `os.getenv()`.
 - Output is limited to 4 MiB per process, for stdout and stderr together. cliamp silently drops later lines.
+- A line is limited to 1 MiB. After a longer line, cliamp silently drops the rest of that stream. The process continues to run.
 - Each plugin can run up to 4 processes at one time.
 - cliamp kills every plugin-owned process when the plugin unloads and when cliamp exits.
 - Negative `on_exit` codes indicate cancellation or timeout (`-1`), or a start failure (`-2`).
+- Each call of `on_stdout`, `on_stderr`, or `on_exit` times out after 5 seconds.
 
 Without `permissions = {"exec"}`, `cliamp.exec.run` returns `nil, "exec permission required"`.
 
@@ -532,7 +561,7 @@ limits durations above 60 seconds.
 cliamp.sleep(2.5)  -- block for 2.5 seconds (max 10)
 ```
 
-This blocks the plugin's Lua VM. Other hooks for the same plugin wait until the sleep ends. Use `cliamp.timer.after()` for a non-blocking delay.
+This blocks the plugin's Lua VM. Other hooks for the same plugin wait until the sleep ends. Use `cliamp.timer.after()` for a non-blocking delay. The sleep ends early when the time limit of the running callback or of the plugin load ends.
 
 ### cliamp.timer
 
@@ -550,6 +579,8 @@ end)
 -- Cancel
 cliamp.timer.cancel(id)
 ```
+
+Each timer callback times out after 5 seconds.
 
 ## Configuration
 
@@ -634,7 +665,7 @@ end
 | `p:init(rows, cols)` | Setup when selected | No |
 | `p:destroy()` | Cleanup when deselected | No |
 
-`render` has a 10 ms limit for each frame. If it exceeds the limit, cliamp reuses the previous frame to prevent UI delay.
+`render` has a 50 ms limit for each frame. If it runs longer or fails, cliamp shows the previous frame. cliamp also shows the previous frame while another callback of the same plugin runs, so a slow hook does not delay the UI. cliamp runs `init` and `destroy` in order with the events of the plugin, and `render` shows the previous frame until `init` has run.
 
 ## Sandbox
 
@@ -663,7 +694,17 @@ You can use `os.time()`, `os.date()`, `os.clock()`, and `os.getenv()`.
 - `~/.local/share/cliamp/`
 - `~/Music/cliamp/`
 
-Writing outside these directories raises a Lua error. cliamp blocks directory traversal (`..`).
+These paths in `~/.config/cliamp/` stay read-only for `cliamp.fs` and for the `cwd` of `cliamp.exec`:
+
+- `plugins/`, which contains the plugin files and `plugins/.trust.json`
+- `config.toml`
+- `radios.toml`
+- `cliamp.sock`
+- `plugins.log`
+
+Thus a plugin cannot use `cliamp.fs` to approve plugins, change the exec allowlist, or hide its log. A plugin with the exec permission can still write to any path that you can write through `yt-dlp` or `ffmpeg`. Approve a plugin that declares the exec permission only when you trust it.
+
+Writing outside these directories, or to a read-only path, raises a Lua error. cliamp resolves symlinks and blocks directory traversal (`..`) before it checks the path. The `cwd` of `cliamp.exec` follows the same rules.
 
 ### Isolation
 

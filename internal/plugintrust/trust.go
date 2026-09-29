@@ -26,6 +26,11 @@ type Manifest struct {
 	Plugins map[string]string `json:"plugins"`
 }
 
+// ManifestPath returns the path of the trust manifest in the plugin dir.
+func ManifestPath(dir string) string {
+	return filepath.Join(dir, manifestName)
+}
+
 func HashFile(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -41,7 +46,7 @@ func HashFile(path string) (string, error) {
 
 func Load(dir string) (Manifest, error) {
 	m := Manifest{Version: 1, Plugins: make(map[string]string)}
-	data, err := os.ReadFile(filepath.Join(dir, manifestName))
+	data, err := os.ReadFile(ManifestPath(dir))
 	if errors.Is(err, os.ErrNotExist) {
 		return m, nil
 	}
@@ -64,7 +69,7 @@ func Save(dir string, m Manifest) error {
 		return fmt.Errorf("encode plugin trust manifest: %w", err)
 	}
 	data = append(data, '\n')
-	return fileutil.WriteFileAtomic(filepath.Join(dir, manifestName), data, 0o600)
+	return fileutil.WriteFileAtomic(ManifestPath(dir), data, 0o600)
 }
 
 func Approve(dir, name, path string) (string, error) {
@@ -81,6 +86,20 @@ func Approve(dir, name, path string) (string, error) {
 		return "", err
 	}
 	return hash, nil
+}
+
+// Revoke removes the approval of name. It leaves the manifest as it is when
+// the manifest has no approval for name.
+func Revoke(dir, name string) error {
+	m, err := Load(dir)
+	if err != nil {
+		return err
+	}
+	if _, ok := m.Plugins[name]; !ok {
+		return nil
+	}
+	delete(m.Plugins, name)
+	return Save(dir, m)
 }
 
 func Verify(m Manifest, name, path string) error {

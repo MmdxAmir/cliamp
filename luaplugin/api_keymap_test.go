@@ -1,6 +1,7 @@
 package luaplugin
 
 import (
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -203,6 +204,10 @@ func TestCommandListIncludesRegistered(t *testing.T) {
 
 func TestCleanupPluginRemovesCommands(t *testing.T) {
 	m := newTestManager()
+	loadTestPlugin(t, m, "keep", `
+		local p = plugin.register({name = "keep", type = "hook"})
+		p:command("a", function() end)
+	`)
 	p := loadTestPlugin(t, m, "cmd", `
 		local p = plugin.register({name = "cmd", type = "hook"})
 		p:command("a", function() end)
@@ -211,8 +216,38 @@ func TestCleanupPluginRemovesCommands(t *testing.T) {
 		t.Fatal("plugin failed to load")
 	}
 	m.cleanupPlugin(p)
-	if len(m.CommandList()) != 0 {
-		t.Fatal("commands should be removed when plugin is cleaned up")
+	if got := m.CommandList(); !slices.Equal(got, []string{"keep a"}) {
+		t.Fatalf("CommandList() = %v, want only the commands of the other plugin", got)
+	}
+}
+
+// A plugin that fails to load because its name is taken must not remove the
+// commands and key bindings of the plugin that owns the name.
+func TestFailedPluginKeepsOtherPluginsCommands(t *testing.T) {
+	m := newTestManager()
+	m.SetReservedKeys(map[string]bool{})
+	loadTestPlugin(t, m, "a", `
+		local p = plugin.register({name = "dup", type = "hook", permissions = {"keymap"}})
+		p:command("hi", function() return "from a" end)
+		p:bind("ctrl+y", "Say hi", function() end)
+	`)
+	for _, name := range []string{"b", "c"} {
+		loadTestPluginExpectError(t, m, name, `
+			local p = plugin.register({name = "dup", type = "hook", permissions = {"keymap"}})
+			p:command("hi", function() return "from `+name+`" end)
+			p:bind("ctrl+y", "Say hi", function() end)
+		`)
+	}
+
+	out, err := m.EmitCommand("dup", "hi", nil)
+	if err != nil || out != "from a" {
+		t.Errorf("EmitCommand() = %q, %v, want %q", out, err, "from a")
+	}
+	if got := m.CommandList(); !slices.Equal(got, []string{"dup hi"}) {
+		t.Errorf("CommandList() = %v, want [dup hi]", got)
+	}
+	if got := m.KeyBindings(); len(got) != 1 || got[0].Plugin != "dup" || got[0].Description != "Say hi" {
+		t.Errorf("KeyBindings() = %+v, want the binding of plugin a", got)
 	}
 }
 

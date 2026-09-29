@@ -88,14 +88,12 @@ func registerPlayerAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) 
 
 	// cliamp.player.eq_bands() -> table of 10 dB values
 	L.SetField(tbl, "eq_bands", L.NewFunction(func(L *lua.LState) int {
-		t := L.NewTable()
+		var bands []float64
 		if state.EQBands != nil {
-			bands := state.EQBands()
-			for i, b := range bands {
-				t.RawSetInt(i+1, lua.LNumber(b))
-			}
+			b := state.EQBands()
+			bands = b[:]
 		}
-		L.Push(t)
+		L.Push(floatsToTable(L, bands))
 		return 1
 	}))
 

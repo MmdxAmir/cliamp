@@ -15,7 +15,7 @@ import (
 // through the ControlProvider, which dispatches them onto the UI loop.
 //
 // All indices are 0-based, matching cliamp.queue.current().
-func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, ctrl *ControlProvider, p *Plugin, logger *pluginLogger) {
+func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, ctrl *ControlProvider, p *Plugin) {
 	tbl := L.NewTable()
 
 	// cliamp.queue.list() -> array of {title, artist, album, genre, year, path,
@@ -72,17 +72,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 		return 1
 	}))
 
-	warned := false
-	guard := func(name string) bool {
-		if !p.perms[PermControl] {
-			if !warned {
-				logger.log(p.Name, "warn", "queue.%s requires permissions = {\"control\"} — further warnings suppressed", name)
-				warned = true
-			}
-			return false
-		}
-		return true
-	}
+	guard := func(name string) bool { return p.permitted(PermControl, "cliamp.queue."+name) }
 
 	// cliamp.queue.add(path) — resolve a file/dir/URL and append to the playlist.
 	// cliamp.queue.add(track) -> true | nil, err — append the track a table
@@ -100,9 +90,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 				track, err = queueTrackFromTable(t)
 			}
 			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString("queue.add: " + err.Error()))
-				return 2
+				return pushErr(L, "queue.add: "+err.Error())
 			}
 			ctrl.QueueAddTrack(track)
 			L.Push(lua.LTrue)

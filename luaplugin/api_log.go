@@ -9,6 +9,9 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+// pluginLogName is the plugin log file in the config dir.
+const pluginLogName = "plugins.log"
+
 // pluginLogger writes plugin log messages to ~/.config/cliamp/plugins.log.
 type pluginLogger struct {
 	mu   sync.Mutex
@@ -51,12 +54,12 @@ func (l *pluginLogger) close() {
 }
 
 // registerLogAPI adds cliamp.log.{info,warn,error,debug} to the cliamp table.
-func registerLogAPI(L *lua.LState, cliamp *lua.LTable, logger *pluginLogger, pluginName string) {
+func registerLogAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) {
 	tbl := L.NewTable()
 	for _, level := range []string{"info", "warn", "error", "debug"} {
 		L.SetField(tbl, level, L.NewFunction(func(L *lua.LState) int {
 			msg := L.CheckString(1)
-			logger.log(pluginName, level, "%s", msg)
+			p.logger.log(p.installName, level, "%s", msg)
 			return 0
 		}))
 	}
