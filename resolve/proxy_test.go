@@ -31,7 +31,7 @@ func TestClientsUseEnvironmentProxy(t *testing.T) {
 		{
 			name: "sniff",
 			call: func(t *testing.T) {
-				if !sniffFeedURL("http://radio.example.invalid/live") {
+				if !sniffFeedURL(context.Background(), "http://radio.example.invalid/live") {
 					t.Fatal("sniffFeedURL = false, want true for an RSS content type")
 				}
 			},

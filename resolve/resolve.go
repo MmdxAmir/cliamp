@@ -101,12 +101,17 @@ func classifyRemote(u string) remoteKind {
 // Args separates CLI arguments into immediately-resolved local tracks
 // and pending remote URLs (feeds, M3U) that require HTTP fetching.
 func Args(args []string) (Result, error) {
+	return argsContext(context.Background(), args)
+}
+
+// argsContext is Args with caller-controlled cancellation of the feed sniff.
+func argsContext(ctx context.Context, args []string) (Result, error) {
 	var r Result
 	var files []string
 
 	for _, arg := range args {
 		if playlist.IsURL(arg) {
-			if classifyRemote(arg) != kindStream || sniffFeedURL(arg) {
+			if classifyRemote(arg) != kindStream || sniffFeedURL(ctx, arg) {
 				r.Pending = append(r.Pending, arg)
 			} else {
 				files = append(files, arg)
@@ -248,12 +253,17 @@ func URL(rawURL string) ([]playlist.Track, error) {
 	return URLContext(context.Background(), rawURL)
 }
 
-// URLContext is URL with caller-controlled cancellation. ctx covers the fetch
-// of a feed, a remote playlist or a video page. The feed sniff of a URL that
-// no resolver claims keeps its own 5 s limit.
+// URLContext is URL with caller-controlled cancellation. ctx covers the feed
+// sniff of a URL that no resolver claims, and the fetch of a feed, a remote
+// playlist or a video page. The sniff also keeps its own 5 s limit.
 func URLContext(ctx context.Context, rawURL string) ([]playlist.Track, error) {
-	result, err := Args([]string{rawURL})
+	result, err := argsContext(ctx, []string{rawURL})
 	if err != nil {
+		return nil, err
+	}
+	// A cancelled sniff finds no feed. Stop here, so the URL does not come
+	// back as a plain stream.
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	tracks := result.Tracks
@@ -293,10 +303,10 @@ func hasListParam(rawURL string) bool {
 	return u.Query().Get("list") != ""
 }
 
-// sniffFeedURL does a HEAD request and returns true if the Content-Type
-// indicates an RSS/Atom feed. Used as a fallback when the URL has no
-// recognizable file extension (e.g. https://feeds.megaphone.fm/GLT1412515089).
-func sniffFeedURL(rawURL string) bool {
+// sniffFeedURL does a HEAD request under ctx and returns true if the
+// Content-Type indicates an RSS/Atom feed. Used as a fallback when the URL has
+// no recognizable file extension (e.g. https://feeds.megaphone.fm/GLT1412515089).
+func sniffFeedURL(ctx context.Context, rawURL string) bool {
 	// URLs with a known audio extension are never feeds — skip the
 	// network round-trip to avoid misclassification when CDNs return
 	// unexpected Content-Types for HEAD requests.
@@ -306,7 +316,11 @@ func sniffFeedURL(rawURL string) bool {
 		}
 	}
 
-	resp, err := sniffClient.Head(rawURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := sniffClient.Do(req)
 	if err != nil {
 		return false
 	}
