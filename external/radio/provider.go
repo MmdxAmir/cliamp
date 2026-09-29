@@ -372,41 +372,43 @@ func (p *Provider) AppendCatalog(stations []CatalogStation) {
 // ToggleFavorite toggles the favorite status of a catalog or favorite entry.
 // Returns (true, name) if added, (false, name) if removed.
 func (p *Provider) ToggleFavorite(id string) (added bool, name string, err error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	s, err := p.favoriteTarget(id)
+	if err != nil {
+		return false, "", err
+	}
+	// The store takes a file lock and fsyncs, so it runs off the provider
+	// lock that the renderer reads the pane through.
+	added, err = p.favorites.Toggle(s)
+	return added, s.Name, err
+}
 
+// favoriteTarget resolves the station behind a catalog, search or favorite ID.
+func (p *Provider) favoriteTarget(id string) (CatalogStation, error) {
 	if strings.HasPrefix(id, "f:") {
-		station, err := p.favoriteStation(id)
-		if err != nil {
-			return false, "", err
-		}
-		added, err := p.favorites.Toggle(station)
-		return added, station.Name, err
+		return p.favoriteStation(id)
 	}
 
 	prefix, idx, err := parseStationID(id)
 	if err != nil {
-		return false, "", err
+		return CatalogStation{}, err
 	}
 
-	var s CatalogStation
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	switch prefix {
 	case "c":
 		if idx < 0 || idx >= len(p.catalog) {
-			return false, "", errors.New("invalid catalog index")
+			return CatalogStation{}, errors.New("invalid catalog index")
 		}
-		s = p.catalog[idx]
+		return p.catalog[idx], nil
 	case "s":
 		if p.searchResults == nil || idx < 0 || idx >= len(p.searchResults) {
-			return false, "", errors.New("invalid search result index")
+			return CatalogStation{}, errors.New("invalid search result index")
 		}
-		s = p.searchResults[idx]
+		return p.searchResults[idx], nil
 	default:
-		return false, "", errors.New("cannot favorite local stations")
+		return CatalogStation{}, errors.New("cannot favorite local stations")
 	}
-
-	added, err = p.favorites.Toggle(s)
-	return added, s.Name, err
 }
 
 // favoriteStation resolves a stable favorite ID from a snapshot of the store.

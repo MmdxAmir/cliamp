@@ -322,3 +322,70 @@ func TestFavoritesConcurrentProcesses(t *testing.T) {
 		}
 	}
 }
+
+// ToggleFavorite must not hold the provider lock while the favorites store
+// writes. The store takes a file lock and fsyncs, and the renderer reads the
+// radio pane through the provider lock.
+func TestToggleFavoriteReleasesProviderLockDuringWrite(t *testing.T) {
+	station := CatalogStation{Name: "Jazz FM", URL: "https://jazz.example/stream"}
+	for _, tc := range []struct {
+		name      string
+		id        string
+		wantAdded bool
+	}{
+		{name: "catalog row", id: "c:0", wantAdded: true},
+		{name: "search row", id: "s:0", wantAdded: true},
+		{name: "favorite row", id: "f:" + station.URL, wantAdded: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+			favorites := LoadFavorites()
+			p := New(Options{Favorites: favorites, Country: CountryDeclined})
+			p.AppendCatalog([]CatalogStation{station})
+			p.SetSearchResults([]CatalogStation{station})
+			if !tc.wantAdded {
+				if _, err := favorites.Toggle(station); err != nil {
+					t.Fatalf("seed favorite: %v", err)
+				}
+			}
+
+			// Hold the store lock, as a slow locked write does.
+			favorites.mu.Lock()
+			var releaseOnce sync.Once
+			release := func() { releaseOnce.Do(favorites.mu.Unlock) }
+			t.Cleanup(release)
+
+			done := make(chan error, 1)
+			go func() {
+				added, name, err := p.ToggleFavorite(tc.id)
+				if err == nil && (added != tc.wantAdded || name != station.Name) {
+					err = fmt.Errorf("ToggleFavorite = (%v, %q), want (%v, %q)", added, name, tc.wantAdded, station.Name)
+				}
+				done <- err
+			}()
+			// Give the toggle time to reach the store lock.
+			time.Sleep(50 * time.Millisecond)
+
+			read := make(chan struct{})
+			go func() {
+				p.IsSearching()
+				close(read)
+			}()
+			select {
+			case <-read:
+			case <-time.After(2 * time.Second):
+				release()
+				<-done
+				t.Fatal("the provider lock was held while the favorites store wrote")
+			}
+
+			release()
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			if got := favorites.Contains(station.URL); got != tc.wantAdded {
+				t.Errorf("Contains = %v, want %v", got, tc.wantAdded)
+			}
+		})
+	}
+}
