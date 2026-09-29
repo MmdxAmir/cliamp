@@ -47,6 +47,7 @@ type client struct {
 	uat     string   // user_auth_token
 	userID  string
 	label   string // subscription tier short label
+	baseURL string // apiBaseURL in production; overridden in tests
 	http    *http.Client
 }
 
@@ -54,6 +55,7 @@ func newClient(appID string, secrets []string) *client {
 	return &client{
 		appID:   appID,
 		secrets: secrets,
+		baseURL: apiBaseURL,
 		http:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -68,7 +70,7 @@ func (c *client) doRequest(ctx context.Context, method, endpoint string, params 
 	if body != "" {
 		reqBody = strings.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, apiBaseURL+endpoint, reqBody)
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+endpoint, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("qobuz: %s: build request: %w", endpoint, err)
 	}
