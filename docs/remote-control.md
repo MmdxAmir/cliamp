@@ -129,9 +129,11 @@ preset name fails the job and does not change the EQ.
 
 `playlist.bookmark` keeps its name for existing scripts. It toggles the favorite
 ♥ of `track`, as `f` does in the TUI. It needs a known `provider` key, but it
-does not change the playlist. In the TUI, a radio station outside a saved
-playlist toggles its station favorite, so the `bookmark` field of that row
-changes too.
+does not change the playlist. In the TUI, a radio station toggles its station
+favorite, and its `bookmark` field in provider lists changes too. A station
+that is a row of a loaded saved playlist toggles the favorites store instead.
+The `bookmark` field of that row in `queue.list` changes. cliamp matches the
+row by path.
 
 Use IDs returned by `provider.playlists` for subsequent provider operations.
 Radio favorite IDs are stable `f:<station URL>` values, not positional

@@ -269,12 +269,14 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 		return ipcMutationCmd(request.Context, request.Reply, func() error { return saver.SavePlaylist(request.Playlist, tracks) })
 	case "playlist.bookmark":
 		// playlist.bookmark keeps its name for old scripts. It toggles the ♥
-		// favorite of the track, as f does.
+		// favorite of the track, as f does. The track can come from the queue
+		// or from a provider list, so the saved rule applies only to a queue row.
 		if request.Track == nil {
 			request.Reply <- ipc.Response{OK: false, Error: "track is required"}
 			return nil
 		}
-		cmd, err := m.togglePlaylistTrackFavorite(ipcTrackFromInfo(*request.Track))
+		track := ipcTrackFromInfo(*request.Track)
+		cmd, err := m.togglePlaylistTrackFavorite(track, m.savedPlaylistRow(track))
 		request.Reply <- ipcResponseError(err)
 		return cmd
 	case "provider.playlists":

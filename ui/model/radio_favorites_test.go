@@ -208,21 +208,29 @@ func TestRadioRowFavoriteDispatch(t *testing.T) {
 	}
 }
 
-// IPC playlist.bookmark on a station row toggles the store that f toggles
-// and that the reported bookmark reads. Outside a saved playlist that is the
-// station favorite. In a saved playlist it is the favorites store.
+// IPC playlist.bookmark on a station toggles the store that f toggles and
+// that the reported bookmark reads. A row of a loaded saved playlist uses the
+// favorites store. Any other station uses its station favorite, also while a
+// saved playlist is loaded.
 func TestIPCBookmarkStationRowMatchesReportedBookmark(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		saved       bool
+		notInQueue  bool
+		list        string
 		wantStation bool
 	}{
-		{name: "unsaved playlist", wantStation: true},
-		{name: "saved playlist", saved: true},
+		{name: "unsaved playlist", list: "queue.list", wantStation: true},
+		{name: "saved playlist", saved: true, list: "queue.list"},
+		{name: "provider list with a saved playlist loaded", saved: true, notInQueue: true, list: "provider.tracks", wantStation: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, _, tracks := radioFavoriteTestModel(t)
-			m.replacePlayerPlaylist(tracks)
+			if tc.notInQueue {
+				m.replacePlayerPlaylist([]playlist.Track{{Path: "a.mp3", Title: "A"}})
+			} else {
+				m.replacePlayerPlaylist(tracks)
+			}
 			if tc.saved {
 				m.loadedPlaylist = "Saved radios"
 			}
@@ -234,7 +242,11 @@ func TestIPCBookmarkStationRowMatchesReportedBookmark(t *testing.T) {
 				if response := runV2(t, &m, "playlist.bookmark", ipc.Request{Provider: "radio", Track: &info}); !response.OK {
 					t.Fatalf("bookmark response = %+v", response)
 				}
-				if got := runV2(t, &m, "queue.list", ipc.Request{}).Tracks[0].Bookmark; got != want {
+				listed := runV2(t, &m, tc.list, ipc.Request{Provider: "radio", Playlist: "c:0"})
+				if !listed.OK || len(listed.Tracks) == 0 {
+					t.Fatalf("%s response = %+v", tc.list, listed)
+				}
+				if got := listed.Tracks[0].Bookmark; got != want {
 					t.Fatalf("reported bookmark = %v, want %v", got, want)
 				}
 				if got := m.radioFavorites.Contains(tracks[0].Path); got != (want && tc.wantStation) {

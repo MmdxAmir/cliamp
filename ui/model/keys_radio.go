@@ -111,7 +111,7 @@ func (m Model) selectedPlaylistStarAction() playlistStarAction {
 		return starUnavailable
 	}
 	track, _ := m.playlist.Track(m.plCursor)
-	if _, ok := m.favoriteStation(track); ok {
+	if _, ok := m.favoriteStation(track, m.loadedPlaylist != ""); ok {
 		return starRadioFavorite
 	}
 	if m.favMgr != nil {
@@ -120,14 +120,29 @@ func (m Model) selectedPlaylistStarAction() playlistStarAction {
 	return starUnavailable
 }
 
-// favoriteStation returns the station whose favorite the ♥ of track, a row
-// of the playback playlist, shows. ok is false when the row uses the
-// favorites store. It is the rule of playlistTrackFavorited.
-func (m Model) favoriteStation(track playlist.Track) (radio.CatalogStation, bool) {
-	if m.loadedPlaylist != "" || m.radioFavorites == nil {
+// favoriteStation returns the station whose favorite the ♥ of track shows.
+// savedPlaylist is true for a row of a loaded saved playlist. ok is false when
+// the track uses the favorites store. It is the rule of trackFavorited.
+func (m Model) favoriteStation(track playlist.Track, savedPlaylist bool) (radio.CatalogStation, bool) {
+	if savedPlaylist || m.radioFavorites == nil {
 		return radio.CatalogStation{}, false
 	}
 	return radio.StationFromTrack(track)
+}
+
+// savedPlaylistRow reports whether track is a row of a loaded saved playlist.
+// It matches rows by path. IPC clients send a track that can come from the
+// queue or from a provider list, and only a queue row uses the saved rule.
+func (m Model) savedPlaylistRow(track playlist.Track) bool {
+	if m.loadedPlaylist == "" || m.playlist == nil {
+		return false
+	}
+	for _, row := range m.playlist.Tracks() {
+		if row.Path == track.Path {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Model) togglePlaylistStar() tea.Cmd {
@@ -135,7 +150,7 @@ func (m *Model) togglePlaylistStar() tea.Cmd {
 		return nil
 	}
 	track, _ := m.playlist.Track(m.plCursor)
-	cmd, err := m.togglePlaylistTrackFavorite(track)
+	cmd, err := m.togglePlaylistTrackFavorite(track, m.loadedPlaylist != "")
 	if err != nil {
 		m.status.Errorf(statusTTLDefault, "Favorite failed: %s", err)
 		return nil
@@ -143,12 +158,13 @@ func (m *Model) togglePlaylistStar() tea.Cmd {
 	return cmd
 }
 
-// togglePlaylistTrackFavorite toggles the ♥ of track, a row of the playback
-// playlist, in the store that the ♥ marker reads. A directory radio station
-// outside a saved playlist toggles its station favorite. Every other track
-// toggles the favorites store. The f key and IPC playlist.bookmark use it.
-func (m *Model) togglePlaylistTrackFavorite(track playlist.Track) (tea.Cmd, error) {
-	station, ok := m.favoriteStation(track)
+// togglePlaylistTrackFavorite toggles the ♥ of track in the store that the ♥
+// marker reads. savedPlaylist is true for a row of a loaded saved playlist. A
+// directory radio station outside a saved playlist toggles its station
+// favorite. Every other track toggles the favorites store. The f key and IPC
+// playlist.bookmark use it.
+func (m *Model) togglePlaylistTrackFavorite(track playlist.Track, savedPlaylist bool) (tea.Cmd, error) {
+	station, ok := m.favoriteStation(track, savedPlaylist)
 	if !ok {
 		return m.toggleTrackFavorite(track)
 	}
