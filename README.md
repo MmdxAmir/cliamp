@@ -224,10 +224,7 @@ Or without Make: `go build -o cliamp .`
 
 `make install` places the binary in `~/.local/bin/`.
 
-**Optional runtime dependencies:**
-
-- [ffmpeg](https://ffmpeg.org/) for AAC, ALAC, Opus, and WMA playback
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube, SoundCloud, Mixcloud, Bandcamp, Bilibili, and NetEase Cloud Music
+A source build uses the same optional runtime dependencies as the other install methods. See [Install](#install).
 
 ## Docs
 
