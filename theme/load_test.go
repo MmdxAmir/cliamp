@@ -191,6 +191,9 @@ func TestLoadAllLogsSkippedTheme(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = closeLog() })
 
+	// The theme picker and theme commands reload the themes, so the same
+	// skip must reach the log only once.
+	LoadAll()
 	LoadAll()
 
 	data, err := os.ReadFile(logPath)
@@ -201,6 +204,9 @@ func TestLoadAllLogsSkippedTheme(t *testing.T) {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("log = %q, want it to contain %q", data, want)
 		}
+	}
+	if n := strings.Count(string(data), "level=WARN"); n != 1 {
+		t.Errorf("log has %d WARN lines, want 1: %q", n, data)
 	}
 }
 

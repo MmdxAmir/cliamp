@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/appdir"
@@ -155,14 +156,19 @@ func Find(name string) (Theme, bool) {
 	return Theme{}, false
 }
 
+// loggedSkips holds the text of each skip error that LoadAll has logged.
+var loggedSkips sync.Map
+
 // LoadAll loads built-in themes and user custom themes from
 // ~/.config/cliamp/themes/*.toml. User themes override built-in
 // themes with the same name. Returns a sorted list. It logs each
-// theme file that it skips, with the reason.
+// theme file that it skips, with the reason, once per process.
 func LoadAll() []Theme {
 	themes, errs := loadAll()
 	for _, err := range errs {
-		applog.Warn("theme: %v", err)
+		if _, seen := loggedSkips.LoadOrStore(err.Error(), true); !seen {
+			applog.Warn("theme: %v", err)
+		}
 	}
 	return themes
 }
