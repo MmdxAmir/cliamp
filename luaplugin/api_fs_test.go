@@ -136,7 +136,6 @@ func TestFSRemove(t *testing.T) {
 }
 
 func TestIsWriteAllowed(t *testing.T) {
-	caseFolded := runtime.GOOS == "windows" || runtime.GOOS == "darwin"
 	layouts := []struct {
 		name       string
 		linkConfig bool // ~/.config/cliamp is a symlink to a dotfiles dir
@@ -186,6 +185,10 @@ func TestIsWriteAllowed(t *testing.T) {
 				}
 			}
 
+			// A hard link stands in for a name that the file system maps to
+			// a denied path but that isWithin does not match.
+			hardLinked := os.Link(filepath.Join(cfg, "config.toml"), filepath.Join(data, "config-link.toml")) == nil
+
 			rules := loadWriteRules()
 			if tmp := fsAllowedPath("test.txt"); !rules.allows(tmp) {
 				t.Errorf("allows(%q) = false, want true", tmp)
@@ -195,7 +198,7 @@ func TestIsWriteAllowed(t *testing.T) {
 			var tempRoots []string
 			for _, tmp := range []string{"/tmp", os.TempDir()} {
 				if canon, ok := canonicalExistingPath(tmp); ok {
-					tempRoots = append(tempRoots, normalizeWritePath(canon))
+					tempRoots = append(tempRoots, canon)
 				}
 			}
 			rules.allow = slices.DeleteFunc(rules.allow, func(dir string) bool {
@@ -203,10 +206,11 @@ func TestIsWriteAllowed(t *testing.T) {
 			})
 
 			tests := []struct {
-				name string
-				path string
-				want bool
-				link bool // the path goes through a symlink in data
+				name     string
+				path     string
+				want     bool
+				link     bool // the path goes through a symlink in data
+				hardLink bool // the path is a hard link in data
 			}{
 				{name: "system file", path: fsDisallowedPath()},
 				{name: "home dotfile", path: filepath.Join(home, ".bashrc")},
@@ -228,20 +232,62 @@ func TestIsWriteAllowed(t *testing.T) {
 				{name: "plugin log", path: filepath.Join(cfg, "plugins.log")},
 				{name: "plugins dir with other case", path: filepath.Join(cfg, "PLUGINS", "evil.lua"), want: !caseFolded},
 				{name: "config.toml with other case", path: filepath.Join(cfg, "Config.toml"), want: !caseFolded},
+				{name: "plugins dir with long s", path: filepath.Join(cfg, "plugin\u017f", "evil.lua"), want: !caseFolded},
+				{name: "trust manifest with long s", path: filepath.Join(cfg, "plugin\u017f", ".trust.json"), want: !caseFolded},
+				{name: "radios.toml with long s", path: filepath.Join(cfg, "radio\u017f.toml"), want: !caseFolded},
+				{name: "IPC socket with Kelvin sign", path: filepath.Join(cfg, "cliamp.soc\u212a"), want: !caseFolded},
 				{name: "config.toml stream", path: filepath.Join(cfg, "config.toml::$DATA"), want: runtime.GOOS != "windows"},
 				{name: "symlink to plugins dir", path: filepath.Join(data, "to-plugins", "evil.lua"), link: true},
 				{name: "symlink to config.toml", path: filepath.Join(data, "to-config.toml"), link: true},
 				{name: "symlink out of allowed dir", path: filepath.Join(data, "to-etc", "new.txt"), link: true},
+				{name: "hard link to config.toml", path: filepath.Join(data, "config-link.toml"), hardLink: true},
 			}
 			for _, tt := range tests {
 				t.Run(tt.name, func(t *testing.T) {
 					if tt.link && !linked {
 						t.Skip("symlinks are not available")
 					}
+					if tt.hardLink && !hardLinked {
+						t.Skip("hard links are not available")
+					}
 					if got := rules.allows(tt.path); got != tt.want {
 						t.Errorf("allows(%q) = %v, want %v", tt.path, got, tt.want)
 					}
 				})
+			}
+		})
+	}
+}
+
+func TestIsWithin(t *testing.T) {
+	sep := string(os.PathSeparator)
+	dir := filepath.Join(sep+"cfg", "plugins")
+	tests := []struct {
+		name       string
+		path       string
+		want       bool
+		wantFolded bool
+	}{
+		{name: "same path", path: dir, want: true, wantFolded: true},
+		{name: "child", path: filepath.Join(dir, "a.lua"), want: true, wantFolded: true},
+		{name: "parent", path: filepath.Dir(dir)},
+		{name: "sibling with the same prefix", path: dir + "2"},
+		{name: "other case", path: filepath.Join(sep+"cfg", "PLUGINS", "a.lua"), wantFolded: true},
+		{name: "long s", path: filepath.Join(sep+"cfg", "plugin\u017f", "a.lua"), wantFolded: true},
+		{name: "other name", path: filepath.Join(sep+"cfg", "plugin", "a.lua")},
+	}
+	defer func(v bool) { caseFolded = v }(caseFolded)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, folded := range []bool{false, true} {
+				caseFolded = folded
+				want := tt.want
+				if folded {
+					want = tt.wantFolded
+				}
+				if got := isWithin(tt.path, dir); got != want {
+					t.Errorf("isWithin(%q, %q) with caseFolded %v = %v, want %v", tt.path, dir, folded, got, want)
+				}
 			}
 		})
 	}

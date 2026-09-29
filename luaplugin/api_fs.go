@@ -31,7 +31,7 @@ func loadWriteRules() writeRules {
 	var r writeRules
 	add := func(list *[]string, path string) {
 		if abs, ok := canonicalExistingPath(path); ok {
-			*list = append(*list, normalizeWritePath(abs))
+			*list = append(*list, abs)
 		}
 	}
 	add(&r.allow, "/tmp")
@@ -104,11 +104,13 @@ func (r writeRules) allows(path string) bool {
 	if runtime.GOOS == "windows" && strings.Contains(abs[len(filepath.VolumeName(abs)):], ":") {
 		return false
 	}
-	abs = normalizeWritePath(abs)
 	for _, dir := range r.deny {
 		if isWithin(abs, dir) {
 			return false
 		}
+	}
+	if r.sameAsDenied(abs) {
+		return false
 	}
 	for _, dir := range r.allow {
 		if isWithin(abs, dir) {
@@ -118,21 +120,59 @@ func (r writeRules) allows(path string) bool {
 	return false
 }
 
-// isWithin reports whether path is dir or lies under dir. Both paths must be
-// canonical and normalized.
-func isWithin(path, dir string) bool {
-	return path == dir || strings.HasPrefix(path, dir+string(os.PathSeparator))
+// sameAsDenied reports whether path or one of its parents is the same file
+// as a denied path. It catches a name that the file system maps to a denied
+// path but that isWithin does not match, such as a case folding that differs
+// from strings.EqualFold. It can match only paths that exist.
+func (r writeRules) sameAsDenied(path string) bool {
+	var denied []os.FileInfo
+	for _, dir := range r.deny {
+		if info, err := os.Stat(dir); err == nil {
+			denied = append(denied, info)
+		}
+	}
+	for cur := path; ; {
+		if info, err := os.Stat(cur); err == nil {
+			for _, d := range denied {
+				if os.SameFile(info, d) {
+					return true
+				}
+			}
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return false
+		}
+		cur = parent
+	}
 }
 
-// normalizeWritePath canonicalizes an absolute path for prefix comparison:
-// cleaned and, on Windows and macOS, case-folded. The default file systems on
-// both are case-insensitive, so plugins/ and Plugins/ name the same dir.
-func normalizeWritePath(path string) string {
-	path = filepath.Clean(path)
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		path = strings.ToLower(path)
+// caseFolded is true where the default file systems ignore case, so
+// plugins/ and Plugins/ name the same dir. It is a var so tests can check
+// the folded comparison on each OS.
+var caseFolded = runtime.GOOS == "windows" || runtime.GOOS == "darwin"
+
+// isWithin reports whether path is dir or lies under dir. Both paths must be
+// canonical. When caseFolded is true, it compares each path component with
+// strings.EqualFold. Lowercasing the path is not enough: strings.ToLower
+// keeps the long s (U+017F), but the file system folds it to s, so pluginſ
+// names the plugins dir.
+func isWithin(path, dir string) bool {
+	if !caseFolded {
+		return path == dir || strings.HasPrefix(path, dir+string(os.PathSeparator))
 	}
-	return path
+	sep := string(os.PathSeparator)
+	pathParts := strings.Split(path, sep)
+	dirParts := strings.Split(dir, sep)
+	if len(pathParts) < len(dirParts) {
+		return false
+	}
+	for i, part := range dirParts {
+		if !strings.EqualFold(pathParts[i], part) {
+			return false
+		}
+	}
+	return true
 }
 
 // registerFSAPI adds cliamp.fs.{write,append,read,remove,exists} to the cliamp table.
