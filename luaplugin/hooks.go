@@ -17,6 +17,10 @@ var hookTimeout = 5 * time.Second
 // errClosed is the error for a call into a plugin whose VM is closed.
 var errClosed = errors.New("plugin is closed")
 
+// eventQueueSize bounds the events and key presses that wait for one plugin.
+// A plugin that falls this far behind drops new ones until it catches up.
+const eventQueueSize = 256
+
 // Event name constants.
 const (
 	EventAppStart      = "app.start"
@@ -132,26 +136,42 @@ func filterOutPlugin(hooks []*luaHook, p *Plugin) []*luaHook {
 	return filtered
 }
 
-// Emit dispatches an event to all plugins that registered for it.
-// Each callback runs in its own goroutine with a timeout. The plugin's
-// mutex serializes all LState access so concurrent events are safe.
+// Emit queues an event for every plugin that registered for it and returns
+// without waiting. Each plugin runs its events one at a time, in the order
+// they were emitted, and each callback times out after hookTimeout.
+// Different plugins run in parallel.
 func (m *Manager) Emit(event string, data map[string]any) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.closing {
 		return
 	}
-	hooks := m.hooks[event]
 	label := event + " handler"
-	for _, h := range hooks {
-		// Add under RLock so Close (which sets closing under Lock, then Wait)
-		// can never miss an in-flight goroutine: either we register it before
-		// closing is set, or we observe closing and skip.
-		m.wg.Add(1)
-		go func(h *luaHook) {
-			defer m.wg.Done()
-			m.fire(h, label, data)
-		}(h)
+	for _, h := range m.hooks[event] {
+		m.enqueue(h.plugin, label, func() { m.fire(h, label, data) })
+	}
+}
+
+// enqueue adds fn to the queue of p without blocking. When the queue is full,
+// it drops fn and logs once until the queue accepts a call again. The caller
+// holds m.mu for reading and saw closing false, so the queue is open.
+func (m *Manager) enqueue(p *Plugin, label string, fn func()) {
+	select {
+	case p.queue <- fn:
+		p.dropping.Store(false)
+	default:
+		if !p.dropping.Swap(true) {
+			m.logger.log(p.installName, "warn", "%s dropped: %d events and key presses are waiting; cliamp drops new ones until the plugin catches up", label, eventQueueSize)
+		}
+	}
+}
+
+// runQueue runs the queued calls of p one at a time until Close closes the
+// queue. Thus the events and key presses of one plugin keep their order.
+func (m *Manager) runQueue(p *Plugin) {
+	defer m.queues.Done()
+	for fn := range p.queue {
+		fn()
 	}
 }
 

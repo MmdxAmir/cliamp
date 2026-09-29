@@ -20,8 +20,8 @@ func newTestManager() *Manager {
 	return newManager(defaultAllowedBinaries, nil)
 }
 
-// loadTestPlugin writes a Lua script to a temp file, loads it into the manager,
-// and appends it to m.plugins if registration succeeded.
+// loadTestPlugin writes a Lua script to a temp file and loads it into the
+// manager. loadPlugin adds the plugin to m.plugins if registration succeeded.
 func loadTestPlugin(t *testing.T, m *Manager, name, code string) *Plugin {
 	return loadTestPluginWithConfig(t, m, name, code, nil)
 }
@@ -36,9 +36,6 @@ func loadTestPluginWithConfig(t *testing.T, m *Manager, name, code string, cfg m
 	p, err := m.loadPlugin(path, name, cfg)
 	if err != nil {
 		t.Fatalf("loadPlugin(%s): %v", name, err)
-	}
-	if p != nil {
-		m.plugins = append(m.plugins, p)
 	}
 	return p
 }
@@ -809,6 +806,172 @@ func TestConcurrentEmitSafety(t *testing.T) {
 
 	if count != 20 {
 		t.Fatalf("count after 20 concurrent emits = %v, want 20", count)
+	}
+}
+
+// recorder collects values that a plugin passes to the global record().
+type recorder struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+// install sets the global record() in the VM of p.
+func (r *recorder) install(p *Plugin) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.L.SetGlobal("record", p.L.NewFunction(func(L *lua.LState) int {
+		r.mu.Lock()
+		r.seen = append(r.seen, L.CheckString(1))
+		r.mu.Unlock()
+		return 0
+	}))
+}
+
+func (r *recorder) values() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.seen)
+}
+
+// wait returns the recorded values once there are n of them.
+func (r *recorder) wait(t *testing.T, n int) []string {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got := r.values()
+		if len(got) >= n || time.Now().After(deadline) {
+			return got
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// Each plugin gets its events and key presses in the order cliamp sent them.
+// Before the queue, each event ran in its own goroutine, and the plugin lock
+// does not wake goroutines in order.
+func TestEmitPreservesOrderPerPlugin(t *testing.T) {
+	// Both rows send 200 calls, which fits the queue, so none may drop.
+	tests := []struct {
+		name string
+		n    int
+		keys bool
+	}{
+		{"events", 200, false},
+		{"events and key presses", 100, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			m.SetReservedKeys(map[string]bool{})
+			p := loadTestPlugin(t, m, "order", `
+				local p = plugin.register({name = "order", type = "hook", permissions = {"keymap"}})
+				p:on("ev", function(data) record(tostring(data.n)) end)
+				p:bind("ctrl+y", function(key) record(key) end)
+			`)
+			var rec recorder
+			rec.install(p)
+
+			var want []string
+			for i := 1; i <= tt.n; i++ {
+				m.Emit("ev", map[string]any{"n": i})
+				want = append(want, fmt.Sprint(i))
+				if tt.keys {
+					m.EmitKey("ctrl+y")
+					want = append(want, "ctrl+y")
+				}
+			}
+			got := rec.wait(t, len(want))
+			if len(got) != len(want) {
+				t.Fatalf("plugin saw %d calls, want %d", len(got), len(want))
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Fatalf("call %d = %s, want %s: the plugin saw its calls out of order", i+1, got[i], want[i])
+				}
+			}
+		})
+	}
+}
+
+// A plugin that falls behind drops new events instead of growing a goroutine
+// for each one. One burst of drops logs one line.
+func TestEmitDropsWhenQueueFull(t *testing.T) {
+	m := newTestManager()
+	logPath := filepath.Join(t.TempDir(), pluginLogName)
+	m.logger = newPluginLogger(logPath)
+	p := loadTestPlugin(t, m, "slow", `
+		local p = plugin.register({name = "slow", type = "hook"})
+		p:on("ev", function(data) record(tostring(data.n)) end)
+	`)
+	var rec recorder
+	rec.install(p)
+
+	// Hold the plugin lock, so the worker blocks on the first event. Wait
+	// until the worker took it, then fill the queue and send 10 more.
+	p.mu.Lock()
+	m.Emit("ev", map[string]any{"n": 1})
+	for len(p.queue) > 0 {
+		time.Sleep(time.Millisecond)
+	}
+	for i := 2; i <= eventQueueSize+11; i++ {
+		m.Emit("ev", map[string]any{"n": i})
+	}
+	p.mu.Unlock()
+
+	want := eventQueueSize + 1
+	got := rec.wait(t, want)
+	time.Sleep(20 * time.Millisecond) // let an extra event arrive if one was kept
+	got = rec.values()
+	if len(got) != want {
+		t.Fatalf("plugin saw %d events, want %d", len(got), want)
+	}
+	for i, v := range got {
+		if v != fmt.Sprint(i+1) {
+			t.Fatalf("event %d = %s, want %d: the queue must keep the first events", i, v, i+1)
+		}
+	}
+
+	m.Emit("ev", map[string]any{"n": "after"})
+	if got := rec.wait(t, len(got)+1); got[len(got)-1] != "after" {
+		t.Fatalf("last event = %s, want the event sent after the queue drained", got[len(got)-1])
+	}
+	m.Close()
+	data, _ := os.ReadFile(logPath)
+	if n := strings.Count(string(data), "ev handler dropped"); n != 1 {
+		t.Fatalf("plugins.log has %d drop warnings, want 1:\n%s", n, data)
+	}
+}
+
+// Close runs the events that are already queued, then app.quit.
+func TestCloseRunsQueuedEventsBeforeQuit(t *testing.T) {
+	m := newTestManager()
+	p := loadTestPlugin(t, m, "quit-order", `
+		local p = plugin.register({name = "quit-order", type = "hook"})
+		p:on("ev", function(data) record(tostring(data.n)) end)
+		p:on("app.quit", function() record("quit") end)
+	`)
+	var rec recorder
+	rec.install(p)
+
+	p.mu.Lock()
+	var want []string
+	for i := 1; i <= 10; i++ {
+		m.Emit("ev", map[string]any{"n": i})
+		want = append(want, fmt.Sprint(i))
+	}
+	done := make(chan struct{})
+	go func() {
+		m.Close()
+		close(done)
+	}()
+	p.mu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not return")
+	}
+	if got := rec.values(); !slices.Equal(got, append(want, "quit")) {
+		t.Fatalf("plugin saw %v, want the queued events and then quit", got)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
@@ -40,6 +41,8 @@ type Plugin struct {
 	installName  string            // installed name; see the type comment
 	namespace    string            // installName reduced to one event topic segment
 	namespaceErr error             // set when another plugin claimed that namespace first
+	queue        chan func()       // events and key presses in arrival order; see runQueue
+	dropping     atomic.Bool       // set while the queue is full, so one burst of drops logs once
 }
 
 // StateProvider supplies read-only access to player/playlist state.
@@ -157,7 +160,8 @@ type Manager struct {
 	logger       *pluginLogger
 	mu           sync.RWMutex
 	closing      bool           // set under mu.Lock during Close; blocks new async dispatch
-	wg           sync.WaitGroup // tracks in-flight async Emit goroutines
+	queues       sync.WaitGroup // tracks the queue worker of each loaded plugin
+	wg           sync.WaitGroup // tracks in-flight EmitCommand goroutines
 }
 
 // New scans the plugin directory and loads all .lua files.
@@ -244,13 +248,8 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 			continue
 		}
 
-		p, err := m.loadPlugin(f.path, f.name, cfg)
-		if err != nil {
+		if _, err := m.loadPlugin(f.path, f.name, cfg); err != nil {
 			loadErrs = append(loadErrs, fmt.Sprintf("%s: %v", f.name, err))
-			continue
-		}
-		if p != nil {
-			m.plugins = append(m.plugins, p)
 		}
 	}
 
@@ -281,7 +280,8 @@ func newManager(allowed []string, publisher EventPublisher) *Manager {
 
 // loadPlugin creates an isolated Lua VM, registers the cliamp API,
 // and executes the plugin file. Returns nil (no error) if the file
-// doesn't call plugin.register().
+// doesn't call plugin.register(). On success it adds the plugin to m.plugins
+// and starts its queue worker, so Close always stops the worker.
 func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin, error) {
 	L := lua.NewState(lua.Options{
 		SkipOpenLibs: false,
@@ -294,6 +294,7 @@ func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin,
 		namespace:   eventNamespace(name),
 		L:           L,
 		config:      cfg,
+		queue:       make(chan func(), eventQueueSize),
 	}
 	m.claimNamespace(p)
 
@@ -314,6 +315,9 @@ func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin,
 	}
 	p.mu.Unlock()
 	if !failed {
+		m.plugins = append(m.plugins, p)
+		m.queues.Add(1)
+		go m.runQueue(p)
 		return p, nil
 	}
 
@@ -658,10 +662,18 @@ func (m *Manager) Close() {
 	m.closing = true
 	m.mu.Unlock()
 
+	// Run the events that are already queued, so app.quit is the last event
+	// each plugin sees. Emit and EmitKey send only under m.mu while closing
+	// is false, so no send can reach a closed queue.
+	for _, p := range m.plugins {
+		close(p.queue)
+	}
+	m.queues.Wait()
+
 	m.EmitSync(EventAppQuit, nil)
 	m.timers.stopAll()
 	m.execs.stopAll()
-	// Wait for any in-flight async hook goroutines to finish before closing
+	// Wait for any in-flight command goroutines to finish before closing
 	// the LStates they call into.
 	m.wg.Wait()
 	// Close each VM under its lock. A timer or exec callback that runs now

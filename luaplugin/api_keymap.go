@@ -42,9 +42,10 @@ func (m *Manager) KeyBindings() []KeyBinding {
 	return out
 }
 
-// EmitKey invokes every plugin callback registered for the given key string.
-// Returns true if at least one callback fired. Called by the UI's main key
-// dispatcher for keys the core doesn't handle.
+// EmitKey queues every plugin callback registered for the given key string,
+// in the same queue as the events of each plugin. Returns true if at least one
+// plugin bound the key. Called by the UI's main key dispatcher for keys the
+// core doesn't handle.
 func (m *Manager) EmitKey(key string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -58,13 +59,9 @@ func (m *Manager) EmitKey(key string) bool {
 
 	label := "keybind " + key
 	for _, h := range hooks {
-		// Tracked in wg and gated on closing (same as Emit) so a keypress
-		// during shutdown can't call into a closed LState.
-		m.wg.Add(1)
-		go func(h *luaHook) {
-			defer m.wg.Done()
+		m.enqueue(h.plugin, label, func() {
 			m.call(h.plugin, label, hookTimeout, 0, fixedArgs(h.fn, lua.LString(key)))
-		}(h)
+		})
 	}
 	return true
 }
