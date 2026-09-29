@@ -1,6 +1,7 @@
 package model
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -365,6 +366,36 @@ func (m Model) commandHelp(mode commandMode) string {
 	ordered = append(ordered, prominent...)
 	ordered = append(ordered, optional...)
 	return renderCommandHelp(ordered, m.helpWidth(), m)
+}
+
+// findCommand returns the enabled command that key runs in mode.
+func (m Model) findCommand(mode commandMode, key string) (commandSpec, bool) {
+	for _, command := range commandRegistry {
+		if command.Mode&mode != 0 && slices.Contains(command.Keys, key) && command.enabled(m) {
+			return command, true
+		}
+	}
+	return commandSpec{}, false
+}
+
+// commandHint renders the command that key runs in mode the way the hint bar
+// does. It returns "" when no enabled command matches.
+func (m Model) commandHint(mode commandMode, key string) string {
+	command, ok := m.findCommand(mode, key)
+	if !ok {
+		return ""
+	}
+	return fitHelpLine("  " + helpKey(command.KeyLabel, command.label(m)))
+}
+
+// pressKeyHint renders "Press <key> <text>" for the command that key runs in
+// mode. It returns "" when no enabled command matches.
+func (m Model) pressKeyHint(mode commandMode, key, text string) string {
+	command, ok := m.findCommand(mode, key)
+	if !ok {
+		return ""
+	}
+	return fitHelpLine(dimStyle.Render("  Press ") + helpKeyStyle.Render(" "+command.KeyLabel+" ") + dimStyle.Render(" "+text))
 }
 
 func (m Model) helpWidth() int {

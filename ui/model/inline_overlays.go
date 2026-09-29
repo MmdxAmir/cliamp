@@ -311,7 +311,10 @@ func (m Model) renderQueueBody() string {
 	}
 	total := m.playlist.QueueLen()
 	if total == 0 {
-		return bodyMessage("(empty)", budget)
+		return bodyLines([]string{
+			dimStyle.Render("  The queue is empty."),
+			m.pressKeyHint(commandModeMain, "a", "on a playlist track to play it next."),
+		}, budget)
 	}
 
 	var stateReporters []provider.PlaybackStateReporter

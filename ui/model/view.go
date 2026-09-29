@@ -88,6 +88,13 @@ var providerEmptyStateHint = map[string]string{
 	"ytmusic":             "Run `cliamp ytmusic-login` to authorize, then refresh.",
 	"soundcloud":          "Set [soundcloud] user in config.toml to browse a profile.",
 	"netease cloud music": "Run `cliamp setup` and configure NetEase browser cookies.",
+	"qobuz":               "Press Ctrl+R to retry, or run `cliamp qobuz reset`.",
+	"tidal":               "Press Ctrl+R to retry, or run `cliamp tidal reset`.",
+	"mixcloud":            "Set [mixcloud] username in config.toml for account views.",
+	"lyrion":              "Only saved server playlists show here. Press N to browse.",
+	"yandex music":        "Verify [yandex] token in config.toml.",
+	"radio":               "Press Ctrl+R to reload the station directory.",
+	"podcasts":            "Press Ctrl+R to reload the top shows.",
 }
 
 // renderProviderEmptyState explains why the playlists pane is empty for the
@@ -97,6 +104,14 @@ func (m Model) renderProviderEmptyState(budget int) string {
 	name := "this provider"
 	if m.provider != nil {
 		name = m.provider.Name()
+	}
+	if m.providerCatalogSearching() {
+		found := "  No results."
+		if m.provSearch.query != "" {
+			found = fmt.Sprintf("  No results for %q.", m.provSearch.query)
+		}
+		lines := []string{dimStyle.Render(found), "", m.pressKeyHint(commandModeProvider, "esc", "to clear the search.")}
+		return strings.Join(fitLines(lines, budget), "\n")
 	}
 	lines := []string{
 		dimStyle.Render(fmt.Sprintf("  No playlists in %s.", name)),
@@ -1056,7 +1071,12 @@ func (m Model) renderPlaylist() string {
 		if m.feedLoading {
 			lines = append(lines, loadingLine("Loading feed…"))
 		} else {
-			lines = append(lines, dimStyle.Render("  No tracks loaded"))
+			lines = append(lines, dimStyle.Render("  No tracks loaded."), dimStyle.Render("  To add music, press one of these keys:"), "")
+			for _, key := range []string{"esc", "o", "u", "ctrl+f"} {
+				if hint := m.commandHint(commandModeMain, key); hint != "" {
+					lines = append(lines, hint)
+				}
+			}
 		}
 		return strings.Join(fitLines(lines, budget), "\n")
 	}
