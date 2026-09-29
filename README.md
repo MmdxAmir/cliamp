@@ -1,6 +1,6 @@
 [![Docs on contextowl.co](https://contextowl.co/uploads/_brand/badge-docs.svg)](https://contextowl.co)
 
-A retro terminal music player inspired by Winamp. Play local files, streams, podcasts, YouTube, YouTube Music, SoundCloud, Mixcloud, Bilibili, Spotify, NetEase Cloud Music, Yandex Music, Xiaoyuzhou (小宇宙), Navidrome, Lyrion, Plex, Jellyfin, and Audiobookshelf. Use the spectrum visualizer, parametric EQ, and playlist manager.
+A retro terminal music player inspired by Winamp. Play local files, streams, podcasts, YouTube, YouTube Music, SoundCloud, Mixcloud, Bilibili, Spotify, Qobuz, Tidal, NetEase Cloud Music, Yandex Music, Xiaoyuzhou (小宇宙), Navidrome, Lyrion, Plex, Jellyfin, Emby, and Audiobookshelf. Use the spectrum visualizer, parametric EQ, and playlist manager.
 
 **[cliamp.stream](https://cliamp.stream)** | **[docs](https://whiterose.org.contextowl.co/docs/cliamp)** | **[android](https://github.com/cliamp/cliamp-mobile)** | **[discord](https://discord.gg/4VpCzXPuj2)**
 
@@ -107,7 +107,7 @@ cliamp https://example.com/stream  # play a URL
 
 Press `Ctrl+K` to see all keybindings.
 
-**Configure remote providers** such as Navidrome, Lyrion, Plex, Jellyfin, Audiobookshelf, Spotify, Mixcloud, YouTube Music, and NetEase Cloud Music with the interactive wizard:
+**Configure remote providers** such as Navidrome, Lyrion, Plex, Jellyfin, Emby, Audiobookshelf, Spotify, Qobuz, Tidal, Mixcloud, YouTube Music, and NetEase Cloud Music with the interactive wizard:
 
 ```sh
 cliamp setup
@@ -143,7 +143,7 @@ To host a radio station, use [cliamp-server](https://github.com/bjarneo/cliamp-s
 
 **Prerequisites:**
 
-- [Go](https://go.dev/dl/) 1.25.5 or later
+- [Go](https://go.dev/dl/) 1.26.6 or later
 - ALSA development headers (Linux only, required by the audio backend)
 
 **Linux (Debian/Ubuntu):**
@@ -224,10 +224,7 @@ Or without Make: `go build -o cliamp .`
 
 `make install` places the binary in `~/.local/bin/`.
 
-**Optional runtime dependencies:**
-
-- [ffmpeg](https://ffmpeg.org/) for AAC, ALAC, Opus, and WMA playback
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube, SoundCloud, Mixcloud, Bandcamp, Bilibili, and NetEase Cloud Music
+A source build uses the same optional runtime dependencies as the other install methods. See [Install](#install).
 
 ## Docs
 
