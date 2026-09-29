@@ -199,22 +199,26 @@ func TestServerCanonicalizesMethodOperation(t *testing.T) {
 }
 
 func TestServerRoutesRuntimeSnapshotAliasToV2State(t *testing.T) {
-	sock := filepath.Join(shortTempDir(t), "cliamp.sock")
-	server, err := NewServer(sock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = server.Close() })
-	server.SetV2Dispatcher(V2DispatcherFunc(func(_ context.Context, request V2Request) (V2Result, *V2Error) {
-		if request.Method != "state.get" || request.Operation != "" {
-			t.Fatalf("request = %#v", request)
-		}
-		return V2Result{Snapshot: &RuntimeSnapshot{State: "paused"}}, nil
-	}))
+	for _, operation := range []string{"runtime.snapshot", "runtime.status"} {
+		t.Run(operation, func(t *testing.T) {
+			sock := filepath.Join(shortTempDir(t), "cliamp.sock")
+			server, err := NewServer(sock)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = server.Close() })
+			server.SetV2Dispatcher(V2DispatcherFunc(func(_ context.Context, request V2Request) (V2Result, *V2Error) {
+				if request.Method != "state.get" || request.Operation != "" {
+					return V2Result{}, &V2Error{Code: V2ErrorCodeInvalidParams, Message: V2MessageInvalidParams, Detail: request.Method + " " + request.Operation}
+				}
+				return V2Result{Snapshot: &RuntimeSnapshot{State: "paused"}}, nil
+			}))
 
-	response := sendV2Request(t, sock, V2Request{ID: json.RawMessage(`"snapshot"`), Method: "operation.submit", Operation: "runtime.snapshot"})
-	if !response.OK || response.Job != nil || response.Snapshot == nil || response.Snapshot.State != "paused" {
-		t.Fatalf("response = %#v", response)
+			response := sendV2Request(t, sock, V2Request{ID: json.RawMessage(`"snapshot"`), Method: "operation.submit", Operation: operation})
+			if !response.OK || response.Job != nil || response.Snapshot == nil || response.Snapshot.State != "paused" {
+				t.Fatalf("response = %#v", response)
+			}
+		})
 	}
 }
 
