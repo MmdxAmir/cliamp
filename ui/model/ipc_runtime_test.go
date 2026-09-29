@@ -257,6 +257,8 @@ func TestV2SettingsOperations(t *testing.T) {
 		{name: "eq band", op: "eq", params: ipc.Request{Band: 3, Value: 4}, want: ipc.Response{OK: true, EQPreset: "Custom"}},
 		{name: "eq band out of range", op: "eq", params: ipc.Request{Band: eqBandCount, Value: 4}, want: ipc.Response{Error: ipc.V2ErrorCodeInvalidParams}},
 		{name: "eq preset", op: "eq", params: ipc.Request{Name: "rock"}, want: ipc.Response{OK: true, EQPreset: "Rock"}},
+		{name: "eq custom curve", op: "eq", params: ipc.Request{Name: "custom"}, want: ipc.Response{OK: true, EQPreset: "Custom"}},
+		{name: "eq unknown preset", op: "eq", params: ipc.Request{Name: "rokc"}, want: ipc.Response{Error: ipc.V2ErrorCodeNotFound}},
 		{name: "theme", op: "theme", params: ipc.Request{Name: "dracula"}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `"dracula"`}},
 		{name: "theme default", op: "theme", params: ipc.Request{Name: "default"}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `""`}},
 		{name: "theme empty", op: "theme", params: ipc.Request{Name: ""}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `""`}},

@@ -123,6 +123,10 @@ play-next list. They use separate zero-based indexes.
 `theme list` returns `Default - Terminal colors` as the first item. `theme`
 accepts that name or `default` to select the terminal colors.
 
+`eq` takes a built-in preset name, such as `Rock`, or a `band` and a `value`.
+The TUI also accepts `Custom` to restore the saved custom curve. An unknown
+preset name fails the job and does not change the EQ.
+
 `playlist.bookmark` keeps its name for existing scripts. It toggles the favorite
 ♥ of `track`, as `f` does in the TUI. It needs a known `provider` key, but it
 does not change the playlist. In the TUI, a radio station outside a saved

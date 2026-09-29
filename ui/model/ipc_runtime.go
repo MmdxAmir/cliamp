@@ -439,6 +439,12 @@ func (m *Model) handleV2EQ(jobs *ipc.JobStore, jobID string, request ipc.Request
 		}
 		m.setCustomEQBand(request.Band, request.Value)
 	} else if request.Name != "" {
+		// Only plugins may name a curve. An IPC name must be a built-in
+		// preset or Custom, as the daemon requires.
+		if _, ok := EQPresetByName(request.Name); !ok && !strings.EqualFold(request.Name, "Custom") {
+			m.failV2Job(jobs, jobID, v2NotFoundError())
+			return nil
+		}
 		m.SetEQPreset(request.Name, nil)
 		m.scheduleEQSave()
 	} else {
