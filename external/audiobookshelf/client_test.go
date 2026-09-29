@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -514,5 +518,48 @@ func TestSendJSONRetriesOnceAfterUnauthorized(t *testing.T) {
 	}
 	if logins != 2 || patches != 2 {
 		t.Fatalf("logins = %d, patches = %d; want 2 and 2", logins, patches)
+	}
+}
+
+// TestDefaultClientSendsUserAgent verifies that the default HTTP client sends
+// the cliamp User-Agent on the login, GET and PATCH paths.
+func TestDefaultClientSendsUserAgent(t *testing.T) {
+	var mu sync.Mutex
+	agents := map[string]string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		agents[r.Method+" "+r.URL.Path] = r.UserAgent()
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/login":
+			io.WriteString(w, `{"user":{"token":"tok"}}`)
+		case "/api/libraries":
+			io.WriteString(w, librariesJSON)
+		default:
+			io.WriteString(w, `{}`)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "", "user", "pw", nil)
+	if err := c.Ping(); err != nil {
+		t.Fatalf("Ping() error: %v", err)
+	}
+	if err := c.UpdateProgress("item-1", "", 10, 100, false); err != nil {
+		t.Fatalf("UpdateProgress() error: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{"POST /login", "GET /api/libraries", "PATCH /api/me/progress/item-1"}
+	for _, req := range want {
+		ua, ok := agents[req]
+		if !ok {
+			t.Errorf("server got no %s request, got %v", req, agents)
+			continue
+		}
+		if ua != httpclient.UserAgent {
+			t.Errorf("%s User-Agent = %q, want %q", req, ua, httpclient.UserAgent)
+		}
 	}
 }

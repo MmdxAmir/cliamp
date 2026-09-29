@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/bjarneo/cliamp/config"
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -21,6 +22,7 @@ type capture struct {
 	Command []any
 	Player  string
 	Auth    string
+	UA      string
 }
 
 // newServer returns a Client pointed at a test server that replies with body
@@ -30,6 +32,7 @@ func newServer(t *testing.T, body string) (*Client, *capture) {
 	got := &capture{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got.Auth = r.Header.Get("Authorization")
+		got.UA = r.UserAgent()
 		raw, _ := io.ReadAll(r.Body)
 		var env struct {
 			Method string `json:"method"`
@@ -74,6 +77,16 @@ func jsonScalar(v any) string {
 func TestName(t *testing.T) {
 	if got := New("http://nas:9000", "", "").Name(); got != "lyrion" {
 		t.Errorf("Name() = %q, want lyrion", got)
+	}
+}
+
+func TestRequestSendsUserAgent(t *testing.T) {
+	c, got := newServer(t, `{"result":{"_version":"9.0.0"}}`)
+	if err := c.Ping(); err != nil {
+		t.Fatalf("Ping() error: %v", err)
+	}
+	if got.UA != httpclient.UserAgent {
+		t.Errorf("User-Agent = %q, want %q", got.UA, httpclient.UserAgent)
 	}
 }
 

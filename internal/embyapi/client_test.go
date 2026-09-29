@@ -947,3 +947,55 @@ func TestUserIDFromUsersList(t *testing.T) {
 		}
 	}
 }
+
+// TestDefaultClientSendsUserAgent verifies that the default HTTP client sends
+// the cliamp User-Agent on the auth, GET and POST paths of both dialects.
+func TestDefaultClientSendsUserAgent(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		newClient func(baseURL string) *Client
+	}{
+		{"jellyfin", func(u string) *Client { return NewJellyfinClient(u, "", "", "user", "pw") }},
+		{"emby", func(u string) *Client { return NewEmbyClient(u, "", "", "user", "pw") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			agents := map[string]string{}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				agents[r.Method+" "+r.URL.Path] = r.UserAgent()
+				mu.Unlock()
+				if r.URL.Path == "/Users/AuthenticateByName" {
+					io.WriteString(w, `{"AccessToken":"tok","User":{"Id":"user-1"}}`)
+					return
+				}
+				io.WriteString(w, `{}`)
+			}))
+			defer srv.Close()
+
+			c := tc.newClient(srv.URL)
+			if err := c.Ping(); err != nil {
+				t.Fatalf("Ping() error: %v", err)
+			}
+			if err := c.ReportNowPlaying(playlist.Track{}, 0, false); err != nil {
+				t.Fatalf("ReportNowPlaying() error: %v", err)
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for _, req := range []string{"POST /Users/AuthenticateByName", "POST /Sessions/Playing"} {
+				if _, ok := agents[req]; !ok {
+					t.Errorf("server got no %s request, got %v", req, agents)
+				}
+			}
+			if len(agents) != 3 {
+				t.Errorf("server got %d distinct requests, want auth, ping and report: %v", len(agents), agents)
+			}
+			for req, ua := range agents {
+				if ua != httpclient.UserAgent {
+					t.Errorf("%s User-Agent = %q, want %q", req, ua, httpclient.UserAgent)
+				}
+			}
+		})
+	}
+}

@@ -17,7 +17,7 @@ import (
 	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
-var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var defaultHTTPClient = httpclient.NewAPI(30 * time.Second)
 
 const maxResponseBody = 10 << 20
 

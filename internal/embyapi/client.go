@@ -23,7 +23,7 @@ import (
 	"github.com/bjarneo/cliamp/provider"
 )
 
-var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var defaultHTTPClient = httpclient.NewAPI(30 * time.Second)
 
 // maxResponseBody limits API responses to 10 MB to prevent unbounded memory growth.
 const maxResponseBody = 10 << 20

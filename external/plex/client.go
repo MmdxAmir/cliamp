@@ -17,7 +17,7 @@ const maxResponseBody = 10 << 20
 
 // apiClient is used for all Plex API calls with a finite timeout.
 // It is distinct from httpclient.Streaming (which has no timeout) used for audio streams.
-var apiClient = &http.Client{Timeout: 30 * time.Second}
+var apiClient = httpclient.NewAPI(30 * time.Second)
 
 // Client speaks to a Plex Media Server over its HTTP API.
 type Client struct {

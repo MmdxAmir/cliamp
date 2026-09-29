@@ -34,7 +34,7 @@ var (
 )
 
 // httpClient is used for all Navidrome API calls with a finite timeout.
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+var httpClient = httpclient.NewAPI(30 * time.Second)
 
 // maxResponseBody limits JSON API responses to 128 MB to prevent unbounded
 // memory growth. A getPlaylist response runs roughly 1.2 KB per entry, so this
