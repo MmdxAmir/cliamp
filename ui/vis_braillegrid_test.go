@@ -162,7 +162,6 @@ func TestSharedDotBuffersDoNotLeakBetweenModes(t *testing.T) {
 }
 
 func TestBrailleGridRenderPalettes(t *testing.T) {
-	withPanelWidth(t, 3)
 	spec := func(tier int, body string) string {
 		var sb, run strings.Builder
 		run.WriteString(body)
@@ -213,7 +212,7 @@ func TestBrailleGridRenderPalettes(t *testing.T) {
 			for col, tier := range tt.tiers {
 				g.set(col*2, 0, tier)
 			}
-			if got := g.render(1); got != tt.want {
+			if got := g.render(1, 3); got != tt.want {
 				t.Fatalf("render = %q, want %q", got, tt.want)
 			}
 		})

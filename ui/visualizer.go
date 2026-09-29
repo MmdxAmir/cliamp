@@ -88,27 +88,27 @@ var brailleBit = [4][2]rune{
 	{0x40, 0x80}, // row 3
 }
 
-// visBandLayout returns how many bands get columns at the current PanelWidth
-// and how many one-column gaps fit between them. The bands take priority, so
-// a narrow panel keeps every band it can and drops gaps first.
-func visBandLayout(totalBands int) (visible, gaps int) {
-	if totalBands <= 0 || PanelWidth <= 0 {
+// visBandLayout returns how many bands get columns in a panel cols wide and
+// how many one-column gaps fit between them. The bands take priority, so a
+// narrow panel keeps every band it can and drops gaps first.
+func visBandLayout(totalBands, cols int) (visible, gaps int) {
+	if totalBands <= 0 || cols <= 0 {
 		return 0, 0
 	}
-	visible = min(totalBands, PanelWidth)
-	gaps = min(visible-1, max(0, PanelWidth-visible))
+	visible = min(totalBands, cols)
+	gaps = min(visible-1, max(0, cols-visible))
 	return visible, gaps
 }
 
-// visBandWidth returns the character width for band b. At narrow widths only
-// the leading visible bands receive columns. Together with the gaps that
-// bandGapAfter places, the bands fill PanelWidth exactly.
-func visBandWidth(totalBands, b int) int {
-	visible, gaps := visBandLayout(totalBands)
+// visBandWidth returns the character width for band b in a panel cols wide.
+// At narrow widths only the leading visible bands receive columns. Together
+// with the gaps that bandGapAfter places, the bands fill the panel exactly.
+func visBandWidth(totalBands, b, cols int) int {
+	visible, gaps := visBandLayout(totalBands, cols)
 	if b < 0 || b >= visible {
 		return 0
 	}
-	bandCols := PanelWidth - gaps
+	bandCols := cols - gaps
 	base := bandCols / visible
 	extra := bandCols % visible
 	if b < extra {
@@ -120,8 +120,8 @@ func visBandWidth(totalBands, b int) int {
 // bandGapAfter reports whether a one-column gap follows band b. When fewer
 // gaps fit than there are slots between the visible bands, the gaps are spread
 // evenly over the slots.
-func bandGapAfter(totalBands, b int) bool {
-	visible, gaps := visBandLayout(totalBands)
+func bandGapAfter(totalBands, b, cols int) bool {
+	visible, gaps := visBandLayout(totalBands, cols)
 	slots := visible - 1
 	if b < 0 || b >= slots || gaps <= 0 {
 		return false
@@ -816,7 +816,6 @@ func (v *Visualizer) Render() string {
 	if cols <= 0 {
 		return ""
 	}
-	defer WithPanelWidth(cols)()
 
 	driver := v.syncDriverMode()
 	if driver == nil {
@@ -904,11 +903,9 @@ func (v *Visualizer) Tick(ctx VisTickContext) {
 	if v == nil || v.Rows <= 0 {
 		return
 	}
-	cols := v.columns()
-	if cols <= 0 {
+	if v.columns() <= 0 {
 		return
 	}
-	defer WithPanelWidth(cols)()
 
 	driver := v.syncDriverMode()
 	if driver == nil {
@@ -1068,6 +1065,9 @@ func (d *luaModeDriver) Render(v *Visualizer) string {
 	return v.luaRender(v.luaVisNames[d.index], luaBands(v.bands), v.Rows, v.columns(), v.frame)
 }
 
+// columns is the width every mode draws and paces itself at. Cols wins. A
+// visualizer that nobody sized, such as the headless daemon's, falls back to
+// the PanelWidth global.
 func (v *Visualizer) columns() int {
 	if v != nil && v.Cols > 0 {
 		return v.Cols

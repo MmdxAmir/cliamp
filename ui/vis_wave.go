@@ -17,7 +17,7 @@ func (v *Visualizer) traceYs(n int) []int {
 // Each Braille character covers a 2×4 dot grid, giving smooth sub-cell resolution.
 func (v *Visualizer) renderWave() string {
 	height := v.Rows
-	charCols := PanelWidth
+	charCols := v.columns()
 	dotRows := height * 4
 	dotCols := charCols * 2
 

@@ -14,7 +14,7 @@ import (
 func (v *Visualizer) renderBubbles(bands []float64) string {
 	height := v.Rows
 	dotRows := height * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 	if dotRows < 4 || dotCols < 4 {
 		return strings.Repeat("\n", max(0, height-1))
 	}
@@ -103,5 +103,5 @@ func (v *Visualizer) renderBubbles(bands []float64) string {
 	}
 
 	// Top rows warm (light through surface), bottom rows cool (depth).
-	return packBraille(grid, dotCols, height, PanelWidth, specRowLevel)
+	return packBraille(grid, dotCols, height, v.columns(), specRowLevel)
 }

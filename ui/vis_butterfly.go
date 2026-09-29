@@ -9,7 +9,7 @@ import "math"
 func (v *Visualizer) renderButterfly(bands []float64) string {
 	height := v.Rows
 	dotRows := height * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 	centerX := dotCols / 2
 	bandCount := len(bands)
 
@@ -67,7 +67,7 @@ func (v *Visualizer) renderButterfly(bands []float64) string {
 	}
 
 	// Color gradient from top to bottom.
-	return packBraille(grid, dotCols, height, PanelWidth, func(row, rows int) float64 {
+	return packBraille(grid, dotCols, height, v.columns(), func(row, rows int) float64 {
 		return float64(row) / float64(max(1, rows-1))
 	})
 }

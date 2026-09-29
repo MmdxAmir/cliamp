@@ -8,7 +8,7 @@ import "math"
 func (v *Visualizer) renderHeartbeat() string {
 	height := v.Rows
 	dotRows := height * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 
 	samples := v.waveBuf
 	n := len(samples)
@@ -66,5 +66,5 @@ func (v *Visualizer) renderHeartbeat() string {
 		}
 	}
 
-	return grid.render(height)
+	return grid.render(height, v.columns())
 }

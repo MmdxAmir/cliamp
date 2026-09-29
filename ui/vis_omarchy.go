@@ -222,11 +222,11 @@ func omarchyMarkFor(pxRows, pxCols int) (omarchyGlyph, int) {
 // renderOmarchy draws the field. Half blocks give two pixels per character
 // cell; a lit pixel takes its tier from how hard the music is pushing it.
 func (v *Visualizer) renderOmarchy(bands []float64) string {
-	rows := v.Rows
-	if rows <= 0 || PanelWidth <= 0 {
+	rows, cols := v.Rows, v.columns()
+	if rows <= 0 || cols <= 0 {
 		return strings.Repeat("\n", max(0, rows-1))
 	}
-	pxRows, pxCols := rows*2, PanelWidth
+	pxRows, pxCols := rows*2, cols
 
 	t := float64(v.frame) * 0.03
 

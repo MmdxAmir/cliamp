@@ -33,14 +33,14 @@ func resizeTerrainBuf(buf []float64, dotCols int) []float64 {
 func (d *terrainDriver) Render(v *Visualizer) string {
 	height := v.Rows
 	dotRows := height * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 	buf := resizeTerrainBuf(d.buf, dotCols)
 
 	// Render: each dot column is filled from its terrain height down to the bottom.
 	lines := make([]string, height)
 	for row := range height {
 		var content strings.Builder
-		for ch := range PanelWidth {
+		for ch := range v.columns() {
 			var braille rune = '\u2800'
 			for dc := range 2 {
 				x := ch*2 + dc
@@ -69,7 +69,7 @@ func (d *terrainDriver) Tick(v *Visualizer, ctx VisTickContext) {
 		return
 	}
 
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 	d.buf = resizeTerrainBuf(d.buf, dotCols)
 	if len(d.buf) < 2 {
 		return

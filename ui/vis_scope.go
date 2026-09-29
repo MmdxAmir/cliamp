@@ -9,7 +9,7 @@ import "math"
 func (v *Visualizer) renderScope() string {
 	height := v.Rows
 	dotRows := height * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 
 	samples := v.waveBuf
 	n := len(samples)
@@ -71,5 +71,5 @@ func (v *Visualizer) renderScope() string {
 		}
 	}
 
-	return packBraille(grid, dotCols, height, PanelWidth, specRowLevel)
+	return packBraille(grid, dotCols, height, v.columns(), specRowLevel)
 }

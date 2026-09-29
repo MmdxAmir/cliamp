@@ -73,7 +73,7 @@ func (*classicPeakDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
 func (d *classicPeakDriver) Render(v *Visualizer) string {
 	height := v.Rows
 	cols, peaks := d.renderState(v)
-	rowPad := max(0, PanelWidth-classicPeakRenderWidth(len(cols)))
+	rowPad := max(0, v.columns()-classicPeakRenderWidth(len(cols)))
 
 	lines := make([]string, height)
 	for row := range height {
@@ -158,7 +158,7 @@ func (d *classicPeakDriver) animating(v *Visualizer) bool {
 }
 
 func (d *classicPeakDriver) levels(v *Visualizer) []float64 {
-	activeCols := classicPeakColsForWidth(PanelWidth)
+	activeCols := classicPeakColsForWidth(v.columns())
 	return classicPeakBands(v.bands, activeCols)
 }
 

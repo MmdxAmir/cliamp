@@ -121,7 +121,7 @@ func (d *mosaicDriver) ensureGrid(rows, tiles, bandCount int) {
 
 func (d *mosaicDriver) Render(v *Visualizer) string {
 	rows := v.Rows
-	tiles := mosaicTileCount(PanelWidth)
+	tiles := mosaicTileCount(v.columns())
 	if rows <= 0 || tiles <= 0 {
 		return strings.Repeat("\n", max(0, rows-1))
 	}
@@ -164,7 +164,7 @@ func (d *mosaicDriver) Tick(v *Visualizer, ctx VisTickContext) {
 		return
 	}
 	rows := v.Rows
-	tiles := mosaicTileCount(PanelWidth)
+	tiles := mosaicTileCount(v.columns())
 	if rows <= 0 || tiles <= 0 {
 		return
 	}

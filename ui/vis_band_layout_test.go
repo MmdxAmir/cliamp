@@ -28,8 +28,8 @@ func TestBandRenderersFillPanelExactly(t *testing.T) {
 	for _, width := range []int{1, 8, 12, 13, 18, 19, 40, 76} {
 		for _, r := range renderers {
 			t.Run(fmt.Sprintf("%s/%d", r.name, width), func(t *testing.T) {
-				withPanelWidth(t, width)
 				v := NewVisualizer(44100)
+				v.Cols = width
 				v.Rows = 3
 				for i, line := range strings.Split(r.render(v, uniformBands(1)), "\n") {
 					if got := lipgloss.Width(line); got != width {
@@ -57,13 +57,12 @@ func TestBandLayoutFillsPanel(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%dx%d", tt.width, tt.bands), func(t *testing.T) {
-			withPanelWidth(t, tt.width)
 			cols, gaps := 0, 0
 			for b := range tt.bands {
-				cols += visBandWidth(tt.bands, b)
-				if bandGapAfter(tt.bands, b) {
+				cols += visBandWidth(tt.bands, b, tt.width)
+				if bandGapAfter(tt.bands, b, tt.width) {
 					gaps++
-					if visBandWidth(tt.bands, b) == 0 {
+					if visBandWidth(tt.bands, b, tt.width) == 0 {
 						t.Errorf("gap after band %d, which has no columns", b)
 					}
 				}

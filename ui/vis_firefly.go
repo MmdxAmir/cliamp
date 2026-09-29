@@ -33,7 +33,7 @@ func bandAvg(b []float64, lo, hi int) float64 {
 func (v *Visualizer) renderFirefly(bands []float64) string {
 	height := v.Rows
 	dotRows := height * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 	if dotRows < 4 || dotCols < 8 {
 		return strings.Repeat("\n", max(0, height-1))
 	}
@@ -107,5 +107,5 @@ func (v *Visualizer) renderFirefly(bands []float64) string {
 		}
 	}
 
-	return grid.render(height)
+	return grid.render(height, v.columns())
 }

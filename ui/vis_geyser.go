@@ -29,7 +29,7 @@ func (d *geyserDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	if ctx.OverlayActive {
 		return
 	}
-	dotRows, dotCols := v.Rows*4, PanelWidth*2
+	dotRows, dotCols := v.Rows*4, v.columns()*2
 	if dotRows < 4 || dotCols < 4 {
 		return
 	}
@@ -117,5 +117,5 @@ func (d *geyserDriver) OnEnter(*Visualizer) {
 	d.prevBass = 0
 }
 func (d *geyserDriver) Render(v *Visualizer) string {
-	return d.grid.render(v.Rows)
+	return d.grid.render(v.Rows, v.columns())
 }

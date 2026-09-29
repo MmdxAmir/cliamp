@@ -176,7 +176,7 @@ func redSectorBand(bands []float64, i int) float64 {
 }
 
 func (d *redSectorDriver) Render(v *Visualizer) string {
-	dotRows, dotCols := v.Rows*4, PanelWidth*2
+	dotRows, dotCols := v.Rows*4, v.columns()*2
 	if dotRows < 4 || dotCols < 16 {
 		return strings.Repeat("\n", max(0, v.Rows-1))
 	}
@@ -186,7 +186,7 @@ func (d *redSectorDriver) Render(v *Visualizer) string {
 	d.drawStars(dotRows, dotCols, frame)
 	d.drawBars(dotRows, dotCols, frame)
 
-	return d.grid.render(v.Rows)
+	return d.grid.render(v.Rows, v.columns())
 }
 
 // Deterministic pseudo-random value in [0, 1) for star index i, one slot per

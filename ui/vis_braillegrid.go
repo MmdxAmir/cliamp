@@ -51,10 +51,10 @@ func (g *brailleGrid) set(x, y int, tier int8) {
 	}
 }
 
-// render flattens the dot grid to len(rows) lines, packing 4×2 dot blocks into
-// Braille glyphs and emitting tier-coloured runs.
-func (g *brailleGrid) render(rows int) string {
-	if g.dotRows < rows*4 || g.dotCols < PanelWidth*2 {
+// render flattens the dot grid to rows lines of cols glyphs, packing 4×2 dot
+// blocks into Braille glyphs and emitting tier-coloured runs.
+func (g *brailleGrid) render(rows, cols int) string {
+	if g.dotRows < rows*4 || g.dotCols < cols*2 {
 		return strings.Repeat("\n", max(0, rows-1))
 	}
 	flush := g.flush
@@ -65,7 +65,7 @@ func (g *brailleGrid) render(rows int) string {
 	for row := range rows {
 		var sb, run strings.Builder
 		tier := 0
-		for col := range PanelWidth {
+		for col := range cols {
 			var braille rune = '⠀'
 			var cellTier int8
 			for dr := range 4 {

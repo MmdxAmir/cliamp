@@ -219,9 +219,8 @@ func TestAdvanceSmoothingResizesOnBandCountChange(t *testing.T) {
 }
 
 func TestPausedBarsDecayToRestThenSuspend(t *testing.T) {
-	withPanelWidth(t, 16)
-
 	v := NewVisualizer(44100)
+	v.Cols = 16
 	activateMode(t, v, VisBars)
 	v.bands = uniformBands(0.8)
 	v.smoothedBands = append([]float64(nil), v.bands...)
@@ -302,8 +301,8 @@ func TestModeSwitchClearsSmoothedBands(t *testing.T) {
 }
 
 func TestPausedGeyserWaitsForParticles(t *testing.T) {
-	withPanelWidth(t, 16)
 	v := NewVisualizer(44100)
+	v.Cols = 16
 	v.Rows = 5
 	activateMode(t, v, VisGeyser)
 	driver := v.driverFor(VisGeyser).(*geyserDriver)
@@ -325,12 +324,12 @@ func TestPausedGeyserWaitsForParticles(t *testing.T) {
 }
 
 func TestPausedSandWaitsForExplosion(t *testing.T) {
-	withPanelWidth(t, 16)
 	v := NewVisualizer(44100)
+	v.Cols = 16
 	v.Rows = 5
 	activateMode(t, v, VisSand)
 	driver := v.driverFor(VisSand).(*sandDriver)
-	driver.grid.resize(v.Rows*4, PanelWidth*2)
+	driver.grid.resize(v.Rows*4, v.Cols*2)
 	driver.particles = []sandParticle{{x: 1, y: float64(v.Rows * 4), tier: 1}}
 	driver.explosionTTL = 1
 	v.bands = uniformBands(0)
@@ -506,9 +505,8 @@ func TestRawSampleModesClearSpectrumHistoryOnModeSwitch(t *testing.T) {
 }
 
 func TestTerrainPreservesStateAcrossModeSwitch(t *testing.T) {
-	withPanelWidth(t, 8)
-
 	v := NewVisualizer(44100)
+	v.Cols = 8
 	activateMode(t, v, VisTerrain)
 	driver := terrainDriverFor(t, v)
 	bands := uniformBands(0.6)
@@ -516,8 +514,8 @@ func TestTerrainPreservesStateAcrossModeSwitch(t *testing.T) {
 
 	v.Tick(VisTickContext{})
 	snapshot := append([]float64(nil), driver.buf...)
-	if len(snapshot) != PanelWidth*2 {
-		t.Fatalf("terrain buffer len = %d, want %d", len(snapshot), PanelWidth*2)
+	if len(snapshot) != v.Cols*2 {
+		t.Fatalf("terrain buffer len = %d, want %d", len(snapshot), v.Cols*2)
 	}
 
 	activateMode(t, v, VisBars)
@@ -534,9 +532,8 @@ func TestTerrainPreservesStateAcrossModeSwitch(t *testing.T) {
 }
 
 func TestTerrainRenderDoesNotAdvanceWithoutTick(t *testing.T) {
-	withPanelWidth(t, 8)
-
 	v := NewVisualizer(44100)
+	v.Cols = 8
 	activateMode(t, v, VisTerrain)
 	driver := terrainDriverFor(t, v)
 	v.bands = uniformBands(0.6)
@@ -553,9 +550,8 @@ func TestTerrainRenderDoesNotAdvanceWithoutTick(t *testing.T) {
 }
 
 func TestTerrainTickSkipsAnalyzeUnderOverlay(t *testing.T) {
-	withPanelWidth(t, 8)
-
 	v := NewVisualizer(44100)
+	v.Cols = 8
 	activateMode(t, v, VisTerrain)
 	driver := terrainDriverFor(t, v)
 	driver.buf = append([]float64(nil), []float64{

@@ -40,10 +40,11 @@ func (d *stereoDriver) Render(v *Visualizer) string {
 	if height <= 0 {
 		return ""
 	}
+	width := v.columns()
 	lines := make([]string, height)
 
 	if height == 1 {
-		lines[0] = renderStereoMeter("L ", d.level[0], d.peak[0], PanelWidth)
+		lines[0] = renderStereoMeter("L ", d.level[0], d.peak[0], width)
 		return strings.Join(lines, "\n")
 	}
 
@@ -55,7 +56,7 @@ func (d *stereoDriver) Render(v *Visualizer) string {
 		if i == thickness/2 {
 			label = "L "
 		}
-		lines[row+i] = renderStereoMeter(label, d.level[0], d.peak[0], PanelWidth)
+		lines[row+i] = renderStereoMeter(label, d.level[0], d.peak[0], width)
 	}
 	row += thickness
 	if height%2 != 0 {
@@ -66,7 +67,7 @@ func (d *stereoDriver) Render(v *Visualizer) string {
 		if i == thickness/2 {
 			label = "R "
 		}
-		lines[row+i] = renderStereoMeter(label, d.level[1], d.peak[1], PanelWidth)
+		lines[row+i] = renderStereoMeter(label, d.level[1], d.peak[1], width)
 	}
 
 	return strings.Join(lines, "\n")

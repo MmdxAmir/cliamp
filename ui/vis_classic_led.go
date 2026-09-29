@@ -47,9 +47,9 @@ func classicLEDRenderWidth(bars int) int {
 	return bars*(classicLEDBarWidth+classicLEDBarGap) - classicLEDBarGap
 }
 
-func (d *classicLEDDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
+func (d *classicLEDDriver) AnalysisSpec(v *Visualizer) VisAnalysisSpec {
 	return VisAnalysisSpec{
-		BandCount: classicLEDBarCount(PanelWidth),
+		BandCount: classicLEDBarCount(v.columns()),
 		FFTSize:   classicLEDFFTSize,
 	}
 }
@@ -61,7 +61,7 @@ func (d *classicLEDDriver) OnEnter(*Visualizer) {
 func (d *classicLEDDriver) OnLeave(*Visualizer) {}
 
 func (d *classicLEDDriver) levels(v *Visualizer) []float64 {
-	return resampleBandsLinear(v.bands, classicLEDBarCount(PanelWidth))
+	return resampleBandsLinear(v.bands, classicLEDBarCount(v.columns()))
 }
 
 func (d *classicLEDDriver) frameInterval() time.Duration {
@@ -152,10 +152,11 @@ func (d *classicLEDDriver) advance(v *Visualizer, now time.Time) {
 
 func (d *classicLEDDriver) Render(v *Visualizer) string {
 	height := v.Rows
-	bars := classicLEDBarCount(PanelWidth)
+	width := v.columns()
+	bars := classicLEDBarCount(width)
 	body, peak := d.renderState(v, bars)
 
-	rowPad := max(0, PanelWidth-classicLEDRenderWidth(bars))
+	rowPad := max(0, width-classicLEDRenderWidth(bars))
 	heightF := float64(height)
 
 	lines := make([]string, height)

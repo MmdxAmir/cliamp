@@ -10,12 +10,13 @@ func (v *Visualizer) renderScatter(bands []float64) string {
 	dotRows := height * 4
 	lines := make([]string, height)
 	bandCount := len(bands)
+	width := v.columns()
 
 	for row := range height {
 		var content strings.Builder
 
 		for b := range bandCount {
-			charsPerBand := visBandWidth(bandCount, b)
+			charsPerBand := visBandWidth(bandCount, b, width)
 			for c := range charsPerBand {
 				var braille rune = '\u2800'
 
@@ -38,7 +39,7 @@ func (v *Visualizer) renderScatter(bands []float64) string {
 
 				content.WriteRune(braille)
 			}
-			if bandGapAfter(bandCount, b) {
+			if bandGapAfter(bandCount, b, width) {
 				content.WriteByte(' ')
 			}
 		}

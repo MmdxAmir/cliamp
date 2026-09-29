@@ -28,7 +28,7 @@ const (
 func (v *Visualizer) renderLogo(bands []float64) string {
 	height := v.Rows
 	dotRows := height * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 
 	grid := v.dotMaskFor(dotRows * dotCols)
 
@@ -90,5 +90,5 @@ func (v *Visualizer) renderLogo(bands []float64) string {
 		}
 	}
 
-	return packBraille(grid, dotCols, height, PanelWidth, specRowLevel)
+	return packBraille(grid, dotCols, height, v.columns(), specRowLevel)
 }

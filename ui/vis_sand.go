@@ -42,7 +42,7 @@ func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
 		return
 	}
 	dotRows := v.Rows * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 	if dotRows < 4 || dotCols < 4 {
 		return
 	}
@@ -367,10 +367,10 @@ func (d *sandDriver) tickExplosion() {
 func (d *sandDriver) Render(v *Visualizer) string {
 	height := v.Rows
 	dotRows := height * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 	if dotRows < 4 || dotCols < 4 {
 		return strings.Repeat("\n", max(0, height-1))
 	}
 	d.grid.resize(dotRows, dotCols)
-	return d.grid.render(height)
+	return d.grid.render(height, v.columns())
 }

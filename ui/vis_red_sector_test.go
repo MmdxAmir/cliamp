@@ -348,9 +348,8 @@ func equalGrids(a, b brailleGrid) bool {
 // A panel too narrow to draw into still has to return the exact number of
 // lines the layout reserved, or the frame below it shifts.
 func TestRedSectorNarrowPanelKeepsRowCount(t *testing.T) {
-	defer WithPanelWidth(4)()
-
 	v := NewVisualizer(44100)
+	v.Cols = 4
 	v.Rows = 5
 	v.Mode = VisRedSector
 

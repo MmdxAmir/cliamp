@@ -38,7 +38,7 @@ func (d *flameDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	}
 
 	dotRows := v.Rows * 4
-	dotCols := PanelWidth * 2
+	dotCols := v.columns() * 2
 	if dotRows < 4 || dotCols < 4 {
 		return
 	}
@@ -107,7 +107,7 @@ func (d *flameDriver) OnEnter(v *Visualizer) {
 		d.dotCols = 0
 		return
 	}
-	d.ensure(v.Rows*4, PanelWidth*2)
+	d.ensure(v.Rows*4, v.columns()*2)
 	for i := range d.heat {
 		d.heat[i] = 0
 	}
@@ -115,8 +115,9 @@ func (d *flameDriver) OnEnter(v *Visualizer) {
 
 func (d *flameDriver) Render(v *Visualizer) string {
 	height := v.Rows
+	cols := v.columns()
 	dotRows := height * 4
-	dotCols := PanelWidth * 2
+	dotCols := cols * 2
 	if dotRows < 4 || dotCols < 4 {
 		return strings.Repeat("\n", max(0, height-1))
 	}
@@ -128,7 +129,7 @@ func (d *flameDriver) Render(v *Visualizer) string {
 	for row := 0; row < height; row++ {
 		var sb, run strings.Builder
 		tag := -1
-		for col := 0; col < PanelWidth; col++ {
+		for col := 0; col < cols; col++ {
 			var braille rune = '⠀'
 			cellTag := -1
 			for dr := 0; dr < 4; dr++ {

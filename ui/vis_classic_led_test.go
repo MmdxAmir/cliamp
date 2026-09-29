@@ -12,11 +12,10 @@ const classicLEDTestBars = 3
 // classicLEDTestBars bars, with body and peak at rest.
 func classicLEDTestDriver(t *testing.T) (*Visualizer, *classicLEDDriver, time.Time) {
 	t.Helper()
-	withPanelWidth(t, 8)
 	v := NewVisualizer(44100)
 	v.Cols = 8
 	d := activateMode(t, v, VisClassicLED).(*classicLEDDriver)
-	if got := classicLEDBarCount(PanelWidth); got != classicLEDTestBars {
+	if got := classicLEDBarCount(v.Cols); got != classicLEDTestBars {
 		t.Fatalf("bar count = %d, want %d", got, classicLEDTestBars)
 	}
 	t0 := time.Unix(10, 0)
