@@ -161,9 +161,11 @@ type Manager struct {
 	execs        *execManager
 	logger       *pluginLogger
 	mu           sync.RWMutex
-	closing      bool           // set under mu.Lock during Close; blocks new async dispatch
-	queues       sync.WaitGroup // tracks the queue worker of each loaded plugin
-	wg           sync.WaitGroup // tracks in-flight EmitCommand goroutines
+	closing      bool               // set under mu.Lock during Close; blocks new async dispatch
+	queues       sync.WaitGroup     // tracks the queue worker of each loaded plugin
+	wg           sync.WaitGroup     // tracks in-flight EmitCommand goroutines
+	ctx          context.Context    // parent of each call context; see Close
+	cancel       context.CancelFunc // cancels ctx
 }
 
 // New scans the plugin directory and loads all .lua files.
@@ -245,6 +247,7 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 // newManager returns a Manager with no plugins and no logger. allowed is the
 // binary allowlist for cliamp.exec.run.
 func newManager(allowed []string, publisher EventPublisher) *Manager {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Manager{
 		hooks:        make(map[string][]*luaHook),
 		keyBinds:     make(map[string][]*luaHook),
@@ -256,6 +259,8 @@ func newManager(allowed []string, publisher EventPublisher) *Manager {
 		timers:       newTimerManager(),
 		execs:        newExecManager(allowed),
 		publisher:    publisher,
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 }
 
@@ -613,6 +618,10 @@ func (m *Manager) Close() {
 	m.EmitSync(EventAppQuit, nil)
 	m.timers.stopAll()
 	m.execs.stopAll()
+	// Stop the Lua that still runs, such as a command or a timer callback.
+	// It stops at its next instruction, and each later call returns
+	// errClosed. Thus the waits below do not take up to commandTimeout.
+	m.cancel()
 	// Wait for any in-flight command goroutines to finish before closing
 	// the LStates they call into.
 	m.wg.Wait()

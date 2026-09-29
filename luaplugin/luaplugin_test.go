@@ -2,6 +2,7 @@ package luaplugin
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -1339,6 +1340,61 @@ func TestCloseBoundsQuitHook(t *testing.T) {
 			case <-done:
 			case <-time.After(5 * time.Second):
 				t.Fatal("Close did not return while an app.quit hook ran")
+			}
+		})
+	}
+}
+
+// Close stops Lua that still runs after app.quit: an IPC command, or a timer
+// callback. Before, Close waited up to 5 minutes for a command and 5 seconds
+// for a timer callback.
+func TestCloseStopsRunningLua(t *testing.T) {
+	tests := []struct {
+		name    string
+		code    string
+		command bool
+	}{
+		{"command loop", `p:command("run", function() while true do end end)`, true},
+		{"command sleep", `p:command("run", function() while true do cliamp.sleep(10) end end)`, true},
+		{"timer loop", `cliamp.timer.after(0.001, function() while true do end end)`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			p := loadTestPlugin(t, m, "spin", `
+				local p = plugin.register({name = "spin", type = "hook"})
+				`+tt.code)
+			cmdErr := make(chan error, 1)
+			if tt.command {
+				go func() {
+					_, err := m.EmitCommand("spin", "run", nil)
+					cmdErr <- err
+				}()
+			}
+			// Wait until the Lua call holds the plugin lock.
+			deadline := time.Now().Add(time.Second)
+			for p.mu.TryLock() {
+				p.mu.Unlock()
+				if time.Now().After(deadline) {
+					t.Fatal("the Lua call did not start")
+				}
+				time.Sleep(time.Millisecond)
+			}
+
+			done := make(chan struct{})
+			go func() {
+				m.Close()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("Close did not stop the running Lua call")
+			}
+			if tt.command {
+				if err := <-cmdErr; !errors.Is(err, errClosed) {
+					t.Errorf("EmitCommand() error = %v, want %v", err, errClosed)
+				}
 			}
 		})
 	}
