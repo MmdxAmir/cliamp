@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/bjarneo/cliamp/applog"
+	"github.com/bjarneo/cliamp/internal/authurl"
 	"github.com/bjarneo/cliamp/internal/browser"
 )
 
@@ -22,27 +22,12 @@ const (
 	oauthScope      = "r_usr w_usr w_sub"
 )
 
-// authURLObserver is invoked with the device-flow URL when interactive auth
-// begins. Used by the TUI to display the URL when the launched browser does
-// not reach the user (containers, headless environments).
-var authURLObserver atomic.Pointer[func(string)]
+// authURLObserver receives the device-flow URL when interactive auth begins.
+var authURLObserver authurl.Observer
 
 // SetAuthURLObserver registers a callback invoked once with the device-flow
 // URL at the start of an interactive sign-in. Pass nil to remove.
-func SetAuthURLObserver(fn func(string)) {
-	if fn == nil {
-		authURLObserver.Store(nil)
-		return
-	}
-	authURLObserver.Store(&fn)
-}
-
-func notifyAuthURL(u string) {
-	applog.Info("tidal: sign-in URL: %s", u)
-	if p := authURLObserver.Load(); p != nil {
-		(*p)(u)
-	}
-}
+func SetAuthURLObserver(fn func(string)) { authURLObserver.Set(fn) }
 
 // deviceAuth is the device_authorization response. verificationUriComplete
 // already embeds the user code (e.g. "link.tidal.com/ABCDE").
@@ -177,7 +162,7 @@ func newClientInteractive(ctx context.Context, clientID, clientSecret string) (*
 	if !strings.HasPrefix(authURL, "http") {
 		authURL = "https://" + authURL
 	}
-	notifyAuthURL(authURL)
+	authURLObserver.Notify("tidal", authURL)
 	_ = browser.Open(authURL) // best-effort; user can open the URL manually
 
 	tok, err := pollDeviceToken(ctx, c.http, c.tokenURL, clientID, clientSecret, da)

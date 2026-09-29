@@ -13,10 +13,10 @@ import (
 	"os"
 	"runtime/debug"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/bjarneo/cliamp/applog"
+	"github.com/bjarneo/cliamp/internal/authurl"
 	"github.com/bjarneo/cliamp/internal/browser"
 	"github.com/bjarneo/cliamp/playlist"
 
@@ -57,27 +57,12 @@ func oauthContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, webHTTPClient)
 }
 
-// authURLObserver is invoked with the OAuth URL when interactive auth begins.
-// Set via SetAuthURLObserver. Used by the TUI to show the URL when the
-// launched browser doesn't reach the user (containers, headless envs).
-var authURLObserver atomic.Pointer[func(string)]
+// authURLObserver receives the OAuth URL when interactive auth begins.
+var authURLObserver authurl.Observer
 
 // SetAuthURLObserver registers a callback invoked once with the OAuth URL at
 // the start of an interactive sign-in. Pass nil to remove.
-func SetAuthURLObserver(fn func(string)) {
-	if fn == nil {
-		authURLObserver.Store(nil)
-		return
-	}
-	authURLObserver.Store(&fn)
-}
-
-func notifyAuthURL(u string) {
-	applog.Info("spotify: sign-in URL: %s", u)
-	if p := authURLObserver.Load(); p != nil {
-		(*p)(u)
-	}
-}
+func SetAuthURLObserver(fn func(string)) { authURLObserver.Set(fn) }
 
 // Session manages a go-librespot session and player for Spotify integration.
 type Session struct {
@@ -487,7 +472,7 @@ func performOAuth2PKCEFlows(ctx context.Context, flows []oauthFlow) ([]*oauth2.T
 		}
 	}()
 
-	notifyAuthURL(pending[0].authURL)
+	authURLObserver.Notify("spotify", pending[0].authURL)
 	_ = browser.Open(pending[0].authURL) // best-effort — user can open the URL manually if this fails
 
 	tokens := make([]*oauth2.Token, len(pending))
