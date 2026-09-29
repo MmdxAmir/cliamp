@@ -3,8 +3,10 @@ package favorites
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/bjarneo/cliamp/internal/fileutil"
 	"github.com/bjarneo/cliamp/playlist"
@@ -339,5 +341,109 @@ func TestImport(t *testing.T) {
 				t.Fatalf("existing entry changed: %+v", tracks[0])
 			}
 		})
+	}
+}
+
+// Files written before the shared track codec must load unchanged.
+func TestParseLoadsExistingFiles(t *testing.T) {
+	at := time.Date(2026, 5, 6, 22, 9, 11, 0, time.UTC)
+	tests := []struct {
+		name string
+		data string
+		want []Entry
+	}{
+		{
+			name: "entry with unsorted meta and unknown keys",
+			data: `# comment
+[[entry]]
+favorited_at = "2026-05-06T22:09:11Z"
+path = "https://radio.example.com/stream"
+title = "Live"
+realtime = true
+provider_meta.radio.url = "https://radio.example.com/stream"
+provider_meta.radio.name = "Station"
+future_key = "ignored"
+`,
+			want: []Entry{{
+				FavoritedAt: at,
+				Track: playlist.Track{
+					Path:     "https://radio.example.com/stream",
+					Title:    "Live",
+					Stream:   true,
+					Realtime: true,
+					ProviderMeta: map[string]string{
+						"radio.url":  "https://radio.example.com/stream",
+						"radio.name": "Station",
+					},
+				},
+			}},
+		},
+		{
+			name: "entry without a path is dropped",
+			data: `[[entry]]
+title = "No path"
+
+[[entry]]
+path = "/a.mp3"
+title = "A"
+year = 1979
+`,
+			want: []Entry{{Track: playlist.Track{Path: "/a.mp3", Title: "A", Year: 1979}}},
+		},
+		{
+			name: "bad timestamp keeps the track",
+			data: `[[entry]]
+favorited_at = "yesterday"
+path = "/a.mp3"
+title = "A"
+`,
+			want: []Entry{{Track: playlist.Track{Path: "/a.mp3", Title: "A"}}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parse([]byte(tt.data)); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parse:\n got %+v\nwant %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSaveWritesStableBytes(t *testing.T) {
+	s := newTestStore(t)
+	at := time.Date(2026, 5, 6, 22, 9, 11, 0, time.UTC)
+	entries := []Entry{
+		{FavoritedAt: at, Track: playlist.Track{
+			Path:         "https://nd.example.com/rest/stream?id=42",
+			Title:        "Song",
+			Artist:       "Artist",
+			DurationSecs: 208,
+			ProviderMeta: map[string]string{"navidrome.id": "42", "jellyfin.id": "7"},
+		}},
+		{FavoritedAt: at, Track: playlist.Track{Path: "/a.mp3", Title: "A"}},
+	}
+	const want = `[[entry]]
+favorited_at = "2026-05-06T22:09:11Z"
+path = "https://nd.example.com/rest/stream?id=42"
+title = "Song"
+artist = "Artist"
+duration_secs = 208
+provider_meta.jellyfin.id = "7"
+provider_meta.navidrome.id = "42"
+
+[[entry]]
+favorited_at = "2026-05-06T22:09:11Z"
+path = "/a.mp3"
+title = "A"
+`
+	if err := s.saveLocked(entries); err != nil {
+		t.Fatalf("saveLocked: %v", err)
+	}
+	data, err := os.ReadFile(s.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != want {
+		t.Fatalf("favorites.toml:\n got:\n%s\nwant:\n%s", data, want)
 	}
 }

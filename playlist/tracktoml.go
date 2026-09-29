@@ -1,0 +1,86 @@
+package playlist
+
+import (
+	"fmt"
+	"io"
+	"maps"
+	"slices"
+	"strconv"
+	"strings"
+)
+
+// tomlMetaPrefix starts the key of each ProviderMeta entry in a TOML track
+// section, e.g. provider_meta.navidrome.id.
+const tomlMetaPrefix = "provider_meta."
+
+// WriteTrackTOML writes the persisted fields of t as `key = value` lines. The
+// caller writes the section header and its own keys, such as a timestamp.
+// Empty optional fields are left out, and ProviderMeta keys come in sorted
+// order, so one track always gives the same bytes. TrackFromTOML reads the
+// lines back.
+func WriteTrackTOML(w io.Writer, t Track) {
+	fmt.Fprintf(w, "path = %q\n", t.Path)
+	fmt.Fprintf(w, "title = %q\n", t.Title)
+	if t.Artist != "" {
+		fmt.Fprintf(w, "artist = %q\n", t.Artist)
+	}
+	if t.Album != "" {
+		fmt.Fprintf(w, "album = %q\n", t.Album)
+	}
+	if t.Genre != "" {
+		fmt.Fprintf(w, "genre = %q\n", t.Genre)
+	}
+	if t.Year != 0 {
+		fmt.Fprintf(w, "year = %d\n", t.Year)
+	}
+	if t.TrackNumber != 0 {
+		fmt.Fprintf(w, "track_number = %d\n", t.TrackNumber)
+	}
+	if t.DurationSecs != 0 {
+		fmt.Fprintf(w, "duration_secs = %d\n", t.DurationSecs)
+	}
+	if t.Feed {
+		fmt.Fprintln(w, "feed = true")
+	}
+	if t.Realtime {
+		fmt.Fprintln(w, "realtime = true")
+	}
+	for _, k := range slices.Sorted(maps.Keys(t.ProviderMeta)) {
+		fmt.Fprintf(w, "%s%s = %q\n", tomlMetaPrefix, k, t.ProviderMeta[k])
+	}
+}
+
+// TrackFromTOML builds a Track from the unquoted fields of one TOML section,
+// as tomlutil.ParseSections passes them. It ignores keys it does not know, so
+// a store can keep its own keys in the same section. Stream follows from the
+// path. ProviderMeta stays nil when the section has no provider_meta keys.
+func TrackFromTOML(f map[string]string) Track {
+	t := Track{
+		Path:     f["path"],
+		Title:    f["title"],
+		Artist:   f["artist"],
+		Album:    f["album"],
+		Genre:    f["genre"],
+		Feed:     f["feed"] == "true",
+		Realtime: f["realtime"] == "true",
+	}
+	t.Stream = IsURL(t.Path)
+	if n, err := strconv.Atoi(f["year"]); err == nil {
+		t.Year = n
+	}
+	if n, err := strconv.Atoi(f["track_number"]); err == nil {
+		t.TrackNumber = n
+	}
+	if n, err := strconv.Atoi(f["duration_secs"]); err == nil {
+		t.DurationSecs = n
+	}
+	for k, v := range f {
+		if metaKey, ok := strings.CutPrefix(k, tomlMetaPrefix); ok {
+			if t.ProviderMeta == nil {
+				t.ProviderMeta = make(map[string]string)
+			}
+			t.ProviderMeta[metaKey] = v
+		}
+	}
+	return t
+}
