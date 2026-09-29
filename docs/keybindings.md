@@ -32,9 +32,9 @@ library commands.
 | `Shift+Up` `Shift+Down` | Move track up/down in playlist/queue |
 | `h` `l` | Adjust the focused setting (EQ: select band) |
 | `Enter` | Play selected track |
-| `/` | Search playlist (navigate results with `↑` `↓` / `Ctrl+N` `Ctrl+P`; `Ctrl+U` clears the query) |
+| `/` | Search playlist (navigate results with `↑` `↓` / `Ctrl+N` `Ctrl+P`; `Ctrl+U` clears the query; `Tab` toggles the queue for the selected result) |
 | `Ctrl+X` | Expand/collapse playlist |
-| `Ctrl+Z` | Undo the last playlist removal or queue clear |
+| `Ctrl+Z` | Undo the last playlist or queue change |
 | `o` | Open file browser |
 | `b` `Esc` | Back to provider |
 
@@ -100,6 +100,7 @@ and `Esc` clears it.
 | `n` | Toggle favorite ♥ on the selected track while the playback playlist has focus. Favorited tracks appear in the cross-playlist "Favorites" virtual playlist. |
 | `Ctrl+F` | Search with the active provider (Podcasts, Spotify, Qobuz, Tidal, Navidrome, Lyrion, Jellyfin, Emby, Plex, Audiobookshelf, Mixcloud, NetEase, Local), or search YouTube. Available in playlist and provider-browser views. |
 | `u` | Load URL (stream/playlist) |
+| `d` | Open the audio device picker |
 | `y` | Show or close lyrics |
 | `r` | Retry lyrics lookup while lyrics are open |
 | `[` / `]` | Adjust synced-lyrics timing offset (−/+250 ms) while lyrics show timestamped lines |
@@ -349,4 +350,4 @@ query to their search API. Their services control matching rules.
 | Key | Action |
 |---|---|
 | `?` / `Ctrl+K` | Show keymap |
-| `q` | Quit |
+| `q` / `Ctrl+C` | Quit |
