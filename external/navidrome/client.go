@@ -19,6 +19,7 @@ import (
 
 	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/internal/httpclient"
+	"github.com/bjarneo/cliamp/internal/netdiag"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -222,7 +223,11 @@ func (c *NavidromeClient) httpGetContext(ctx context.Context, rawURL string) (*h
 		return nil, err
 	}
 	req.Header.Set("User-Agent", httpclient.UserAgent)
-	return httpClient.Do(req)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, netdiag.Explain(err)
+	}
+	return resp, nil
 }
 
 // subsonicGet performs a GET to the Subsonic API endpoint, decodes the JSON

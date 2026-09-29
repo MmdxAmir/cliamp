@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/bjarneo/cliamp/internal/httpclient"
+	"github.com/bjarneo/cliamp/internal/netdiag"
 )
 
 var defaultHTTPClient = httpclient.NewAPI(30 * time.Second)
@@ -173,7 +174,7 @@ func (c *Client) getOnce(p string, params url.Values, out any) (int, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", p, err)
+		return 0, fmt.Errorf("%s: %w", p, netdiag.Explain(err))
 	}
 	defer resp.Body.Close()
 
@@ -218,7 +219,7 @@ func (c *Client) sendJSONOnce(method, p string, payload any) (int, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", p, err)
+		return 0, fmt.Errorf("%s: %w", p, netdiag.Explain(err))
 	}
 	defer resp.Body.Close()
 
@@ -360,7 +361,7 @@ func (c *Client) ensureAuth() error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("login: %w", err)
+		return fmt.Errorf("login: %w", netdiag.Explain(err))
 	}
 	defer resp.Body.Close()
 

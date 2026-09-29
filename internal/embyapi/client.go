@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/bjarneo/cliamp/internal/httpclient"
+	"github.com/bjarneo/cliamp/internal/netdiag"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -627,7 +628,7 @@ func (c *Client) get(p string, params url.Values, out any) error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("%s: %s: %w", c.dialect.name(), p, err)
+		return fmt.Errorf("%s: %s: %w", c.dialect.name(), p, netdiag.Explain(err))
 	}
 	defer resp.Body.Close()
 
@@ -672,7 +673,7 @@ func (c *Client) postJSON(p string, payload any) error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("%s: %s: %w", c.dialect.name(), p, err)
+		return fmt.Errorf("%s: %s: %w", c.dialect.name(), p, netdiag.Explain(err))
 	}
 	defer resp.Body.Close()
 
@@ -715,7 +716,7 @@ func (c *Client) ensureAuth() error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("%s: auth: %w", c.dialect.name(), err)
+		return fmt.Errorf("%s: auth: %w", c.dialect.name(), netdiag.Explain(err))
 	}
 	defer resp.Body.Close()
 

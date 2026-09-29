@@ -97,6 +97,8 @@ With credentials, Cliamp uses HTTP Basic authentication. The LMS web interface u
 
 **Connection refused or timed out.** Check the port. LMS serves its web UI and this API on 9000 by default. Open `http://your-server:9000` in a browser to test it.
 
+**macOS: "no route to host".** If `curl` works with the same URL, macOS likely denies Local Network access to the app. cliamp then adds a hint to the error. Open **System Settings > Privacy & Security > Local Network**, enable access for the terminal app, and restart cliamp. For more steps, see [Plex troubleshooting](plex.md#troubleshooting).
+
 **Tracks appear but will not play.** Cliamp might not decode the file format. Install `ffmpeg` and try again.
 
 **A playlist or artist is missing.** If it comes from a server plugin instead of local files, cliamp hides it by default. Set `show_unplayable = true` to show it. Showing it does not make it playable.

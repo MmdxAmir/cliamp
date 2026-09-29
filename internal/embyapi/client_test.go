@@ -5,19 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/bjarneo/cliamp/internal/appmeta"
 	"github.com/bjarneo/cliamp/internal/httpclient"
+	"github.com/bjarneo/cliamp/internal/netdiag"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -997,5 +1001,51 @@ func TestDefaultClientSendsUserAgent(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDialErrorGetsNetdiagHint verifies that the auth, GET and POST paths of
+// both dialects pass a dial failure through netdiag.Explain. On macOS the error
+// then carries the Local Network hint. On other systems it stays the same.
+func TestDialErrorGetsNetdiagHint(t *testing.T) {
+	dialErr := &net.OpError{
+		Op:   "dial",
+		Net:  "tcp",
+		Addr: &net.TCPAddr{IP: net.ParseIP("192.168.1.20"), Port: 8096},
+		Err:  os.NewSyscallError("connect", syscall.EHOSTUNREACH),
+	}
+	want := netdiag.Explain(dialErr).Error()
+
+	dialects := []struct {
+		name      string
+		newClient func(baseURL, token, userID, user, password string) *Client
+	}{
+		{"jellyfin", NewJellyfinClient},
+		{"emby", NewEmbyClient},
+	}
+	calls := []struct {
+		name  string
+		token string
+		call  func(*Client) error
+	}{
+		{"auth", "", (*Client).Ping},
+		{"get", "tok", (*Client).Ping},
+		{"post", "tok", func(c *Client) error { return c.ReportNowPlaying(playlist.Track{}, 0, false) }},
+	}
+	for _, d := range dialects {
+		for _, tc := range calls {
+			t.Run(d.name+"/"+tc.name, func(t *testing.T) {
+				c := mock(d.newClient("http://192.168.1.20:8096", tc.token, "user-1", "user", "pw"), func(*http.Request) (*http.Response, error) {
+					return nil, dialErr
+				})
+				err := tc.call(c)
+				if !errors.Is(err, syscall.EHOSTUNREACH) {
+					t.Fatalf("error = %v, want the dial error in the chain", err)
+				}
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to contain %q", err, want)
+				}
+			})
+		}
 	}
 }

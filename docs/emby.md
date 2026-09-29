@@ -56,6 +56,14 @@ Press `N` while you browse Emby to switch to **By Album** or **By Artist** for t
 
 cliamp authenticates with an API key or the supplied username and password. It resolves the active Emby user and lists the music library views. It reads the albums of each view in pages of 500 and derives an alphabetical artist index from them. Then it gets the tracks for the selected album. Playback uses Emby's authenticated download endpoint and streams through the cliamp HTTP pipeline.
 
+## Troubleshooting
+
+### macOS: `dial tcp ... connect: no route to host`
+
+If cliamp reports `no route to host` for a Emby server on the LAN, but `curl` works with the same URL, macOS likely denies Local Network access to the app. cliamp then adds a hint to the error.
+
+Fix: Open **System Settings > Privacy & Security > Local Network**. Enable access for the terminal app, then restart cliamp. For more steps, see [Plex troubleshooting](plex.md#troubleshooting).
+
 ## Known limitations
 
 - **Token-based access**: Store the API key safely.

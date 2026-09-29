@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -225,5 +226,29 @@ func TestNewAPIClient(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.ProtoMajor != 2 {
 		t.Errorf("Proto = %s, want HTTP/2", resp.Proto)
+	}
+}
+
+// TestNewAPIDialErrorKeepsAddress verifies that a failed dial through NewAPI
+// keeps the *net.OpError and the TCP address of the server in the error chain.
+// netdiag.Explain needs both to add the macOS Local Network hint.
+func TestNewAPIDialErrorKeepsAddress(t *testing.T) {
+	clearProxyEnv(t)
+	srv := httptest.NewServer(http.NotFoundHandler())
+	want := srv.Listener.Addr().(*net.TCPAddr)
+	srv.Close()
+
+	resp, err := NewAPI(10 * time.Second).Get(srv.URL)
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("Get to a closed server succeeded")
+	}
+	var opErr *net.OpError
+	if !errors.As(err, &opErr) {
+		t.Fatalf("error %v has no *net.OpError", err)
+	}
+	got, ok := opErr.Addr.(*net.TCPAddr)
+	if !ok || !got.IP.Equal(want.IP) || got.Port != want.Port {
+		t.Errorf("OpError.Addr = %v, want %v", opErr.Addr, want)
 	}
 }

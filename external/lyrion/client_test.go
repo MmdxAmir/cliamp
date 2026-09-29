@@ -3,16 +3,21 @@ package lyrion
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/internal/httpclient"
+	"github.com/bjarneo/cliamp/internal/netdiag"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -825,5 +830,36 @@ func TestUntaggedResultsSurviveTheFilter(t *testing.T) {
 	}
 	if len(pls) != 1 {
 		t.Errorf("got %d playlists, want the untagged playlist kept", len(pls))
+	}
+}
+
+// roundTripFunc lets a test answer requests without a server.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// TestDialErrorGetsNetdiagHint verifies that a request passes a dial failure
+// through netdiag.Explain. On macOS the error then carries the Local Network
+// hint. On other systems it stays the same.
+func TestDialErrorGetsNetdiagHint(t *testing.T) {
+	dialErr := &net.OpError{
+		Op:   "dial",
+		Net:  "tcp",
+		Addr: &net.TCPAddr{IP: net.ParseIP("192.168.1.20"), Port: 9000},
+		Err:  os.NewSyscallError("connect", syscall.EHOSTUNREACH),
+	}
+	want := netdiag.Explain(dialErr).Error()
+	old := httpClient
+	httpClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, dialErr
+	})}
+	t.Cleanup(func() { httpClient = old })
+
+	err := New("http://192.168.1.20:9000", "", "").Ping()
+	if !errors.Is(err, syscall.EHOSTUNREACH) {
+		t.Fatalf("error = %v, want the dial error in the chain", err)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error = %q, want it to contain %q", err, want)
 	}
 }

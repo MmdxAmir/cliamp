@@ -21,6 +21,7 @@ import (
 
 	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/internal/httpclient"
+	"github.com/bjarneo/cliamp/internal/netdiag"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -158,7 +159,7 @@ func (c *Client) request(ctx context.Context, command []any, out any) error {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("lyrion: %s: %w", c.url, err)
+		return fmt.Errorf("lyrion: %s: %w", c.url, netdiag.Explain(err))
 	}
 	defer resp.Body.Close()
 
