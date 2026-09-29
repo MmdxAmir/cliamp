@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -183,7 +182,7 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 	logDir, _ := appdir.Dir()
 	m.logger = newPluginLogger(filepath.Join(logDir, pluginLogName))
 
-	entries, err := os.ReadDir(dir)
+	files, err := Discover(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return m, nil
@@ -201,27 +200,6 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 		trustManifest = plugintrust.Manifest{}
 	}
 
-	// Collect plugin files: *.lua and directories with init.lua.
-	type pluginFile struct {
-		name string
-		path string
-	}
-	var files []pluginFile
-	for _, e := range entries {
-		if e.IsDir() {
-			init := filepath.Join(dir, e.Name(), "init.lua")
-			if _, err := os.Stat(init); err == nil {
-				files = append(files, pluginFile{name: e.Name(), path: init})
-			}
-		} else if before, ok := strings.CutSuffix(e.Name(), ".lua"); ok {
-			files = append(files, pluginFile{
-				name: before,
-				path: filepath.Join(dir, e.Name()),
-			})
-		}
-	}
-	sort.Slice(files, func(i, j int) bool { return files[i].name < files[j].name })
-
 	// Check disabled list.
 	disabled := make(map[string]bool)
 	if pluginCfg != nil {
@@ -235,23 +213,23 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 	}
 
 	for _, f := range files {
-		if disabled[f.name] {
+		if disabled[f.Name] {
 			continue
 		}
-		cfg := pluginCfg[f.name]
+		cfg := pluginCfg[f.Name]
 		// Check per-plugin enabled flag.
 		if cfg != nil {
 			if v, ok := cfg["enabled"]; ok && v == "false" {
 				continue
 			}
 		}
-		if err := plugintrust.Verify(trustManifest, f.name, f.path); err != nil {
-			loadErrs = append(loadErrs, fmt.Sprintf("%s: %v; run `cliamp plugins trust %s`", f.name, err, f.name))
+		if err := plugintrust.Verify(trustManifest, f.Name, f.Path); err != nil {
+			loadErrs = append(loadErrs, fmt.Sprintf("%s: %v; run `cliamp plugins trust %s`", f.Name, err, f.Name))
 			continue
 		}
 
-		if _, err := m.loadPlugin(f.path, f.name, cfg); err != nil {
-			loadErrs = append(loadErrs, fmt.Sprintf("%s: %v", f.name, err))
+		if _, err := m.loadPlugin(f.Path, f.Name, cfg); err != nil {
+			loadErrs = append(loadErrs, fmt.Sprintf("%s: %v", f.Name, err))
 		}
 	}
 
@@ -406,45 +384,25 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 
 	// plugin.register(opts) -> plugin object
 	L.SetField(pluginTbl, "register", L.NewFunction(func(L *lua.LState) int {
-		opts := L.CheckTable(1)
-
-		name := p.Name
-		if v := opts.RawGetString("name"); v != lua.LNil {
-			name = v.String()
+		md, err := parseRegisterOpts(L.CheckTable(1))
+		if err != nil {
+			L.RaiseError("%v", err)
 		}
-		if version := opts.RawGetString("version"); version != lua.LNil {
-			p.Version = version.String()
-		}
-		if desc := opts.RawGetString("description"); desc != lua.LNil {
-			p.Description = desc.String()
-		}
-		if typ := opts.RawGetString("type"); typ != lua.LNil {
-			p.Type = typ.String()
-		}
-		if p.Type == "" {
-			L.RaiseError(`plugin.register() needs type = "hook" or "visualizer"`)
-		}
-		// Parse permissions = {"control", ...}
-		if perms := opts.RawGetString("permissions"); perms != lua.LNil {
-			if tbl, ok := perms.(*lua.LTable); ok {
-				p.perms = make(map[string]bool)
-				tbl.ForEach(func(_, v lua.LValue) {
-					permission := v.String()
-					switch permission {
-					case PermControl, PermExec, PermKeymap:
-						p.perms[permission] = true
-					default:
-						L.RaiseError("unknown permission %q", permission)
-					}
-				})
-			} else {
-				L.RaiseError("permissions must be an array")
-			}
+		name := md.Name
+		if name == "" {
+			name = p.Name
 		}
 		if err := m.claimName(p, name); err != nil {
 			L.RaiseError("%v", err)
 		}
 		p.Name = name
+		p.Version = md.Version
+		p.Description = md.Description
+		p.Type = md.Type
+		p.perms = make(map[string]bool, len(md.Permissions))
+		for _, permission := range md.Permissions {
+			p.perms[permission] = true
+		}
 
 		// Return a plugin object with on() and config() methods.
 		obj := L.NewTable()

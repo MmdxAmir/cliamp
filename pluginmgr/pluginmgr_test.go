@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/plugintrust"
+	"github.com/bjarneo/cliamp/luaplugin"
 )
 
 // redirectTransport rewrites every request's Host to point at target.
@@ -79,20 +82,20 @@ func TestScanPluginsSingleFile(t *testing.T) {
 		t.Fatalf("got %d plugins, want 1", len(plugins))
 	}
 	got := plugins[0]
-	if got.name != "hello" {
-		t.Errorf("name = %q, want hello", got.name)
+	if got.Name != "hello" {
+		t.Errorf("name = %q, want hello", got.Name)
 	}
-	if got.version != "1.2" {
-		t.Errorf("version = %q, want 1.2", got.version)
+	if got.Version != "1.2" {
+		t.Errorf("version = %q, want 1.2", got.Version)
 	}
-	if got.description != "says hi" {
-		t.Errorf("description = %q, want 'says hi'", got.description)
+	if got.Description != "says hi" {
+		t.Errorf("description = %q, want 'says hi'", got.Description)
 	}
-	if got.typ != "visualizer" {
-		t.Errorf("typ = %q, want visualizer", got.typ)
+	if got.Type != "visualizer" {
+		t.Errorf("type = %q, want visualizer", got.Type)
 	}
-	if got.file != "hello.lua" {
-		t.Errorf("file = %q, want hello.lua", got.file)
+	if got.id != "hello" || got.path != filepath.Join(dir, "hello.lua") {
+		t.Errorf("id, path = %q, %q, want hello and hello.lua", got.id, got.path)
 	}
 }
 
@@ -109,8 +112,8 @@ func TestScanPluginsFallsBackToFilename(t *testing.T) {
 	if len(plugins) != 1 {
 		t.Fatalf("got %d plugins, want 1", len(plugins))
 	}
-	if plugins[0].name != "nameless" {
-		t.Errorf("name = %q, want 'nameless' (filename fallback)", plugins[0].name)
+	if plugins[0].Name != "nameless" {
+		t.Errorf("name = %q, want 'nameless' (filename fallback)", plugins[0].Name)
 	}
 }
 
@@ -132,8 +135,8 @@ func TestScanPluginsDirectoryEntry(t *testing.T) {
 	if len(plugins) != 1 {
 		t.Fatalf("got %d plugins, want 1", len(plugins))
 	}
-	if plugins[0].file != "myplug/" {
-		t.Errorf("file = %q, want 'myplug/'", plugins[0].file)
+	if plugins[0].id != "myplug" || plugins[0].path != filepath.Join(sub, "init.lua") {
+		t.Errorf("id, path = %q, %q, want myplug and myplug/init.lua", plugins[0].id, plugins[0].path)
 	}
 }
 
@@ -267,7 +270,7 @@ func TestInstallFromRawURL(t *testing.T) {
 		if !strings.HasSuffix(r.URL.Path, "/example.lua") {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-		_, _ = w.Write([]byte(`plugin.register({ name = "example", version = "1" })`))
+		_, _ = w.Write([]byte(`plugin.register({ name = "example", version = "1", type = "hook" })`))
 	}))
 	defer srv.Close()
 	installTestClient(t, srv.URL)
@@ -363,5 +366,107 @@ func TestDownloadErrors(t *testing.T) {
 				t.Errorf("error = %q, want to contain %q", err.Error(), tt.wantErr)
 			}
 		})
+	}
+}
+
+// installForTest writes source as <name>.lua in the plugin dir of a temp HOME.
+func installForTest(t *testing.T, name, source string) (pluginDir, path string) {
+	t.Helper()
+	home := withTempHome(t)
+	pluginDir = filepath.Join(home, ".config", "cliamp", "plugins")
+	path = filepath.Join(pluginDir, name+".lua")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return pluginDir, path
+}
+
+// silenceOutput sends the CLI output to a buffer for the rest of the test.
+func silenceOutput(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var out bytes.Buffer
+	old := output
+	output = &out
+	t.Cleanup(func() { output = old })
+	return &out
+}
+
+// cliamp plugins trust accepts a plugin exactly when the player loads it
+// without an error, because both use the luaplugin register() parser.
+func TestTrustMatchesRuntime(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		accept bool
+	}{
+		{"hook", `plugin.register({name = "p", type = "hook"})`, true},
+		{"bind at the top level without a name", `
+			local p = plugin.register({type = "hook", permissions = {"keymap"}})
+			p:bind("ctrl+y", "Say hi", function() end)`, true},
+		{"cliamp call at the top level without a name", `
+			plugin.register({type = "hook"})
+			cliamp.log.info("loaded")`, true},
+		{"cliamp call before register", `
+			cliamp.log.info("loading")
+			plugin.register({name = "p", type = "hook"})`, true},
+		{"no register call", `local x = 1`, true},
+		{"unknown permission", `plugin.register({name = "p", type = "hook", permissions = {"root"}})`, false},
+		{"permissions not an array", `plugin.register({name = "p", type = "hook", permissions = "exec"})`, false},
+		{"missing type", `plugin.register({name = "p"})`, false},
+		{"syntax error", `plugin.register({`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pluginDir, path := installForTest(t, "p", tt.source)
+			silenceOutput(t)
+
+			trustErr := Trust("p", true)
+			if _, err := plugintrust.Approve(pluginDir, "p", path); err != nil {
+				t.Fatal(err)
+			}
+			mgr, loadErr := luaplugin.New(nil, nil)
+			mgr.Close()
+
+			if (trustErr == nil) != tt.accept {
+				t.Errorf("Trust() error = %v, want accept = %v", trustErr, tt.accept)
+			}
+			if (trustErr == nil) != (loadErr == nil) {
+				t.Errorf("Trust() error = %v, but the player load error = %v", trustErr, loadErr)
+			}
+		})
+	}
+}
+
+// With p.lua and p/init.lua both installed, the CLI and the player use the
+// same file, so the approval from cliamp plugins trust loads the plugin.
+func TestTrustAndRuntimePickSameFile(t *testing.T) {
+	pluginDir, _ := installForTest(t, "p", `plugin.register({name = "file", type = "hook"})`)
+	init := filepath.Join(pluginDir, "p", "init.lua")
+	if err := os.MkdirAll(filepath.Dir(init), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(init, []byte(`plugin.register({name = "dir", type = "hook"})`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := silenceOutput(t)
+
+	if err := Trust("p", true); err != nil {
+		t.Fatalf("Trust: %v", err)
+	}
+	mgr, err := luaplugin.New(nil, nil)
+	defer mgr.Close()
+	if err != nil || mgr.PluginCount() != 1 {
+		t.Fatalf("New() loaded %d plugins, error %v, want 1 plugin and no error", mgr.PluginCount(), err)
+	}
+	out.Reset()
+	if err := List(); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if lines := strings.Split(strings.TrimSpace(out.String()), "\n"); len(lines) != 2 ||
+		!strings.Contains(lines[1], "file") || !strings.Contains(lines[1], "trusted") {
+		t.Errorf("List output = %q, want one trusted row for p.lua", out.String())
 	}
 }
