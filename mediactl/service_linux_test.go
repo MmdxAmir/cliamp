@@ -4,6 +4,7 @@ package mediactl
 
 import (
 	"io"
+	"math"
 	"testing"
 	"time"
 
@@ -76,24 +77,24 @@ func TestServiceCallbacksDoNotWaitForSend(t *testing.T) {
 		{
 			name:  "one volume change",
 			calls: []call{setVolume(0.5)},
-			want:  []tea.Msg{playback.SetVolumeMsg{VolumeDB: linearToDb(0.5)}},
+			want:  []tea.Msg{playback.SetVolumeMsg{VolumeDB: linearToDb(0.5, 0)}},
 		},
 		{
 			name:  "rapid volume changes keep order",
 			calls: []call{setVolume(0.2), setVolume(0.9), setVolume(0.5), setVolume(0.7)},
 			want: []tea.Msg{
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.2)},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.9)},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.5)},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.7)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.2, 0)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.9, 0)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.5, 0)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.7, 0)},
 			},
 		},
 		{
 			name:  "out of range volume clamps",
 			calls: []call{setVolume(1.5), setVolume(-0.5)},
 			want: []tea.Msg{
-				playback.SetVolumeMsg{VolumeDB: linearToDb(1)},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(1, 0)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0, 0)},
 			},
 		},
 		{
@@ -101,10 +102,10 @@ func TestServiceCallbacksDoNotWaitForSend(t *testing.T) {
 			calls: []call{next, setVolume(0.3), playPause, seek, setVolume(0.6)},
 			want: []tea.Msg{
 				playback.NextMsg{},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.3)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.3, 0)},
 				playback.PlayPauseMsg{},
 				playback.SeekMsg{Offset: 5 * time.Second},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.6)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.6, 0)},
 			},
 		},
 	}
@@ -163,7 +164,7 @@ func TestServiceFirstUpdatePublishesState(t *testing.T) {
 	}{
 		{name: "muted and not seekable", state: playback.State{VolumeDB: -30}, wantVolume: 0, wantCanSeek: false},
 		{name: "full volume and seekable", state: playback.State{VolumeDB: 6, Seekable: true}, wantVolume: 1, wantCanSeek: true},
-		{name: "0 dB and seekable", state: playback.State{VolumeDB: 0, Seekable: true}, wantVolume: dbToLinear(0), wantCanSeek: true},
+		{name: "0 dB and seekable", state: playback.State{VolumeDB: 0, Seekable: true}, wantVolume: linearAt(0), wantCanSeek: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -174,6 +175,47 @@ func TestServiceFirstUpdatePublishesState(t *testing.T) {
 			}
 			if got := svc.props.GetMust(playerName, "CanSeek"); got != tt.wantCanSeek {
 				t.Errorf("CanSeek = %v, want %v", got, tt.wantCanSeek)
+			}
+		})
+	}
+}
+
+// TestServiceVolumeUsesStateFloor checks that the Volume property and a
+// Volume Set use the engine floor from the last Update.
+func TestServiceVolumeUsesStateFloor(t *testing.T) {
+	const playerName = "org.mpris.MediaPlayer2.Player"
+	tests := []struct {
+		name       string
+		floor      float64
+		volumeDB   float64
+		wantVolume float64 // Volume property after Update
+		wantSetDB  float64 // dB that a Volume Set of 0 sends
+	}{
+		{name: "no floor falls back to -30", floor: 0, volumeDB: -40, wantVolume: 0, wantSetDB: -30},
+		{name: "floor -30", floor: -30, volumeDB: -30, wantVolume: 0, wantSetDB: -30},
+		{name: "floor -50", floor: -50, volumeDB: -40, wantVolume: linearAt(-40), wantSetDB: -50},
+		{name: "floor -90", floor: -90, volumeDB: -80, wantVolume: linearAt(-80), wantSetDB: -90},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := make(chan tea.Msg, 1)
+			svc := newTestService(t, func(msg tea.Msg) { got <- msg })
+
+			svc.Update(playback.State{VolumeDB: tt.volumeDB, VolumeMinDB: tt.floor})
+			if v := svc.props.GetMust(playerName, "Volume").(float64); math.Abs(v-tt.wantVolume) > 1e-12 {
+				t.Fatalf("Volume = %v, want %v", v, tt.wantVolume)
+			}
+
+			if err := svc.props.Set(playerName, "Volume", dbus.MakeVariant(0.0)); err != nil {
+				t.Fatalf("Set Volume error = %v", err)
+			}
+			select {
+			case msg := <-got:
+				if want := (playback.SetVolumeMsg{VolumeDB: tt.wantSetDB}); msg != want {
+					t.Fatalf("message = %#v, want %#v", msg, want)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("Set Volume sent no message")
 			}
 		})
 	}

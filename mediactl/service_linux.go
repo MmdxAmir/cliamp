@@ -4,7 +4,9 @@ package mediactl
 
 import (
 	"fmt"
+	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -30,6 +32,12 @@ type Service struct {
 	wake      chan struct{} // tells forwardMessages that queue has messages
 	done      chan struct{} // closed by Close to stop forwardMessages
 	closeOnce sync.Once
+
+	// volFloor holds the math.Float64bits of the last State.VolumeMinDB.
+	// The Volume callback reads it without mu, because godbus runs the
+	// callback under the Properties lock and Update holds mu while it
+	// takes that lock.
+	volFloor atomic.Uint64
 
 	lastStatus  playback.Status
 	lastTrack   playback.Track
@@ -218,7 +226,8 @@ func newService(conn *dbus.Conn, send func(tea.Msg)) (*Service, error) {
 				// until the event loop reads the message, so a direct send can
 				// deadlock the TUI. dispatch only queues the message. The queue
 				// is filled under the lock, so it keeps the order of the changes.
-				svc.dispatch(playback.SetVolumeMsg{VolumeDB: linearToDb(v)})
+				floor := math.Float64frombits(svc.volFloor.Load())
+				svc.dispatch(playback.SetVolumeMsg{VolumeDB: linearToDb(v, floor)})
 				return nil
 			}},
 			"Position":      {Value: int64(0), Writable: false, Emit: prop.EmitFalse},
@@ -299,7 +308,8 @@ func (s *Service) Update(state playback.State) {
 		s.lastTrack = state.Track
 	}
 
-	vol := dbToLinear(state.VolumeDB)
+	s.volFloor.Store(math.Float64bits(state.VolumeMinDB))
+	vol := dbToLinear(state.VolumeDB, state.VolumeMinDB)
 	if vol != s.lastVol {
 		s.props.SetMust(iface, "Volume", vol)
 		s.lastVol = vol
