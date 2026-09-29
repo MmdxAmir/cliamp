@@ -16,15 +16,7 @@ import (
 
 // newTestManager returns a Manager ready for testing (no disk I/O).
 func newTestManager() *Manager {
-	return &Manager{
-		hooks:        make(map[string][]*luaHook),
-		keyBinds:     make(map[string][]*luaHook),
-		keyBindDescs: make(map[string]KeyBinding),
-		commands:     make(map[string]map[string]*luaHook),
-		visMap:       make(map[string]*luaVis),
-		timers:       newTimerManager(),
-		execs:        newExecManager(defaultAllowedBinaries),
-	}
+	return newManager(defaultAllowedBinaries, nil)
 }
 
 // loadTestPlugin writes a Lua script to a temp file, loads it into the manager,

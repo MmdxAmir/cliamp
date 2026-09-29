@@ -159,17 +159,7 @@ type Manager struct {
 // runs so a plugin can publish from its top-level chunk.
 // Returns a Manager (possibly with 0 plugins) and any non-fatal load error.
 func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Manager, error) {
-	m := &Manager{
-		hooks:        make(map[string][]*luaHook),
-		keyBinds:     make(map[string][]*luaHook),
-		keyBindDescs: make(map[string]KeyBinding),
-		commands:     make(map[string]map[string]*luaHook),
-		visMap:       make(map[string]*luaVis),
-		namespaces:   make(map[string]string),
-		timers:       newTimerManager(),
-		execs:        newExecManager(resolveAllowedBinaries(pluginCfg)),
-		publisher:    publisher,
-	}
+	m := newManager(resolveAllowedBinaries(pluginCfg), publisher)
 
 	dir, err := appdir.PluginDir()
 	if err != nil {
@@ -263,6 +253,22 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 		return m, fmt.Errorf("plugin load errors: %s", strings.Join(loadErrs, "; "))
 	}
 	return m, nil
+}
+
+// newManager returns a Manager with no plugins and no logger. allowed is the
+// binary allowlist for cliamp.exec.run.
+func newManager(allowed []string, publisher EventPublisher) *Manager {
+	return &Manager{
+		hooks:        make(map[string][]*luaHook),
+		keyBinds:     make(map[string][]*luaHook),
+		keyBindDescs: make(map[string]KeyBinding),
+		commands:     make(map[string]map[string]*luaHook),
+		visMap:       make(map[string]*luaVis),
+		namespaces:   make(map[string]string),
+		timers:       newTimerManager(),
+		execs:        newExecManager(allowed),
+		publisher:    publisher,
+	}
 }
 
 // loadPlugin creates an isolated Lua VM, registers the cliamp API,
@@ -566,9 +572,6 @@ func eventNamespace(name string) string {
 func (m *Manager) claimNamespace(p *Plugin) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.namespaces == nil {
-		m.namespaces = make(map[string]string)
-	}
 	if owner, taken := m.namespaces[p.namespace]; taken && owner != p.namespaceOwner {
 		p.namespaceErr = fmt.Errorf("event namespace %q is already used by plugin %q; rename this plugin to publish events", p.namespace, owner)
 		if m.logger != nil {
