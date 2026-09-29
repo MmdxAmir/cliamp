@@ -238,7 +238,7 @@ cliamp reads a subset of TOML. These rules apply to every key:
 - Single quotes are literal. cliamp decodes no escapes inside them.
 - An unquoted string also works. cliamp keeps all of its text, including a `#`.
 - A bool is `true` or `false` in any letter case. `1` and `0` also work. cliamp ignores any other value and keeps the default.
-- To add a comment after a value, put whitespace and then `#`. This works after a quoted string, a number, or a bool. After an unquoted string, the `#` and the text after it stay part of the value.
+- To add a comment at the end of a line, put whitespace and then `#`. This works after a quoted string, a number, a bool, or a section header such as `[navidrome]`. After an unquoted string, the `#` and the text after it stay part of the value.
 - A comment after a list, such as `eq` or `libraries`, does not work. Put that comment on its own line.
 
 ```toml
@@ -246,7 +246,7 @@ volume = -6                       # quieter start
 shuffle = True                    # any letter case
 initial_directory = 'D:\Music'    # single quotes keep backslashes
 
-[navidrome]
+[navidrome]                       # home server
 password = "back\\slash\"quote"   # reads as back\slash"quote
 ```
 

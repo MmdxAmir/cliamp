@@ -207,3 +207,50 @@ api_key = abc #123
 		}
 	}
 }
+
+func TestSectionHeader(t *testing.T) {
+	tests := []struct {
+		in     string
+		want   string
+		wantOK bool
+	}{
+		{"[navidrome]", "navidrome", true},
+		{"[plugins.lastfm]", "plugins.lastfm", true},
+		{"[navidrome] # my server", "navidrome", true},
+		{"[navidrome]\t# my server", "navidrome", true},
+		{"[navidrome]# no space", "", false},
+		{"[[dir]]", "[dir]", true},
+		{"navidrome]", "", false},
+		{"[navidrome", "", false},
+		{"key = [1, 2]", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, ok := sectionHeader(tt.in)
+			if got != tt.want || ok != tt.wantOK {
+				t.Fatalf("sectionHeader(%q) = %q, %v, want %q, %v", tt.in, got, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
+}
+
+// TestLoadCommentAfterSectionHeader checks that keys after a commented
+// header land in that section and not in the section before it.
+func TestLoadCommentAfterSectionHeader(t *testing.T) {
+	cfg := loadConfigText(t, `
+[plex]
+url = "http://plex.local:32400"
+token = "plex-token"
+
+[navidrome] # my server
+url = "https://music.example.com"
+user = "alice"
+password = "secret"
+`)
+	if got, want := cfg.Navidrome.URL, "https://music.example.com"; got != want {
+		t.Errorf("Navidrome.URL = %q, want %q", got, want)
+	}
+	if got, want := cfg.Plex.URL, "http://plex.local:32400"; got != want {
+		t.Errorf("Plex.URL = %q, want %q", got, want)
+	}
+}

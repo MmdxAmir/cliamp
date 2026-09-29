@@ -808,8 +808,8 @@ func Load() (Config, error) {
 		}
 
 		// Section header: [navidrome], [plex], [plugins.lastfm], etc.
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.ToLower(line[1 : len(line)-1])
+		if name, ok := sectionHeader(line); ok {
+			section = strings.ToLower(name)
 			// Mark providers as enabled when their section exists.
 			// [yt], [youtube], and [ytmusic] all configure the same YouTube providers.
 			switch section {
@@ -890,6 +890,21 @@ func Load() (Config, error) {
 
 	cfg.clamp()
 	return cfg, scanner.Err()
+}
+
+// sectionHeader returns the name inside a [name] header line. A # comment
+// may follow the closing bracket.
+func sectionHeader(line string) (string, bool) {
+	if !strings.HasPrefix(line, "[") {
+		return "", false
+	}
+	if end := strings.IndexByte(line, ']'); end > 0 && isComment(line[end+1:]) {
+		return line[1:end], true
+	}
+	if strings.HasSuffix(line, "]") {
+		return line[1 : len(line)-1], true
+	}
+	return "", false
 }
 
 // pluginSection returns the plugin name of a [plugins] or [plugins.<name>]
@@ -1056,7 +1071,7 @@ func Save(key, value string) error {
 		}
 		// Stop searching once we hit a section header — the key
 		// belongs in the top-level scope only.
-		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		if _, ok := sectionHeader(trimmed); ok {
 			break
 		}
 		k, _, ok := strings.Cut(trimmed, "=")
@@ -1070,8 +1085,7 @@ func Save(key, value string) error {
 		// Insert before the first section header to keep top-level keys together.
 		inserted := false
 		for i, l := range lines {
-			trimmed := strings.TrimSpace(l)
-			if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			if _, ok := sectionHeader(strings.TrimSpace(l)); ok {
 				lines = append(lines[:i], append([]string{line}, lines[i:]...)...)
 				inserted = true
 				break
@@ -1143,8 +1157,8 @@ func saveSectionValue(section, key, value string) error {
 	inSection := false
 	for i, l := range lines {
 		trimmed := strings.TrimSpace(l)
-		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
-			inSection = strings.EqualFold(trimmed[1:len(trimmed)-1], section)
+		if name, ok := sectionHeader(trimmed); ok {
+			inSection = strings.EqualFold(name, section)
 			continue
 		}
 		if inSection {
@@ -1164,12 +1178,11 @@ func saveSectionValue(section, key, value string) error {
 	inSection = false
 	insertAt := -1
 	for i, l := range lines {
-		trimmed := strings.TrimSpace(l)
-		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		if name, ok := sectionHeader(strings.TrimSpace(l)); ok {
 			if inSection && insertAt >= 0 {
 				break
 			}
-			inSection = strings.EqualFold(trimmed[1:len(trimmed)-1], section)
+			inSection = strings.EqualFold(name, section)
 		}
 		if inSection {
 			insertAt = i

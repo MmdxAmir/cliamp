@@ -232,3 +232,52 @@ func TestSaveMixcloudStylesCreatesSection(t *testing.T) {
 		t.Fatalf("Mixcloud section missing:\n%s", got)
 	}
 }
+
+// TestSaveWithCommentedSectionHeaders checks that the savers see a header
+// with a trailing comment, so they neither duplicate the section nor write
+// a top-level key inside it.
+func TestSaveWithCommentedSectionHeaders(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial string
+		save    func() error
+		want    string
+	}{
+		{
+			name:    "section key replaced in place",
+			initial: "[navidrome] # my server\nbrowse_sort = \"old\"\n",
+			save:    func() error { return SaveNavidromeSort("byYear") },
+			want:    "[navidrome] # my server\nbrowse_sort = \"byYear\"\n",
+		},
+		{
+			name:    "section key appended to the section",
+			initial: "[navidrome] # my server\nurl = \"https://e.com\"\n[plex] # nas\ntoken = \"t\"\n",
+			save:    func() error { return SaveNavidromeSort("byYear") },
+			want:    "[navidrome] # my server\nurl = \"https://e.com\"\nbrowse_sort = \"byYear\"\n[plex] # nas\ntoken = \"t\"\n",
+		},
+		{
+			name:    "top-level key inserted before the header",
+			initial: "[radio] # home\nvolume = 1\n",
+			save:    func() error { return Save("volume", "-6") },
+			want:    "volume = -6\n[radio] # home\nvolume = 1\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := withHome(t)
+			dir := filepath.Join(home, ".config", "cliamp")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatalf("MkdirAll: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(tt.initial), 0o644); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+			if err := tt.save(); err != nil {
+				t.Fatalf("save: %v", err)
+			}
+			if got := readConfig(t, home); got != tt.want {
+				t.Errorf("config =\n%s\nwant\n%s", got, tt.want)
+			}
+		})
+	}
+}
