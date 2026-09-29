@@ -20,11 +20,13 @@ staticcheck:
 	@command -v staticcheck >/dev/null 2>&1 || { echo "staticcheck is required"; exit 1; }
 	staticcheck ./...
 
+GOFILES = $$(git ls-files '*.go')
+
 fmt:
-	gofmt -l -w .
+	gofmt -l -w $(GOFILES)
 
 fmt-check:
-	@test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
+	@test -z "$$(gofmt -l $(GOFILES))" || { gofmt -l $(GOFILES); exit 1; }
 
 coverage:
 	go test -count=1 -coverprofile=coverage.out ./...
