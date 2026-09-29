@@ -206,8 +206,9 @@ func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 	// identity (including selections and in-flight track requests).
 	for _, s := range p.favorites.Stations() {
 		out = append(out, playlist.PlaylistInfo{
-			ID:   "f:" + s.URL,
-			Name: "★ " + formatCatalogName(s),
+			ID:       "f:" + s.URL,
+			Name:     "★ " + formatCatalogName(s),
+			Favorite: true,
 		})
 	}
 

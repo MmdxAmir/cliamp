@@ -120,6 +120,38 @@ func TestFavoritesToggleSharedWithProvider(t *testing.T) {
 	}
 }
 
+// TestPlaylistsMarkFavoriteRows checks that only the rows of the favorites
+// section set Favorite. The catalog row of the same station shows a star
+// but does not set it.
+func TestPlaylistsMarkFavoriteRows(t *testing.T) {
+	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+	favorites := LoadFavorites()
+	p := New(Options{Favorites: favorites, Country: CountryDeclined})
+	station := CatalogStation{Name: "Jazz FM", URL: "https://jazz.example/stream"}
+	p.AppendCatalog([]CatalogStation{station, {Name: "Rock FM", URL: "https://rock.example/stream"}})
+	if _, err := favorites.Toggle(station); err != nil {
+		t.Fatal(err)
+	}
+	lists, err := p.Playlists()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"f:" + station.URL: true, "c:0": false, "c:1": false}
+	for _, list := range lists {
+		wantFavorite, ok := want[list.ID]
+		if !ok {
+			continue
+		}
+		delete(want, list.ID)
+		if list.Favorite != wantFavorite {
+			t.Errorf("row %s (%s) Favorite = %v, want %v", list.ID, list.Name, list.Favorite, wantFavorite)
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("rows %v are missing from Playlists()", want)
+	}
+}
+
 func TestFavoritesPersistenceFailurePreservesState(t *testing.T) {
 	for _, remove := range []bool{false, true} {
 		t.Run(fmt.Sprintf("remove=%v", remove), func(t *testing.T) {
