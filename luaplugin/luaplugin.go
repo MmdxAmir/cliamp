@@ -475,36 +475,7 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 			return 1
 		}))
 
-		// p:publish(topic, payload, {retain=true}) publishes only inside the
-		// immutable namespace derived from the installed plugin filename.
-		L.SetField(obj, "publish", L.NewFunction(func(L *lua.LState) int {
-			topic := L.CheckString(2)
-			payload := luaToGo(L.Get(3))
-			retain := false
-			if options, ok := L.Get(4).(*lua.LTable); ok {
-				retain = lua.LVAsBool(options.RawGetString("retain"))
-			}
-			data, err := json.Marshal(payload)
-			if err == nil {
-				m.mu.RLock()
-				publisher := m.publisher
-				m.mu.RUnlock()
-				if publisher == nil {
-					err = fmt.Errorf("plugin event publisher is unavailable")
-				} else if p.namespaceErr != nil {
-					err = p.namespaceErr
-				} else {
-					fullTopic := "plugin." + p.namespace + "." + topic
-					err = publisher.Publish(fullTopic, data, retain)
-				}
-			}
-			if err != nil {
-				return pushErr(L, err.Error())
-			}
-			L.Push(lua.LTrue)
-			return 1
-		}))
-
+		m.registerPublishAPI(L, obj, p)
 		m.registerKeymapAPI(L, obj, p)
 		m.registerCommandAPI(L, obj, p)
 
