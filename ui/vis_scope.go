@@ -1,9 +1,6 @@
 package ui
 
-import (
-	"math"
-	"strings"
-)
+import "math"
 
 // renderScope draws a Lissajous-style XY oscilloscope using Braille dots.
 // Since the audio tap is mono, a phase-delayed copy of the signal is used as
@@ -17,7 +14,7 @@ func (v *Visualizer) renderScope() string {
 	samples := v.waveBuf
 	n := len(samples)
 
-	grid := make([]bool, dotRows*dotCols)
+	grid := v.dotMaskFor(dotRows * dotCols)
 
 	if n > 1 {
 		// Phase delay slowly oscillates for evolving Lissajous patterns.
@@ -74,23 +71,5 @@ func (v *Visualizer) renderScope() string {
 		}
 	}
 
-	// Convert dot grid to Braille characters.
-	lines := make([]string, height)
-	for row := range height {
-		var content strings.Builder
-		for ch := range PanelWidth {
-			var braille rune = '\u2800'
-			for dr := range 4 {
-				for dc := range 2 {
-					if grid[(row*4+dr)*dotCols+ch*2+dc] {
-						braille |= brailleBit[dr][dc]
-					}
-				}
-			}
-			content.WriteRune(braille)
-		}
-		lines[row] = specWrap(float64(height-1-row)/float64(height), content.String())
-	}
-
-	return strings.Join(lines, "\n")
+	return packBraille(grid, dotCols, height, PanelWidth, specRowLevel)
 }

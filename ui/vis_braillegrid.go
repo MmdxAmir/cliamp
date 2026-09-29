@@ -81,6 +81,48 @@ func (g *brailleGrid) render(rows int) string {
 	return strings.Join(lines, "\n")
 }
 
+// packBraille packs a dot mask of rows*4 by cols*2 dots, dotCols wide, into
+// rows lines of Braille glyphs. rowLevel picks the spectrum colour of each
+// whole line, as specWrap does.
+func packBraille(dots []bool, dotCols, rows, cols int, rowLevel func(row, rows int) float64) string {
+	lines := make([]string, rows)
+	for row := range rows {
+		var content strings.Builder
+		for col := range cols {
+			var braille rune = '\u2800'
+			for dr := range 4 {
+				for dc := range 2 {
+					if dots[(row*4+dr)*dotCols+col*2+dc] {
+						braille |= brailleBit[dr][dc]
+					}
+				}
+			}
+			content.WriteRune(braille)
+		}
+		lines[row] = specWrap(rowLevel(row, rows), content.String())
+	}
+	return strings.Join(lines, "\n")
+}
+
+// specRowLevel is the usual spectrum gradient: the low colour on the bottom
+// row and the high colour towards the top.
+func specRowLevel(row, rows int) float64 {
+	return float64(rows-1-row) / float64(rows)
+}
+
+// dotMaskFor returns the per-frame dot mask that the Braille modes share,
+// cleared and sized to n dots. Only one mode renders a frame, so one buffer
+// serves all of them.
+func (v *Visualizer) dotMaskFor(n int) []bool {
+	if cap(v.dotMask) < n {
+		v.dotMask = make([]bool, n)
+	} else {
+		v.dotMask = v.dotMask[:n]
+		clear(v.dotMask)
+	}
+	return v.dotMask
+}
+
 // lcgNext advances a 64-bit LCG and returns the top 31 bits of the new state.
 // Every visualizer that needs a repeatable random stream draws from it.
 func lcgNext(state *uint64) uint64 {

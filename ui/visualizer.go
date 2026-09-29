@@ -424,6 +424,7 @@ type Visualizer struct {
 	luaRender       LuaVisRenderer
 	luaDriverCache  map[int]visModeDriver
 	pulseCoordCache *pulseCoords
+	dotMask         []bool // per-frame Braille dots, see dotMaskFor
 	mirrorGrid      brailleGrid
 }
 
