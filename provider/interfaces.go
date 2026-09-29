@@ -406,10 +406,6 @@ type FavoritesManager interface {
 	// ToggleFavorite toggles the given track in the favorites store.
 	// Returns true when the track is now favorited after the call.
 	ToggleFavorite(track playlist.Track) (bool, error)
-	// IsFavorited reports whether the given path is in the favorites store.
-	IsFavorited(path string) bool
-	// FavoritesCount returns the number of favorited tracks.
-	FavoritesCount() int
 }
 
 // TrackPager is implemented by providers that can return a playlist's tracks

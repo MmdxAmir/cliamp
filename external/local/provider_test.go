@@ -937,46 +937,39 @@ func TestCanAddToPlaylistMatchesAddTracks(t *testing.T) {
 	}
 }
 
-func TestFavoritesManagerInterface(t *testing.T) {
-	p := newTestProviderWithFavorites(t)
-	fm, ok := any(p).(provider.FavoritesManager)
-	if !ok {
-		t.Fatal("Provider does not implement FavoritesManager")
+func TestFavoritesManagerToggle(t *testing.T) {
+	track := playlist.Track{Path: "/a.mp3", Title: "A"}
+	tests := []struct {
+		name  string
+		store bool
+		want  []bool // favorited state after each toggle
+	}{
+		{name: "toggle on then off", store: true, want: []bool{true, false}},
+		{name: "no favorites store", want: []bool{false, false}},
 	}
-
-	// Initially empty.
-	if fm.FavoritesCount() != 0 {
-		t.Fatalf("Count = %d, want 0", fm.FavoritesCount())
-	}
-	if fm.IsFavorited("/a.mp3") {
-		t.Fatal("should not be favorited initially")
-	}
-
-	// Toggle on.
-	added, err := fm.ToggleFavorite(playlist.Track{Path: "/a.mp3", Title: "A"})
-	if err != nil {
-		t.Fatalf("ToggleFavorite: %v", err)
-	}
-	if !added {
-		t.Fatal("first toggle should return true")
-	}
-	if !fm.IsFavorited("/a.mp3") {
-		t.Fatal("should be favorited after toggle on")
-	}
-	if fm.FavoritesCount() != 1 {
-		t.Fatalf("Count = %d, want 1", fm.FavoritesCount())
-	}
-
-	// Toggle off.
-	added, err = fm.ToggleFavorite(playlist.Track{Path: "/a.mp3", Title: "A"})
-	if err != nil {
-		t.Fatalf("ToggleFavorite: %v", err)
-	}
-	if added {
-		t.Fatal("second toggle should return false")
-	}
-	if fm.IsFavorited("/a.mp3") {
-		t.Fatal("should not be favorited after toggle off")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestProviderWithFavorites(t)
+			if !tt.store {
+				p.favorites = nil
+			}
+			var fm provider.FavoritesManager = p
+			if p.IsFavorited(track.Path) {
+				t.Fatal("favorited before the first toggle")
+			}
+			for i, want := range tt.want {
+				got, err := fm.ToggleFavorite(track)
+				if err != nil {
+					t.Fatalf("toggle %d: ToggleFavorite: %v", i, err)
+				}
+				if got != want {
+					t.Fatalf("toggle %d: ToggleFavorite = %v, want %v", i, got, want)
+				}
+				if got := p.IsFavorited(track.Path); got != want {
+					t.Fatalf("toggle %d: IsFavorited = %v, want %v", i, got, want)
+				}
+			}
+		})
 	}
 }
 

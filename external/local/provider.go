@@ -1075,21 +1075,11 @@ func (p *Provider) ToggleFavorite(track playlist.Track) (bool, error) {
 }
 
 // IsFavorited reports whether the given path is in the favorites store.
-// Implements provider.FavoritesManager.
 func (p *Provider) IsFavorited(path string) bool {
 	if p.favorites == nil {
 		return false
 	}
 	return p.favorites.IsFavorited(path)
-}
-
-// FavoritesCount returns the number of favorited tracks.
-// Implements provider.FavoritesManager.
-func (p *Provider) FavoritesCount() int {
-	if p.favorites == nil {
-		return 0
-	}
-	return p.favorites.Count()
 }
 
 // RemoveTrack removes a track by index from the named playlist.
