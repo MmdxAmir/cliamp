@@ -229,6 +229,16 @@ or with a sidebar too short for details, `Ctrl+I` opens that full info overlay
 instead. The preference remains saved so the section appears when you return
 to a wide playback layout with enough room and Settings open.
 
+## Value syntax
+
+cliamp reads a subset of TOML. These rules apply to every key:
+
+- A bool is `true` or `false` in any letter case. `1` and `0` also work. cliamp ignores any other value and keeps the default.
+
+```toml
+shuffle = True
+```
+
 ## Secrets from Environment Variables
 
 Set a string value in `config.toml` to `$VAR_NAME` or `${VAR_NAME}` to read it from an environment variable. This keeps passwords, tokens, and client secrets out of the file.

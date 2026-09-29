@@ -68,6 +68,14 @@ func isEnvName(s string) bool {
 	return true
 }
 
+// parseBool reads a bool value. It accepts true and false in any letter case,
+// and the other strconv.ParseBool forms such as 1 and 0. ok is false for any
+// other value, so the caller keeps the current setting.
+func parseBool(val string) (v, ok bool) {
+	v, err := strconv.ParseBool(strings.ToLower(val))
+	return v, err == nil
+}
+
 // NavidromeConfig holds credentials for a Navidrome/Subsonic server.
 // All three fields must be non-empty for a client to be constructed.
 type NavidromeConfig struct {
@@ -506,8 +514,10 @@ func Load() (Config, error) {
 			case "format":
 				cfg.Navidrome.Format = parseString(val)
 			case "scrobble":
-				// Opt-out: only mark disabled when the value is explicitly "false".
-				cfg.Navidrome.ScrobbleDisabled = strings.ToLower(val) == "false"
+				// Opt-out: only mark disabled when the value is explicitly false.
+				if v, ok := parseBool(val); ok {
+					cfg.Navidrome.ScrobbleDisabled = !v
+				}
 			}
 		case "lyrion":
 			switch key {
@@ -518,12 +528,16 @@ func Load() (Config, error) {
 			case "password":
 				cfg.Lyrion.Password = parseString(val)
 			case "show_unplayable":
-				cfg.Lyrion.ShowUnplayable = strings.ToLower(val) == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.Lyrion.ShowUnplayable = v
+				}
 			}
 		case "spotify":
 			switch key {
 			case "enabled":
-				cfg.Spotify.Disabled = strings.ToLower(val) == "false"
+				if v, ok := parseBool(val); ok {
+					cfg.Spotify.Disabled = !v
+				}
 			case "client_id":
 				cfg.Spotify.ClientID = parseString(val)
 			case "bitrate":
@@ -534,7 +548,9 @@ func Load() (Config, error) {
 		case "qobuz":
 			switch key {
 			case "enabled":
-				cfg.Qobuz.Disabled = strings.ToLower(val) == "false"
+				if v, ok := parseBool(val); ok {
+					cfg.Qobuz.Disabled = !v
+				}
 			case "quality":
 				if v, err := strconv.Atoi(val); err == nil {
 					cfg.Qobuz.Quality = v
@@ -543,7 +559,9 @@ func Load() (Config, error) {
 		case "tidal":
 			switch key {
 			case "enabled":
-				cfg.Tidal.Disabled = strings.ToLower(val) == "false"
+				if v, ok := parseBool(val); ok {
+					cfg.Tidal.Disabled = !v
+				}
 			case "client_id":
 				cfg.Tidal.ClientID = parseString(val)
 			case "client_secret":
@@ -554,7 +572,9 @@ func Load() (Config, error) {
 		case "ytmusic":
 			switch key {
 			case "enabled":
-				cfg.YouTubeMusic.Disabled = strings.ToLower(val) == "false"
+				if v, ok := parseBool(val); ok {
+					cfg.YouTubeMusic.Disabled = !v
+				}
 			case "client_id":
 				cfg.YouTubeMusic.ClientID = parseString(val)
 			case "client_secret":
@@ -562,8 +582,9 @@ func Load() (Config, error) {
 			case "cookies_from":
 				cfg.YouTubeMusic.CookiesFrom = strings.TrimSpace(parseString(val))
 			case "expand_playlist":
-				v := strings.ToLower(val) != "false"
-				cfg.YouTubeMusic.ExpandPlaylist = &v
+				if v, ok := parseBool(val); ok {
+					cfg.YouTubeMusic.ExpandPlaylist = &v
+				}
 			}
 		case "plex":
 			switch key {
@@ -586,7 +607,9 @@ func Load() (Config, error) {
 		case "soundcloud":
 			switch key {
 			case "enabled":
-				cfg.SoundCloud.Enabled = strings.ToLower(val) == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.SoundCloud.Enabled = v
+				}
 			case "user":
 				cfg.SoundCloud.User = parseString(val)
 			case "cookies_from":
@@ -595,7 +618,9 @@ func Load() (Config, error) {
 		case "mixcloud":
 			switch key {
 			case "enabled":
-				cfg.Mixcloud.Enabled = strings.ToLower(val) == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.Mixcloud.Enabled = v
+				}
 			case "username":
 				cfg.Mixcloud.Username = strings.TrimSpace(parseString(val))
 			case "access_token":
@@ -617,7 +642,9 @@ func Load() (Config, error) {
 		case "netease":
 			switch key {
 			case "enabled":
-				cfg.NetEase.Enabled = strings.ToLower(val) == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.NetEase.Enabled = v
+				}
 			case "cookies_from":
 				cfg.NetEase.CookiesFrom = strings.TrimSpace(parseString(val))
 			case "user_id":
@@ -626,7 +653,9 @@ func Load() (Config, error) {
 		case "yandex":
 			switch key {
 			case "enabled":
-				cfg.Yandex.Enabled = strings.ToLower(val) == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.Yandex.Enabled = v
+				}
 			case "token":
 				cfg.Yandex.Token = parseString(val)
 			}
@@ -693,7 +722,7 @@ func Load() (Config, error) {
 					cfg.VolumeMin = v
 				}
 			case "vis_volume_linked":
-				if v, err := strconv.ParseBool(val); err == nil {
+				if v, ok := parseBool(val); ok {
 					cfg.VisVolumeLinked = v
 				}
 			case "repeat":
@@ -703,11 +732,17 @@ func Load() (Config, error) {
 					cfg.Repeat = strings.ToLower(val)
 				}
 			case "shuffle":
-				cfg.Shuffle = val == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.Shuffle = v
+				}
 			case "mono":
-				cfg.Mono = val == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.Mono = v
+				}
 			case "auto_play":
-				cfg.AutoPlay = val == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.AutoPlay = v
+				}
 			case "seek_large_step_sec":
 				if v, err := strconv.Atoi(val); err == nil {
 					cfg.SeekStepLarge = v
@@ -751,15 +786,25 @@ func Load() (Config, error) {
 					cfg.Speed = v
 				}
 			case "simplified":
-				cfg.Simplified = val == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.Simplified = v
+				}
 			case "hide_help_bar":
-				cfg.HideHelpBar = val == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.HideHelpBar = v
+				}
 			case "hide_settings_pane":
-				cfg.HideSettingsPane = val == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.HideSettingsPane = v
+				}
 			case "show_metadata":
-				cfg.ShowMetadata = val == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.ShowMetadata = v
+				}
 			case "expanded":
-				cfg.Expanded = strings.ToLower(val) == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.Expanded = v
+				}
 			case "audio_device":
 				cfg.AudioDevice = parseString(val)
 			case "initial_directory":
@@ -779,7 +824,9 @@ func Load() (Config, error) {
 					cfg.LogLevel = lvl
 				}
 			case "low_power":
-				cfg.LowPower = strings.ToLower(val) == "true"
+				if v, ok := parseBool(val); ok {
+					cfg.LowPower = v
+				}
 			}
 		}
 	}
