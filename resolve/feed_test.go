@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/playlist"
 )
 
@@ -44,8 +45,8 @@ func TestFeedMetadata(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %s, want GET without classification probes", r.Method)
 		}
-		if got := r.UserAgent(); got != "cliamp/1.0 (https://github.com/bjarneo/cliamp)" {
-			t.Errorf("User-Agent = %q", got)
+		if got := r.UserAgent(); got != httpclient.UserAgent {
+			t.Errorf("User-Agent = %q, want %q", got, httpclient.UserAgent)
 		}
 		if r.URL.Path == "/show" {
 			http.Redirect(w, r, "/publisher", http.StatusFound)

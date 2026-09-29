@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/internal/ytdlcookies"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
@@ -61,7 +62,7 @@ type uaTransport struct{ rt http.RoundTripper }
 
 func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
-	req.Header.Set("User-Agent", "cliamp/1.0 (https://github.com/bjarneo/cliamp)")
+	req.Header.Set("User-Agent", httpclient.UserAgent)
 	return t.rt.RoundTrip(req)
 }
 
