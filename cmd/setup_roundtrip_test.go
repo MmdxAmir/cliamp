@@ -2,13 +2,15 @@ package cmd
 
 import (
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/bjarneo/cliamp/config"
 )
 
 // TestSetupBodyRoundTrip saves each provider body with values that need
-// escapes and checks that config.Load reads the same values back.
+// escapes and checks that config.Load reads the same values back. It covers
+// every provider spec.
 func TestSetupBodyRoundTrip(t *testing.T) {
 	const (
 		backslash = `a\b`
@@ -80,6 +82,22 @@ func TestSetupBodyRoundTrip(t *testing.T) {
 			want: []string{mixed},
 		},
 		{
+			section: "qobuz",
+			values:  map[string]string{keyQobuzQuality: "27"},
+			got: func(c config.Config) []string {
+				return []string{strconv.FormatBool(c.Qobuz.IsSet()), strconv.Itoa(c.Qobuz.Quality)}
+			},
+			want: []string{"true", "27"},
+		},
+		{
+			section: "tidal",
+			values:  map[string]string{keyTidalQuality: "hires"},
+			got: func(c config.Config) []string {
+				return []string{strconv.FormatBool(c.Tidal.IsSet()), c.Tidal.Quality}
+			},
+			want: []string{"true", "hires"},
+		},
+		{
 			section: "netease",
 			values:  map[string]string{keyNetEaseBrowser: "custom", "cookies_from": `chrome:Profile "1"`, "user_id": backslash},
 			got: func(c config.Config) []string {
@@ -111,28 +129,24 @@ func TestSetupBodyRoundTrip(t *testing.T) {
 		},
 	}
 
-	specs := map[string]providerSpec{}
-	for _, p := range providers() {
-		specs[p.section] = p
-	}
+	tested := map[string]bool{}
 	for _, tt := range tests {
+		tested[tt.section] = true
 		t.Run(tt.section, func(t *testing.T) {
 			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
-			spec, ok := specs[tt.section]
-			if !ok {
-				t.Fatalf("no provider spec for [%s]", tt.section)
-			}
-			body := spec.body(tt.values)
-			if err := saveSection(spec.section, body); err != nil {
-				t.Fatalf("saveSection: %v", err)
-			}
+			saveSetup(t, tt.section, tt.values)
 			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("config.Load: %v", err)
 			}
 			if got := tt.got(cfg); !slices.Equal(got, tt.want) {
-				t.Fatalf("round trip of\n%s\ngot  %q\nwant %q", body, got, tt.want)
+				t.Fatalf("round trip got  %q\nwant %q", got, tt.want)
 			}
 		})
+	}
+	for _, p := range providers() {
+		if !tested[p.section] {
+			t.Errorf("no round trip case for [%s]", p.section)
+		}
 	}
 }

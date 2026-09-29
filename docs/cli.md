@@ -145,13 +145,13 @@ CLI flags override config file values for the current session only. Persisted bo
 
 ## Setup wizard
 
-Configure remote providers through a small TUI. Supported providers are Navidrome, Lyrion, Plex, Jellyfin, Emby, Spotify, Qobuz, Tidal, Mixcloud, NetEase, Audiobookshelf, and YouTube Music. Each provider page links to its required credentials. The wizard writes the `[provider]` block to `~/.config/cliamp/config.toml` and leaves the rest of the file unchanged. It validates supported server connections during setup. OAuth providers (Spotify, Qobuz, Tidal) authenticate later in the player. Mixcloud checks optional browser-session or OAuth credentials when you use them.
+Configure remote providers through a small TUI. Supported providers are Navidrome, Lyrion, Plex, Jellyfin, Emby, Spotify, Qobuz, Tidal, Mixcloud, NetEase, Audiobookshelf, and YouTube Music. Each provider page links to its required credentials. The wizard writes the provider keys into the `[provider]` section of `~/.config/cliamp/config.toml` and leaves the rest of the file unchanged. For YouTube Music, it edits an existing `[youtube]` or `[yt]` section. It validates supported server connections during setup. OAuth providers (Spotify, Qobuz, Tidal) authenticate later in the player. Mixcloud checks optional browser-session or OAuth credentials when you use them.
 
 ```sh
 cliamp setup
 ```
 
-Use `↑/↓` to navigate. Use `Enter` to confirm or submit. Use `Esc` to go back. Use `q` in the menu to quit. Passwords and tokens are masked. Running setup again for a configured provider replaces its section.
+Use `↑/↓` to navigate. Use `Enter` to confirm or submit. Use `Esc` to go back. Use `q` in the menu to quit. Passwords and tokens are masked. Running setup again for a configured provider updates the keys that setup manages. It keeps the other keys and comments in the section, such as `browse_sort`. It removes a managed key that the new choice does not use, such as `token` after a switch to password login.
 
 ## Playlist Management
 
