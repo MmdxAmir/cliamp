@@ -168,45 +168,50 @@ func TestOAuthCallbackHandler(t *testing.T) {
 }
 
 // TestDoOAuthReturnsAuthorizationError checks that a denied sign-in ends the
-// wait at once instead of after the sign-in timeout.
+// wait at once instead of after the sign-in timeout. The retry reuses the
+// HTTP client, as a browser does, so a kept-alive connection to the first
+// callback server must not swallow the second callback.
 func TestDoOAuthReturnsAuthorizationError(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // keep browser.Open from starting a real browser
 	urls := make(chan string, 1)
 	SetAuthURLObserver(func(u string) { urls <- u })
 	t.Cleanup(func() { SetAuthURLObserver(nil) })
+	client := &http.Client{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := doOAuth(ctx, "id", "secret")
-		errCh <- err
-	}()
+	for _, attempt := range []string{"first sign-in", "retry after a denial"} {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		t.Cleanup(cancel)
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := doOAuth(ctx, "id", "secret")
+			errCh <- err
+		}()
 
-	var authURL string
-	select {
-	case authURL = <-urls:
-	case err := <-errCh:
-		t.Skipf("callback port unavailable: %v", err)
-	}
-	parsed, err := url.Parse(authURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	callback := fmt.Sprintf("http://127.0.0.1:%d/callback?state=%s&error=access_denied",
-		CallbackPort, url.QueryEscape(parsed.Query().Get("state")))
-	resp, err := http.Get(callback)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-
-	select {
-	case err := <-errCh:
-		if err == nil || !strings.Contains(err.Error(), "access_denied") {
-			t.Fatalf("doOAuth() error = %v, want access_denied", err)
+		var authURL string
+		select {
+		case authURL = <-urls:
+		case err := <-errCh:
+			t.Skipf("%s: callback port unavailable: %v", attempt, err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("doOAuth() still waits after the error callback")
+		parsed, err := url.Parse(authURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		callback := fmt.Sprintf("http://127.0.0.1:%d/callback?state=%s&error=access_denied",
+			CallbackPort, url.QueryEscape(parsed.Query().Get("state")))
+		resp, err := client.Get(callback)
+		if err != nil {
+			t.Fatalf("%s: %v", attempt, err)
+		}
+		resp.Body.Close()
+
+		select {
+		case err := <-errCh:
+			if err == nil || !strings.Contains(err.Error(), "access_denied") {
+				t.Fatalf("%s: doOAuth() error = %v, want access_denied", attempt, err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: doOAuth() still waits after the error callback", attempt)
+		}
 	}
 }

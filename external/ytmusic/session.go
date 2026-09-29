@@ -263,8 +263,12 @@ func doOAuth(ctx context.Context, clientID, clientSecret string) (*oauth2.Token,
 	authURL := oauthConf.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.AccessTypeOffline)
 
 	resultCh := make(chan oauthResult, 1)
+	// Close each connection after its response. The browser then cannot
+	// send the callback of a later sign-in to this server after it stops.
+	srv := &http.Server{Handler: oauthCallbackHandler(state, resultCh)}
+	srv.SetKeepAlivesEnabled(false)
 	go func() {
-		if err := http.Serve(lis, oauthCallbackHandler(state, resultCh)); err != nil && !errors.Is(err, net.ErrClosed) {
+		if err := srv.Serve(lis); err != nil && !errors.Is(err, net.ErrClosed) {
 			applog.UserError("ytmusic: auth callback server error: %v", err)
 		}
 	}()
