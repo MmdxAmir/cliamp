@@ -16,6 +16,7 @@ import (
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/authurl"
 	"github.com/bjarneo/cliamp/internal/browser"
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/playlist"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -48,7 +49,7 @@ func callbackAddress() string {
 
 // webHTTPClient sends Web API, lyrics and OAuth token requests. The timeout
 // stops a stalled connection from blocking its caller without limit.
-var webHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var webHTTPClient = httpclient.NewAPI(30 * time.Second)
 
 // oauthContext makes oauth2 send its token requests through webHTTPClient.
 func oauthContext(ctx context.Context) context.Context {
