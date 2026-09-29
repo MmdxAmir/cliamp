@@ -66,7 +66,7 @@ cliamp authenticates with an API key or the supplied username and password. It r
 
 ### macOS: `dial tcp ... connect: no route to host`
 
-If cliamp reports `no route to host` for a Emby server on the LAN, but `curl` works with the same URL, macOS likely denies Local Network access to the app. cliamp then adds a hint to the error.
+If cliamp reports `no route to host` for an Emby server on the LAN, but `curl` works with the same URL, macOS likely denies Local Network access to the app. cliamp then adds a hint to the error.
 
 Fix: Open **System Settings > Privacy & Security > Local Network**. Enable access for the terminal app, then restart cliamp. For more steps, see [Plex troubleshooting](plex.md#troubleshooting).
 
