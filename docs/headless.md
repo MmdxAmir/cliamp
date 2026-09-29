@@ -32,7 +32,7 @@ The daemon exposes the same runtime, library, job, and event IPC interface as th
 UI-only commands return an error in headless mode:
 
 - `theme`: no UI is available for themes
-- `vis`: no visualizer is running
+- `vis`: headless mode has no visualizer to select
 
 The daemon enables MPRIS on Linux, NowPlaying on macOS, and hardware media key hotkeys on Windows when the platform service is available. You can also bind media keys directly to `cliamp` subcommands. See [Hyprland](#hyprland).
 
@@ -44,9 +44,9 @@ way in both modes:
 - Lua plugins load from `~/.config/cliamp/plugins/`. Their hooks see playback events.
 - Navidrome, Jellyfin, Plex, and the other servers get now-playing and scrobble reports.
 - A track enters Recently Played when it starts. See [Recently Played](history.md).
-- `cliamp save` writes to the `[downloads]` directory. See [configuration.md](configuration.md#download-directory).
+- The IPC `save` operation, for example `cliamp remote call save --wait`, writes to the `[downloads]` directory. See [configuration.md](configuration.md#download-directory).
 - The next track preloads, so playback is gapless.
-- Shuffle, repeat, speed, and EQ changes are saved to `config.toml`.
+- cliamp saves shuffle, repeat, speed, EQ, and output device changes to `config.toml`. A device switch saves `audio_device`.
 
 The view settings in `config.toml`, such as `visualizer`, `simplified`, and
 `expanded`, do not apply. `spectrum.get` and `cliamp visstream` always use the
