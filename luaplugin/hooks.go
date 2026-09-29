@@ -161,7 +161,7 @@ func (m *Manager) enqueue(p *Plugin, label string, fn func()) {
 		p.dropping.Store(false)
 	default:
 		if !p.dropping.Swap(true) {
-			m.logger.log(p.installName, "warn", "%s dropped: %d events and key presses are waiting; cliamp drops new ones until the plugin catches up", label, eventQueueSize)
+			m.logger.log(p.installName, "warn", "%s dropped. %d events and key presses are waiting. cliamp drops new ones until the plugin catches up.", label, eventQueueSize)
 		}
 	}
 }
