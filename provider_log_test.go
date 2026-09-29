@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/bjarneo/cliamp/applog"
+	"github.com/bjarneo/cliamp/ui/model"
 )
 
 // readLog opens a fresh log file for the test and returns a func that reads
@@ -76,5 +77,42 @@ func TestLogYouTubeSkippedCoversAllThreeProviders(t *testing.T) {
 	}
 	if strings.Count(got, "provider skipped") != 3 {
 		t.Errorf("expected 3 skip lines, got: %s", got)
+	}
+}
+
+func TestLogProviderWiring(t *testing.T) {
+	readBack := readLog(t)
+
+	providers := []model.ProviderEntry{
+		{Key: "cliamp", Name: "cliamp radio"},
+		{Key: "radio", Name: "Radio"},
+		{Key: "spotify", Name: "Spotify"},
+	}
+	logProviderWiring(providers)
+
+	got := readBack()
+	if strings.Count(got, "provider registered") != len(providers) {
+		t.Errorf("expected %d registration lines, got: %s", len(providers), got)
+	}
+	for _, p := range providers {
+		if !strings.Contains(got, "key="+p.Key) {
+			t.Errorf("log missing registration for %q: %s", p.Key, got)
+		}
+	}
+
+	// Spotify is in optionalProviders but is registered above, so it must
+	// not also be logged as skipped.
+	if strings.Contains(got, "key=spotify reason=not configured") {
+		t.Errorf("registered provider spotify was also logged as skipped: %s", got)
+	}
+
+	// Every other optional provider is absent from the registry, so each
+	// must be logged as skipped with "not configured".
+	wantSkips := len(optionalProviders) - 1
+	if n := strings.Count(got, "reason=not configured"); n != wantSkips {
+		t.Errorf("expected %d not-configured skips, got %d: %s", wantSkips, n, got)
+	}
+	if !strings.Contains(got, "key=navidrome reason=not configured") {
+		t.Errorf("log missing navidrome skip: %s", got)
 	}
 }
