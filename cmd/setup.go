@@ -26,6 +26,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/external/audiobookshelf"
 	"github.com/bjarneo/cliamp/external/emby"
 	"github.com/bjarneo/cliamp/external/jellyfin"
@@ -122,9 +123,9 @@ func providers() []providerSpec {
 			},
 			body: func(v map[string]string) string {
 				return strings.Join([]string{
-					fmt.Sprintf("url      = %q", v["url"]),
-					fmt.Sprintf("user     = %q", v["user"]),
-					fmt.Sprintf("password = %q", v["password"]),
+					"url      = " + config.QuoteString(v["url"]),
+					"user     = " + config.QuoteString(v["user"]),
+					"password = " + config.QuoteString(v["password"]),
 				}, "\n")
 			},
 		},
@@ -147,9 +148,9 @@ func providers() []providerSpec {
 			},
 			body: func(v map[string]string) string {
 				return strings.Join([]string{
-					fmt.Sprintf("url      = %q", v["url"]),
-					fmt.Sprintf("user     = %q", v["user"]),
-					fmt.Sprintf("password = %q", v["password"]),
+					"url      = " + config.QuoteString(v["url"]),
+					"user     = " + config.QuoteString(v["user"]),
+					"password = " + config.QuoteString(v["password"]),
 				}, "\n")
 			},
 		},
@@ -171,8 +172,8 @@ func providers() []providerSpec {
 			},
 			body: func(v map[string]string) string {
 				lines := []string{
-					fmt.Sprintf("url   = %q", v["url"]),
-					fmt.Sprintf("token = %q", v["token"]),
+					"url   = " + config.QuoteString(v["url"]),
+					"token = " + config.QuoteString(v["token"]),
 				}
 				if libraries := setupStringList(v["libraries"]); libraries != "" {
 					lines = append(lines, "libraries = "+libraries)
@@ -209,13 +210,13 @@ func providers() []providerSpec {
 				return jellyfin.NewClient(v["url"], v["token"], "", v["user"], v["password"]).Ping()
 			},
 			body: func(v map[string]string) string {
-				lines := []string{fmt.Sprintf("url      = %q", v["url"])}
+				lines := []string{"url      = " + config.QuoteString(v["url"])}
 				if v[keyJellyfinAuth] == "token" {
-					lines = append(lines, fmt.Sprintf("token    = %q", v["token"]))
+					lines = append(lines, "token    = "+config.QuoteString(v["token"]))
 				} else {
 					lines = append(lines,
-						fmt.Sprintf("user     = %q", v["user"]),
-						fmt.Sprintf("password = %q", v["password"]),
+						"user     = "+config.QuoteString(v["user"]),
+						"password = "+config.QuoteString(v["password"]),
 					)
 				}
 				return strings.Join(lines, "\n")
@@ -255,16 +256,16 @@ func providers() []providerSpec {
 				return nil
 			},
 			body: func(v map[string]string) string {
-				lines := []string{fmt.Sprintf("url      = %q", v["url"])}
+				lines := []string{"url      = " + config.QuoteString(v["url"])}
 				if v[keyEmbyAuth] == "token" {
-					lines = append(lines, fmt.Sprintf("token    = %q", v["token"]))
+					lines = append(lines, "token    = "+config.QuoteString(v["token"]))
 					if v["user"] != "" {
-						lines = append(lines, fmt.Sprintf("user     = %q", v["user"]))
+						lines = append(lines, "user     = "+config.QuoteString(v["user"]))
 					}
 				} else {
 					lines = append(lines,
-						fmt.Sprintf("user     = %q", v["user"]),
-						fmt.Sprintf("password = %q", v["password"]),
+						"user     = "+config.QuoteString(v["user"]),
+						"password = "+config.QuoteString(v["password"]),
 					)
 				}
 				return strings.Join(lines, "\n")
@@ -303,13 +304,13 @@ func providers() []providerSpec {
 				return nil
 			},
 			body: func(v map[string]string) string {
-				lines := []string{fmt.Sprintf("url      = %q", v["url"])}
+				lines := []string{"url      = " + config.QuoteString(v["url"])}
 				if v[keyABSAuth] == "token" {
-					lines = append(lines, fmt.Sprintf("token    = %q", v["token"]))
+					lines = append(lines, "token    = "+config.QuoteString(v["token"]))
 				} else {
 					lines = append(lines,
-						fmt.Sprintf("user     = %q", v["user"]),
-						fmt.Sprintf("password = %q", v["password"]),
+						"user     = "+config.QuoteString(v["user"]),
+						"password = "+config.QuoteString(v["password"]),
 					)
 				}
 				return strings.Join(lines, "\n")
@@ -365,7 +366,7 @@ func providers() []providerSpec {
 				}
 				lines := []string{}
 				if v[keySpotifyMode] == "custom" && v["client_id"] != "" {
-					lines = append(lines, fmt.Sprintf("client_id = %q", v["client_id"]))
+					lines = append(lines, "client_id = "+config.QuoteString(v["client_id"]))
 				}
 				lines = append(lines, fmt.Sprintf("bitrate   = %s", br))
 				return strings.Join(lines, "\n")
@@ -433,7 +434,7 @@ func providers() []providerSpec {
 				}
 				return strings.Join([]string{
 					"enabled = true",
-					fmt.Sprintf("quality = %q", q),
+					"quality = " + config.QuoteString(q),
 				}, "\n")
 			},
 		},
@@ -482,10 +483,10 @@ func providers() []providerSpec {
 				browser := netEaseCookiesFrom(v)
 				lines := []string{
 					"enabled      = true",
-					fmt.Sprintf("cookies_from = %q", browser),
+					"cookies_from = " + config.QuoteString(browser),
 				}
 				if v["user_id"] != "" {
-					lines = append(lines, fmt.Sprintf("user_id      = %q", v["user_id"]))
+					lines = append(lines, "user_id      = "+config.QuoteString(v["user_id"]))
 				}
 				return strings.Join(lines, "\n")
 			},
@@ -549,13 +550,13 @@ func providers() []providerSpec {
 			body: func(v map[string]string) string {
 				lines := []string{"enabled = true"}
 				if username := strings.TrimSpace(v["username"]); username != "" {
-					lines = append(lines, fmt.Sprintf("username = %q", username))
+					lines = append(lines, "username = "+config.QuoteString(username))
 				}
 				if token := strings.TrimSpace(v["access_token"]); token != "" {
-					lines = append(lines, fmt.Sprintf("access_token = %q", token))
+					lines = append(lines, "access_token = "+config.QuoteString(token))
 				}
 				if browser := mixcloudCookiesFrom(v); browser != "" {
-					lines = append(lines, fmt.Sprintf("cookies_from = %q", browser))
+					lines = append(lines, "cookies_from = "+config.QuoteString(browser))
 				}
 				if styles := setupStringList(v["styles"]); styles != "" {
 					lines = append(lines, "styles = "+styles)
@@ -604,13 +605,13 @@ func providers() []providerSpec {
 				case "custom":
 					lines := []string{"enabled = true"}
 					if v["client_id"] != "" {
-						lines = append(lines, fmt.Sprintf("client_id     = %q", v["client_id"]))
+						lines = append(lines, "client_id     = "+config.QuoteString(v["client_id"]))
 					}
 					if v["client_secret"] != "" {
-						lines = append(lines, fmt.Sprintf("client_secret = %q", v["client_secret"]))
+						lines = append(lines, "client_secret = "+config.QuoteString(v["client_secret"]))
 					}
 					if v["cookies_from"] != "" {
-						lines = append(lines, fmt.Sprintf("cookies_from  = %q", v["cookies_from"]))
+						lines = append(lines, "cookies_from  = "+config.QuoteString(v["cookies_from"]))
 					}
 					return strings.Join(lines, "\n")
 				default:
@@ -618,7 +619,7 @@ func providers() []providerSpec {
 					if browser == "" {
 						browser = "chrome"
 					}
-					return fmt.Sprintf("enabled      = true\ncookies_from = %q", browser)
+					return "enabled      = true\ncookies_from = " + config.QuoteString(browser)
 				}
 			},
 		},
@@ -648,7 +649,7 @@ func setupStringList(value string) string {
 	var quoted []string
 	for _, part := range strings.Split(value, ",") {
 		if part = strings.TrimSpace(part); part != "" {
-			quoted = append(quoted, strconv.Quote(part))
+			quoted = append(quoted, config.QuoteString(part))
 		}
 	}
 	if len(quoted) == 0 {
