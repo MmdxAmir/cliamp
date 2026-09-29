@@ -204,9 +204,9 @@ cliamp history --json                         # machine-readable output
 cliamp history clear                          # wipe ~/.config/cliamp/history.toml
 ```
 
-cliamp records a play after you listen to at least 50% of a track. In the TUI,
-the Local Playlists provider shows this data in the virtual "Recently Played"
-entry. See [history.md](history.md).
+cliamp adds a track to the history when the track starts. In the TUI, the Local
+Playlists provider shows this data in the virtual "Recently Played" entry. See
+[history.md](history.md).
 
 ## Spotify
 
