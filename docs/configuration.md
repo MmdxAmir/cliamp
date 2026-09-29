@@ -604,5 +604,16 @@ HTTPS_PROXY=http://proxy.example:3128 cliamp
 - API requests accept a user and password in a SOCKS5 proxy URL, such as
   `socks5h://user:pass@proxy.example:1080`. Audio streams refuse a SOCKS5 proxy
   URL with a user and password, because SOCKS5 sends them as clear text.
-- yt-dlp and ffmpeg read these variables themselves. The Spotify playback
-  connection and the `cliamp.http` Lua plugin API do not follow these rules.
+- yt-dlp reads these variables itself.
+- ffmpeg opens HLS streams, and remote streams in a format that cliamp does
+  not decode itself. ffmpeg reads only the lowercase `http_proxy` and
+  `no_proxy` variables. It uses only an `http://` proxy, and it ignores
+  `HTTPS_PROXY`, `ALL_PROXY` and SOCKS5 proxies.
+- The Spotify playback connection and the `cliamp.http` Lua plugin API do not
+  follow these rules.
+
+To send the ffmpeg streams through a proxy too, also set `http_proxy`:
+
+```sh
+HTTPS_PROXY=http://proxy.example:3128 http_proxy=http://proxy.example:3128 cliamp
+```
