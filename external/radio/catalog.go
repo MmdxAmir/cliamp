@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 const radioBrowserBase = "https://de1.api.radio-browser.info/json"
@@ -53,7 +55,7 @@ type Tag struct {
 	StationCount int    `json:"stationcount"`
 }
 
-var catalogClient = &http.Client{Timeout: 10 * time.Second}
+var catalogClient = httpclient.NewAPI(10 * time.Second)
 
 // StationQuery narrows a station listing. The zero value lists everything.
 //
@@ -277,7 +279,7 @@ func get(ctx context.Context, client *http.Client, u string) (*http.Response, er
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "cliamp/1.0")
+	req.Header.Set("User-Agent", httpclient.UserAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {

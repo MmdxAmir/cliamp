@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bjarneo/cliamp/internal/appmeta"
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 type show struct {
@@ -58,7 +59,7 @@ type client struct {
 
 func newClient() *client {
 	return &client{
-		http:         &http.Client{Timeout: 30 * time.Second},
+		http:         httpclient.NewAPI(30 * time.Second),
 		directoryURL: "https://itunes.apple.com",
 		chartsURL:    "https://rss.marketingtools.apple.com/api/v2",
 	}

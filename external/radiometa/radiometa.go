@@ -14,11 +14,11 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
-var client = &http.Client{Timeout: 8 * time.Second}
-
-const userAgent = "cliamp/1.0 (https://github.com/bjarneo/cliamp)"
+var client = httpclient.NewAPI(8 * time.Second)
 
 // Resolver reports how to fetch now-playing metadata for streamURL, or ok=false
 // when the URL is not a recognized broadcaster. It satisfies
@@ -45,7 +45,7 @@ func getJSON(ctx context.Context, url string, v any) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", httpclient.UserAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
