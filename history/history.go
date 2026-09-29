@@ -64,15 +64,6 @@ func NewAt(path string) *Store {
 	return &Store{path: path, cap: DefaultCap}
 }
 
-// SetCap overrides the entry cap. Values <= 0 leave the cap unchanged.
-func (s *Store) SetCap(n int) {
-	if n > 0 {
-		s.mu.Lock()
-		s.cap = n
-		s.mu.Unlock()
-	}
-}
-
 // Path returns the on-disk file path.
 func (s *Store) Path() string { return s.path }
 

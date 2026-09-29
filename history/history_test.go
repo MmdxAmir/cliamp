@@ -90,26 +90,41 @@ func TestReplayMovesEntryToTop(t *testing.T) {
 }
 
 func TestCapTruncates(t *testing.T) {
-	s := newTestStore(t)
-	s.SetCap(3)
-
-	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	for i := 0; i < 5; i++ {
-		mustRecord(t, s, playlist.Track{
-			Path:  filepath.FromSlash("/track" + string(rune('A'+i)) + ".mp3"),
-			Title: string(rune('A' + i)),
-		}, base.Add(time.Duration(i)*time.Hour))
+	tests := []struct {
+		name    string
+		cap     int // 0 keeps the cap that NewAt sets
+		records int
+		want    int
+	}{
+		{name: "small cap", cap: 3, records: 5, want: 3},
+		{name: "default cap", records: DefaultCap + 2, want: DefaultCap},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStore(t)
+			if tt.cap > 0 {
+				s.cap = tt.cap
+			}
 
-	got, _ := s.Recent(0)
-	if len(got) != 3 {
-		t.Fatalf("got %d entries, want 3 (cap)", len(got))
-	}
-	wantTitles := []string{"E", "D", "C"} // newest 3
-	for i, e := range got {
-		if e.Track.Title != wantTitles[i] {
-			t.Errorf("entry %d = %q, want %q", i, e.Track.Title, wantTitles[i])
-		}
+			base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+			for i := range tt.records {
+				mustRecord(t, s, playlist.Track{
+					Path:  filepath.FromSlash(fmt.Sprintf("/track%d.mp3", i)),
+					Title: fmt.Sprint(i),
+				}, base.Add(time.Duration(i)*time.Hour))
+			}
+
+			got, _ := s.Recent(0)
+			if len(got) != tt.want {
+				t.Fatalf("got %d entries, want %d (cap)", len(got), tt.want)
+			}
+			for i, e := range got {
+				// The newest entries survive, newest first.
+				if want := fmt.Sprint(tt.records - 1 - i); e.Track.Title != want {
+					t.Fatalf("entry %d = %q, want %q", i, e.Track.Title, want)
+				}
+			}
+		})
 	}
 }
 
