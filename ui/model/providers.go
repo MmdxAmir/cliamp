@@ -61,8 +61,10 @@ func (m *Model) switchProvider(idx int) tea.Cmd {
 	return listsCmd
 }
 
+// fetchProviderPlaylists reloads the rows of the provider pane. A headless
+// Model has no pane, so it skips the provider call.
 func (m *Model) fetchProviderPlaylists() tea.Cmd {
-	if m.provider == nil {
+	if m.provider == nil || m.headless {
 		return nil
 	}
 	gen := nextRequest(&m.requests.provider)

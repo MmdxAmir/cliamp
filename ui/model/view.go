@@ -180,9 +180,9 @@ func playlistLabel(prefix string, p playlist.PlaylistInfo) string {
 	return out
 }
 
-// View renders the full TUI frame.
+// View renders the full TUI frame. A headless Model renders nothing.
 func (m Model) View() tea.View {
-	if m.quitting {
+	if m.quitting || m.headless {
 		return tea.NewView("")
 	}
 	m.recomputeLayout()

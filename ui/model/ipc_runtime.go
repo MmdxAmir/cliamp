@@ -691,6 +691,11 @@ func (m *Model) runtimeFingerprint() ipcRuntimeFingerprint {
 
 func (m *Model) v2BandsResponse() ipc.Response {
 	response := ipc.Response{OK: true}
+	if m.headless {
+		// The low-power tick is too slow for a spectrum client, so each
+		// request analyzes the audio that plays now.
+		m.tickVisualizer(time.Now())
+	}
 	if m.vis != nil {
 		response.Visualizer = m.vis.ModeName()
 		response.Bands = append([]float64(nil), m.vis.SmoothedBands()...)
