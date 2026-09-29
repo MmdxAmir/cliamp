@@ -72,7 +72,7 @@ func (s *Session) trackLyrics(ctx context.Context, trackID string) ([]lyrics.Lin
 	req.Header.Set("app-platform", "WebPlayer")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := webHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("spotify lyrics request: %w", err)
 	}

@@ -15,6 +15,7 @@ import (
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/browser"
@@ -47,6 +48,15 @@ const (
 
 func callbackAddress() string {
 	return net.JoinHostPort(callbackHost, fmt.Sprint(CallbackPort))
+}
+
+// webHTTPClient sends Web API, lyrics and OAuth token requests. The timeout
+// stops a stalled connection from blocking its caller without limit.
+var webHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
+// oauthContext makes oauth2 send its token requests through webHTTPClient.
+func oauthContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, oauth2.HTTPClient, webHTTPClient)
 }
 
 // authURLObserver is invoked with the OAuth URL when interactive auth begins.
@@ -182,7 +192,7 @@ func newSessionFromStored(ctx context.Context, clientID string, creds *storedCre
 	var oauthToken *oauth2.Token
 	var refreshErr error
 	if creds.RefreshToken != "" {
-		token, err := silentTokenRefresh(clientID, creds.RefreshToken)
+		token, err := silentTokenRefresh(ctx, clientID, creds.RefreshToken)
 		if err == nil {
 			oauthToken = token
 		} else {
@@ -296,9 +306,9 @@ func spotifyOAuthConfig(clientID string, scopes []string) *oauth2.Config {
 
 // silentTokenRefresh uses a stored refresh token to get a new access token
 // without opening a browser.
-func silentTokenRefresh(clientID, refreshToken string) (*oauth2.Token, error) {
+func silentTokenRefresh(ctx context.Context, clientID, refreshToken string) (*oauth2.Token, error) {
 	conf := spotifyOAuthConfig(clientID, oauthScopes)
-	src := conf.TokenSource(context.Background(), &oauth2.Token{RefreshToken: refreshToken})
+	src := conf.TokenSource(oauthContext(ctx), &oauth2.Token{RefreshToken: refreshToken})
 	return src.Token()
 }
 
@@ -334,7 +344,7 @@ func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
 
 func webAPITokenSource(clientID string, token *oauth2.Token, creds storedCreds) oauth2.TokenSource {
 	conf := spotifyOAuthConfig(clientID, oauthScopes)
-	source := conf.TokenSource(context.Background(), token)
+	source := conf.TokenSource(oauthContext(context.Background()), token)
 	return &persistingTokenSource{
 		source:       source,
 		refreshToken: creds.RefreshToken,
@@ -490,7 +500,7 @@ func performOAuth2PKCEFlows(ctx context.Context, flows []oauthFlow) ([]*oauth2.T
 			if result.err != nil {
 				return nil, fmt.Errorf("%s authorization: %w", flow.name, result.err)
 			}
-			token, err := flow.config.Exchange(ctx, result.code, oauth2.VerifierOption(flow.verifier))
+			token, err := flow.config.Exchange(oauthContext(ctx), result.code, oauth2.VerifierOption(flow.verifier))
 			if err != nil {
 				return nil, fmt.Errorf("%s token exchange: %w", flow.name, err)
 			}
@@ -665,7 +675,7 @@ func (s *Session) webApiWithBody(ctx context.Context, method, path string, query
 		req.Header.Set("Content-Type", contentType)
 	}
 
-	return http.DefaultClient.Do(req)
+	return webHTTPClient.Do(req)
 }
 
 // Close releases all session and player resources.

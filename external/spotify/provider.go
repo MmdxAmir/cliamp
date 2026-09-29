@@ -111,7 +111,9 @@ func (p *SpotifyProvider) ensureSession() error {
 	if clientID == "" {
 		return fmt.Errorf("spotify: no client ID available")
 	}
-	sess, err := NewSessionSilent(context.Background(), clientID)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	sess, err := NewSessionSilent(ctx, clientID)
 	if err != nil {
 		return playlist.ErrNeedsAuth
 	}
