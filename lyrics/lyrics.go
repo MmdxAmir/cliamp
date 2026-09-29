@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 // ErrNotFound is returned when no lyrics could be found from any source.
@@ -23,7 +25,7 @@ type Line struct {
 }
 
 // httpClient is reused across all lyrics API calls.
-var httpClient = &http.Client{Timeout: 10 * time.Second}
+var httpClient = httpclient.NewAPI(10 * time.Second)
 
 // maxResponseBody limits API responses to 2 MB.
 const maxResponseBody = 2 << 20
