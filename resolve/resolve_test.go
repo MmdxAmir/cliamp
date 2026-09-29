@@ -445,3 +445,53 @@ func TestRemoteRequiresClassifiedURLs(t *testing.T) {
 		t.Fatal("Remote accepted an unclassified stream URL; URL is no longer needed")
 	}
 }
+
+// TestClassifyRemote pins the one URL list that Args and Remote share,
+// including the order rules between overlapping predicates.
+func TestClassifyRemote(t *testing.T) {
+	tests := []struct {
+		url  string
+		want remoteKind
+	}{
+		{"https://www.xiaoyuzhoufm.com/episode/abc123", kindXiaoyuzhou},
+		{"https://music.youtube.com/watch?v=abc", kindYouTubeMusic},
+		{"https://music.youtube.com/playlist?list=PLx", kindYouTubeMusic},
+		{"https://www.youtube.com/watch?v=abc", kindYouTube},
+		{"https://youtu.be/abc", kindYouTube},
+		{"ytsearch5:lofi", kindYTDL},
+		{"scsearch:artist", kindYTDL},
+		{"https://soundcloud.com/artist/track", kindYTDL},
+		{"https://www.mixcloud.com/creator/show/", kindYTDL},
+		{"https://artist.bandcamp.com/album/name", kindYTDL},
+		{"https://example.com/podcast.rss", kindFeed},
+		{"https://example.com/feed.XML", kindFeed},
+		{"https://example.com/list.m3u8", kindM3U},
+		{"https://example.com/list.m3u", kindM3U},
+		{"https://example.com/stations.pls", kindPLS},
+		// Order rules: a yt-dlp site wins over a file extension.
+		{"https://www.youtube.com/list.m3u8", kindYouTube},
+		{"https://soundcloud.com/artist/feed.xml", kindYTDL},
+		{"https://music.youtube.com/stations.pls", kindYouTubeMusic},
+		// No resolver claims these. Args sniffs them for a feed.
+		{"https://example.com/stream.mp3", kindStream},
+		{"https://radio.example/live", kindStream},
+		{"https://www.xiaoyuzhoufm.com/podcast/abc123", kindStream},
+	}
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			if got := classifyRemote(tt.url); got != tt.want {
+				t.Fatalf("classifyRemote(%q) = %d, want %d", tt.url, got, tt.want)
+			}
+			if tt.want == kindStream {
+				return // Args would send a HEAD request to sniff for a feed.
+			}
+			r, err := Args([]string{tt.url})
+			if err != nil {
+				t.Fatalf("Args: %v", err)
+			}
+			if len(r.Pending) != 1 || r.Pending[0] != tt.url || len(r.Tracks) != 0 {
+				t.Fatalf("Args = %+v, want %q pending for Remote", r, tt.url)
+			}
+		})
+	}
+}

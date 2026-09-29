@@ -72,6 +72,44 @@ type Result struct {
 	Pending []string         // feed/M3U URLs to resolve asynchronously
 }
 
+// remoteKind names the resolver that Remote uses for a URL.
+type remoteKind int
+
+const (
+	kindStream remoteKind = iota // no resolver claims the URL: play it as is
+	kindXiaoyuzhou
+	kindYouTubeMusic
+	kindYouTube
+	kindYTDL
+	kindFeed
+	kindM3U
+	kindPLS
+)
+
+// classifyRemote picks the resolver for the URL u from its form alone. It is
+// the one list that both Args and Remote use. The case order matters:
+// IsYTDL also matches YouTube and YouTube Music URLs, and a yt-dlp site wins
+// over a playlist or feed file extension.
+func classifyRemote(u string) remoteKind {
+	switch {
+	case playlist.IsXiaoyuzhouEpisode(u):
+		return kindXiaoyuzhou
+	case playlist.IsYouTubeMusicURL(u):
+		return kindYouTubeMusic
+	case playlist.IsYouTubeURL(u):
+		return kindYouTube
+	case playlist.IsYTDL(u):
+		return kindYTDL
+	case playlist.IsFeed(u):
+		return kindFeed
+	case playlist.IsM3U(u):
+		return kindM3U
+	case playlist.IsPLS(u):
+		return kindPLS
+	}
+	return kindStream
+}
+
 // Args separates CLI arguments into immediately-resolved local tracks
 // and pending remote URLs (feeds, M3U) that require HTTP fetching.
 func Args(args []string) (Result, error) {
@@ -80,7 +118,7 @@ func Args(args []string) (Result, error) {
 
 	for _, arg := range args {
 		if playlist.IsURL(arg) {
-			if playlist.IsFeed(arg) || playlist.IsM3U(arg) || playlist.IsPLS(arg) || playlist.IsYouTubeURL(arg) || playlist.IsYTDL(arg) || playlist.IsXiaoyuzhouEpisode(arg) || sniffFeedURL(arg) {
+			if classifyRemote(arg) != kindStream || sniffFeedURL(arg) {
 				r.Pending = append(r.Pending, arg)
 			} else {
 				files = append(files, arg)
@@ -123,20 +161,20 @@ func Args(args []string) (Result, error) {
 // Remote fetches feed and M3U URLs and returns the resolved tracks.
 //
 // Callers must pass URLs that have already been classified as remote
-// playlists, as Args does: a URL matching none of the cases below falls
-// through to resolveFeed. Use URL for input that has not been classified yet,
+// playlists, as Args does: a URL that classifyRemote reports as kindStream
+// goes to resolveFeed. Use URL for input that has not been classified yet,
 // such as an address typed interactively.
 func Remote(urls []string) ([]playlist.Track, error) {
 	var tracks []playlist.Track
 	for _, u := range urls {
-		switch {
-		case playlist.IsXiaoyuzhouEpisode(u):
+		switch classifyRemote(u) {
+		case kindXiaoyuzhou:
 			t, err := resolveXiaoyuzhouEpisode(u)
 			if err != nil {
 				return nil, fmt.Errorf("resolving xiaoyuzhou episode %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
-		case playlist.IsYouTubeMusicURL(u):
+		case kindYouTubeMusic:
 			// YouTube Music requires yt-dlp; the native YouTube API client
 			// does not support music.youtube.com playlists.
 			//
@@ -171,7 +209,7 @@ func Remote(urls []string) ([]playlist.Track, error) {
 				}
 				tracks = append(tracks, t...)
 			}
-		case playlist.IsYouTubeURL(u):
+		case kindYouTube:
 			target := u
 			if !ExpandYTPlaylist {
 				target = stripPlaylistParam(u)
@@ -181,32 +219,26 @@ func Remote(urls []string) ([]playlist.Track, error) {
 				return nil, fmt.Errorf("resolving youtube %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
-		case playlist.IsYTDL(u):
+		case kindYTDL:
 			t, err := resolveYTDL(u)
 			if err != nil {
 				return nil, fmt.Errorf("resolving yt-dlp %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
-		case playlist.IsFeed(u):
-			t, err := resolveFeed(u)
-			if err != nil {
-				return nil, fmt.Errorf("resolving feed %s: %w", u, err)
-			}
-			tracks = append(tracks, t...)
-		case playlist.IsM3U(u):
+		case kindM3U:
 			t, err := resolveM3U(u)
 			if err != nil {
 				return nil, fmt.Errorf("resolving m3u %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
-		case playlist.IsPLS(u):
+		case kindPLS:
 			t, err := resolvePLS(u)
 			if err != nil {
 				return nil, fmt.Errorf("resolving pls %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
 		default:
-			// URL was classified as a feed by content-type sniffing.
+			// kindFeed, or kindStream that Args sniffed as a feed.
 			t, err := resolveFeed(u)
 			if err != nil {
 				return nil, fmt.Errorf("resolving feed %s: %w", u, err)
