@@ -299,6 +299,27 @@ Rules:
 - If the variable is unset, the value is empty (the same as if you had left it blank).
 - Works for any string field, including plugin config under `[plugins.<name>]`.
 
+## Provider enable rules
+
+Each provider section turns on its provider in one of three ways:
+
+| Rule | Providers | The provider starts when |
+| --- | --- | --- |
+| Credentials | Navidrome, Lyrion, Plex, Jellyfin, Emby, Audiobookshelf | The section holds the required credentials. Lyrion needs only `url`. |
+| Section | Spotify, Qobuz, Tidal, YouTube Music | The section header exists. Set `enabled = false` to turn the provider off. |
+| Opt-in | SoundCloud, Mixcloud, NetEase, Yandex | The section sets `enabled = true`. Yandex also needs `token`. |
+
+Radio and podcasts are always on. Their sections only tune them.
+
+```toml
+# Section rule: the header alone turns on Tidal.
+[tidal]
+
+# Opt-in rule: SoundCloud needs the enabled line.
+[soundcloud]
+enabled = true
+```
+
 ## Default Provider
 
 Set the provider that cliamp opens at start:

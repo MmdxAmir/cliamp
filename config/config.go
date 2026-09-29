@@ -147,8 +147,22 @@ func scalar(val string) string {
 	return val
 }
 
+// Provider sections follow one of three enable rules. Each provider struct
+// names its rule, and its IsSet method applies it. YouTube Music uses
+// IsSetOrFallback instead.
+//
+//   - Credentials: the provider registers when the section holds the
+//     credentials that IsSet needs. The section header alone does nothing.
+//   - Section: the section header alone registers the provider. Load sets
+//     Enabled when it reads the header, and enabled = false sets Disabled.
+//   - Opt-in: the provider registers only when the section sets
+//     enabled = true.
+//
+// Radio and podcasts are always on, so their sections only tune them.
+
 // NavidromeConfig holds credentials for a Navidrome/Subsonic server.
 // All three fields must be non-empty for a client to be constructed.
+// Enable rule: credentials.
 type NavidromeConfig struct {
 	URL              string // e.g. "https://music.example.com"
 	User             string
@@ -187,6 +201,7 @@ func (n *NavidromeConfig) set(key, val string) {
 // LyrionConfig holds settings for a Lyrion Music Server (LMS) instance.
 // User and Password are optional — they are only needed when the server has
 // password protection enabled.
+// Enable rule: credentials, where the URL alone is enough.
 type LyrionConfig struct {
 	URL      string // e.g. "http://nas.local:9000"
 	User     string
@@ -223,6 +238,7 @@ func (l *LyrionConfig) set(key, val string) {
 // keymaster ID) is used so search and catalog endpoints work even for users
 // who never registered their own developer app — see Spotify's Nov 27, 2024
 // dev-mode quota restriction.
+// Enable rule: section.
 type SpotifyConfig struct {
 	Disabled bool   // true only when user explicitly sets enabled = false
 	Enabled  bool   // true when [spotify] section exists (even without client_id)
@@ -265,6 +281,7 @@ func (s *SpotifyConfig) set(key, val string) {
 // subscription (Studio/Sublime). The app_id, signing secrets and OAuth private
 // key are scraped automatically from the Qobuz web player, so no developer
 // credentials are needed. Sign-in is an interactive OAuth browser flow.
+// Enable rule: section.
 type QobuzConfig struct {
 	Disabled bool // true only when user explicitly sets enabled = false
 	Enabled  bool // true when [qobuz] section exists
@@ -296,6 +313,7 @@ func (q *QobuzConfig) set(key, val string) {
 // device flow (link.tidal.com). Built-in fallback client credentials are used
 // when none are configured; Tidal revokes leaked client IDs periodically, so
 // client_id/client_secret can be overridden without waiting for a release.
+// Enable rule: section.
 type TidalConfig struct {
 	Disabled     bool   // true only when user explicitly sets enabled = false
 	Enabled      bool   // true when [tidal] section exists
@@ -329,6 +347,7 @@ func (t *TidalConfig) set(key, val string) {
 // YouTubeMusicConfig holds settings for the YouTube Music provider.
 // If no client_id/client_secret are set, built-in fallback credentials are
 // used automatically (same pattern as Spotify).
+// Enable rule: section. The [yt] and [youtube] headers count as [ytmusic].
 type YouTubeMusicConfig struct {
 	Disabled       bool   // true only when user explicitly sets enabled = false
 	Enabled        bool   // true when [ytmusic] section exists (even without credentials)
@@ -426,6 +445,7 @@ func (p *PodcastConfig) set(key, val string) {
 // provider registers. Setting User exposes that profile's Tracks/Likes/Reposts
 // in the browse view. Setting CookiesFrom (browser name) lets yt-dlp use the
 // user's signed-in session for subscriber-gated tracks.
+// Enable rule: opt-in.
 type SoundCloudConfig struct {
 	Enabled     bool   // true only when user explicitly sets enabled = true
 	User        string // SoundCloud username for browse (optional)
@@ -453,6 +473,7 @@ func (s *SoundCloudConfig) set(key, val string) {
 // works with only enabled=true. Username adds public account views; an access
 // token adds /me and Listen Later; browser cookies are used only by yt-dlp for
 // playback that needs the listener's signed-in Mixcloud session.
+// Enable rule: opt-in.
 type MixcloudConfig struct {
 	Enabled        bool
 	Username       string
@@ -497,6 +518,7 @@ func (m *MixcloudConfig) set(key, val string) {
 // NetEaseConfig holds settings for the NetEase Cloud Music provider.
 // The provider is opt-in and can reuse an existing browser session through
 // yt-dlp's --cookies-from-browser support.
+// Enable rule: opt-in.
 type NetEaseConfig struct {
 	Enabled     bool   // true only when user explicitly sets enabled = true
 	CookiesFrom string // browser name for account APIs and playback (e.g. "chrome")
@@ -523,6 +545,7 @@ func (n *NetEaseConfig) set(key, val string) {
 // YandexConfig holds settings for the Yandex Music provider.
 // The provider is opt-in and authenticates with a personal OAuth token
 // obtained from https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d
+// Enable rule: opt-in, and Token must also be set.
 type YandexConfig struct {
 	Enabled bool   // true only when user explicitly sets enabled = true
 	Token   string // personal OAuth token
@@ -545,6 +568,7 @@ func (y *YandexConfig) set(key, val string) {
 
 // PlexConfig holds credentials for a Plex Media Server.
 // Both URL and Token must be non-empty for a client to be constructed.
+// Enable rule: credentials.
 type PlexConfig struct {
 	URL       string   // e.g. "http://192.168.1.10:32400"
 	Token     string   // X-Plex-Token
@@ -571,6 +595,7 @@ func (p *PlexConfig) set(key, val string) {
 // JellyfinConfig holds credentials for a Jellyfin server.
 // URL is required. Authenticate either with Token, or with User+Password.
 // UserID is optional and can be discovered lazily.
+// Enable rule: credentials.
 type JellyfinConfig struct {
 	URL      string // e.g. "https://jellyfin.example.com"
 	Token    string // API access token
@@ -603,6 +628,7 @@ func (j *JellyfinConfig) set(key, val string) {
 // EmbyConfig holds credentials for an Emby server.
 // URL is required. Authenticate either with Token, or with User+Password.
 // UserID is optional and can be discovered lazily.
+// Enable rule: credentials.
 type EmbyConfig struct {
 	URL      string // e.g. "https://emby.example.com"
 	Token    string // API access token
@@ -634,6 +660,7 @@ func (e *EmbyConfig) set(key, val string) {
 
 // AudiobookshelfConfig holds credentials for an Audiobookshelf server.
 // URL is required. Authenticate either with Token, or with User+Password.
+// Enable rule: credentials.
 type AudiobookshelfConfig struct {
 	URL       string   // e.g. "https://abs.example.com"
 	Token     string   // API key or login token
