@@ -109,14 +109,14 @@ func TestNavBufferCompletedPathOnTruncatedDownload(t *testing.T) {
 // A finite HTTP source must reach the seekable pipeline without being
 // recognized in advance: podcast CDNs rewrite enclosure URLs per request, so a
 // track restored from a saved playlist never matches a URL seen before.
-// fixtureMP3 returns the short MP3 shipped at the repository root, a real
+// fixtureMP3 returns the short MP3 shipped in testdata, a real
 // encoded file both decoders accept, so routing tests exercise the same path
 // a podcast enclosure takes.
 func fixtureMP3(t *testing.T) []byte {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "cliamp_whips_terminal_ass.mp3"))
+	data, err := os.ReadFile(filepath.Join("testdata", "cliamp_whips_terminal_ass.mp3"))
 	if err != nil {
-		t.Skipf("fixture unavailable: %v", err)
+		t.Fatalf("fixture unavailable: %v", err)
 	}
 	return data
 }
