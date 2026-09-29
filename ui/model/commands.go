@@ -10,7 +10,6 @@ import (
 
 	"github.com/bjarneo/cliamp/external/radio"
 	"github.com/bjarneo/cliamp/external/spotify"
-	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/lyrics"
 	"github.com/bjarneo/cliamp/player"
@@ -588,19 +587,8 @@ func fetchSpotPlaylistsCmd(prov playlist.Provider, gen uint64) tea.Cmd {
 			// holds every target the picker needs.
 			err = nil
 		}
-		targets, canFilter := prov.(provider.PlaylistTargetFilter)
-		if err == nil && (canFilter || prov.Name() == "Local") {
-			filtered := playlists[:0]
-			for _, pl := range playlists {
-				if pl.Name == history.PlaylistName && prov.Name() == "Local" {
-					continue
-				}
-				if canFilter && !targets.CanAddToPlaylist(pl) {
-					continue
-				}
-				filtered = append(filtered, pl)
-			}
-			playlists = filtered
+		if err == nil {
+			playlists = playlistTargets(prov, playlists)
 		}
 		return spotPlaylistsMsg{playlists: playlists, err: err, providerName: prov.Name(), gen: gen}
 	}

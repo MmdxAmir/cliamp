@@ -7,7 +7,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
@@ -23,22 +22,34 @@ func (m *Model) openPlaylistPicker(tracks []playlist.Track, title string) {
 		m.status.Errorf(statusTTLDefault, "Playlist list failed: %s", err)
 		return
 	}
-	playlists := make([]playlist.PlaylistInfo, 0, len(lists))
-	for _, pl := range lists {
-		if pl.Name != history.PlaylistName {
-			playlists = append(playlists, pl)
-		}
-	}
 	m.plPicker = playlistPickerState{
 		visible:   true,
 		screen:    plPickerChoose,
-		playlists: playlists,
+		playlists: playlistTargets(m.localProvider, lists),
 		tracks:    append([]playlist.Track(nil), tracks...),
 		title:     title,
 	}
 	m.refreshChrome()
 	m.applyHeightMode()
 	m.plPickerMaybeAdjustScroll(m.plPickerVisible())
+}
+
+// playlistTargets returns the lists of prov that can take new tracks. A
+// provider whose list holds entries that reject adds reports them through
+// provider.PlaylistTargetFilter. The local provider rejects its virtual
+// Favorites and Recently Played lists this way.
+func playlistTargets(prov playlist.Provider, lists []playlist.PlaylistInfo) []playlist.PlaylistInfo {
+	targets, ok := prov.(provider.PlaylistTargetFilter)
+	if !ok {
+		return lists
+	}
+	filtered := make([]playlist.PlaylistInfo, 0, len(lists))
+	for _, pl := range lists {
+		if targets.CanAddToPlaylist(pl) {
+			filtered = append(filtered, pl)
+		}
+	}
+	return filtered
 }
 
 func (m *Model) closePlaylistPicker() {
