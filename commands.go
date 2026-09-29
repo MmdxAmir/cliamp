@@ -709,7 +709,7 @@ func historyCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "history",
 		Usage: "show recently played tracks",
-		Description: "Lists tracks that have been played past the scrobble threshold.\n" +
+		Description: "Lists recently played tracks. A track is recorded when it starts to play.\n" +
 			"Browse the same data inside the TUI under Local Playlists →\n" +
 			"\"Recently Played\".",
 		Flags: []cli.Flag{
