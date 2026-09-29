@@ -497,6 +497,15 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		})
 	}
 
+	if qobuzProv != nil {
+		// Qobuz tracks carry qobuz:// URIs. The provider resolves them to a
+		// fresh signed URL when playback starts.
+		p.RegisterSourceResolver(qobuz.TrackURIPrefix, func(uri string) (player.ResolvedSource, error) {
+			u, err := qobuzProv.ResolveSource(uri)
+			return player.ResolvedSource{URL: u}, err
+		})
+	}
+
 	if tidalProv != nil {
 		// Tidal tracks carry tidal:// URIs; the provider resolves them to a
 		// fresh signed URL or DASH segment list when playback starts.

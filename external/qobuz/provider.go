@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,10 +34,6 @@ const favoriteTracksID = "favorites/tracks"
 // drawn from across all of the user's playlists (deduplicated).
 const randomTracksID = "playlists/random"
 
-// resolveConcurrency bounds how many track/getFileUrl calls run in parallel
-// when resolving a playlist's streaming URLs.
-const resolveConcurrency = 8
-
 // playlistFetchConcurrency bounds how many playlist/get calls run in parallel
 // when gathering tracks for the Random Tracks entry.
 const playlistFetchConcurrency = 8
@@ -44,12 +41,16 @@ const playlistFetchConcurrency = 8
 // favoritesPageSize is the page size for favorite album/artist browsing.
 const favoritesPageSize = 100
 
-// randomTracksLimit caps the synthetic Random Tracks list. Each track costs one
-// track/getFileUrl call to resolve a (short-lived) stream URL, so resolving an
-// unbounded library would be slow and wasteful. When the deduplicated library
-// exceeds this, a random sample is taken so it stays a fair cross-section.
-// Matches the favorite tracks cap.
+// randomTracksLimit caps the synthetic Random Tracks list. When the
+// deduplicated library exceeds this, a random sample is taken so it stays a
+// fair cross-section. Matches the favorite tracks cap.
 const randomTracksLimit = 500
+
+// TrackURIPrefix is the custom URI scheme for Qobuz tracks. Track paths are
+// "qobuz://track/<id>". The player resolves them to a fresh signed URL at
+// play time through the SourceResolver registered in main.go, so queue
+// entries never hold expirable URLs.
+const TrackURIPrefix = "qobuz://track/"
 
 // albumSortTypes is the static sort list for Qobuz album browsing. Qobuz has no
 // global catalog listing, so browsing surfaces the user's favorite albums.
@@ -57,9 +58,9 @@ var albumSortTypes = []provider.SortType{
 	{ID: "favorites", Label: "Favorite Albums"},
 }
 
-// QobuzProvider implements playlist.Provider backed by the Qobuz API. Streaming
-// URLs are resolved per track via track/getFileUrl and routed through the
-// player's buffered pipeline (see stream.go).
+// QobuzProvider implements playlist.Provider backed by the Qobuz API. Tracks
+// carry qobuz:// URIs. ResolveSource turns them into signed stream URLs when
+// playback starts. stream.go holds the URL registry.
 type QobuzProvider struct {
 	quality int
 
@@ -155,8 +156,9 @@ func (p *QobuzProvider) Close() {
 	}
 }
 
-// Refresh clears cached playlists and tracks so the next call re-fetches and
-// re-resolves streaming URLs (which expire). Implements playlist.Refresher.
+// Refresh clears cached playlist and track lists so the next call re-fetches
+// them. ResolveSource gets stream URLs at play time, so no URL state needs
+// repair here. Implements playlist.Refresher.
 func (p *QobuzProvider) Refresh() {
 	p.mu.Lock()
 	p.listCache = nil
@@ -234,7 +236,8 @@ func (p *QobuzProvider) Playlists() ([]playlist.PlaylistInfo, error) {
 }
 
 // Tracks returns the tracks of a playlist (or the synthetic Favorite Tracks /
-// Random Tracks entries), each with a resolved streaming URL.
+// Random Tracks entries). The tracks carry qobuz:// URIs. Stream URLs resolve
+// at play time.
 func (p *QobuzProvider) Tracks(playlistID string) ([]playlist.Track, error) {
 	c, err := p.ensureClient()
 	if err != nil {
@@ -265,7 +268,7 @@ func (p *QobuzProvider) Tracks(playlistID string) ([]playlist.Track, error) {
 		return nil, p.mapErr(err)
 	}
 
-	tracks := p.resolveTracks(ctx, c, apiTracks, nil)
+	tracks := tracksFromAPI(apiTracks, nil)
 
 	p.mu.Lock()
 	p.trackCache[playlistID] = tracks
@@ -357,7 +360,7 @@ func (p *QobuzProvider) SearchTracks(ctx context.Context, query string, limit in
 	if err != nil {
 		return nil, p.mapErr(err)
 	}
-	return p.resolveTracks(ctx, c, apiTracks, nil), nil
+	return tracksFromAPI(apiTracks, nil), nil
 }
 
 // Artists returns the user's favorite artists. Implements provider.ArtistBrowser.
@@ -454,40 +457,31 @@ func (p *QobuzProvider) AlbumTracks(albumID string) ([]playlist.Track, error) {
 	if album.Tracks != nil {
 		tracks = album.Tracks.Items
 	}
-	return p.resolveTracks(ctx, c, tracks, &album), nil
+	return tracksFromAPI(tracks, &album), nil
 }
 
-// resolveTracks converts API tracks into playable tracks, resolving a signed
-// streaming URL for each in parallel. albumFallback supplies album metadata for
-// tracks that lack it (album/get nests tracks without an album field). Tracks
-// that are not streamable or fail URL resolution are returned as unplayable.
-func (p *QobuzProvider) resolveTracks(ctx context.Context, c *client, in []apiTrack, albumFallback *apiAlbum) []playlist.Track {
+// tracksFromAPI converts API tracks into playlist tracks carrying qobuz://
+// URIs. albumFallback supplies album metadata for tracks that lack it
+// (album/get nests tracks without an album field). It sends no requests.
+// Stream URLs resolve at play time.
+func tracksFromAPI(in []apiTrack, albumFallback *apiAlbum) []playlist.Track {
 	out := make([]playlist.Track, len(in))
-	sem := make(chan struct{}, resolveConcurrency)
-	var wg sync.WaitGroup
-
-	for i := range in {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(idx int) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			out[idx] = p.buildTrack(ctx, c, in[idx], albumFallback)
-		}(i)
+	for i, t := range in {
+		out[i] = trackFromAPI(t, albumFallback)
 	}
-	wg.Wait()
 	return out
 }
 
-// buildTrack maps a single API track to a playlist.Track, resolving its stream
-// URL unless the track is not streamable.
-func (p *QobuzProvider) buildTrack(ctx context.Context, c *client, t apiTrack, albumFallback *apiAlbum) playlist.Track {
+// trackFromAPI maps a single API track to a playlist.Track. A track that
+// Qobuz does not allow to stream is unplayable.
+func trackFromAPI(t apiTrack, albumFallback *apiAlbum) playlist.Track {
 	album := t.Album
 	if album == nil {
 		album = albumFallback
 	}
 
 	track := playlist.Track{
+		Path:         TrackURIPrefix + t.ID.String(),
 		Title:        t.Title,
 		Artist:       trackArtist(t, album),
 		TrackNumber:  t.TrackNumber,
@@ -503,20 +497,36 @@ func (p *QobuzProvider) buildTrack(ctx context.Context, c *client, t apiTrack, a
 
 	if !t.Streamable {
 		track.Unplayable = true
-		return track
+	}
+	return track
+}
+
+// ResolveSource turns a qobuz://track/<id> URI into a signed stream URL when
+// playback starts. Resolving at play time keeps the URL fresh no matter how
+// long the track sat in a queue. It is registered as the player's
+// SourceResolver in main.go.
+func (p *QobuzProvider) ResolveSource(uri string) (string, error) {
+	trackID, ok := strings.CutPrefix(uri, TrackURIPrefix)
+	if !ok || trackID == "" || strings.ContainsAny(trackID, "/?#") {
+		return "", fmt.Errorf("qobuz: invalid track URI %q", uri)
+	}
+	c, err := p.ensureClient()
+	if err != nil {
+		return "", err
 	}
 
-	file, err := c.trackFileURL(ctx, t.ID.String(), p.quality, "")
-	if err != nil || file.URL == "" {
-		if err != nil {
-			applog.Debug("qobuz: resolve stream url for track %s: %v", t.ID.String(), err)
-		}
-		track.Unplayable = true
-		return track
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	file, err := c.trackFileURL(ctx, trackID, p.quality, "")
+	if err != nil {
+		return "", p.mapErr(err)
 	}
-	registerStreamURL(file.URL)
-	track.Path = file.URL
-	return track
+	if file.URL == "" {
+		return "", fmt.Errorf("qobuz: no stream URL for track %s", trackID)
+	}
+	streamURLs.register(trackID, file.URL)
+	return file.URL, nil
 }
 
 // trackArtist picks the best available artist name for a track.
