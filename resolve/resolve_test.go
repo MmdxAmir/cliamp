@@ -1,6 +1,8 @@
 package resolve
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -199,7 +201,7 @@ func TestResolveM3U_HLS_ReturnsSingleStream(t *testing.T) {
 	defer srv.Close()
 
 	u := srv.URL + "/primary/gaucha_rbs.sdp/playlist.m3u8"
-	tracks, err := resolveM3U(u)
+	tracks, err := resolveM3U(t.Context(), u)
 	if err != nil {
 		t.Fatalf("resolveM3U: %v", err)
 	}
@@ -224,7 +226,7 @@ func TestResolveM3U_PlainPlaylist_StillParsesTracks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tracks, err := resolveM3U(srv.URL + "/list.m3u")
+	tracks, err := resolveM3U(t.Context(), srv.URL+"/list.m3u")
 	if err != nil {
 		t.Fatalf("resolveM3U: %v", err)
 	}
@@ -422,7 +424,7 @@ func TestResolvePLSCapsBody(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			tracks, err := resolvePLS(srv.URL + "/stations.pls")
+			tracks, err := resolvePLS(t.Context(), srv.URL+"/stations.pls")
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("resolvePLS accepted a %d-byte body and returned %d tracks, want an error",
@@ -470,7 +472,7 @@ func TestResolvePLSStopsReadingAtTheCap(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := resolvePLS(srv.URL + "/endless.pls"); err == nil {
+	if _, err := resolvePLS(t.Context(), srv.URL+"/endless.pls"); err == nil {
 		t.Fatal("resolvePLS accepted an oversized body, want an error")
 	}
 
@@ -522,7 +524,7 @@ func TestResolveM3UCapsBody(t *testing.T) {
 			defer srv.Close()
 
 			u := srv.URL + "/list.m3u8"
-			tracks, err := resolveM3U(u)
+			tracks, err := resolveM3U(t.Context(), u)
 			if tt.wantErr {
 				if err == nil || !strings.Contains(err.Error(), "exceeds") {
 					t.Fatalf("resolveM3U = %d tracks, err %v, want an error that names the cap", len(tracks), err)
@@ -613,6 +615,58 @@ func TestClassifyRemote(t *testing.T) {
 			}
 			if len(r.Pending) != 1 || r.Pending[0] != tt.url || len(r.Tracks) != 0 {
 				t.Fatalf("Args = %+v, want %q pending for Remote", r, tt.url)
+			}
+		})
+	}
+}
+
+// TestURLContextCancelsRemoteFetch pins that URLContext stops a slow remote
+// resolve when the caller cancels, well before the 30 s client limit.
+func TestURLContextCancelsRemoteFetch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping Unix shell script test on Windows")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(10 * time.Second):
+		}
+	}))
+	defer srv.Close()
+	target, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldClient := httpClient
+	httpClient = &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: rewriteHostTransport{target: target, rt: http.DefaultTransport},
+	}
+	t.Cleanup(func() { httpClient = oldClient })
+
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "yt-dlp"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", tmpDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	for _, rawURL := range []string{
+		"https://example.com/list.m3u",
+		"https://example.com/stations.pls",
+		"https://example.com/podcast.rss",
+		"https://www.xiaoyuzhoufm.com/episode/abc123",
+		"ytsearch:slow query",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			time.AfterFunc(100*time.Millisecond, cancel)
+			start := time.Now()
+			_, err := URLContext(ctx, rawURL)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("URLContext error = %v, want context.Canceled", err)
+			}
+			if elapsed := time.Since(start); elapsed > 5*time.Second {
+				t.Fatalf("URLContext returned after %v, want it to stop at the cancel", elapsed)
 			}
 		})
 	}

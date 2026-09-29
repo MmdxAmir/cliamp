@@ -83,7 +83,7 @@ func TestFeedMetadata(t *testing.T) {
 		call func(string) ([]playlist.Track, error)
 	}{
 		{"Feed", func(u string) ([]playlist.Track, error) { return Feed(context.Background(), u) }},
-		{"resolveFeed", resolveFeed},
+		{"Remote", func(u string) ([]playlist.Track, error) { return Remote([]string{u}) }},
 	} {
 		t.Run(resolve.name, func(t *testing.T) {
 			got, err := resolve.call(feedURL)
