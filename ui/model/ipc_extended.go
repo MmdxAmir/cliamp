@@ -248,14 +248,19 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 			request.Reply <- ipc.Response{OK: false, Error: "provider does not support adding tracks"}
 			return nil
 		}
-		return ipcMutationCmd(request.Context, request.Reply, func() error {
+		return func() tea.Msg {
+			if request.Context != nil && request.Context.Err() != nil {
+				return nil
+			}
 			for _, track := range tracks {
 				if err := writer.AddTrackToPlaylist(requestContext(request.Context), request.Playlist, track); err != nil {
-					return err
+					request.Reply <- ipcResponseError(err)
+					return nil
 				}
 			}
+			request.Reply <- ipc.Response{OK: true, Total: len(tracks)}
 			return nil
-		})
+		}
 	case "playlist.replace":
 		saver, ok := entry.Provider.(provider.PlaylistSaver)
 		if !ok {
@@ -322,7 +327,7 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 				request.Reply <- ipc.Response{OK: false, Error: err.Error()}
 			} else {
 				page, total := ipcPage(tracks, request.Offset, request.Limit, 200)
-				request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(page, favorite), Total: total}
+				request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(page, favorite), Playlist: request.Playlist, Total: total}
 			}
 			return nil
 		}

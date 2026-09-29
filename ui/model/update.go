@@ -1033,6 +1033,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status.Errorf(statusTTLDefault, "Switch failed: %s", msg.err)
 		} else {
 			m.status.Showf(statusTTLDefault, "Audio output: %s", msg.name)
+			m.audioDevice = msg.name
 			_ = m.configSaver.Save("audio_device", msg.name)
 		}
 		// Invalidate cached list so the next open refreshes Active markers.
@@ -1144,9 +1145,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ipcV2ResponseMsg:
 		if msg.Response.OK {
-			if msg.Operation == "device" && msg.Response.Device != "" {
-				_ = m.configSaver.Save("audio_device", msg.Response.Device)
-				m.devicePicker.devices = nil
+			if msg.Operation == "device" {
+				m.applyV2DeviceResponse(msg.Response)
 			}
 			m.completeV2Job(msg.Jobs, msg.JobID, msg.Response)
 		} else {

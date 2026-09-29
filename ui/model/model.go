@@ -285,6 +285,9 @@ const (
 // Model is the Bubbletea model for the CLIAMP TUI.
 type Model struct {
 	downloadsDirectory string
+	// audioDevice names the output device that the last device switch or
+	// list reported. The runtime snapshot shows it.
+	audioDevice string
 	// Core playback
 	player        player.Engine
 	playlist      *playlist.Playlist

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"maps"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/ipc"
+	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/theme"
 	"github.com/bjarneo/cliamp/ui"
@@ -311,5 +313,112 @@ func TestV2LoadReadsLocalPlaylist(t *testing.T) {
 	}
 	if !reflect.DeepEqual(m.playlist.Tracks(), tracks) || m.loadedPlaylist != "Mix" {
 		t.Fatalf("playlist = %+v, loaded %q; want the tracks of Mix", m.playlist.Tracks(), m.loadedPlaylist)
+	}
+}
+
+// A device job records the output device for the snapshot. Only a switch
+// saves the device in the config. The list text feeds cliamp device list.
+func TestV2DeviceResponseRecordsDevice(t *testing.T) {
+	devices := []player.AudioDevice{{Name: "speakers"}, {Name: "headphones", Active: true}}
+	for _, tc := range []struct {
+		name       string
+		response   ipc.Response
+		wantDevice string
+		wantSaved  map[string]string
+	}{
+		{name: "list", response: deviceListResponse(devices), wantDevice: "headphones"},
+		{name: "switch", response: ipc.Response{OK: true, Device: "usb"}, wantDevice: "usb", wantSaved: map[string]string{"audio_device": "usb"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			saver := &recordingSaver{}
+			m := Model{player: &playbackFakeEngine{}, playlist: playlist.New(), configSaver: saver}
+			m.applyV2DeviceResponse(tc.response)
+			if got := m.runtimeSnapshot().Device; got != tc.wantDevice {
+				t.Fatalf("snapshot device = %q, want %q", got, tc.wantDevice)
+			}
+			if !maps.Equal(saver.saved, tc.wantSaved) {
+				t.Fatalf("saved = %v, want %v", saver.saved, tc.wantSaved)
+			}
+		})
+	}
+	list := deviceListResponse(devices)
+	if want := "  speakers\n* headphones"; list.Device != want || len(list.Devices) != 2 || !list.Devices[1].Active {
+		t.Fatalf("device list = %q %+v, want %q", list.Device, list.Devices, want)
+	}
+}
+
+// The snapshot names the loaded saved playlist, and a change of the
+// playlist or the device publishes a new runtime state.
+func TestV2SnapshotReportsLoadedPlaylist(t *testing.T) {
+	pl := playlist.New()
+	pl.Add(playlist.Track{Path: "/music/one.flac", Title: "One"})
+	m := Model{player: &playbackFakeEngine{}, playlist: pl, configSaver: &recordingSaver{}}
+	m.SetIPCBroker(ipc.NewBroker())
+	m.publishIPCRuntimeState()
+	revision := m.ipcRuntime.revision
+
+	m.loadedPlaylist = "Lofi"
+	m.publishIPCRuntimeState()
+	if got := m.runtimeSnapshot().Playlist; got != "Lofi" || m.ipcRuntime.revision != revision+1 {
+		t.Fatalf("playlist = %q at revision %d, want Lofi at %d", got, m.ipcRuntime.revision, revision+1)
+	}
+	m.applyV2DeviceResponse(ipc.Response{OK: true, Device: "usb"})
+	m.publishIPCRuntimeState()
+	if m.ipcRuntime.revision != revision+2 {
+		t.Fatalf("revision = %d after a device change, want %d", m.ipcRuntime.revision, revision+2)
+	}
+}
+
+// writableTestProvider records the saved-playlist writes that IPC forwards.
+type writableTestProvider struct {
+	commandsTestProvider
+	created, renamed, deleted string
+	added                     []string
+	removed                   int
+}
+
+func (p *writableTestProvider) Tracks(string) ([]playlist.Track, error) {
+	return []playlist.Track{{Path: "/music/one.flac", Title: "One"}}, nil
+}
+func (p *writableTestProvider) CreatePlaylist(_ context.Context, name string) (string, error) {
+	p.created = name
+	return name, nil
+}
+func (p *writableTestProvider) RenamePlaylist(oldName, newName string) error {
+	p.renamed = oldName + ":" + newName
+	return nil
+}
+func (p *writableTestProvider) DeletePlaylist(name string) error {
+	p.deleted = name
+	return nil
+}
+func (p *writableTestProvider) RemoveTrack(_ string, index int) error {
+	p.removed = index
+	return nil
+}
+func (p *writableTestProvider) AddTrackToPlaylist(_ context.Context, name string, track playlist.Track) error {
+	p.added = append(p.added, name+":"+track.Path)
+	return nil
+}
+
+// provider.tracks names the playlist that it lists, and playlist.add_many
+// counts the tracks that a provider without a batch write added one by one.
+func TestV2ProviderResponsesNameThePlaylistAndCount(t *testing.T) {
+	prov := &writableTestProvider{commandsTestProvider: commandsTestProvider{name: "Writable"}}
+	m := Model{
+		player:    &playbackFakeEngine{},
+		playlist:  playlist.New(),
+		providers: []ProviderEntry{{Key: "writable", Name: "Writable", Provider: prov}},
+	}
+
+	if response := runV2(t, &m, "provider.tracks", ipc.Request{Provider: "writable", Playlist: "Mix"}); !response.OK || response.Playlist != "Mix" || response.Total != 1 {
+		t.Fatalf("provider.tracks = %+v, want playlist Mix and 1 track", response)
+	}
+	tracks := []ipc.TrackInfo{{Path: "/a.flac"}, {Path: "/b.flac"}}
+	if response := runV2(t, &m, "playlist.add_many", ipc.Request{Provider: "writable", Playlist: "Mix", Tracks: tracks}); !response.OK || response.Total != 2 {
+		t.Fatalf("playlist.add_many = %+v, want 2 added", response)
+	}
+	if want := []string{"Mix:/a.flac", "Mix:/b.flac"}; !reflect.DeepEqual(prov.added, want) {
+		t.Fatalf("added = %v, want %v", prov.added, want)
 	}
 }

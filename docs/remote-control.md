@@ -66,7 +66,9 @@ writes, remains asynchronous.
 
 `state.get` returns a snapshot with the active audio track, logical playlist
 track, playback state, position, duration, seekability, modes, EQ, visualizer,
-theme, stream error, and two revisions.
+theme, stream error, and two revisions. `playlist` names the loaded saved
+playlist. `device` names the output device that the last `device` operation
+reported.
 
 ```json
 {

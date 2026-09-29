@@ -46,12 +46,14 @@ type ipcRuntimeFingerprint struct {
 	total            int
 	playNextTotal    int
 	volume           float64
+	playlist         string
 	shuffle          bool
 	repeat           string
 	mono             bool
 	speed            float64
 	eq               [10]float64
 	eqPreset         string
+	device           string
 	visualizer       string
 	theme            string
 	streamTitle      string
@@ -414,11 +416,7 @@ func (m *Model) handleV2Device(jobs *ipc.JobStore, jobID string, request ipc.Req
 			if err != nil {
 				return ipcV2ResponseMsg{Jobs: jobs, JobID: jobID, Operation: "device", Response: ipc.Response{OK: false, Error: err.Error()}}
 			}
-			items := make([]ipc.DeviceInfo, len(devices))
-			for i, device := range devices {
-				items[i] = ipc.DeviceInfo{Name: device.Name, Active: device.Active}
-			}
-			return ipcV2ResponseMsg{Jobs: jobs, JobID: jobID, Operation: "device", Response: ipc.Response{OK: true, Devices: items}}
+			return ipcV2ResponseMsg{Jobs: jobs, JobID: jobID, Operation: "device", Response: deviceListResponse(devices)}
 		}
 	}
 	return func() tea.Msg {
@@ -428,6 +426,40 @@ func (m *Model) handleV2Device(jobs *ipc.JobStore, jobID string, request ipc.Req
 			response = ipc.Response{OK: false, Error: err.Error()}
 		}
 		return ipcV2ResponseMsg{Jobs: jobs, JobID: jobID, Operation: "device", Response: response}
+	}
+}
+
+// deviceListResponse lists the output devices. Device holds one line for
+// each device, with "* " before the active one, for cliamp device list.
+func deviceListResponse(devices []player.AudioDevice) ipc.Response {
+	items := make([]ipc.DeviceInfo, len(devices))
+	lines := make([]string, len(devices))
+	for i, device := range devices {
+		items[i] = ipc.DeviceInfo{Name: device.Name, Active: device.Active}
+		marker := "  "
+		if device.Active {
+			marker = "* "
+		}
+		lines[i] = marker + device.Name
+	}
+	return ipc.Response{OK: true, Device: strings.Join(lines, "\n"), Devices: items}
+}
+
+// applyV2DeviceResponse records the output device that a device job
+// reports. A switch also saves the device in the config.
+func (m *Model) applyV2DeviceResponse(response ipc.Response) {
+	if len(response.Devices) > 0 {
+		for _, device := range response.Devices {
+			if device.Active {
+				m.audioDevice = device.Name
+			}
+		}
+		return
+	}
+	if response.Device != "" {
+		m.audioDevice = response.Device
+		_ = m.configSaver.Save("audio_device", response.Device)
+		m.devicePicker.devices = nil
 	}
 }
 
@@ -555,7 +587,7 @@ func (m *Model) replyV2(reply chan V2RequestResult, result ipc.V2Result, err *ip
 }
 
 func (m *Model) runtimeSnapshot() ipc.RuntimeSnapshot {
-	snapshot := ipc.RuntimeSnapshot{}
+	snapshot := ipc.RuntimeSnapshot{Playlist: m.loadedPlaylist, Device: m.audioDevice}
 	if m.ipcRuntime != nil {
 		snapshot.Revision = m.ipcRuntime.revision
 	}
@@ -651,7 +683,7 @@ func (m *Model) publishIPCRuntimeState() {
 }
 
 func (m *Model) runtimeFingerprint() ipcRuntimeFingerprint {
-	var fingerprint ipcRuntimeFingerprint
+	fingerprint := ipcRuntimeFingerprint{playlist: m.loadedPlaylist, device: m.audioDevice}
 	fingerprint.playlistRevision = m.playlist.Revision()
 	fingerprint.index = m.playlist.Index()
 	fingerprint.total = m.playlist.Len()
