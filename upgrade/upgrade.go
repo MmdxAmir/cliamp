@@ -21,7 +21,13 @@ import (
 
 const repo = "bjarneo/cliamp"
 
+// httpClient serves the GitHub API and checksum requests.
 var httpClient = httpclient.NewAPI(30 * time.Second)
+
+// downloadClient fetches the release binary. A client timeout also covers the
+// body read, so the binary gets a longer limit than the API calls. With this
+// limit, a 40 MB binary needs about 70 KB/s.
+var downloadClient = httpclient.NewAPI(10 * time.Minute)
 
 type release struct {
 	TagName    string `json:"tag_name"`
@@ -163,7 +169,7 @@ func downloadAndReplace(url, destPath, expectedHash string) error {
 	if len(expectedHash) != sha256.Size*2 {
 		return errors.New("valid expected SHA-256 is required")
 	}
-	resp, err := httpClient.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return fmt.Errorf("downloading: %w", err)
 	}

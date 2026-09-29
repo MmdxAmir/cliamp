@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -44,12 +45,16 @@ func installTestClient(t *testing.T, serverURL string) {
 	}
 	// The rewriter sits in front of the production transport, so the
 	// tests see the headers that the real client sends.
-	old := httpClient
+	oldAPI, oldDownload := httpClient, downloadClient
 	httpClient = &http.Client{
 		Timeout:   10 * time.Second,
-		Transport: rewriter{target: u, rt: old.Transport},
+		Transport: rewriter{target: u, rt: oldAPI.Transport},
 	}
-	t.Cleanup(func() { httpClient = old })
+	downloadClient = &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: rewriter{target: u, rt: oldDownload.Transport},
+	}
+	t.Cleanup(func() { httpClient, downloadClient = oldAPI, oldDownload })
 }
 
 func TestLatestVersionSuccess(t *testing.T) {
@@ -230,6 +235,36 @@ func TestDownloadAndReplace(t *testing.T) {
 	// Verify executable bit is set where the platform models one.
 	if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
 		t.Errorf("target mode = %o, want executable", info.Mode().Perm())
+	}
+}
+
+// TestDownloadOutlivesAPITimeout verifies that the binary download is not
+// cut by the short timeout of the API client. The API limit covers the whole
+// body read, so a slow connection could not finish a 37 MB binary in it.
+func TestDownloadOutlivesAPITimeout(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "cliamp")
+	if err := os.WriteFile(target, []byte("OLD"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	newContent := []byte("NEW BINARY BYTES")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(newContent)))
+		_, _ = w.Write(newContent[:4])
+		w.(http.Flusher).Flush()
+		time.Sleep(300 * time.Millisecond)
+		_, _ = w.Write(newContent[4:])
+	}))
+	defer srv.Close()
+	installTestClient(t, srv.URL)
+	httpClient.Timeout = 50 * time.Millisecond
+
+	if err := downloadAndReplace(srv.URL+"/cliamp-linux-amd64", target, testHash(newContent)); err != nil {
+		t.Fatalf("downloadAndReplace: %v", err)
+	}
+	if got, _ := os.ReadFile(target); string(got) != string(newContent) {
+		t.Errorf("target content = %q, want %q", got, newContent)
 	}
 }
 
