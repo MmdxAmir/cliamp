@@ -3,6 +3,7 @@ package embyapi
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -120,11 +121,12 @@ func (p *Provider) ReportScrobble(track playlist.Track, elapsed, _ time.Duration
 }
 
 // Playlists returns all albums across all music views.
-// Results are cached after the first successful call.
+// Results are cached after the first successful call. Callers get a copy, so
+// a change to the returned slice does not change the cache.
 func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 	p.mu.Lock()
 	if p.playlistCache != nil {
-		cached := p.playlistCache
+		cached := slices.Clone(p.playlistCache)
 		p.mu.Unlock()
 		return cached, nil
 	}
@@ -155,7 +157,7 @@ func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 	p.playlistCache = out
 	p.mu.Unlock()
 
-	return out, nil
+	return slices.Clone(out), nil
 }
 
 // SearchTracks searches the music library for tracks matching query.
@@ -169,13 +171,13 @@ func (p *Provider) SearchTracks(_ context.Context, query string, limit int) ([]p
 }
 
 // Tracks returns the tracks for one album item.
-// Results are cached per album id.
+// Results are cached per album id. Callers get a copy of the cached slice.
 func (p *Provider) Tracks(albumID string) ([]playlist.Track, error) {
 	p.mu.Lock()
 	if p.trackCache != nil {
 		if cached, ok := p.trackCache[albumID]; ok {
 			p.mu.Unlock()
-			return cached, nil
+			return slices.Clone(cached), nil
 		}
 	}
 	p.mu.Unlock()
@@ -194,7 +196,7 @@ func (p *Provider) Tracks(albumID string) ([]playlist.Track, error) {
 	p.trackCache[albumID] = out
 	p.mu.Unlock()
 
-	return out, nil
+	return slices.Clone(out), nil
 }
 
 // toPlaylistTracks converts server Tracks to playlist.Tracks, attaching the

@@ -247,3 +247,74 @@ func TestProviderResolveSourcePropagatesAuthenticationFailure(t *testing.T) {
 func trackWithMeta(key, value string) playlist.Track {
 	return playlist.Track{ProviderMeta: map[string]string{key: value}}
 }
+
+// TestProviderCachesReturnCopies verifies that a caller that changes a
+// returned slice does not change the provider cache.
+func TestProviderCachesReturnCopies(t *testing.T) {
+	c := mock(NewJellyfinClient("https://media.example.com", "tok", "user-1", "", ""), func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.URL.Path == "/Users/user-1/Views":
+			return jsonResponse(`{"Items":[{"Id":"lib-1","Name":"Music","CollectionType":"music"}]}`), nil
+		case req.URL.Query().Get("includeItemTypes") == "MusicAlbum":
+			return jsonResponse(`{"Items":[{"Id":"album-1","Name":"Kind of Blue"}]}`), nil
+		default:
+			return jsonResponse(`{"Items":[{"Id":"track-1","Name":"So What"}]}`), nil
+		}
+	})
+	p := NewProvider(c, "Jellyfin")
+	tests := []struct {
+		name   string
+		mutate func() error
+		read   func() (string, error)
+	}{
+		{
+			name: "playlists",
+			mutate: func() error {
+				lists, err := p.Playlists()
+				if err == nil {
+					lists[0].Name = "changed"
+				}
+				return err
+			},
+			read: func() (string, error) {
+				lists, err := p.Playlists()
+				if err != nil {
+					return "", err
+				}
+				return lists[0].Name, nil
+			},
+		},
+		{
+			name: "tracks",
+			mutate: func() error {
+				tracks, err := p.Tracks("album-1")
+				if err == nil {
+					tracks[0].Title = "changed"
+				}
+				return err
+			},
+			read: func() (string, error) {
+				tracks, err := p.Tracks("album-1")
+				if err != nil {
+					return "", err
+				}
+				return tracks[0].Title, nil
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.mutate(); err != nil {
+				t.Fatalf("first call error: %v", err)
+			}
+			// The second read comes from the cache.
+			got, err := tt.read()
+			if err != nil {
+				t.Fatalf("second call error: %v", err)
+			}
+			if got == "changed" {
+				t.Fatal("a change to the returned slice changed the cache")
+			}
+		})
+	}
+}

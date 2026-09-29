@@ -1050,3 +1050,53 @@ func TestBrowseHandlesSingleMediaTypeServers(t *testing.T) {
 		})
 	}
 }
+
+// TestCachesReturnCopies verifies that a caller that changes a returned slice
+// does not change the provider cache.
+func TestCachesReturnCopies(t *testing.T) {
+	p := mockProvider(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Path {
+		case "/api/libraries":
+			return jsonResponse(`{"libraries":[{"id":"lib-b","name":"Audiobooks","mediaType":"book"}]}`), nil
+		case "/api/libraries/lib-b/items":
+			return jsonResponse(`{"total":1,"results":[` + bookItemJSON + `]}`), nil
+		default:
+			return jsonResponse(bookItemJSON), nil
+		}
+	})
+	tests := []struct {
+		name string
+		call func() (*string, error)
+	}{
+		{"playlists", func() (*string, error) {
+			lists, err := p.Playlists()
+			if err != nil {
+				return nil, err
+			}
+			return &lists[0].Name, nil
+		}},
+		{"tracks", func() (*string, error) {
+			tracks, err := p.Tracks("b:book-1")
+			if err != nil {
+				return nil, err
+			}
+			return &tracks[0].Title, nil
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			first, err := tt.call()
+			if err != nil {
+				t.Fatalf("first call error: %v", err)
+			}
+			*first = "changed"
+			second, err := tt.call()
+			if err != nil {
+				t.Fatalf("cached call error: %v", err)
+			}
+			if *second == "changed" {
+				t.Fatal("a change to the returned slice changed the cache")
+			}
+		})
+	}
+}
