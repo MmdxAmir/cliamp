@@ -124,16 +124,26 @@ func logYouTubeSkipped(reason string) {
 }
 
 // offerYTDLPInstall asks on in whether to install yt-dlp now. It asks only
-// when interactive is true. Only a bare Enter confirms. Any other answer, EOF
-// or a read error skips the install. So a start with stdin at /dev/null, as
-// under systemd, never installs a package.
+// when interactive is true. A bare Enter, y or yes in any case confirms. Any
+// other answer, EOF or a read error skips the install. So a start with stdin
+// at /dev/null, as under systemd, never installs a package.
 func offerYTDLPInstall(interactive bool, in io.Reader, out io.Writer) bool {
 	if !interactive {
 		return false
 	}
 	fmt.Fprint(out, "Press Enter to install it now, or type n and press Enter to skip... ")
 	answer, err := bufio.NewReader(in).ReadString('\n')
-	return err == nil && strings.TrimSpace(answer) == ""
+	if err == nil {
+		switch strings.ToLower(strings.TrimSpace(answer)) {
+		case "", "y", "yes":
+			return true
+		}
+	} else {
+		// EOF leaves the cursor on the prompt line.
+		fmt.Fprintln(out)
+	}
+	fmt.Fprint(out, "Skipped. YouTube providers are disabled.\n\n")
+	return false
 }
 
 // stdinIsTerminal reports whether stdin is a character device, such as a

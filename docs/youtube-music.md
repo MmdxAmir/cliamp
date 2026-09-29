@@ -154,4 +154,4 @@ like. See issue [#541](https://github.com/bjarneo/cliamp/issues/541).
 - Browser cookies (`cookies_from = "browser"`, no Google Cloud setup) or a Google Cloud project with YouTube Data API v3 enabled for OAuth
 - No Spotify Premium or other paid subscription is required. The YouTube Music free tier works.
 
-If yt-dlp is missing when cliamp starts with YouTube configured, cliamp offers to install it. Press `Enter` to install it, or type `n` and press `Enter` to skip. In `--daemon` mode, or when stdin is not a terminal, cliamp does not ask and does not install yt-dlp.
+If yt-dlp is missing when cliamp starts with YouTube configured, cliamp offers to install it. To install it, press `Enter`, or type `y` or `yes` and press `Enter`. To skip, type `n` and press `Enter`. Any other answer also skips the install, and the YouTube providers stay disabled for that start. In `--daemon` mode, or when stdin is not a terminal, cliamp does not ask and does not install yt-dlp.
