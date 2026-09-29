@@ -20,8 +20,9 @@ func (m *Manager) SetReservedKeys(keys map[string]bool) {
 // KeyBinding describes a plugin-registered keybinding for the Ctrl+K overlay.
 type KeyBinding struct {
 	Key         string
-	Plugin      string
+	Plugin      string // display name of the plugin
 	Description string
+	owner       *Plugin
 }
 
 // KeyBindings returns a snapshot of every plugin-registered keybinding that
@@ -83,7 +84,7 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 			return true
 		}
 		if !warned && m.logger != nil {
-			m.logger.log(p.Name, "warn", "plugin:bind requires permissions = {\"keymap\"} — further warnings suppressed")
+			m.logger.log(p.installName, "warn", "plugin:bind requires permissions = {\"keymap\"} — further warnings suppressed")
 			warned = true
 		}
 		return false
@@ -121,7 +122,7 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 		if m.reservedKeys[key] {
 			m.mu.Unlock()
 			if m.logger != nil {
-				m.logger.log(p.Name, "warn", "refusing to bind %q: reserved by cliamp core", key)
+				m.logger.log(p.installName, "warn", "refusing to bind %q: reserved by cliamp core", key)
 			}
 			L.Push(lua.LFalse)
 			L.Push(lua.LString("key reserved by cliamp: " + key))
@@ -129,7 +130,7 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 		}
 		m.keyBinds[key] = append(m.keyBinds[key], &luaHook{plugin: p, fn: fn})
 		if description != "" {
-			m.keyBindDescs[key] = KeyBinding{Key: key, Plugin: p.Name, Description: description}
+			m.keyBindDescs[key] = KeyBinding{Key: key, Plugin: p.Name, Description: description, owner: p}
 		}
 		m.mu.Unlock()
 
@@ -145,7 +146,7 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 		if len(m.keyBinds[key]) == 0 {
 			delete(m.keyBinds, key)
 		}
-		if desc, ok := m.keyBindDescs[key]; ok && desc.Plugin == p.Name {
+		if desc, ok := m.keyBindDescs[key]; ok && desc.owner == p {
 			delete(m.keyBindDescs, key)
 		}
 		m.mu.Unlock()

@@ -20,20 +20,26 @@ import (
 )
 
 // Plugin represents a single loaded Lua plugin.
+//
+// A plugin has two names. installName is the file name without .lua, or the
+// directory name. Config, trust, the store, the event namespace and
+// plugins.log use it, and plugin.register() cannot change it. Name is the
+// display name from plugin.register(). Commands, key binding descriptions and
+// visualizers use it, and Manager.claimName keeps it unique.
 type Plugin struct {
-	Name           string
-	Version        string
-	Description    string
-	Type           string // "hook" or "visualizer"
-	L              *lua.LState
-	mu             sync.Mutex        // serializes all LState access (LState is not thread-safe)
-	closed         bool              // guarded by mu; set when L is closed, so no callback runs after it
-	lastErr        map[string]string // guarded by mu; call label -> last logged error
-	config         map[string]string // per-plugin config from config.toml
-	perms          map[string]bool   // declared permissions (e.g. "control")
-	namespaceOwner string            // installed filename; plugin.register() cannot change it
-	namespace      string            // namespaceOwner reduced to one event topic segment
-	namespaceErr   error             // set when another plugin claimed that namespace first
+	Name         string
+	Version      string
+	Description  string
+	Type         string // "hook" or "visualizer"
+	L            *lua.LState
+	mu           sync.Mutex        // serializes all LState access (LState is not thread-safe)
+	closed       bool              // guarded by mu; set when L is closed, so no callback runs after it
+	lastErr      map[string]string // guarded by mu; call label -> last logged error
+	config       map[string]string // per-plugin config from config.toml
+	perms        map[string]bool   // declared permissions (e.g. "control")
+	installName  string            // installed name; see the type comment
+	namespace    string            // installName reduced to one event topic segment
+	namespaceErr error             // set when another plugin claimed that namespace first
 }
 
 // StateProvider supplies read-only access to player/playlist state.
@@ -141,6 +147,7 @@ type Manager struct {
 	visPlugs     []*luaVis                      // Lua visualizers in registration order
 	visMap       map[string]*luaVis             // name -> Lua visualizer
 	namespaces   map[string]string              // event namespace -> owning plugin name
+	names        map[string]*Plugin             // display name -> plugin that registered it
 	state        StateProvider
 	control      ControlProvider
 	ui           UIProvider
@@ -265,6 +272,7 @@ func newManager(allowed []string, publisher EventPublisher) *Manager {
 		commands:     make(map[string]map[string]*luaHook),
 		visMap:       make(map[string]*luaVis),
 		namespaces:   make(map[string]string),
+		names:        make(map[string]*Plugin),
 		timers:       newTimerManager(),
 		execs:        newExecManager(allowed),
 		publisher:    publisher,
@@ -281,11 +289,11 @@ func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin,
 	sandbox(L)
 
 	p := &Plugin{
-		Name:           name,
-		namespaceOwner: name,
-		namespace:      eventNamespace(name),
-		L:              L,
-		config:         cfg,
+		Name:        name,
+		installName: name,
+		namespace:   eventNamespace(name),
+		L:           L,
+		config:      cfg,
 	}
 	m.claimNamespace(p)
 
@@ -321,11 +329,19 @@ func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin,
 func (m *Manager) cleanupPlugin(p *Plugin) {
 	m.mu.Lock()
 	// Release the event namespace only if this plugin owns it. Compare against
-	// namespaceOwner, not Name: plugin.register() can rename Name after the
+	// installName, not Name: plugin.register() can rename Name after the
 	// claim, and a renamed plugin that then fails to load must not keep the
 	// namespace locked away from a later colliding plugin.
-	if owner, ok := m.namespaces[p.namespace]; ok && owner == p.namespaceOwner {
+	if owner, ok := m.namespaces[p.namespace]; ok && owner == p.installName {
 		delete(m.namespaces, p.namespace)
+	}
+	// Everything below is matched by owner, never by name. A plugin that
+	// failed to claim a name must not remove what the owner of that name
+	// registered.
+	for name, owner := range m.names {
+		if owner == p {
+			delete(m.names, name)
+		}
 	}
 	for event, hooks := range m.hooks {
 		m.hooks[event] = filterOutPlugin(hooks, p)
@@ -339,12 +355,20 @@ func (m *Manager) cleanupPlugin(p *Plugin) {
 		}
 	}
 	for key, desc := range m.keyBindDescs {
-		if desc.Plugin == p.Name {
+		if desc.owner == p {
 			delete(m.keyBindDescs, key)
 		}
 	}
-
-	delete(m.commands, p.Name)
+	for name, cmds := range m.commands {
+		for cmd, h := range cmds {
+			if h.plugin == p {
+				delete(cmds, cmd)
+			}
+		}
+		if len(cmds) == 0 {
+			delete(m.commands, name)
+		}
+	}
 
 	filteredVis := m.visPlugs[:0]
 	for _, vis := range m.visPlugs {
@@ -377,8 +401,9 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 	L.SetField(pluginTbl, "register", L.NewFunction(func(L *lua.LState) int {
 		opts := L.CheckTable(1)
 
-		if name := opts.RawGetString("name"); name != lua.LNil {
-			p.Name = name.String()
+		name := p.Name
+		if v := opts.RawGetString("name"); v != lua.LNil {
+			name = v.String()
 		}
 		if version := opts.RawGetString("version"); version != lua.LNil {
 			p.Version = version.String()
@@ -409,6 +434,10 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 				L.RaiseError("permissions must be an array")
 			}
 		}
+		if err := m.claimName(p, name); err != nil {
+			L.RaiseError("%v", err)
+		}
+		p.Name = name
 
 		// Return a plugin object with on() and config() methods.
 		obj := L.NewTable()
@@ -489,9 +518,9 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 // registerCliampAPI sets up the "cliamp" global table with all sub-modules.
 func (m *Manager) registerCliampAPI(L *lua.LState, p *Plugin) {
 	cliamp := L.NewTable()
-	registerLogAPI(L, cliamp, m.logger, p.Name)
+	registerLogAPI(L, cliamp, m.logger, p.installName)
 	registerJSONAPI(L, cliamp)
-	registerStoreAPI(L, cliamp, p.Name)
+	registerStoreAPI(L, cliamp, p.installName)
 	registerCryptoAPI(L, cliamp)
 	registerFSAPI(L, cliamp)
 	registerHTTPAPI(L, cliamp)
@@ -499,7 +528,7 @@ func (m *Manager) registerCliampAPI(L *lua.LState, p *Plugin) {
 	registerTrackAPI(L, cliamp, &m.state)
 	m.registerTimerAPI(L, cliamp, p)
 	registerQueueAPI(L, cliamp, &m.state, &m.control, p, m.logger)
-	registerNotifyAPI(L, cliamp, m.logger, p.Name)
+	registerNotifyAPI(L, cliamp, m.logger, p.installName)
 	registerControlAPI(L, cliamp, &m.control, p, m.logger)
 	registerMessageAPI(L, cliamp, &m.ui)
 	registerSleepAPI(L, cliamp)
@@ -568,18 +597,33 @@ func eventNamespace(name string) string {
 // claimNamespace records p as the owner of its event namespace, or marks p as
 // unable to publish when another plugin already owns that namespace. Load order
 // is sorted by installed name, so the winner is deterministic. Ownership is
-// tracked by installed filename because plugin.register() can rename p.Name.
+// tracked by installed name because plugin.register() can rename p.Name.
 func (m *Manager) claimNamespace(p *Plugin) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if owner, taken := m.namespaces[p.namespace]; taken && owner != p.namespaceOwner {
+	if owner, taken := m.namespaces[p.namespace]; taken && owner != p.installName {
 		p.namespaceErr = fmt.Errorf("event namespace %q is already used by plugin %q; rename this plugin to publish events", p.namespace, owner)
 		if m.logger != nil {
-			m.logger.log(p.namespaceOwner, "warn", "%v", p.namespaceErr)
+			m.logger.log(p.installName, "warn", "%v", p.namespaceErr)
 		}
 		return
 	}
-	m.namespaces[p.namespace] = p.namespaceOwner
+	m.namespaces[p.namespace] = p.installName
+}
+
+// claimName records p as the owner of the display name. It fails when another
+// plugin registered that name first, so a command, key binding description or
+// visualizer name always belongs to one plugin. Load order is sorted by
+// installed name, so the winner is deterministic. A plugin keeps every name
+// it registered until cleanupPlugin releases them.
+func (m *Manager) claimName(p *Plugin, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if owner, taken := m.names[name]; taken && owner != p {
+		return fmt.Errorf("plugin name %q is already used by plugin %q; set another name in plugin.register()", name, owner.installName)
+	}
+	m.names[name] = p
+	return nil
 }
 
 // SetEventPublisher replaces the publisher backing p:publish(). New installs

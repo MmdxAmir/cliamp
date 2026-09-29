@@ -95,7 +95,7 @@ func (m *Manager) callLocked(p *Plugin, label string, timeout time.Duration, nre
 				p.lastErr = make(map[string]string)
 			}
 			p.lastErr[label] = key
-			m.logHookErr(p.Name, label, err)
+			m.logHookErr(p.installName, label, err)
 		}
 		return lua.LNil, err
 	}

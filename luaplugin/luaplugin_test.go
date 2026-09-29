@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -120,6 +121,90 @@ func TestRegisterWithoutTypeReportsError(t *testing.T) {
 			}
 			if n := len(m.hooks["track.change"]); n != 0 {
 				t.Errorf("hooks[track.change] = %d, want 0", n)
+			}
+		})
+	}
+}
+
+// A display name belongs to the first plugin that registers it. A later
+// plugin with the same name fails to load. A plugin that registers again under
+// a new name keeps the old name too.
+func TestDuplicateDisplayNameRejected(t *testing.T) {
+	type file struct{ name, code string }
+	tests := []struct {
+		name     string
+		first    file
+		second   file
+		wantErr  string
+		wantVis  []string
+		wantName string
+	}{
+		{
+			name:    "same name",
+			first:   file{"a", `plugin.register({name = "dup", type = "hook"})`},
+			second:  file{"b", `plugin.register({name = "dup", type = "hook"})`},
+			wantErr: `plugin name "dup" is already used by plugin "a"`,
+		},
+		{
+			name:    "name matches the default name of another plugin",
+			first:   file{"dup", `plugin.register({type = "hook"})`},
+			second:  file{"b", `plugin.register({name = "dup", type = "hook"})`},
+			wantErr: `plugin name "dup" is already used by plugin "dup"`,
+		},
+		{
+			name:    "default name matches the name of another plugin",
+			first:   file{"a", `plugin.register({name = "dup", type = "hook"})`},
+			second:  file{"dup", `plugin.register({type = "hook"})`},
+			wantErr: `plugin name "dup" is already used by plugin "a"`,
+		},
+		{
+			name: "visualizers with the same name",
+			first: file{"a", `
+				local p = plugin.register({name = "bars", type = "visualizer"})
+				function p:render() return "a" end`},
+			second: file{"b", `
+				local p = plugin.register({name = "bars", type = "visualizer"})
+				function p:render() return "b" end`},
+			wantErr: `plugin name "bars" is already used by plugin "a"`,
+			wantVis: []string{"bars"},
+		},
+		{
+			name:    "register again under a new name",
+			first:   file{"a", `plugin.register({name = "one", type = "hook"}); plugin.register({name = "two", type = "hook"})`},
+			second:  file{"b", `plugin.register({name = "one", type = "hook"})`},
+			wantErr: `plugin name "one" is already used by plugin "a"`,
+		},
+		{
+			name:     "different names",
+			first:    file{"a", `plugin.register({name = "one", type = "hook"})`},
+			second:   file{"b", `plugin.register({name = "two", type = "hook"})`},
+			wantName: "two",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			loadTestPlugin(t, m, tt.first.name, tt.first.code)
+			path := filepath.Join(t.TempDir(), tt.second.name+".lua")
+			if err := os.WriteFile(path, []byte(tt.second.code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			p, err := m.loadPlugin(path, tt.second.name, nil)
+			if tt.wantErr != "" {
+				if p != nil || err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("loadPlugin() = %v, %v, want an error with %q", p, err, tt.wantErr)
+				}
+			} else if err != nil || p == nil || p.Name != tt.wantName {
+				t.Fatalf("loadPlugin() = %v, %v, want a plugin named %q", p, err, tt.wantName)
+			}
+			m.finalizeVisualizers()
+			if got := m.Visualizers(); tt.wantVis != nil && !slices.Equal(got, tt.wantVis) {
+				t.Errorf("Visualizers() = %v, want %v", got, tt.wantVis)
+			}
+			if tt.wantVis != nil {
+				if got := m.RenderVis("bars", [10]float64{}, 1, 1, 1); got != "a" {
+					t.Errorf("RenderVis() = %q, want the frame of the first plugin", got)
+				}
 			}
 		})
 	}

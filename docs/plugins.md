@@ -140,12 +140,14 @@ Each plugin must call `plugin.register()`. cliamp skips files that do not call i
 
 ```lua
 local p = plugin.register({
-    name        = "myplugin",           -- required
+    name        = "myplugin",           -- unique; default: the installed name
     type        = "hook",               -- required: "hook" or "visualizer"
     version     = "1.0.0",             -- optional
     description = "What it does",       -- optional
 })
 ```
+
+Each loaded plugin must have its own `name`. cliamp loads plugins in the order of their installed names. If a plugin registers a name that an earlier plugin already uses, cliamp reports a load error and does not load it. If you omit `name`, cliamp uses the installed name: the file name without `.lua`, or the directory name. Commands, key binding descriptions, and visualizer modes use `name`. Config, trust, `cliamp.store`, event topics, and `plugins.log` use the installed name.
 
 The returned `p` object provides these methods:
 
@@ -438,7 +440,7 @@ cliamp.log.error("request failed: " .. err)
 cliamp.log.debug("response: " .. body)
 ```
 
-cliamp writes logs to `~/.config/cliamp/plugins.log`. Each line has a timestamp and the `[plugin-name]` prefix.
+cliamp writes logs to `~/.config/cliamp/plugins.log`. Each line has a timestamp and the installed name of the plugin as the prefix, for example `[now-playing]`.
 
 cliamp also logs the Lua errors of event hooks, key bindings, commands, timers, exec callbacks, and visualizer callbacks to this file. A callback that fails again with the same error logs it once. cliamp logs it again after the callback succeeds or fails with a different error.
 

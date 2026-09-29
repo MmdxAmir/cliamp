@@ -151,7 +151,7 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 			return true
 		}
 		if !warned {
-			logger.log(p.Name, "warn", "cliamp.exec requires permissions = {\"exec\"} — further warnings suppressed")
+			logger.log(p.installName, "warn", "cliamp.exec requires permissions = {\"exec\"} — further warnings suppressed")
 			warned = true
 		}
 		return false

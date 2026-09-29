@@ -76,7 +76,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 	guard := func(name string) bool {
 		if !p.perms[PermControl] {
 			if !warned {
-				logger.log(p.Name, "warn", "queue.%s requires permissions = {\"control\"} — further warnings suppressed", name)
+				logger.log(p.installName, "warn", "queue.%s requires permissions = {\"control\"} — further warnings suppressed", name)
 				warned = true
 			}
 			return false
