@@ -95,7 +95,9 @@ play-next operations to reject stale GUI actions with the `conflict` error code.
 `track` keeps `provider_meta`, embedded playback flags, and directory-source
 state. A GUI can send a provider result through `track.play`,
 `track.queue`, `playlist.add`, `playlist.add_many`, or `playlist.replace`
-without losing provider identity.
+without losing provider identity. When cliamp saves such a track to a local
+playlist, Favorites or Recently Played, it keeps only the `provider_meta` keys
+that hold letters, digits, `.`, `_` and `-`.
 
 The `bookmark` field of `track` keeps its name for existing scripts. It reports
 the favorite ♥ state of the track, the same state as the playlist row marker.
