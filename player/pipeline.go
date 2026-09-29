@@ -183,7 +183,8 @@ func (p *Player) localFFmpegPipeline(path string) (*trackPipeline, error) {
 }
 
 // buildPipeline opens and decodes a track, returning a ready-to-play pipeline.
-// It only chooses the route. The constructors above build the pipelines.
+// bufferedPipeline, ffmpegURLPipeline and localFFmpegPipeline build the
+// routes that more than one source type shares.
 func (p *Player) buildPipeline(path string) (*trackPipeline, error) {
 	// Clear stream title on each new pipeline build.
 	p.streamTitle.Store("")
