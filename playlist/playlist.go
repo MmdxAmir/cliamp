@@ -368,7 +368,6 @@ type Playlist struct {
 	queue          []int       // track indices queued to play next
 	queuePositions map[int]int // first 1-based queue position by track index
 	queuedIdx      int         // track index currently playing from queue, -1 if none
-	bookmarkCount  int         // number of tracks with Bookmark set
 }
 
 // Snapshot preserves the complete mutable playback state for later restoration.
@@ -404,15 +403,6 @@ func (p *Playlist) rebuildQueuePositions() {
 	for i, idx := range p.queue {
 		if _, exists := p.queuePositions[idx]; !exists {
 			p.queuePositions[idx] = i + 1
-		}
-	}
-}
-
-func (p *Playlist) rebuildBookmarkCount() {
-	p.bookmarkCount = 0
-	for _, track := range p.tracks {
-		if track.Bookmark {
-			p.bookmarkCount++
 		}
 	}
 }
@@ -485,7 +475,6 @@ func (p *Playlist) Replace(tracks []Track) {
 	p.queue = nil
 	p.queuePositions = nil
 	p.queuedIdx = -1
-	p.rebuildBookmarkCount()
 	if p.shuffle && len(tracks) > 0 {
 		p.doShuffle()
 	}
@@ -504,11 +493,6 @@ func (p *Playlist) Add(tracks ...Track) {
 	}
 	start := len(p.tracks)
 	p.tracks = append(p.tracks, tracks...)
-	for _, track := range tracks {
-		if track.Bookmark {
-			p.bookmarkCount++
-		}
-	}
 	for i := start; i < len(p.tracks); i++ {
 		p.order = append(p.order, i)
 	}
@@ -1015,7 +999,6 @@ func (p *Playlist) Restore(snapshot Snapshot) {
 	p.queue = slices.Clone(snapshot.queue)
 	p.queuedIdx = snapshot.queuedIdx
 	p.rebuildQueuePositions()
-	p.rebuildBookmarkCount()
 	if !p.matches(before) {
 		p.revision++
 	}
@@ -1106,9 +1089,6 @@ func (p *Playlist) Remove(idx int) bool {
 	if idx < 0 || idx >= len(p.tracks) {
 		return false
 	}
-	if p.tracks[idx].Bookmark {
-		p.bookmarkCount--
-	}
 
 	p.tracks = slices.Delete(p.tracks, idx, idx+1)
 
@@ -1169,13 +1149,6 @@ func (p *Playlist) SetTrack(i int, t Track) {
 		if equalTrack(p.tracks[i], t) {
 			return
 		}
-		if p.tracks[i].Bookmark != t.Bookmark {
-			if t.Bookmark {
-				p.bookmarkCount++
-			} else {
-				p.bookmarkCount--
-			}
-		}
 		p.tracks[i] = t
 		p.revision++
 	}
@@ -1235,20 +1208,8 @@ func (p *Playlist) ToggleBookmark(idx int) {
 	defer p.mu.Unlock()
 	if idx >= 0 && idx < len(p.tracks) {
 		p.tracks[idx].Bookmark = !p.tracks[idx].Bookmark
-		if p.tracks[idx].Bookmark {
-			p.bookmarkCount++
-		} else {
-			p.bookmarkCount--
-		}
 		p.revision++
 	}
-}
-
-// BookmarkCount returns the number of bookmarked tracks.
-func (p *Playlist) BookmarkCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.bookmarkCount
 }
 
 // ToggleShuffle enables or disables shuffle mode.
