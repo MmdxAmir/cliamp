@@ -21,7 +21,11 @@ cliamp --sample-rate 48000 track.mp3      # output sample rate (22050, 44100, 48
 cliamp --buffer-ms 2000 track.mp3         # speaker buffer in ms (50-5000; useful for unstable radio)
 cliamp --resample-quality 1 track.mp3     # resample quality factor (1–4)
 cliamp --bit-depth 32 track.m4a           # PCM bit depth: 16 (default) or 32 (lossless)
+cliamp --audio-device list                # print the output devices, then exit
+cliamp --audio-device NAME track.mp3      # use one output device for this session
 ```
+
+`--audio-device` overrides `audio_device` in config.toml. See [Audio output device](configuration.md#audio-output-device) for the platform rules.
 
 ## Appearance
 
@@ -136,6 +140,7 @@ cliamp track.mp3 --repeat all --mono ~/Music
 | `--buffer-ms` | int | 250 | 50-5000 |
 | `--resample-quality` | int | 4 | 1-4 |
 | `--bit-depth` | int | 16 | 16, 32 |
+| `--audio-device` | string | | a device name from `--audio-device list`. `list` prints the devices and exits. |
 | `--playlist` | string | | local TOML playlist name |
 | `--log-level` | string | info | debug, info, warn, error |
 | `--low-power` / `--no-low-power` | bool | false | lower UI cadence; disable visualization |

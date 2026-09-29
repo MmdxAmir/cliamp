@@ -292,6 +292,7 @@ func TestLoadGolden(t *testing.T) {
 	allWant := exampleWant
 	allWant.VisRows = 7
 	allWant.InitialDirectory = "~/Music"
+	allWant.AudioDevice = "alsa_output.usb-FiiO_K5_Pro-00.analog-stereo"
 	allWant.Provider = "cliamp"
 	allWant.Simplified = true
 	allWant.HideHelpBar = true

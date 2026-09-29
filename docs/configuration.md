@@ -45,6 +45,11 @@ shuffle = false
 # Start with mono output (L+R downmix)
 mono = false
 
+# Audio output device name. Empty uses the system default output.
+# Run cliamp --audio-device list and copy a name from the second column.
+# See "Audio output device" below.
+audio_device = ""
+
 # Initial directory for the file browser ('o' key)
 initial_directory = "~/Music"
 
@@ -105,6 +110,11 @@ hide_settings_pane = false
 # Show highlighted-playlist metadata below Settings (Ctrl+I toggles and saves).
 show_metadata = false
 
+# Empty space around the UI: columns on the left and right (0-10, default 3)
+# and rows above and below (0-5, default 1).
+padding_horizontal = 3
+padding_vertical = 1
+
 # UI theme name (see available themes in ~/.config/cliamp/themes/)
 theme = "Tokyo Night"
 
@@ -126,6 +136,13 @@ cliamp adapts its playback screen to the terminal size:
 | At least `56x16` | Compact controls and five visualizer rows |
 | At least `40x10` | Minimal playback, list, seek bar, and help layout |
 | Smaller than `40x10` | Resize message only |
+
+The tiers use the full terminal size. `padding_horizontal` and
+`padding_vertical` set the empty space between the terminal edge and the UI,
+in columns and rows. The defaults are 3 and 1. cliamp clamps
+`padding_horizontal` to 0-10 and `padding_vertical` to 0-5. On a small
+terminal, cliamp reduces the padding so that the UI keeps at least one column
+and one row.
 
 At the full tier the playback screen splits below the seek bar: the playlist
 fills the left column and a `Settings` pane fills the right one. The pane reads
@@ -228,6 +245,35 @@ When enabling Metadata in a narrow or simplified layout, with Settings closed,
 or with a sidebar too short for details, `Ctrl+I` opens that full info overlay
 instead. The preference remains saved so the section appears when you return
 to a wide playback layout with enough room and Settings open.
+
+## Audio output device
+
+`audio_device` selects the output device when cliamp starts. Leave it empty to
+use the system default output. To find the device names, run this command:
+
+```sh
+cliamp --audio-device list
+```
+
+The command prints the description and the name of each device, then exits.
+A `*` marks the active device. Put the name in `audio_device`:
+
+```toml
+audio_device = "alsa_output.usb-FiiO_K5_Pro-00.analog-stereo"
+```
+
+- On Linux, cliamp sets `PIPEWIRE_NODE` to the name before it opens the audio
+  output. PipeWire then sends the cliamp stream to that device. Without
+  PipeWire, the key has no effect.
+- On macOS, cliamp makes the device the system default output while it runs.
+  It restores the previous default output when it exits. The value can be the
+  name or the description.
+- On Windows, the key has no effect at startup. The `d` device picker changes
+  the system default output instead.
+
+When you select a device with `d` or `cliamp device <name>`, the TUI saves it to
+`audio_device`. To use a different device for one session, run
+`cliamp --audio-device <name>`.
 
 ## Value syntax
 
