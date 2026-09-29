@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -20,8 +21,8 @@ import (
 // value further when the terminal cannot spare the rows.
 const maxVisRows = 40
 
-// configPath returns the path to the config file.
-func configPath() (string, error) {
+// Path returns the path of config.toml in the cliamp config directory.
+func Path() (string, error) {
 	dir, err := appdir.Dir()
 	if err != nil {
 		return "", err
@@ -788,7 +789,7 @@ func defaultConfig() Config {
 func Load() (Config, error) {
 	cfg := defaultConfig()
 
-	path, err := configPath()
+	path, err := Path()
 	if err != nil {
 		return cfg, nil
 	}
@@ -812,13 +813,11 @@ func Load() (Config, error) {
 
 		// Section header: [navidrome], [plex], [plugins.lastfm], etc.
 		if name, ok := sectionHeader(line); ok {
-			section = strings.ToLower(name)
+			section = canonicalSection(name)
 			// Mark providers as enabled when their section exists.
-			// [yt], [youtube], and [ytmusic] all configure the same YouTube providers.
 			switch section {
-			case "yt", "youtube", "ytmusic":
+			case "ytmusic":
 				cfg.YouTubeMusic.Enabled = true
-				section = "ytmusic" // normalize for key parsing below
 			case "spotify":
 				cfg.Spotify.Enabled = true
 			case "qobuz":
@@ -908,6 +907,18 @@ func sectionHeader(line string) (string, bool) {
 		return line[1 : len(line)-1], true
 	}
 	return "", false
+}
+
+// canonicalSection returns the name that Load uses for a section header. It
+// ignores letter case, and [yt], [youtube] and [ytmusic] all configure the
+// same YouTube providers.
+func canonicalSection(name string) string {
+	name = strings.ToLower(name)
+	switch name {
+	case "yt", "youtube":
+		return "ytmusic"
+	}
+	return name
 }
 
 // pluginSection returns the plugin name of a [plugins] or [plugins.<name>]
@@ -1044,7 +1055,7 @@ func (c *Config) setTopLevel(key, val string) {
 // all other content, comments, and formatting. If the key doesn't exist,
 // it is appended. If no config file exists, one is created with just that key.
 func Save(key, value string) error {
-	path, err := configPath()
+	path, err := Path()
 	if err != nil {
 		return err
 	}
@@ -1107,7 +1118,7 @@ func Save(key, value string) error {
 // in-place, or appends it after the [navidrome] section if not present.
 // If no [navidrome] section exists, one is appended along with the key.
 func SaveNavidromeSort(sortType string) error {
-	return saveSectionValue("navidrome", "browse_sort", QuoteString(sortType))
+	return SaveSection("navidrome", []KeyValue{{"browse_sort", QuoteString(sortType)}}, nil)
 }
 
 // SaveRadioCountry persists the listener's home country in the [radio] section
@@ -1117,7 +1128,7 @@ func SaveRadioCountry(code string) error {
 	if code == "" {
 		code = "none"
 	}
-	return saveSectionValue("radio", "country", QuoteString(code))
+	return SaveSection("radio", []KeyValue{{"country", QuoteString(code)}}, nil)
 }
 
 // SaveMixcloudStyles persists the selected discovery styles in the [mixcloud]
@@ -1127,82 +1138,118 @@ func SaveMixcloudStyles(styles []string) error {
 	for _, style := range styles {
 		quoted = append(quoted, QuoteString(style))
 	}
-	return saveSectionValue("mixcloud", "styles", "["+strings.Join(quoted, ", ")+"]")
+	return SaveSection("mixcloud", []KeyValue{{"styles", "[" + strings.Join(quoted, ", ") + "]"}}, nil)
 }
 
-func saveSectionValue(section, key, value string) error {
-	path, err := configPath()
+// KeyValue is one key line for SaveSection. Value is the TOML text of the
+// value, such as QuoteString(s), a number, a bool or a list.
+type KeyValue struct {
+	Key, Value string
+}
+
+// SaveSection writes kv into the [section] block of the config file and
+// keeps every other line. It replaces a key in place and adds a missing key
+// after the last key of the section. It removes each key in owned that kv
+// does not hold, and it keeps all other keys and all comments. Headers match
+// the way Load reads them, so section "ytmusic" also edits [youtube] or [yt].
+// A missing section is added at the end, and a missing file is created.
+func SaveSection(section string, kv []KeyValue, owned []string) error {
+	for _, e := range kv {
+		if strings.ContainsAny(e.Key+e.Value, "\r\n") {
+			return fmt.Errorf("save [%s] %s: a key or value holds a line break", section, e.Key)
+		}
+	}
+	path, err := Path()
 	if err != nil {
 		return fmt.Errorf("resolve config path: %w", err)
 	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
-	}
-
-	line := fmt.Sprintf("%s = %s", key, value)
-
 	data, err := os.ReadFile(path)
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("read config: %w", err)
-		}
-		// No file: create with section + key.
-		if err := fileutil.WriteFileAtomic(path, []byte("["+section+"]\n"+line+"\n"), 0o600); err != nil {
-			return fmt.Errorf("write config: %w", err)
-		}
-		return nil
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("read config: %w", err)
 	}
-
-	lines := strings.Split(string(data), "\n")
-
-	// Try to replace the existing key inside the requested section.
-	inSection := false
-	for i, l := range lines {
-		trimmed := strings.TrimSpace(l)
-		if name, ok := sectionHeader(trimmed); ok {
-			inSection = strings.EqualFold(name, section)
-			continue
-		}
-		if inSection {
-			k, _, ok := strings.Cut(trimmed, "=")
-			if ok && strings.TrimSpace(k) == key {
-				lines[i] = line
-				if err := fileutil.WriteFileAtomic(path, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
-					return fmt.Errorf("write config: %w", err)
-				}
-				return nil
-			}
-		}
-	}
-
-	// Key not found: append after the last line in the requested section, or
-	// append a new section at the end.
-	inSection = false
-	insertAt := -1
-	for i, l := range lines {
-		if name, ok := sectionHeader(strings.TrimSpace(l)); ok {
-			if inSection && insertAt >= 0 {
-				break
-			}
-			inSection = strings.EqualFold(name, section)
-		}
-		if inSection {
-			insertAt = i
-		}
-	}
-
-	if insertAt >= 0 {
-		tail := append([]string{line}, lines[insertAt+1:]...)
-		lines = append(lines[:insertAt+1], tail...)
-	} else {
-		lines = append(lines, "["+section+"]", line)
-	}
-
-	if err := fileutil.WriteFileAtomic(path, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
+	out := editSection(string(data), section, kv, owned)
+	if err := fileutil.WriteFileAtomic(path, []byte(out), 0o600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
+}
+
+// editSection returns data with kv written into [section]. SaveSection
+// describes the rules.
+func editSection(data, section string, kv []KeyValue, owned []string) string {
+	values := make(map[string]string, len(kv))
+	for _, e := range kv {
+		values[e.Key] = e.Value
+	}
+	written := make(map[string]bool, len(kv))
+	target := canonicalSection(section)
+
+	var lines []string
+	if data != "" {
+		lines = strings.Split(data, "\n")
+	}
+	out := make([]string, 0, len(lines)+len(kv)+3)
+	inSection := false
+	block := 0     // matching blocks seen so far
+	insertAt := -1 // missing keys go before out[insertAt]
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if name, ok := sectionHeader(trimmed); ok {
+			inSection = canonicalSection(name) == target
+			out = append(out, l)
+			if inSection {
+				block++
+				if block == 1 {
+					insertAt = len(out)
+				}
+			}
+			continue
+		}
+		if inSection && !strings.HasPrefix(trimmed, "#") {
+			if before, _, ok := strings.Cut(l, "="); ok {
+				key := strings.TrimSpace(before)
+				if v, ok := values[key]; ok {
+					if !strings.HasSuffix(before, " ") && !strings.HasSuffix(before, "\t") {
+						before += " "
+					}
+					l = before + "= " + v
+					written[key] = true
+				} else if slices.Contains(owned, key) {
+					continue
+				}
+				out = append(out, l)
+				if block == 1 {
+					insertAt = len(out)
+				}
+				continue
+			}
+		}
+		out = append(out, l)
+	}
+
+	var missing []string
+	for _, e := range kv {
+		if !written[e.Key] {
+			written[e.Key] = true
+			missing = append(missing, e.Key+" = "+values[e.Key])
+		}
+	}
+	switch {
+	case len(missing) == 0:
+	case insertAt >= 0:
+		out = slices.Insert(out, insertAt, missing...)
+	default:
+		for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+			out = out[:len(out)-1]
+		}
+		if len(out) > 0 {
+			out = append(out, "")
+		}
+		out = append(out, "["+section+"]")
+		out = append(out, missing...)
+		out = append(out, "")
+	}
+	return strings.Join(out, "\n")
 }
 
 // PlayerConfig is the subset of player controls needed to apply config.
