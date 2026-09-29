@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
@@ -43,6 +44,8 @@ type Provider struct {
 	dir       string // e.g. ~/.config/cliamp/playlists/
 	history   *history.Store
 	favorites *favorites.Store
+
+	mu sync.Mutex // see lock
 }
 
 // New creates a Provider using ~/.config/cliamp/playlists/ as the base directory.
@@ -79,6 +82,29 @@ func validateNewName(name string) error {
 		return fmt.Errorf("invalid playlist name %q", name)
 	}
 	return nil
+}
+
+// lock serializes the load-modify-save cycles of playlist writes. The mutex
+// covers goroutines that share this Provider. The file lock covers other
+// Provider values and other cliamp processes, such as the `cliamp playlist`
+// CLI next to the TUI. A method that holds the lock must not call another
+// method that takes it.
+func (p *Provider) lock() (func(), error) {
+	p.mu.Lock()
+	path := p.dir + ".lock"
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		p.mu.Unlock()
+		return nil, fmt.Errorf("creating config dir: %w", err)
+	}
+	unlock, err := fileutil.LockFile(path)
+	if err != nil {
+		p.mu.Unlock()
+		return nil, err
+	}
+	return func() {
+		_ = unlock()
+		p.mu.Unlock()
+	}, nil
 }
 
 func isHistoryName(name string) bool {
@@ -243,6 +269,11 @@ func (p *Provider) AddTracks(playlistName string, tracks []playlist.Track) (adde
 	if err := writable(playlistName); err != nil {
 		return 0, 0, err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer unlock()
 	if err := os.MkdirAll(p.dir, 0o755); err != nil {
 		return 0, 0, err
 	}
@@ -317,6 +348,11 @@ func (p *Provider) PrependTracks(playlistName string, tracks []playlist.Track) (
 	if len(tracks) == 0 {
 		return 0, 0, 0, nil
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer unlock()
 	if err := os.MkdirAll(p.dir, 0o755); err != nil {
 		return 0, 0, 0, fmt.Errorf("creating playlist dir: %w", err)
 	}
@@ -519,6 +555,11 @@ func (p *Provider) AddDirSources(name string, dirs []string) ([]string, error) {
 			return nil, err
 		}
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	if err := os.MkdirAll(p.dir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating playlist dir: %w", err)
 	}
@@ -603,6 +644,11 @@ func (p *Provider) RemoveDirSource(name, dir string) error {
 	if err := writable(name); err != nil {
 		return err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	path, err := p.safePath(name)
 	if err != nil {
 		return fmt.Errorf("resolving playlist path: %w", err)
@@ -643,6 +689,11 @@ func (p *Provider) SetDirRecursive(name, dir string, recursive bool) error {
 	if err := writable(name); err != nil {
 		return err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	path, err := p.safePath(name)
 	if err != nil {
 		return fmt.Errorf("resolving playlist path: %w", err)
@@ -810,6 +861,11 @@ func (p *Provider) SetBookmark(playlistName string, idx int) error {
 	if err := writable(playlistName); err != nil {
 		return err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	tracks, err := p.expandedTracks(playlistName)
 	if err != nil {
 		return err
@@ -831,6 +887,11 @@ func (p *Provider) SetBookmarkByPath(playlistName string, path string) error {
 	if err := writable(playlistName); err != nil {
 		return err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	tracks, err := p.expandedTracks(playlistName)
 	if err != nil {
 		return err
@@ -859,6 +920,11 @@ func (p *Provider) SavePlaylist(name string, tracks []playlist.Track) error {
 	if err := writable(name); err != nil {
 		return err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	return p.savePlaylist(name, tracks)
 }
 
@@ -957,6 +1023,11 @@ func (p *Provider) RenamePlaylist(oldName, newName string) error {
 	if err := writable(newName); err != nil {
 		return err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	oldPath, err := p.safePath(oldName)
 	if err != nil {
 		return fmt.Errorf("invalid playlist name %q: %w", oldName, err)
@@ -985,6 +1056,11 @@ func (p *Provider) DeletePlaylist(name string) error {
 	if err := writable(name); err != nil {
 		return err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	path, err := p.safePath(name)
 	if err != nil {
 		return err
@@ -1012,6 +1088,11 @@ func (p *Provider) RestorePlaylistDocument(name string, data []byte) error {
 	if err := writable(name); err != nil {
 		return err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := os.MkdirAll(p.dir, 0o755); err != nil {
 		return fmt.Errorf("creating playlist dir: %w", err)
 	}
@@ -1083,6 +1164,11 @@ func (p *Provider) RemoveTrack(name string, index int) error {
 	if err := writable(name); err != nil {
 		return err
 	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	tracks, err := p.expandedTracks(name)
 	if err != nil {
 		return err
