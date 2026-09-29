@@ -41,6 +41,29 @@ func TestWriteHistory(t *testing.T) {
 			entries: []history.Entry{remote, local},
 			want:    "Recently Played (2 tracks)\n\n    1. Artist - Song  (3m ago)\n    2. A  (2h ago)\n",
 		},
+		{
+			name:       "json keeps provider meta",
+			entries:    []history.Entry{remote, local},
+			jsonOutput: true,
+			want: `[
+  {
+    "played_at": "2026-09-30T11:57:00Z",
+    "path": "https://music.example.com/rest/stream?id=1",
+    "title": "Song",
+    "artist": "Artist",
+    "duration_secs": 200,
+    "provider_meta": {
+      "navidrome.id": "1"
+    }
+  },
+  {
+    "played_at": "2026-09-30T10:00:00Z",
+    "path": "/music/a.mp3",
+    "title": "A"
+  }
+]
+`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
