@@ -14,8 +14,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -224,99 +222,33 @@ func mergeTrackMeta(prev, cur playlist.Track) playlist.Track {
 	if cur.DurationSecs == 0 {
 		cur.DurationSecs = prev.DurationSecs
 	}
+	cur.Feed = cur.Feed || prev.Feed
+	cur.Realtime = cur.Realtime || prev.Realtime
+	if len(cur.ProviderMeta) == 0 {
+		cur.ProviderMeta = prev.ProviderMeta
+	}
 	return cur
 }
 
 func writeEntry(w io.Writer, e Entry) {
-	fmt.Fprintf(w, "[[entry]]\n")
+	fmt.Fprintln(w, "[[entry]]")
 	fmt.Fprintf(w, "played_at = %q\n", e.PlayedAt.UTC().Format(time.RFC3339))
-	fmt.Fprintf(w, "path = %q\n", e.Track.Path)
-	fmt.Fprintf(w, "title = %q\n", e.Track.Title)
-	if e.Track.Artist != "" {
-		fmt.Fprintf(w, "artist = %q\n", e.Track.Artist)
-	}
-	if e.Track.Album != "" {
-		fmt.Fprintf(w, "album = %q\n", e.Track.Album)
-	}
-	if e.Track.Genre != "" {
-		fmt.Fprintf(w, "genre = %q\n", e.Track.Genre)
-	}
-	if e.Track.Year != 0 {
-		fmt.Fprintf(w, "year = %d\n", e.Track.Year)
-	}
-	if e.Track.TrackNumber != 0 {
-		fmt.Fprintf(w, "track_number = %d\n", e.Track.TrackNumber)
-	}
-	if e.Track.DurationSecs != 0 {
-		fmt.Fprintf(w, "duration_secs = %d\n", e.Track.DurationSecs)
-	}
+	playlist.WriteTrackTOML(w, e.Track)
 }
 
 // parse skips unknown keys to keep the on-disk format forward-compatible.
+// It drops entries without a path, the only required field.
 func parse(data []byte) []Entry {
 	var entries []Entry
-	var cur *Entry
-
-	flush := func() {
-		if cur != nil {
-			entries = append(entries, *cur)
+	tomlutil.ParseSections(data, "entry", func(f map[string]string) {
+		e := Entry{Track: playlist.TrackFromTOML(f)}
+		if strings.TrimSpace(e.Track.Path) == "" {
+			return
 		}
-	}
-
-	for rawLine := range strings.SplitSeq(string(data), "\n") {
-		line := strings.TrimSpace(rawLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+		if t, err := time.Parse(time.RFC3339, f["played_at"]); err == nil {
+			e.PlayedAt = t
 		}
-		if line == "[[entry]]" {
-			flush()
-			cur = &Entry{}
-			continue
-		}
-		if cur == nil {
-			continue
-		}
-		key, val, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		val = tomlutil.Unquote(strings.TrimSpace(val))
-		switch key {
-		case "played_at":
-			if t, err := time.Parse(time.RFC3339, val); err == nil {
-				cur.PlayedAt = t
-			}
-		case "path":
-			cur.Track.Path = val
-			cur.Track.Stream = playlist.IsURL(val)
-		case "title":
-			cur.Track.Title = val
-		case "artist":
-			cur.Track.Artist = val
-		case "album":
-			cur.Track.Album = val
-		case "genre":
-			cur.Track.Genre = val
-		case "year":
-			if n, err := strconv.Atoi(val); err == nil {
-				cur.Track.Year = n
-			}
-		case "track_number":
-			if n, err := strconv.Atoi(val); err == nil {
-				cur.Track.TrackNumber = n
-			}
-		case "duration_secs":
-			if n, err := strconv.Atoi(val); err == nil {
-				cur.Track.DurationSecs = n
-			}
-		}
-	}
-	flush()
-
-	// Drop entries that failed to parse a path (the only required field).
-	entries = slices.DeleteFunc(entries, func(e Entry) bool {
-		return strings.TrimSpace(e.Track.Path) == ""
+		entries = append(entries, e)
 	})
 	return entries
 }

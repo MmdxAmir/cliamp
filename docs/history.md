@@ -43,6 +43,11 @@ year = 1979
 duration_secs = 208
 ```
 
+An entry can also hold `feed = true`, `realtime = true` and
+`provider_meta.<key>` lines, as `favorites.toml` does. With these keys, a
+Navidrome or Jellyfin track that you replay from Recently Played still
+scrobbles, and cliamp still recognizes a radio station or a podcast episode.
+
 The default limit is 200 entries. cliamp removes older plays in FIFO order.
 Consecutive plays of the same track within 5 minutes update the top entry time
 instead of adding another entry.

@@ -3,6 +3,7 @@ package history
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -264,5 +265,104 @@ title = "A"
 	}
 	if len(got) != 3 {
 		t.Fatalf("entries = %d, want 3 after a clean rewrite", len(got))
+	}
+}
+
+// Recently Played must keep what makes a track work after a restart:
+// provider IDs for scrobbling and starring, the station meta for radio, and
+// the feed and GUID for a podcast episode.
+func TestProviderMetaSurvivesRecordAndTracks(t *testing.T) {
+	tests := []struct {
+		name  string
+		track playlist.Track
+	}{
+		{
+			name: "navidrome track",
+			track: playlist.Track{
+				Path:         "https://nd.example.com/rest/stream?id=42",
+				Title:        "Song",
+				Artist:       "Artist",
+				DurationSecs: 208,
+				ProviderMeta: map[string]string{"navidrome.id": "42"},
+			},
+		},
+		{
+			name: "jellyfin track",
+			track: playlist.Track{
+				Path:         "https://jf.example.com/Audio/7/universal",
+				Title:        "Song",
+				ProviderMeta: map[string]string{"jellyfin.id": "7"},
+			},
+		},
+		{
+			name: "radio station",
+			track: playlist.Track{
+				Path:     "https://radio.example.com/live",
+				Title:    "Station",
+				Realtime: true,
+				ProviderMeta: map[string]string{
+					"radio.name": "Station",
+					"radio.url":  "https://radio.example.com/live",
+				},
+			},
+		},
+		{
+			name: "podcast feed",
+			track: playlist.Track{
+				Path:  "https://example.com/podcast?feed_id=7",
+				Title: "Show",
+				Feed:  true,
+				ProviderMeta: map[string]string{
+					"podcast.feed": "https://example.com/podcast?feed_id=7",
+					"podcast.guid": "guid-1",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStore(t)
+			mustRecord(t, s, tt.track, time.Now())
+
+			tracks, err := NewAt(s.Path()).Tracks(0)
+			if err != nil {
+				t.Fatalf("Tracks: %v", err)
+			}
+			want := tt.track
+			want.Stream = true
+			if len(tracks) != 1 || !reflect.DeepEqual(tracks[0], want) {
+				t.Fatalf("Tracks after reload:\n got %+v\nwant %+v", tracks, want)
+			}
+		})
+	}
+}
+
+func TestMergeTrackMeta(t *testing.T) {
+	meta := map[string]string{"navidrome.id": "42"}
+	tests := []struct {
+		name string
+		prev playlist.Track
+		cur  playlist.Track
+		want playlist.Track
+	}{
+		{
+			name: "sparse replay keeps the stored meta and flags",
+			prev: playlist.Track{Path: "/a", Title: "A", Realtime: true, Feed: true, ProviderMeta: meta},
+			cur:  playlist.Track{Path: "/a"},
+			want: playlist.Track{Path: "/a", Title: "A", Realtime: true, Feed: true, ProviderMeta: meta},
+		},
+		{
+			name: "replay meta replaces the stored meta",
+			prev: playlist.Track{Path: "/a", ProviderMeta: meta},
+			cur:  playlist.Track{Path: "/a", ProviderMeta: map[string]string{"jellyfin.id": "7"}},
+			want: playlist.Track{Path: "/a", ProviderMeta: map[string]string{"jellyfin.id": "7"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := mergeTrackMeta(tt.prev, tt.cur); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("mergeTrackMeta:\n got %+v\nwant %+v", got, tt.want)
+			}
+		})
 	}
 }
