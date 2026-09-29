@@ -298,8 +298,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 
 	var closeYouTube func()
 	var ytOAuth *ytmusic.Providers // set when YouTube signs in through OAuth
-	// cliamp ships no YouTube OAuth client, so nil passes no fallback.
-	ytWanted := cfg.YouTubeMusic.IsSetOrFallback(nil)
+	ytWanted := cfg.YouTubeMusic.IsSet()
 	if !ytWanted {
 		switch cfg.Provider {
 		case "yt", "youtube", "ytmusic":

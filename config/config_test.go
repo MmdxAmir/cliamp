@@ -615,59 +615,24 @@ func TestJellyfinIsSet(t *testing.T) {
 	}
 }
 
-func TestYouTubeMusicIsSetOrFallback(t *testing.T) {
-	hasFallback := func() (string, string) { return "id", "secret" }
-	noFallback := func() (string, string) { return "", "" }
-
+func TestYouTubeMusicIsSet(t *testing.T) {
 	tests := []struct {
-		name       string
-		cfg        YouTubeMusicConfig
-		fallbackFn func() (string, string)
-		want       bool
+		name string
+		cfg  YouTubeMusicConfig
+		want bool
 	}{
-		{"enabled section", YouTubeMusicConfig{Enabled: true}, nil, true},
-		{"cookies_from set", YouTubeMusicConfig{CookiesFrom: "chrome"}, nil, true},
-		{"cookies_from whitespace only", YouTubeMusicConfig{CookiesFrom: "   "}, nil, false},
-		{"cookies_from whitespace only with fallback", YouTubeMusicConfig{CookiesFrom: "   \t\n"}, hasFallback, true},
-		{"cookies_from with disabled", YouTubeMusicConfig{Disabled: true, CookiesFrom: "chrome"}, nil, false},
-		{"disabled", YouTubeMusicConfig{Disabled: true}, hasFallback, false},
-		{"fallback available", YouTubeMusicConfig{}, hasFallback, true},
-		{"no fallback", YouTubeMusicConfig{}, noFallback, false},
-		{"nil fallback", YouTubeMusicConfig{}, nil, false},
+		{"enabled section", YouTubeMusicConfig{Enabled: true}, true},
+		{"cookies_from set", YouTubeMusicConfig{CookiesFrom: "chrome"}, true},
+		{"cookies_from whitespace only", YouTubeMusicConfig{CookiesFrom: "   \t\n"}, false},
+		{"cookies_from with disabled", YouTubeMusicConfig{Disabled: true, CookiesFrom: "chrome"}, false},
+		{"disabled", YouTubeMusicConfig{Disabled: true}, false},
+		{"credentials without section", YouTubeMusicConfig{ClientID: "id", ClientSecret: "secret"}, false},
+		{"not configured", YouTubeMusicConfig{}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.cfg.IsSetOrFallback(tt.fallbackFn); got != tt.want {
-				t.Errorf("IsSetOrFallback() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestYouTubeMusicResolveCredentials(t *testing.T) {
-	fallback := func() (string, string) { return "fb_id", "fb_secret" }
-
-	tests := []struct {
-		name       string
-		cfg        YouTubeMusicConfig
-		fallbackFn func() (string, string)
-		wantID     string
-		wantSecret string
-	}{
-		{"user credentials take priority", YouTubeMusicConfig{ClientID: "my_id", ClientSecret: "my_secret"}, fallback, "my_id", "my_secret"},
-		{"whitespace credentials fall back", YouTubeMusicConfig{ClientID: "  ", ClientSecret: "\t"}, fallback, "fb_id", "fb_secret"},
-		{"valid configured credentials with whitespace are trimmed", YouTubeMusicConfig{ClientID: "  my_id  ", ClientSecret: "  my_secret \t"}, fallback, "my_id", "my_secret"},
-		{"incomplete client secret falls back", YouTubeMusicConfig{ClientID: "my_id", ClientSecret: "   "}, fallback, "fb_id", "fb_secret"},
-		{"incomplete client id falls back", YouTubeMusicConfig{ClientID: "   ", ClientSecret: "my_secret"}, fallback, "fb_id", "fb_secret"},
-		{"whitespace in fallback credentials is trimmed", YouTubeMusicConfig{}, func() (string, string) { return "  fb_id  ", " \tfb_secret\n" }, "fb_id", "fb_secret"},
-		{"falls back when empty", YouTubeMusicConfig{}, fallback, "fb_id", "fb_secret"},
-		{"nil fallback returns empty", YouTubeMusicConfig{}, nil, "", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			id, secret := tt.cfg.ResolveCredentials(tt.fallbackFn)
-			if id != tt.wantID || secret != tt.wantSecret {
-				t.Errorf("got (%q, %q), want (%q, %q)", id, secret, tt.wantID, tt.wantSecret)
+			if got := tt.cfg.IsSet(); got != tt.want {
+				t.Errorf("IsSet() = %v, want %v", got, tt.want)
 			}
 		})
 	}

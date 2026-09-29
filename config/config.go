@@ -165,47 +165,21 @@ func (t TidalConfig) IsSet() bool {
 }
 
 // YouTubeMusicConfig holds settings for the YouTube Music provider.
-// If no client_id/client_secret are set, built-in fallback credentials are
-// used automatically (same pattern as Spotify).
+// cliamp ships no OAuth client, so sign-in needs client_id and client_secret
+// from the user. cookies_from alone enables the cookie mode.
 type YouTubeMusicConfig struct {
 	Disabled       bool   // true only when user explicitly sets enabled = false
 	Enabled        bool   // true when [ytmusic] section exists (even without credentials)
-	ClientID       string // Google Cloud OAuth2 client ID (overrides built-in fallback)
-	ClientSecret   string // Google Cloud OAuth2 client secret (overrides built-in fallback)
+	ClientID       string // Google Cloud OAuth2 client ID
+	ClientSecret   string // Google Cloud OAuth2 client secret
 	CookiesFrom    string // browser name for yt-dlp --cookies-from-browser (e.g. "chrome", "firefox")
 	ExpandPlaylist *bool  // nil = default (true), controls whether list= URLs expand the full playlist
 }
 
-// IsSetOrFallback returns true when YouTube providers should be enabled,
-// either via config or because fallback credentials are available.
-func (y YouTubeMusicConfig) IsSetOrFallback(fallbackFn func() (string, string)) bool {
-	if y.Disabled {
-		return false
-	}
-	if y.Enabled || strings.TrimSpace(y.CookiesFrom) != "" {
-		return true
-	}
-	// Even without a config section, enable if fallback credentials exist.
-	if fallbackFn != nil {
-		id, secret := fallbackFn()
-		return strings.TrimSpace(id) != "" && strings.TrimSpace(secret) != ""
-	}
-	return false
-}
-
-// ResolveCredentials returns the user's configured credentials, or falls back
-// to the built-in pool. Returns empty strings only when the pool is also empty.
-func (y YouTubeMusicConfig) ResolveCredentials(fallbackFn func() (string, string)) (clientID, clientSecret string) {
-	id := strings.TrimSpace(y.ClientID)
-	secret := strings.TrimSpace(y.ClientSecret)
-	if id != "" && secret != "" {
-		return id, secret
-	}
-	if fallbackFn != nil {
-		fbID, fbSecret := fallbackFn()
-		return strings.TrimSpace(fbID), strings.TrimSpace(fbSecret)
-	}
-	return "", ""
+// IsSet reports whether the YouTube providers should be enabled: the
+// [ytmusic] section exists or cookies_from is set, and enabled is not false.
+func (y YouTubeMusicConfig) IsSet() bool {
+	return !y.Disabled && (y.Enabled || strings.TrimSpace(y.CookiesFrom) != "")
 }
 
 // RadioConfig holds settings for the built-in Radio provider. Radio is always
