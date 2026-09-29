@@ -687,17 +687,6 @@ func TestExistsForHistoryName(t *testing.T) {
 	}
 }
 
-func TestClearHistoryRemovesEntries(t *testing.T) {
-	p := newTestProviderWithHistory(t)
-	p.history.Record(playlist.Track{Path: "/a.mp3"}, time.Now())
-	if err := p.ClearHistory(); err != nil {
-		t.Fatalf("ClearHistory: %v", err)
-	}
-	if got, _ := p.history.Recent(0); len(got) != 0 {
-		t.Errorf("history not cleared: %d entries remain", len(got))
-	}
-}
-
 // --- SearchTracks (fuzzy) ---
 
 func TestTrackMatchScore(t *testing.T) {

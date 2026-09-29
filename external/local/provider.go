@@ -1009,7 +1009,8 @@ func (p *Provider) RenamePlaylist(oldName, newName string) error {
 }
 
 // DeletePlaylist removes the TOML file for the named playlist.
-// "Recently Played" cannot be deleted via this method — use ClearHistory.
+// The virtual playlists cannot be deleted. Clear them with history.Store.Clear
+// or favorites.Store.Clear.
 func (p *Provider) DeletePlaylist(name string) error {
 	if err := writable(name); err != nil {
 		return err
@@ -1062,29 +1063,6 @@ func (p *Provider) RestorePlaylistDocument(name string, data []byte) error {
 		return fmt.Errorf("replacing playlist %q: %w", name, err)
 	}
 	return nil
-}
-
-// ClearHistory wipes the recorded play history. Returns nil if no history
-// exists yet.
-func (p *Provider) ClearHistory() error {
-	if p.history == nil {
-		return nil
-	}
-	return p.history.Clear()
-}
-
-// ClearFavorites wipes the favorites list. Returns nil if no favorites exist.
-func (p *Provider) ClearFavorites() error {
-	if p.favorites == nil {
-		return nil
-	}
-	return p.favorites.Clear()
-}
-
-// FavoritesStore returns the underlying favorites store so the UI can toggle
-// favorites without going through the playlist write path.
-func (p *Provider) FavoritesStore() *favorites.Store {
-	return p.favorites
 }
 
 // ToggleFavorite toggles a track in the favorites store.
