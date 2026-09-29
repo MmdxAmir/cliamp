@@ -19,8 +19,8 @@ import (
 //
 // A cell keeps the highest tag drawn into it, which is what puts every bar in
 // front of every star: the four star tags sit below the three bar tags. That
-// ordering is why this mode rasterises into a grid of its own rather than the
-// shared brailleGrid, whose three tiers leave no room below the bars.
+// ordering is why this mode gives its brailleGrid seven tags rather than the
+// three spectrum tiers, which leave no room below the bars.
 
 const (
 	redSectorBars      = 5
@@ -93,7 +93,7 @@ var redSectorFaces = [6][4]int{
 // frames. Both outlive a single render, which is why this mode carries a
 // driver of its own rather than a plain render function.
 type redSectorDriver struct {
-	grid    redSectorGrid
+	grid    brailleGrid
 	ceiling [redSectorBars]float64
 	floor   [redSectorBars]float64
 	heights [redSectorBars]float64
@@ -112,7 +112,7 @@ func (d *redSectorDriver) reset() {
 		d.floor[i] = 1
 		d.heights[i] = redSectorMinHeight
 	}
-	d.grid = redSectorGrid{}
+	d.grid = newRedSectorGrid()
 }
 
 func (*redSectorDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
@@ -376,92 +376,20 @@ func (d *redSectorDriver) drawLine(dotRows, dotCols int, x0, y0, x1, y1 float64,
 	}
 }
 
-// redSectorGrid is a 4x2 dot-per-cell rasteriser with a tag per dot. It is the
-// shared brailleGrid with a wider palette: seven tags instead of three, so the
-// stars have somewhere to sit below the bars. A cell wears the highest tag any
-// of its eight dots carries.
-type redSectorGrid struct {
-	cells   []int8
-	dotRows int
-	dotCols int
+// newRedSectorGrid returns a brailleGrid with the seven Red Sector tags, so the
+// stars have somewhere to sit below the bars. A blank cell keeps the colour
+// that runs.
+func newRedSectorGrid() brailleGrid {
+	return brailleGrid{flush: flushRedSectorRun, keepRunOnEmpty: true}
 }
 
-func (g *redSectorGrid) ensure(rows, cols int) {
-	if rows == g.dotRows && cols == g.dotCols && len(g.cells) == rows*cols {
-		for i := range g.cells {
-			g.cells[i] = 0
-		}
-		return
-	}
-	g.cells = make([]int8, rows*cols)
-	g.dotRows = rows
-	g.dotCols = cols
-}
-
-func (g *redSectorGrid) set(x, y int, tag int8) {
-	if x < 0 || x >= g.dotCols || y < 0 || y >= g.dotRows {
-		return
-	}
-	if tag > g.cells[y*g.dotCols+x] {
-		g.cells[y*g.dotCols+x] = tag
-	}
-}
-
-// render flattens the dot grid to len(rows) lines, packing 4x2 dot blocks into
-// Braille glyphs and emitting tag-coloured runs. An empty cell keeps whatever
-// colour is running: a blank Braille glyph paints nothing, so breaking the run
-// there would only add ANSI noise.
-func (g *redSectorGrid) render(rows int) string {
-	if g.dotRows < rows*4 || g.dotCols < PanelWidth*2 {
-		return strings.Repeat("\n", max(0, rows-1))
-	}
-	lines := make([]string, rows)
-	for row := range rows {
-		var sb, run strings.Builder
-		tag := 0
-		for col := range PanelWidth {
-			var braille rune = '⠀'
-			cellTag := 0
-			for dr := range 4 {
-				for dc := range 2 {
-					t := g.cells[(row*4+dr)*g.dotCols+col*2+dc]
-					if t == 0 {
-						continue
-					}
-					braille |= brailleBit[dr][dc]
-					cellTag = max(cellTag, int(t))
-				}
-			}
-			if cellTag != 0 && cellTag != tag {
-				flushRedSectorRun(&sb, &run, tag)
-				tag = cellTag
-			}
-			run.WriteRune(braille)
-		}
-		flushRedSectorRun(&sb, &run, tag)
-		lines[row] = sb.String()
-	}
-	return strings.Join(lines, "\n")
-}
-
+// flushRedSectorRun colours a run by its Red Sector tag. Tag 0 is unstyled.
 func flushRedSectorRun(sb *strings.Builder, run *strings.Builder, tag int) {
-	if run.Len() == 0 {
-		return
-	}
 	var prefix, suffix string
 	if tag >= 1 && tag <= redSectorTagCount {
 		prefix, suffix = redSectorPrefix[tag-1], redSectorSuffix[tag-1]
 	}
-	if prefix != "" {
-		sb.WriteString(prefix)
-	}
-	// run.String() aliases the builder's backing array (no allocation) and we
-	// copy those bytes into sb before run.Reset() releases the slice.
-	sb.WriteString(run.String())
-	if suffix != "" {
-		sb.WriteString(suffix)
-	}
-	run.Reset()
+	writeStyledRun(sb, run, prefix, suffix)
 }
 
 // Raw ANSI wrappers for the seven tags, cached the way the spectrum styles are

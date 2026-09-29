@@ -177,7 +177,7 @@ func TestRedSectorBarsOutrankStars(t *testing.T) {
 	}
 
 	// A star drawn into a cell a bar already owns leaves it alone.
-	var g redSectorGrid
+	g := newRedSectorGrid()
 	g.ensure(4, 4)
 	g.set(0, 0, redSectorTagLow)
 	g.set(0, 0, redSectorStarTags)
@@ -333,7 +333,7 @@ func abs(n int) int {
 	return n
 }
 
-func equalGrids(a, b redSectorGrid) bool {
+func equalGrids(a, b brailleGrid) bool {
 	if len(a.cells) != len(b.cells) {
 		return false
 	}

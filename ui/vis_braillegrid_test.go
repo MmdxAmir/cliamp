@@ -160,3 +160,90 @@ func TestSharedDotBuffersDoNotLeakBetweenModes(t *testing.T) {
 		}
 	}
 }
+
+func TestBrailleGridRenderPalettes(t *testing.T) {
+	withPanelWidth(t, 3)
+	spec := func(tier int, body string) string {
+		var sb, run strings.Builder
+		run.WriteString(body)
+		flushSpectrumTier(&sb, &run, tier)
+		return sb.String()
+	}
+	star := func(tag int, body string) string {
+		var sb, run strings.Builder
+		run.WriteString(body)
+		flushRedSectorRun(&sb, &run, tag)
+		return sb.String()
+	}
+	tests := []struct {
+		name  string
+		grid  brailleGrid
+		tiers [3]int8 // tier of the top-left dot of each cell
+		want  string
+	}{
+		{
+			name:  "spectrum blank cell breaks the run",
+			grid:  brailleGrid{},
+			tiers: [3]int8{3, 0, 3},
+			want:  spec(3, "⠁") + spec(1, "⠀") + spec(3, "⠁"),
+		},
+		{
+			name:  "spectrum keeps a run of one tier",
+			grid:  brailleGrid{},
+			tiers: [3]int8{2, 2, 1},
+			want:  spec(2, "⠁⠁") + spec(1, "⠁"),
+		},
+		{
+			name:  "red sector blank cell joins the run",
+			grid:  newRedSectorGrid(),
+			tiers: [3]int8{redSectorTagLow, 0, redSectorTagLow},
+			want:  star(redSectorTagLow, "⠁⠀⠁"),
+		},
+		{
+			name:  "red sector leading blank is unstyled",
+			grid:  newRedSectorGrid(),
+			tiers: [3]int8{0, 2, redSectorTagHigh},
+			want:  star(0, "⠀") + star(2, "⠁") + star(redSectorTagHigh, "⠁"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := tt.grid
+			g.ensure(4, 6)
+			for col, tier := range tt.tiers {
+				g.set(col*2, 0, tier)
+			}
+			if got := g.render(1); got != tt.want {
+				t.Fatalf("render = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBrailleGridResizeKeepsCells(t *testing.T) {
+	tests := []struct {
+		name       string
+		rows, cols int
+		keep       bool
+	}{
+		{name: "same size keeps the cells", rows: 4, cols: 2, keep: true},
+		{name: "new size starts empty", rows: 8, cols: 2, keep: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var g brailleGrid
+			g.resize(4, 2)
+			g.set(1, 1, 2)
+			g.resize(tt.rows, tt.cols)
+			if got := g.cells[1*g.dotCols+1] == 2; got != tt.keep {
+				t.Fatalf("cell kept = %v, want %v", got, tt.keep)
+			}
+			g.ensure(tt.rows, tt.cols)
+			for i, c := range g.cells {
+				if c != 0 {
+					t.Fatalf("ensure left cell %d at tier %d", i, c)
+				}
+			}
+		})
+	}
+}

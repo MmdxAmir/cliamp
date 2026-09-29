@@ -1217,9 +1217,6 @@ func specWrap(rowBottom float64, body string) string {
 // Streaming via the pre-extracted prefix/suffix strings avoids allocating a
 // fresh lipgloss.Render result on every flush (the hot path for Matrix/Pulse).
 func flushStyleRun(sb *strings.Builder, run *strings.Builder, tag int) {
-	if run.Len() == 0 {
-		return
-	}
 	var prefix, suffix string
 	switch tag {
 	case 2:
@@ -1229,14 +1226,19 @@ func flushStyleRun(sb *strings.Builder, run *strings.Builder, tag int) {
 	case 0:
 		prefix, suffix = specLowPrefix, specLowSuffix
 	}
-	if prefix != "" {
-		sb.WriteString(prefix)
+	writeStyledRun(sb, run, prefix, suffix)
+}
+
+// writeStyledRun appends run to sb between the ANSI prefix and suffix of its
+// style, then resets run. An empty run writes nothing.
+func writeStyledRun(sb, run *strings.Builder, prefix, suffix string) {
+	if run.Len() == 0 {
+		return
 	}
+	sb.WriteString(prefix)
 	// run.String() aliases the builder's backing array (no allocation) and we
 	// copy those bytes into sb before run.Reset() releases the slice.
 	sb.WriteString(run.String())
-	if suffix != "" {
-		sb.WriteString(suffix)
-	}
+	sb.WriteString(suffix)
 	run.Reset()
 }

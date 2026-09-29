@@ -330,7 +330,7 @@ func TestPausedSandWaitsForExplosion(t *testing.T) {
 	v.Rows = 5
 	activateMode(t, v, VisSand)
 	driver := v.driverFor(VisSand).(*sandDriver)
-	driver.ensure(v.Rows*4, PanelWidth*2)
+	driver.grid.resize(v.Rows*4, PanelWidth*2)
 	driver.particles = []sandParticle{{x: 1, y: float64(v.Rows * 4), tier: 1}}
 	driver.explosionTTL = 1
 	v.bands = uniformBands(0)
