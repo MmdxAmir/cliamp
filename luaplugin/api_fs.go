@@ -155,7 +155,7 @@ var caseFolded = runtime.GOOS == "windows" || runtime.GOOS == "darwin"
 // isWithin reports whether path is dir or lies under dir. Both paths must be
 // canonical. When caseFolded is true, it compares each path component with
 // strings.EqualFold. Lowercasing the path is not enough: strings.ToLower
-// keeps the long s (U+017F), but the file system folds it to s, so pluginſ
+// keeps the long s, U+017F, but the file system folds it to s. Thus pluginſ
 // names the plugins dir.
 func isWithin(path, dir string) bool {
 	if !caseFolded {

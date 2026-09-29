@@ -266,7 +266,7 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 			for scanner.Scan() {
 				line := scanner.Text()
 				if outUsed.Add(int64(len(line)+1)) > execMaxOutputBytes {
-					return // budget exhausted; drop the rest silently
+					return // The budget is used up. Drop the rest silently.
 				}
 				if fn == nil {
 					continue
