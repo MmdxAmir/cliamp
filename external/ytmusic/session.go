@@ -132,11 +132,13 @@ func newSessionFromStored(ctx context.Context, clientID, clientSecret string, cr
 // setup. oauth2 keeps the context of a token source for every later refresh,
 // so the token source gets a context that does not end. The Data API client
 // sends its requests through the transport of oauthHTTPClient, so they
-// follow the same proxy rules.
+// follow the same proxy rules. It does not use the timeout of
+// oauthHTTPClient.
 func newTokenSession(ctx context.Context, clientID, clientSecret string, token *oauth2.Token, cacheIdentity string) (*Session, error) {
 	ts := googleOAuthConfig(clientID, clientSecret).TokenSource(oauthContext(context.Background()), token)
 
-	svc, err := youtube.NewService(ctx, option.WithHTTPClient(oauth2.NewClient(oauthContext(context.Background()), ts)))
+	apiClient := &http.Client{Transport: &oauth2.Transport{Base: oauthHTTPClient.Transport, Source: ts}}
+	svc, err := youtube.NewService(ctx, option.WithHTTPClient(apiClient))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic: create service: %w", err)
 	}

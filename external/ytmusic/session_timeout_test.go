@@ -159,3 +159,32 @@ func TestInteractiveSessionRefreshesAfterSignIn(t *testing.T) {
 		t.Errorf("access token = %q, want the refreshed access-2", token.AccessToken)
 	}
 }
+
+// TestDataAPIRequestsKeepNoClientTimeout checks that the Data API client
+// shares only the transport of oauthHTTPClient. A Data API request that
+// takes longer than the token client timeout still succeeds.
+func TestDataAPIRequestsKeepNoClientTimeout(t *testing.T) {
+	const tokenTimeout = 50 * time.Millisecond
+	setOAuthTransport(t, tokenTimeout, roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		select {
+		case <-time.After(4 * tokenTimeout):
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"items":[]}`)),
+			Request:    req,
+		}, nil
+	}))
+
+	token := &oauth2.Token{AccessToken: "token", Expiry: time.Now().Add(time.Hour)}
+	s, err := newTokenSession(context.Background(), "client", "secret", token, "refresh")
+	if err != nil {
+		t.Fatalf("newTokenSession() error = %v", err)
+	}
+	if _, err := s.Service().Playlists.List([]string{"snippet"}).Mine(true).Do(); err != nil {
+		t.Fatalf("Playlists.List().Do() error = %v, want no client timeout", err)
+	}
+}
