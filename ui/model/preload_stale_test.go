@@ -1,6 +1,8 @@
 package model
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,5 +135,32 @@ func TestUpdateDropsStaleInFlightPreload(t *testing.T) {
 	next, _ = next.(Model).Update(streamPreloadedMsg{path: "b.mp3", gen: stale})
 	if m = next.(Model); !m.preloading || m.preloadFor != "c.mp3" {
 		t.Fatalf("preloading %v for %q, want c.mp3 still in flight", m.preloading, m.preloadFor)
+	}
+}
+
+// A shuffle or repeat change over IPC re-arms the preload for the new next
+// track at once, and a failed config save shows in the TUI, as the keys do.
+func TestV2ModeChangeRearmsPreloadAndReportsSaveError(t *testing.T) {
+	for _, tc := range []struct {
+		op, name string
+	}{
+		{op: "shuffle", name: "on"},
+		{op: "repeat", name: "one"},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			m, player := armedModel()
+			m.configSaver = &recordingSaver{err: errors.New("disk full")}
+
+			if response := runV2(t, &m, tc.op, ipc.Request{Name: tc.name}); !response.OK {
+				t.Fatalf("response = %+v", response)
+			}
+			next, ok := m.playlist.PeekNext()
+			if !ok || player.clearPreloadCalls == 0 || !m.preloading || m.preloadFor != next.Path {
+				t.Fatalf("preloading %v for %q after ClearPreload %d, want %q armed at once", m.preloading, m.preloadFor, player.clearPreloadCalls, next.Path)
+			}
+			if !strings.Contains(m.status.text, "Config save failed: disk full") {
+				t.Fatalf("status = %q, want the config save error", m.status.text)
+			}
+		})
 	}
 }

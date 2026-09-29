@@ -460,9 +460,10 @@ func (m *Model) handleV2Mode(jobs *ipc.JobStore, jobID string, request ipc.Reque
 			m.playlist.ToggleShuffle()
 		}
 		value := m.playlist.Shuffled()
-		_ = m.configSaver.Save("shuffle", fmt.Sprintf("%v", value))
-		m.player.ClearPreload()
+		m.saveConfigKey("shuffle", fmt.Sprintf("%v", value))
+		cmd := m.rearmPreload()
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Shuffle: &value})
+		return cmd
 	case "repeat":
 		switch name {
 		case "off":
@@ -474,9 +475,10 @@ func (m *Model) handleV2Mode(jobs *ipc.JobStore, jobID string, request ipc.Reque
 		default:
 			m.playlist.CycleRepeat()
 		}
-		_ = m.configSaver.Save("repeat", fmt.Sprintf("%q", m.playlist.Repeat().String()))
-		m.player.ClearPreload()
+		m.saveConfigKey("repeat", fmt.Sprintf("%q", m.playlist.Repeat().String()))
+		cmd := m.rearmPreload()
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Repeat: m.playlist.Repeat().String()})
+		return cmd
 	case "mono":
 		if (name == "on" && !m.player.Mono()) || (name == "off" && m.player.Mono()) || (name != "on" && name != "off") {
 			m.player.ToggleMono()
