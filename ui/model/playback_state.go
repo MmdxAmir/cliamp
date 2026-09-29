@@ -1,6 +1,8 @@
 package model
 
 import (
+	"time"
+
 	"github.com/bjarneo/cliamp/luaplugin"
 	"github.com/bjarneo/cliamp/playlist"
 )
@@ -16,13 +18,19 @@ func (m Model) currentPlaybackTrack() (playlist.Track, int) {
 }
 
 func (m Model) currentPlaybackIsLive(track playlist.Track) bool {
+	return PlaysLive(track, m.player)
+}
+
+// PlaysLive reports whether track, playing on engine, is a live stream with
+// no track boundary. The Model and the Lua track API share this rule.
+func PlaysLive(track playlist.Track, engine interface{ Duration() time.Duration }) bool {
 	if track.IsLive() {
 		// A yt-dlp live flag is a listing-time snapshot and may be restored from
 		// a favorite or saved playlist. Once the broadcast ends the same URL
 		// serves a finite recording, and the player then reports its duration.
-		return !playlist.IsYTDL(track.Path) || m.player == nil || m.player.Duration() <= 0
+		return !playlist.IsYTDL(track.Path) || engine == nil || engine.Duration() <= 0
 	}
-	reporter, ok := m.player.(interface{ IsLiveStream() bool })
+	reporter, ok := engine.(interface{ IsLiveStream() bool })
 	return ok && reporter.IsLiveStream()
 }
 

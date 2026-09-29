@@ -1402,3 +1402,33 @@ func TestStopKeepsErrorShownDuringReconnect(t *testing.T) {
 		t.Fatalf("err = %v after stop, want %v kept", m.err, failure)
 	}
 }
+
+// cliamp.track.is_live() and the Model share this rule, so a plugin sees a
+// finished recording with a stale yt-dlp live flag as the finite track it is.
+func TestPlaysLive(t *testing.T) {
+	ytdl := "https://music.youtube.com/watch?v=live1"
+	tests := []struct {
+		name   string
+		track  playlist.Track
+		engine *playbackFakeEngine
+		want   bool
+	}{
+		{"yt-dlp live stream", playlist.Track{Path: ytdl, Stream: true, Realtime: true}, &playbackFakeEngine{}, true},
+		{"yt-dlp recording with a stale live flag", playlist.Track{Path: ytdl, Stream: true, Realtime: true}, &playbackFakeEngine{duration: 90 * time.Minute}, false},
+		{"radio station", playlist.Track{Path: "https://example.com/radio", Stream: true, Realtime: true}, &playbackFakeEngine{duration: time.Minute}, true},
+		{"stream the player detected as live", playlist.Track{Path: "https://example.com/stream", Stream: true}, &playbackFakeEngine{live: true}, true},
+		{"ordinary track", playlist.Track{Path: "/music/song.flac"}, &playbackFakeEngine{duration: 3 * time.Minute}, false},
+		{"yt-dlp live stream with no player", playlist.Track{Path: ytdl, Stream: true, Realtime: true}, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var engine interface{ Duration() time.Duration }
+			if tt.engine != nil {
+				engine = tt.engine
+			}
+			if got := PlaysLive(tt.track, engine); got != tt.want {
+				t.Fatalf("PlaysLive() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
