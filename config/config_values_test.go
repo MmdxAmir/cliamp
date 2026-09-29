@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestParseBool(t *testing.T) {
 	tests := []struct {
@@ -77,5 +80,62 @@ func TestLoadBoolKeysIgnoreLetterCase(t *testing.T) {
 				t.Fatalf("%q: got %v, want %v", tt.data, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestQuoteStringRoundTrip(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"plain", `"plain"`},
+		{`a\b`, `"a\\b"`},
+		{`p"w`, `"p\"w"`},
+		{`'x'`, `"'x'"`},
+		{`abc\`, `"abc\\"`},
+		{`\"`, `"\\\""`},
+		{`D:\new`, `"D:\\new"`},
+		{"pa#ss word", `"pa#ss word"`},
+		{" spaced ", `" spaced "`},
+		{"tab\there", "\"tab\there\""},
+		{"ünïcode", `"ünïcode"`},
+		{"", `""`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got := QuoteString(tt.in)
+			if got != tt.want {
+				t.Fatalf("QuoteString(%q) = %s, want %s", tt.in, got, tt.want)
+			}
+			if back := unquote(got); back != tt.in {
+				t.Fatalf("unquote(%s) = %q, want %q", got, back, tt.in)
+			}
+		})
+	}
+}
+
+func TestLoadDecodesQuotedStrings(t *testing.T) {
+	cfg := loadConfigText(t, `
+[navidrome]
+url = 'https://music.example.com'
+user = "'alice'"
+password = "a\\b\"c"
+
+[plex]
+url = "http://plex.local:32400"
+token = "tok"
+libraries = ["Mus\"ic", 'Ja\zz']
+`)
+	if got, want := cfg.Navidrome.URL, "https://music.example.com"; got != want {
+		t.Errorf("Navidrome.URL = %q, want %q", got, want)
+	}
+	if got, want := cfg.Navidrome.User, "'alice'"; got != want {
+		t.Errorf("Navidrome.User = %q, want %q", got, want)
+	}
+	if got, want := cfg.Navidrome.Password, `a\b"c`; got != want {
+		t.Errorf("Navidrome.Password = %q, want %q", got, want)
+	}
+	if got, want := cfg.Plex.Libraries, []string{`Mus"ic`, `Ja\zz`}; !slices.Equal(got, want) {
+		t.Errorf("Plex.Libraries = %q, want %q", got, want)
 	}
 }

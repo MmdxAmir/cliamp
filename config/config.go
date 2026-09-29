@@ -29,12 +29,12 @@ func configPath() (string, error) {
 	return filepath.Join(dir, "config.toml"), nil
 }
 
-// parseString trims surrounding quotes from a TOML string value and, if the
-// result is exactly $NAME or ${NAME}, replaces it with the value of that
-// environment variable (or "" when unset). Mixed values containing other
-// characters are left untouched, so literal '$' in passwords is preserved.
+// parseString unquotes a TOML string value and, if the result is exactly
+// $NAME or ${NAME}, replaces it with the value of that environment variable
+// (or "" when unset). Mixed values containing other characters are left
+// untouched, so literal '$' in passwords is preserved.
 func parseString(s string) string {
-	s = strings.Trim(s, `"'`)
+	s = unquote(s)
 	if len(s) < 2 || s[0] != '$' {
 		return s
 	}
@@ -49,6 +49,47 @@ func parseString(s string) string {
 		return s
 	}
 	return os.Getenv(name)
+}
+
+// unquote removes one pair of matching quotes from s. Inside double quotes it
+// decodes \\ and \", the escapes QuoteString writes, and keeps every other
+// backslash as typed, so "D:\new" stays a Windows path. Single quotes are
+// literal. A value that does not start with a quote is returned unchanged.
+func unquote(s string) string {
+	if len(s) < 2 || (s[0] != '"' && s[0] != '\'') {
+		return s
+	}
+	q := s[0]
+	var b strings.Builder
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		if q == '"' && c == '\\' && i+1 < len(s) && (s[i+1] == '\\' || s[i+1] == '"') {
+			i++
+			b.WriteByte(s[i])
+			continue
+		}
+		if c == q {
+			if i == len(s)-1 {
+				return b.String()
+			}
+			break
+		}
+		b.WriteByte(c)
+	}
+	// The closing quote is missing or text follows it. Strip the outer pair
+	// and keep the rest as typed.
+	if s[len(s)-1] == q {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
+var quoteEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+
+// QuoteString returns s as a double-quoted TOML string that Load reads back
+// unchanged. It escapes only \ and ". s must be a single line.
+func QuoteString(s string) string {
+	return `"` + quoteEscaper.Replace(s) + `"`
 }
 
 func isEnvName(s string) bool {
@@ -903,7 +944,7 @@ func Save(key, value string) error {
 // in-place, or appends it after the [navidrome] section if not present.
 // If no [navidrome] section exists, one is appended along with the key.
 func SaveNavidromeSort(sortType string) error {
-	return saveSectionValue("navidrome", "browse_sort", strconv.Quote(sortType))
+	return saveSectionValue("navidrome", "browse_sort", QuoteString(sortType))
 }
 
 // SaveRadioCountry persists the listener's home country in the [radio] section
@@ -913,7 +954,7 @@ func SaveRadioCountry(code string) error {
 	if code == "" {
 		code = "none"
 	}
-	return saveSectionValue("radio", "country", strconv.Quote(code))
+	return saveSectionValue("radio", "country", QuoteString(code))
 }
 
 // SaveMixcloudStyles persists the selected discovery styles in the [mixcloud]
@@ -921,7 +962,7 @@ func SaveRadioCountry(code string) error {
 func SaveMixcloudStyles(styles []string) error {
 	quoted := make([]string, 0, len(styles))
 	for _, style := range styles {
-		quoted = append(quoted, strconv.Quote(style))
+		quoted = append(quoted, QuoteString(style))
 	}
 	return saveSectionValue("mixcloud", "styles", "["+strings.Join(quoted, ", ")+"]")
 }
@@ -1124,14 +1165,13 @@ func abs(x int) int {
 
 // parseStringSlice parses a comma-separated list of strings, optionally
 // wrapped in square brackets (e.g. `["Music", "Jazz"]` or `Music, Jazz`).
-// Leading/trailing whitespace and surrounding quotes are stripped from each element.
+// Each element is trimmed and unquoted like a single string value.
 func parseStringSlice(val string) []string {
 	val = strings.Trim(val, "[]")
 	parts := strings.Split(val, ",")
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		p = strings.Trim(p, `"'`)
+		p = unquote(strings.TrimSpace(p))
 		if p != "" {
 			result = append(result, p)
 		}

@@ -29,6 +29,17 @@ func TestParseStringEnvInterpolation(t *testing.T) {
 		{"only dollar", `"$"`, "$"},
 		{"interpolation only on whole value", `"prefix-$CLIAMP_TEST_VAR"`, "prefix-$CLIAMP_TEST_VAR"},
 		{"underscore-leading name", `"$_CLIAMP_TEST"`, ""},
+		{"strips one quote pair only", `"'quoted'"`, "'quoted'"},
+		{"single quotes keep inner double quotes", `'"x"'`, `"x"`},
+		{"escaped backslash", `"a\\b"`, `a\b`},
+		{"escaped quote", `"p\"w"`, `p"w`},
+		{"escaped trailing backslash", `"abc\\"`, `abc\`},
+		{"other escapes stay literal", `"D:\new\tab"`, `D:\new\tab`},
+		{"single quotes are literal", `'a\\b'`, `a\\b`},
+		{"path ending in backslash", `"C:\path\"`, `C:\path\`},
+		{"text after closing quote", `"abc"def"`, `abc"def`},
+		{"unclosed quote kept", `"abc`, `"abc`},
+		{"unquoted value keeps #", `pa#ss word`, `pa#ss word`},
 	}
 
 	for _, tt := range tests {

@@ -233,10 +233,19 @@ to a wide playback layout with enough room and Settings open.
 
 cliamp reads a subset of TOML. These rules apply to every key:
 
+- Put a string in double quotes or single quotes. cliamp removes one pair of quotes.
+- Inside double quotes, write `\\` for a backslash and `\"` for a double quote. cliamp keeps every other backslash as you type it, so `"D:\new"` stays a Windows path.
+- Single quotes are literal. cliamp decodes no escapes inside them.
+- An unquoted string also works. cliamp keeps all of its text, including a `#`.
 - A bool is `true` or `false` in any letter case. `1` and `0` also work. cliamp ignores any other value and keeps the default.
 
 ```toml
 shuffle = True
+initial_directory = 'D:\Music'
+
+[navidrome]
+# cliamp reads this password as back\slash"quote
+password = "back\\slash\"quote"
 ```
 
 ## Secrets from Environment Variables
