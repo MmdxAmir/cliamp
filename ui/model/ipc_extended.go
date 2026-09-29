@@ -483,25 +483,11 @@ func ipcResponseError(err error) ipc.Response {
 	return ipc.Response{OK: true}
 }
 
-// stationSearcher is a search that keeps no state in the provider. IPC uses
-// it before provider.CatalogSearcher. A catalog search stores its results in
-// the provider, where the pane shows them, so an IPC catalog search replaces
-// and then clears the search on screen. This is not provider.Searcher,
-// because Ctrl+F opens a different overlay for a Searcher.
-type stationSearcher interface {
-	SearchStations(ctx context.Context, query string, limit int) ([]playlist.Track, error)
-}
-
 func ipcSearchProvider(ctx context.Context, source playlist.Provider, query string, limit int) ([]playlist.Track, error) {
 	if searcher, ok := source.(provider.Searcher); ok {
 		ctx, cancel := context.WithTimeout(requestContext(ctx), 30*time.Second)
 		defer cancel()
 		return searcher.SearchTracks(ctx, query, limit)
-	}
-	if searcher, ok := source.(stationSearcher); ok {
-		ctx, cancel := context.WithTimeout(requestContext(ctx), 30*time.Second)
-		defer cancel()
-		return searcher.SearchStations(ctx, query, limit)
 	}
 	catalog, ok := source.(provider.CatalogSearcher)
 	if !ok {
