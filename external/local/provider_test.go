@@ -3,6 +3,8 @@ package local
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -733,32 +735,6 @@ func TestTracksReadsFromHistory(t *testing.T) {
 	}
 }
 
-func TestWritesRejectedForHistoryName(t *testing.T) {
-	p := newTestProviderWithHistory(t)
-	track := playlist.Track{Path: "/a.mp3", Title: "A"}
-
-	tests := []struct {
-		name string
-		call func() error
-	}{
-		{"AddTrack", func() error { return p.AddTrack(history.PlaylistName, track) }},
-		{"AddTracks", func() error { _, _, err := p.AddTracks(history.PlaylistName, []playlist.Track{track}); return err }},
-		{"SavePlaylist", func() error { return p.SavePlaylist(history.PlaylistName, []playlist.Track{track}) }},
-		{"DeletePlaylist", func() error { return p.DeletePlaylist(history.PlaylistName) }},
-		{"RemoveTrack", func() error { return p.RemoveTrack(history.PlaylistName, 0) }},
-		{"SetBookmark", func() error { return p.SetBookmark(history.PlaylistName, 0) }},
-		{"SetBookmarkByPath", func() error { return p.SetBookmarkByPath(history.PlaylistName, track.Path) }},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.call(); err == nil {
-				t.Errorf("%s should reject history name", tt.name)
-			}
-		})
-	}
-}
-
 func TestExistsForHistoryName(t *testing.T) {
 	p := newTestProviderWithHistory(t)
 	if p.Exists(history.PlaylistName) {
@@ -918,38 +894,76 @@ func TestTracksReadsFromFavorites(t *testing.T) {
 	}
 }
 
-func TestWritesRejectedForFavoritesName(t *testing.T) {
-	p := newTestProviderWithFavorites(t)
+// Every writer must reject both virtual names and leave no file behind: a
+// physical file under a virtual name is hidden behind the virtual playlist.
+func TestWritesRejectedForVirtualNames(t *testing.T) {
 	track := playlist.Track{Path: "/a.mp3", Title: "A"}
-
-	tests := []struct {
+	calls := []struct {
 		name string
-		fn   func() error
+		fn   func(p *Provider, name string) error
 	}{
-		{"AddTrack", func() error { return p.AddTrack("Favorites", track) }},
-		{"AddTracks", func() error { _, _, err := p.AddTracks("Favorites", []playlist.Track{track}); return err }},
-		{"SavePlaylist", func() error { return p.SavePlaylist("Favorites", nil) }},
-		{"DeletePlaylist", func() error { return p.DeletePlaylist("Favorites") }},
-		{"RemoveTrack", func() error { return p.RemoveTrack("Favorites", 0) }},
-		{"SetBookmark", func() error { return p.SetBookmark("Favorites", 0) }},
-		{"SetBookmarkByPath", func() error { return p.SetBookmarkByPath("Favorites", "/a.mp3") }},
-		{"RenamePlaylist", func() error { return p.RenamePlaylist("Favorites", "NewName") }},
-		{"CreatePlaylist", func() error { _, err := p.CreatePlaylist(context.Background(), "Favorites"); return err }},
-		{"AddDirSources", func() error { _, err := p.AddDirSources("Favorites", []string{"/some/dir"}); return err }},
-		{"RemoveDirSource", func() error { return p.RemoveDirSource("Favorites", "/some/dir") }},
-		{"SetDirRecursive", func() error { return p.SetDirRecursive("Favorites", "/some/dir", true) }},
+		{"AddTrack", func(p *Provider, name string) error { return p.AddTrack(name, track) }},
+		{"AddTracks", func(p *Provider, name string) error {
+			_, _, err := p.AddTracks(name, []playlist.Track{track})
+			return err
+		}},
+		{"PrependTracks", func(p *Provider, name string) error {
+			_, _, _, err := p.PrependTracks(name, []playlist.Track{track})
+			return err
+		}},
+		{"SavePlaylist", func(p *Provider, name string) error { return p.SavePlaylist(name, []playlist.Track{track}) }},
+		{"DeletePlaylist", func(p *Provider, name string) error { return p.DeletePlaylist(name) }},
+		{"RemoveTrack", func(p *Provider, name string) error { return p.RemoveTrack(name, 0) }},
+		{"SetBookmark", func(p *Provider, name string) error { return p.SetBookmark(name, 0) }},
+		{"SetBookmarkByPath", func(p *Provider, name string) error { return p.SetBookmarkByPath(name, track.Path) }},
+		{"RenamePlaylist from", func(p *Provider, name string) error { return p.RenamePlaylist(name, "NewName") }},
+		{"RenamePlaylist to", func(p *Provider, name string) error { return p.RenamePlaylist("Mix", name) }},
+		{"CreatePlaylist", func(p *Provider, name string) error {
+			_, err := p.CreatePlaylist(context.Background(), name)
+			return err
+		}},
+		{"CreateDirPlaylist", func(p *Provider, name string) error { return p.CreateDirPlaylist(name, []string{t.TempDir()}) }},
+		{"AddDirSources", func(p *Provider, name string) error {
+			_, err := p.AddDirSources(name, []string{t.TempDir()})
+			return err
+		}},
+		{"DirSources", func(p *Provider, name string) error {
+			_, err := p.DirSources(name)
+			return err
+		}},
+		{"RemoveDirSource", func(p *Provider, name string) error { return p.RemoveDirSource(name, "/some/dir") }},
+		{"SetDirRecursive", func(p *Provider, name string) error { return p.SetDirRecursive(name, "/some/dir", true) }},
+		{"RestorePlaylistDocument", func(p *Provider, name string) error {
+			return p.RestorePlaylistDocument(name, []byte("[[track]]\npath = \"/a.mp3\"\n"))
+		}},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.fn()
-			if err == nil {
-				t.Fatalf("%s: expected error, got nil", tt.name)
-			}
-			if !strings.Contains(err.Error(), "Favorites") {
-				t.Fatalf("%s: error = %q, want message mentioning Favorites", tt.name, err)
-			}
-		})
+	names := []struct {
+		name string
+		want error
+	}{
+		{history.PlaylistName, errReservedHistoryName},
+		{favorites.PlaylistName, errReservedFavoritesName},
+	}
+	for _, n := range names {
+		for _, c := range calls {
+			t.Run(n.name+"/"+c.name, func(t *testing.T) {
+				dir := t.TempDir()
+				p := &Provider{
+					dir:       filepath.Join(dir, "playlists"),
+					history:   history.NewAt(filepath.Join(dir, "history.toml")),
+					favorites: favorites.NewAt(filepath.Join(dir, "favorites.toml")),
+				}
+				if err := p.SavePlaylist("Mix", []playlist.Track{track}); err != nil {
+					t.Fatalf("SavePlaylist: %v", err)
+				}
+				if err := c.fn(p, n.name); !errors.Is(err, n.want) {
+					t.Fatalf("%s(%q) error = %v, want %v", c.name, n.name, err, n.want)
+				}
+				if _, err := os.Stat(filepath.Join(p.dir, n.name+".toml")); !errors.Is(err, fs.ErrNotExist) {
+					t.Fatalf("%s(%q) left a playlist file behind: %v", c.name, n.name, err)
+				}
+			})
+		}
 	}
 }
 

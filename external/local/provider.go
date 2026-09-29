@@ -240,11 +240,8 @@ func (p *Provider) AddTrack(playlistName string, track playlist.Track) error {
 // provided by the playlist (explicit [[track]] entries or [[dir]] sources) or
 // repeated in the input. It creates the playlist file if needed.
 func (p *Provider) AddTracks(playlistName string, tracks []playlist.Track) (added, skipped int, err error) {
-	if isHistoryName(playlistName) {
-		return 0, 0, errReservedHistoryName
-	}
-	if isFavoritesName(playlistName) {
-		return 0, 0, errReservedFavoritesName
+	if err := writable(playlistName); err != nil {
+		return 0, 0, err
 	}
 	if err := os.MkdirAll(p.dir, 0o755); err != nil {
 		return 0, 0, err
@@ -314,11 +311,8 @@ func (p *Provider) AddTracks(playlistName string, tracks []playlist.Track) (adde
 // [[dir]] source cannot move, since the entry is generated at load time, so it
 // is skipped the way AddTracks skips it.
 func (p *Provider) PrependTracks(playlistName string, tracks []playlist.Track) (added, moved, skipped int, err error) {
-	if isHistoryName(playlistName) {
-		return 0, 0, 0, errReservedHistoryName
-	}
-	if isFavoritesName(playlistName) {
-		return 0, 0, 0, errReservedFavoritesName
+	if err := writable(playlistName); err != nil {
+		return 0, 0, 0, err
 	}
 	if len(tracks) == 0 {
 		return 0, 0, 0, nil
@@ -433,11 +427,8 @@ func (p *Provider) PrependTracksToPlaylist(_ context.Context, playlistID string,
 
 // CreatePlaylist creates an empty playlist file.
 func (p *Provider) CreatePlaylist(_ context.Context, name string) (string, error) {
-	if isHistoryName(name) {
-		return "", errReservedHistoryName
-	}
-	if isFavoritesName(name) {
-		return "", errReservedFavoritesName
+	if err := writable(name); err != nil {
+		return "", err
 	}
 	if err := os.MkdirAll(p.dir, 0o755); err != nil {
 		return "", err
@@ -467,11 +458,8 @@ func (p *Provider) CreatePlaylist(_ context.Context, name string) (string, error
 // when the playlist already exists or a directory does not exist, leaving no
 // file behind.
 func (p *Provider) CreateDirPlaylist(name string, dirs []string) error {
-	if isHistoryName(name) {
-		return errReservedHistoryName
-	}
-	if isFavoritesName(name) {
-		return errReservedFavoritesName
+	if err := writable(name); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(p.dir, 0o755); err != nil {
 		return fmt.Errorf("creating playlist dir: %w", err)
@@ -523,11 +511,8 @@ func (p *Provider) CreateDirPlaylist(name string, dirs []string) error {
 // All directories are validated before anything is persisted, so a failing
 // input leaves the playlist untouched. Returns the directories that were added.
 func (p *Provider) AddDirSources(name string, dirs []string) ([]string, error) {
-	if isHistoryName(name) {
-		return nil, errReservedHistoryName
-	}
-	if isFavoritesName(name) {
-		return nil, errReservedFavoritesName
+	if err := writable(name); err != nil {
+		return nil, err
 	}
 	for _, dir := range dirs {
 		if err := validateDirSource(dir); err != nil {
@@ -586,11 +571,8 @@ func (p *Provider) AddDirSource(name, dir string) (bool, error) {
 
 // DirSources returns the directory sources referenced by a playlist.
 func (p *Provider) DirSources(name string) ([]playlist.DirSource, error) {
-	if isHistoryName(name) {
-		return nil, errReservedHistoryName
-	}
-	if isFavoritesName(name) {
-		return nil, errReservedFavoritesName
+	if err := writable(name); err != nil {
+		return nil, err
 	}
 	doc, err := p.loadDocByName(name)
 	if err != nil {
@@ -618,11 +600,8 @@ func dirIndexByPath(doc *playlistDoc, dir string) int {
 // missing source (or a missing playlist) is a no-op rather than an error, so
 // callers can remove without first checking existence.
 func (p *Provider) RemoveDirSource(name, dir string) error {
-	if isHistoryName(name) {
-		return errReservedHistoryName
-	}
-	if isFavoritesName(name) {
-		return errReservedFavoritesName
+	if err := writable(name); err != nil {
+		return err
 	}
 	path, err := p.safePath(name)
 	if err != nil {
@@ -661,11 +640,8 @@ func (p *Provider) RemoveDirSource(name, dir string) error {
 // source is missing, the playlist is missing, or the flag is already the
 // requested value, so callers can toggle without first checking state.
 func (p *Provider) SetDirRecursive(name, dir string, recursive bool) error {
-	if isHistoryName(name) {
-		return errReservedHistoryName
-	}
-	if isFavoritesName(name) {
-		return errReservedFavoritesName
+	if err := writable(name); err != nil {
+		return err
 	}
 	path, err := p.safePath(name)
 	if err != nil {
@@ -811,17 +787,28 @@ var errReservedHistoryName = errors.New(`"Recently Played" is a virtual history 
 // otherwise mutate the synthetic favorites playlist.
 var errReservedFavoritesName = errors.New(`"Favorites" is a virtual favorites playlist and cannot be modified`)
 
+// writable returns the error for a name that belongs to a virtual playlist,
+// or nil when a write to the name can go to a playlist file. Every method
+// that writes a playlist file checks it first, because a file under a
+// virtual name is hidden behind the virtual playlist.
+func writable(name string) error {
+	switch {
+	case isHistoryName(name):
+		return errReservedHistoryName
+	case isFavoritesName(name):
+		return errReservedFavoritesName
+	}
+	return nil
+}
+
 // SetBookmark toggles the bookmark flag on a track and rewrites the playlist.
 // The index refers to the expanded track list (explicit entries plus
 // directory-scanned ones). Bookmarking a directory-scanned track materializes
 // it as an explicit [[track]] entry so the bookmark persists; it then loads
 // after the directory-sourced tracks.
 func (p *Provider) SetBookmark(playlistName string, idx int) error {
-	if isHistoryName(playlistName) {
-		return errReservedHistoryName
-	}
-	if isFavoritesName(playlistName) {
-		return errReservedFavoritesName
+	if err := writable(playlistName); err != nil {
+		return err
 	}
 	tracks, err := p.expandedTracks(playlistName)
 	if err != nil {
@@ -841,11 +828,8 @@ func (p *Provider) SetBookmark(playlistName string, idx int) error {
 // Directory-scanned tracks are materialized as explicit entries so the
 // bookmark persists.
 func (p *Provider) SetBookmarkByPath(playlistName string, path string) error {
-	if isHistoryName(playlistName) {
-		return errReservedHistoryName
-	}
-	if isFavoritesName(playlistName) {
-		return errReservedFavoritesName
+	if err := writable(playlistName); err != nil {
+		return err
 	}
 	tracks, err := p.expandedTracks(playlistName)
 	if err != nil {
@@ -872,11 +856,8 @@ func (p *Provider) loadDocByName(name string) (*playlistDoc, error) {
 
 // SavePlaylist overwrites a playlist with the given tracks.
 func (p *Provider) SavePlaylist(name string, tracks []playlist.Track) error {
-	if isHistoryName(name) {
-		return errReservedHistoryName
-	}
-	if isFavoritesName(name) {
-		return errReservedFavoritesName
+	if err := writable(name); err != nil {
+		return err
 	}
 	return p.savePlaylist(name, tracks)
 }
@@ -970,11 +951,11 @@ func trackMatchScore(t playlist.Track, query string) (int, bool) {
 // RenamePlaylist renames a playlist by renaming its TOML file.
 // The reserved "Recently Played" history playlist cannot be renamed.
 func (p *Provider) RenamePlaylist(oldName, newName string) error {
-	if isHistoryName(oldName) || isHistoryName(newName) {
-		return errReservedHistoryName
+	if err := writable(oldName); err != nil {
+		return err
 	}
-	if isFavoritesName(oldName) || isFavoritesName(newName) {
-		return errReservedFavoritesName
+	if err := writable(newName); err != nil {
+		return err
 	}
 	oldPath, err := p.safePath(oldName)
 	if err != nil {
@@ -1001,11 +982,8 @@ func (p *Provider) RenamePlaylist(oldName, newName string) error {
 // DeletePlaylist removes the TOML file for the named playlist.
 // "Recently Played" cannot be deleted via this method — use ClearHistory.
 func (p *Provider) DeletePlaylist(name string) error {
-	if isHistoryName(name) {
-		return errReservedHistoryName
-	}
-	if isFavoritesName(name) {
-		return errReservedFavoritesName
+	if err := writable(name); err != nil {
+		return err
 	}
 	path, err := p.safePath(name)
 	if err != nil {
@@ -1031,8 +1009,8 @@ func (p *Provider) PlaylistDocument(name string) ([]byte, error) {
 // RestorePlaylistDocument overwrites the playlist with raw TOML bytes so an
 // undo can put back exactly what a delete removed, [[dir]] sections included.
 func (p *Provider) RestorePlaylistDocument(name string, data []byte) error {
-	if isHistoryName(name) {
-		return errReservedHistoryName
+	if err := writable(name); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(p.dir, 0o755); err != nil {
 		return fmt.Errorf("creating playlist dir: %w", err)
@@ -1102,11 +1080,8 @@ func (p *Provider) FavoritesCount() int {
 // cannot be removed: they are re-derived from the [[dir]] source on every
 // load. Empty playlists are kept on disk; deleting a playlist remains explicit.
 func (p *Provider) RemoveTrack(name string, index int) error {
-	if isHistoryName(name) {
-		return errReservedHistoryName
-	}
-	if isFavoritesName(name) {
-		return errReservedFavoritesName
+	if err := writable(name); err != nil {
+		return err
 	}
 	tracks, err := p.expandedTracks(name)
 	if err != nil {
