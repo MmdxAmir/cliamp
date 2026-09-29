@@ -3,6 +3,7 @@ package player
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -734,16 +735,30 @@ func pcmOutputArgs(sr beep.SampleRate, bitDepth int) []string {
 	}
 }
 
+// ffprobeTimeout bounds one ffprobe run. ffprobe reads only the container
+// header, so a longer run means a stalled mount or a hung process.
+const ffprobeTimeout = 5 * time.Second
+
 // probeFrames uses ffprobe to quickly read file duration from metadata and
 // converts it to sample frames. This only reads the container header, so it
-// returns almost instantly even for very large files.
+// returns almost instantly even for very large files. It returns 0 when
+// ffprobe fails or runs longer than ffprobeTimeout.
 func probeFrames(path string, sr beep.SampleRate) int {
-	out, err := exec.Command("ffprobe",
+	return probeFramesWithin(path, sr, ffprobeTimeout)
+}
+
+func probeFramesWithin(path string, sr beep.SampleRate, timeout time.Duration) int {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ffprobe",
 		"-v", "error",
 		"-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1",
 		path,
-	).Output()
+	)
+	// A child that keeps stdout open must not hold Output after the kill.
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
 	if err != nil {
 		return 0
 	}

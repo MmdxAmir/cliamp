@@ -828,3 +828,40 @@ func TestFFmpegDecodersRequireFFmpeg(t *testing.T) {
 		})
 	}
 }
+
+func TestProbeFrames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell fixtures")
+	}
+	tests := []struct {
+		name   string
+		script string
+		want   int
+	}{
+		{name: "duration", script: "printf '2.5\\n'", want: 250},
+		{name: "no duration", script: "printf 'N/A\\n'", want: 0},
+		{name: "probe error", script: "exit 1", want: 0},
+		// The child sleep keeps stdout open after the shell is killed.
+		{name: "hung probe", script: "sleep 30\nprintf '2.5\\n'", want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeExecutable(t, filepath.Join(dir, "ffprobe"), "#!/bin/sh\n"+tt.script+"\n")
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+			done := make(chan int, 1)
+			go func() {
+				done <- probeFramesWithin(filepath.Join(dir, "track.m4a"), beep.SampleRate(100), 100*time.Millisecond)
+			}()
+			select {
+			case got := <-done:
+				if got != tt.want {
+					t.Fatalf("probeFramesWithin() = %d, want %d", got, tt.want)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("probeFramesWithin() did not return after its timeout")
+			}
+		})
+	}
+}
