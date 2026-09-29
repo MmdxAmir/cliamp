@@ -77,24 +77,24 @@ func TestServiceCallbacksDoNotWaitForSend(t *testing.T) {
 		{
 			name:  "one volume change",
 			calls: []call{setVolume(0.5)},
-			want:  []tea.Msg{playback.SetVolumeMsg{VolumeDB: linearToDb(0.5, 0)}},
+			want:  []tea.Msg{playback.SetVolumeMsg{VolumeDB: linearToDb(0.5, initialVolumeFloor)}},
 		},
 		{
 			name:  "rapid volume changes keep order",
 			calls: []call{setVolume(0.2), setVolume(0.9), setVolume(0.5), setVolume(0.7)},
 			want: []tea.Msg{
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.2, 0)},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.9, 0)},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.5, 0)},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.7, 0)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.2, initialVolumeFloor)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.9, initialVolumeFloor)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.5, initialVolumeFloor)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.7, initialVolumeFloor)},
 			},
 		},
 		{
 			name:  "out of range volume clamps",
 			calls: []call{setVolume(1.5), setVolume(-0.5)},
 			want: []tea.Msg{
-				playback.SetVolumeMsg{VolumeDB: linearToDb(1, 0)},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0, 0)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(1, initialVolumeFloor)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0, initialVolumeFloor)},
 			},
 		},
 		{
@@ -102,10 +102,10 @@ func TestServiceCallbacksDoNotWaitForSend(t *testing.T) {
 			calls: []call{next, setVolume(0.3), playPause, seek, setVolume(0.6)},
 			want: []tea.Msg{
 				playback.NextMsg{},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.3, 0)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.3, initialVolumeFloor)},
 				playback.PlayPauseMsg{},
 				playback.SeekMsg{Offset: 5 * time.Second},
-				playback.SetVolumeMsg{VolumeDB: linearToDb(0.6, 0)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.6, initialVolumeFloor)},
 			},
 		},
 	}
@@ -129,7 +129,7 @@ func TestServiceCallbacksDoNotWaitForSend(t *testing.T) {
 			// The event loop calls Update, which takes the godbus
 			// Properties lock that the Volume Set held.
 			returnsWithin(t, "Update", func() {
-				svc.Update(playback.State{Status: playback.StatusPlaying, VolumeDB: -12})
+				svc.Update(playback.State{Status: playback.StatusPlaying, VolumeDB: -12, VolumeMinDB: -50})
 			})
 
 			close(release)
@@ -162,9 +162,9 @@ func TestServiceFirstUpdatePublishesState(t *testing.T) {
 		wantVolume  float64
 		wantCanSeek bool
 	}{
-		{name: "muted and not seekable", state: playback.State{VolumeDB: -30}, wantVolume: 0, wantCanSeek: false},
-		{name: "full volume and seekable", state: playback.State{VolumeDB: 6, Seekable: true}, wantVolume: 1, wantCanSeek: true},
-		{name: "0 dB and seekable", state: playback.State{VolumeDB: 0, Seekable: true}, wantVolume: linearAt(0), wantCanSeek: true},
+		{name: "muted and not seekable", state: playback.State{VolumeDB: -50, VolumeMinDB: -50}, wantVolume: 0, wantCanSeek: false},
+		{name: "full volume and seekable", state: playback.State{VolumeDB: 6, VolumeMinDB: -50, Seekable: true}, wantVolume: 1, wantCanSeek: true},
+		{name: "0 dB and seekable", state: playback.State{VolumeDB: 0, VolumeMinDB: -50, Seekable: true}, wantVolume: linearAt(0), wantCanSeek: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -181,17 +181,20 @@ func TestServiceFirstUpdatePublishesState(t *testing.T) {
 }
 
 // TestServiceVolumeUsesStateFloor checks that the Volume property and a
-// Volume Set use the engine floor from the last Update.
+// Volume Set use the engine floor from the last Update. Before the first
+// Update, a Volume Set uses the player default floor.
 func TestServiceVolumeUsesStateFloor(t *testing.T) {
 	const playerName = "org.mpris.MediaPlayer2.Player"
 	tests := []struct {
 		name       string
+		noUpdate   bool
 		floor      float64
 		volumeDB   float64
 		wantVolume float64 // Volume property after Update
 		wantSetDB  float64 // dB that a Volume Set of 0 sends
 	}{
-		{name: "no floor falls back to -30", floor: 0, volumeDB: -40, wantVolume: 0, wantSetDB: -30},
+		{name: "no Update yet uses the player default", noUpdate: true, wantSetDB: -50},
+		{name: "floor 0", floor: 0, volumeDB: 0, wantVolume: 0, wantSetDB: 0},
 		{name: "floor -30", floor: -30, volumeDB: -30, wantVolume: 0, wantSetDB: -30},
 		{name: "floor -50", floor: -50, volumeDB: -40, wantVolume: linearAt(-40), wantSetDB: -50},
 		{name: "floor -90", floor: -90, volumeDB: -80, wantVolume: linearAt(-80), wantSetDB: -90},
@@ -201,9 +204,11 @@ func TestServiceVolumeUsesStateFloor(t *testing.T) {
 			got := make(chan tea.Msg, 1)
 			svc := newTestService(t, func(msg tea.Msg) { got <- msg })
 
-			svc.Update(playback.State{VolumeDB: tt.volumeDB, VolumeMinDB: tt.floor})
-			if v := svc.props.GetMust(playerName, "Volume").(float64); math.Abs(v-tt.wantVolume) > 1e-12 {
-				t.Fatalf("Volume = %v, want %v", v, tt.wantVolume)
+			if !tt.noUpdate {
+				svc.Update(playback.State{VolumeDB: tt.volumeDB, VolumeMinDB: tt.floor})
+				if v := svc.props.GetMust(playerName, "Volume").(float64); math.Abs(v-tt.wantVolume) > 1e-12 {
+					t.Fatalf("Volume = %v, want %v", v, tt.wantVolume)
+				}
 			}
 
 			if err := svc.props.Set(playerName, "Volume", dbus.MakeVariant(0.0)); err != nil {

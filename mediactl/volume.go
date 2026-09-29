@@ -2,21 +2,10 @@ package mediactl
 
 import "math"
 
-// defaultVolumeFloor is the floor in dB when the state gives no floor.
-const defaultVolumeFloor = -30
-
-// volumeFloor returns floor, or defaultVolumeFloor when floor is 0.
-func volumeFloor(floor float64) float64 {
-	if floor == 0 {
-		return defaultVolumeFloor
-	}
-	return floor
-}
-
 // dbToLinear converts a volume in dB to the MPRIS range 0 to 1. A volume at
 // or below the engine floor in dB converts to 0.
 func dbToLinear(db, floor float64) float64 {
-	if db <= volumeFloor(floor) {
+	if db <= floor {
 		return 0.0
 	}
 	if db >= 6 {
@@ -28,7 +17,6 @@ func dbToLinear(db, floor float64) float64 {
 // linearToDb converts an MPRIS volume from 0 to 1 to dB. The result is never
 // below the engine floor in dB.
 func linearToDb(v, floor float64) float64 {
-	floor = volumeFloor(floor)
 	if v <= 0 {
 		return floor
 	}

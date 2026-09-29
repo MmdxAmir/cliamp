@@ -40,7 +40,7 @@ type State struct {
 	Status      Status
 	Track       Track
 	VolumeDB    float64
-	VolumeMinDB float64 // engine volume floor in dB, or 0 when not known
+	VolumeMinDB float64 // engine volume floor in dB
 	Position    time.Duration
 	Seekable    bool
 }

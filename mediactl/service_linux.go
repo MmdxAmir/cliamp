@@ -33,7 +33,8 @@ type Service struct {
 	done      chan struct{} // closed by Close to stop forwardMessages
 	closeOnce sync.Once
 
-	// volFloor holds the math.Float64bits of the last State.VolumeMinDB.
+	// volFloor holds the math.Float64bits of the last State.VolumeMinDB,
+	// or of initialVolumeFloor before the first Update.
 	// The Volume callback reads it without mu, because godbus runs the
 	// callback under the Properties lock and Update holds mu while it
 	// takes that lock.
@@ -168,6 +169,10 @@ func New(send func(tea.Msg)) (*Service, error) {
 	return svc, nil
 }
 
+// initialVolumeFloor is the player default volume_min in dB. A Volume Set
+// uses it until the first Update gives the engine floor.
+const initialVolumeFloor = -50
+
 // newService exports the MPRIS objects and properties on conn. It starts
 // the goroutine that forwards the queued messages to send.
 func newService(conn *dbus.Conn, send func(tea.Msg)) (*Service, error) {
@@ -183,6 +188,7 @@ func newService(conn *dbus.Conn, send func(tea.Msg)) (*Service, error) {
 		trackSeq:    1,
 		trackID:     trackPath(1),
 	}
+	svc.volFloor.Store(math.Float64bits(initialVolumeFloor))
 	path := dbus.ObjectPath("/org/mpris/MediaPlayer2")
 
 	if err := conn.Export(root{svc}, path, "org.mpris.MediaPlayer2"); err != nil {
