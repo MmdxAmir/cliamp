@@ -23,11 +23,14 @@ set a background. Omit it to keep the terminal background. The file name
 without `.toml` is the theme name.
 
 cliamp skips an incomplete or malformed custom theme. It writes the file name
-and the reason to `~/.config/cliamp/cliamp.log`, for example:
+and the reason to `~/.config/cliamp/cliamp.log` once per run, for example:
 
 ```
-level=WARN msg="theme: skip mytheme.toml in /home/you/.config/cliamp/themes: theme \"mytheme\": accent must be #RRGGBB"
+time=2026-09-29T21:00:00.000+02:00 level=WARN msg="theme: skip mytheme.toml in /home/you/.config/cliamp/themes: theme \"mytheme\": accent must be #RRGGBB"
 ```
+
+cliamp writes this line at the warn level. With `log_level = "error"`, the log
+does not show it.
 
 ### Example: `~/.config/cliamp/themes/solarized.toml`
 
