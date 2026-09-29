@@ -186,6 +186,8 @@ cliamp playlist delete "Name"                   # delete entire playlist
 
 Sort keys: `track`, `title`, `artist`, `album`, `artist+album`, `path`.
 
+`--ssh` takes `host`, `user@host`, or `host:port`. `playlist enrich` connects to the port in each `ssh://` track path.
+
 See [playlists.md](playlists.md) for the TOML format. See [ssh-streaming.md](ssh-streaming.md) for remote playback.
 
 ## Recently Played

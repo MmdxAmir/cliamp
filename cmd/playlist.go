@@ -682,16 +682,16 @@ func PlaylistEnrich(name string, source string) error {
 	return nil
 }
 
-func probeRemoteDuration(host, remotePath string) int {
+// sshCommand returns an ssh command that runs remoteCmd on the host of parsed,
+// with the same options and port that playback uses.
+func sshCommand(parsed sshurl.Parsed, remoteCmd string) *exec.Cmd {
+	return exec.Command("ssh", append(parsed.SSHArgs(), remoteCmd)...)
+}
+
+func probeRemoteDuration(parsed sshurl.Parsed) int {
 	// Use ffprobe over SSH for cross-platform compatibility (works on Linux and macOS remotes).
-	probeCmd := fmt.Sprintf("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 %s 2>/dev/null", shellQuote(remotePath))
-	cmd := exec.Command("ssh",
-		"-o", "BatchMode=yes",
-		"-o", "StrictHostKeyChecking=yes",
-		"-o", "ConnectTimeout=5",
-		host, probeCmd,
-	)
-	out, err := cmd.Output()
+	probeCmd := fmt.Sprintf("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 %s 2>/dev/null", shellQuote(parsed.Path))
+	out, err := sshCommand(parsed, probeCmd).Output()
 	if err != nil {
 		return 0
 	}
@@ -704,7 +704,7 @@ func probeDuration(path string) int {
 		if err != nil {
 			return 0
 		}
-		return probeRemoteDuration(parsed.Host, parsed.Path)
+		return probeRemoteDuration(parsed)
 	}
 	if playlist.IsURL(path) || path == "" {
 		return 0
@@ -903,7 +903,22 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
+// parseSSHHost reads a --ssh value such as nas, me@nas or nas:2222 with the
+// rules that playback uses for the ssh:// track paths built from it.
+func parseSSHHost(host string) (sshurl.Parsed, error) {
+	parsed, err := sshurl.Parse("ssh://" + host + "/")
+	if err != nil || parsed.Host == "" || parsed.Path != "/" {
+		return sshurl.Parsed{}, fmt.Errorf("invalid --ssh host %q: use host, user@host or host:port", host)
+	}
+	return parsed, nil
+}
+
 func sshFindAudio(host string, paths []string) ([]string, error) {
+	parsed, err := parseSSHHost(host)
+	if err != nil {
+		return nil, err
+	}
+
 	var nameArgs []string
 	first := true
 	for ext := range player.SupportedExts {
@@ -919,9 +934,7 @@ func sshFindAudio(host string, paths []string) ([]string, error) {
 		findCmd := fmt.Sprintf("find %s -type f \\( %s \\) | sort",
 			shellQuote(p), strings.Join(nameArgs, " "))
 
-		sshArgs := []string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=5", host, findCmd}
-		cmd := exec.Command("ssh", sshArgs...)
-		out, err := cmd.Output()
+		out, err := sshCommand(parsed, findCmd).Output()
 		if err != nil {
 			return nil, fmt.Errorf("ssh find on %s:%s: %w", host, p, err)
 		}
