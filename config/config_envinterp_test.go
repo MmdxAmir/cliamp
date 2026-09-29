@@ -40,6 +40,14 @@ func TestParseStringEnvInterpolation(t *testing.T) {
 		{"text after closing quote", `"abc"def"`, `abc"def`},
 		{"unclosed quote kept", `"abc`, `"abc`},
 		{"unquoted value keeps #", `pa#ss word`, `pa#ss word`},
+		{"unquoted value keeps spaced #", `pa #ss`, `pa #ss`},
+		{"comment after double quotes", `"abc" # mine`, "abc"},
+		{"comment after tab", "\"abc\"\t# mine", "abc"},
+		{"comment after single quotes", `'abc'  # mine`, "abc"},
+		{"# inside quotes kept", `"a # b"`, "a # b"},
+		{"escaped quote before #", `"x\" # y"`, `x" # y`},
+		{"comment needs whitespace", `"abc"# mine`, `"abc"# mine`},
+		{"comment after env reference", `"${CLIAMP_TEST_VAR}" # from env`, "from-env"},
 	}
 
 	for _, tt := range tests {

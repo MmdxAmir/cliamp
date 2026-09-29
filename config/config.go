@@ -54,7 +54,8 @@ func parseString(s string) string {
 // unquote removes one pair of matching quotes from s. Inside double quotes it
 // decodes \\ and \", the escapes QuoteString writes, and keeps every other
 // backslash as typed, so "D:\new" stays a Windows path. Single quotes are
-// literal. A value that does not start with a quote is returned unchanged.
+// literal. A # comment after the closing quote is dropped. A value that does
+// not start with a quote is returned unchanged, # included.
 func unquote(s string) string {
 	if len(s) < 2 || (s[0] != '"' && s[0] != '\'') {
 		return s
@@ -69,7 +70,7 @@ func unquote(s string) string {
 			continue
 		}
 		if c == q {
-			if i == len(s)-1 {
+			if isComment(s[i+1:]) {
 				return b.String()
 			}
 			break
@@ -82,6 +83,13 @@ func unquote(s string) string {
 		return s[1 : len(s)-1]
 	}
 	return s
+}
+
+// isComment reports whether rest, the text after a value, is empty or a
+// # comment that whitespace separates from the value.
+func isComment(rest string) bool {
+	trimmed := strings.TrimLeft(rest, " \t")
+	return rest == "" || (len(trimmed) < len(rest) && strings.HasPrefix(trimmed, "#"))
 }
 
 var quoteEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
@@ -113,8 +121,30 @@ func isEnvName(s string) bool {
 // and the other strconv.ParseBool forms such as 1 and 0. ok is false for any
 // other value, so the caller keeps the current setting.
 func parseBool(val string) (v, ok bool) {
-	v, err := strconv.ParseBool(strings.ToLower(val))
+	v, err := strconv.ParseBool(strings.ToLower(scalar(val)))
 	return v, err == nil
+}
+
+// parseInt reads an integer value. ok is false for any other value.
+func parseInt(val string) (int, bool) {
+	v, err := strconv.Atoi(scalar(val))
+	return v, err == nil
+}
+
+// parseFloat reads a number value. ok is false for any other value.
+func parseFloat(val string) (float64, bool) {
+	v, err := strconv.ParseFloat(scalar(val), 64)
+	return v, err == nil
+}
+
+// scalar returns the number or bool token at the start of val without its
+// trailing # comment. Only the number and bool parsers call it, so a # in an
+// unquoted string value is never cut.
+func scalar(val string) string {
+	if i := strings.IndexAny(val, " \t"); i >= 0 && isComment(val[i:]) {
+		return val[:i]
+	}
+	return val
 }
 
 // NavidromeConfig holds credentials for a Navidrome/Subsonic server.
@@ -582,7 +612,7 @@ func Load() (Config, error) {
 			case "client_id":
 				cfg.Spotify.ClientID = parseString(val)
 			case "bitrate":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.Spotify.Bitrate = v
 				}
 			}
@@ -593,7 +623,7 @@ func Load() (Config, error) {
 					cfg.Qobuz.Disabled = !v
 				}
 			case "quality":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.Qobuz.Quality = v
 				}
 			}
@@ -672,11 +702,11 @@ func Load() (Config, error) {
 				cfg.Mixcloud.Styles = parseStringSlice(val)
 				cfg.Mixcloud.StylesSet = true
 			case "max_items":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.Mixcloud.MaxItems = v
 				}
 			case "stream_creators":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.Mixcloud.StreamCreators = v
 				}
 			}
@@ -755,11 +785,11 @@ func Load() (Config, error) {
 			}
 			switch key {
 			case "volume":
-				if v, err := strconv.ParseFloat(val, 64); err == nil {
+				if v, ok := parseFloat(val); ok {
 					cfg.Volume = v
 				}
 			case "volume_min":
-				if v, err := strconv.ParseFloat(val, 64); err == nil {
+				if v, ok := parseFloat(val); ok {
 					cfg.VolumeMin = v
 				}
 			case "vis_volume_linked":
@@ -785,11 +815,11 @@ func Load() (Config, error) {
 					cfg.AutoPlay = v
 				}
 			case "seek_large_step_sec":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.SeekStepLarge = v
 				}
 			case "lyrics_offset_ms":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.LyricsOffsetMs = v
 				}
 			case "eq":
@@ -803,27 +833,27 @@ func Load() (Config, error) {
 			case "visualizer":
 				cfg.Visualizer = parseString(val)
 			case "vis_rows":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.VisRows = v
 				}
 			case "sample_rate":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.SampleRate = v
 				}
 			case "buffer_ms":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.BufferMs = v
 				}
 			case "resample_quality":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.ResampleQuality = v
 				}
 			case "bit_depth":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.BitDepth = v
 				}
 			case "speed":
-				if v, err := strconv.ParseFloat(val, 64); err == nil {
+				if v, ok := parseFloat(val); ok {
 					cfg.Speed = v
 				}
 			case "simplified":
@@ -851,11 +881,11 @@ func Load() (Config, error) {
 			case "initial_directory":
 				cfg.InitialDirectory = parseString(val)
 			case "padding_horizontal":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.PaddingH = v
 				}
 			case "padding_vertical":
-				if v, err := strconv.Atoi(val); err == nil {
+				if v, ok := parseInt(val); ok {
 					cfg.PaddingV = v
 				}
 			case "log_level":

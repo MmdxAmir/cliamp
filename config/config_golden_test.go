@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"testing"
 )
 
@@ -32,6 +33,15 @@ func readExampleConfig(t *testing.T) string {
 		t.Fatalf("read config.toml.example: %v", err)
 	}
 	return string(data)
+}
+
+// exampleSetting matches a commented key or section header in the example.
+var exampleSetting = regexp.MustCompile(`(?m)^# (\[[a-z]+\]|[a-z_]+ *=.*)$`)
+
+// uncommentExample turns every commented key and section header of the
+// example into a live line, the way a user turns a setting on.
+func uncommentExample(s string) string {
+	return exampleSetting.ReplaceAllString(s, "$1")
 }
 
 // goldenSections sets every key of every provider section. The unquoted
@@ -172,8 +182,9 @@ low_power = false
 // so a parser change cannot move a value without a test failure.
 func TestLoadGolden(t *testing.T) {
 	t.Setenv("CLIAMP_GOLDEN_YT_SECRET", "yt-secret")
+	t.Setenv("MIXCLOUD_ACCESS_TOKEN", "mc-env-token")
 	example := readExampleConfig(t)
-	f := false
+	f, tr := false, true
 
 	exampleWant := defaultConfig()
 	exampleWant.EQPreset = "Flat"
@@ -276,12 +287,80 @@ func TestLoadGolden(t *testing.T) {
 	topWant.PaddingV = 2
 	topWant.LogLevel = "debug"
 
+	// Every setting of the example turned on. The example puts # comments
+	// after sample_rate, the other audio numbers and 3 cookies_from strings.
+	allWant := exampleWant
+	allWant.VisRows = 7
+	allWant.InitialDirectory = "~/Music"
+	allWant.Provider = "cliamp"
+	allWant.Simplified = true
+	allWant.HideHelpBar = true
+	allWant.HideSettingsPane = true
+	allWant.Expanded = true
+	allWant.Theme = "Tokyo Night"
+	allWant.Visualizer = "Bars"
+	allWant.Podcast = PodcastConfig{Country: "no"}
+	allWant.Spotify = SpotifyConfig{Enabled: true, ClientID: "your-spotify-app-client-id", Bitrate: 320}
+	allWant.Qobuz = QobuzConfig{Enabled: true, Quality: 6}
+	allWant.Tidal = TidalConfig{Enabled: true, Quality: "lossless"}
+	allWant.Navidrome = NavidromeConfig{
+		URL:        "https://music.example.com",
+		User:       "alice",
+		Password:   "secret",
+		Format:     "raw",
+		BrowseSort: "alphabeticalByName",
+	}
+	allWant.Lyrion = LyrionConfig{URL: "http://nas.local:9000", User: "alice", Password: "secret", ShowUnplayable: true}
+	allWant.SoundCloud = SoundCloudConfig{Enabled: true, User: "yourname", CookiesFrom: "firefox"}
+	allWant.Mixcloud = MixcloudConfig{
+		Enabled:        true,
+		Username:       "yourname",
+		AccessToken:    "mc-env-token",
+		CookiesFrom:    "firefox",
+		Styles:         []string{"ambient", "deep-house", "house", "jazz", "techno"},
+		StylesSet:      true,
+		MaxItems:       100,
+		StreamCreators: 20,
+	}
+	allWant.NetEase = NetEaseConfig{Enabled: true, CookiesFrom: "chrome", UserID: "optional-account-user-id"}
+	allWant.Yandex = YandexConfig{Enabled: true, Token: "y0_YourPersonalOAuthToken"}
+	allWant.Plex = PlexConfig{URL: "http://192.168.1.10:32400", Token: "xxxxxxxxxxxxxxxxxxxx", Libraries: []string{"Music", "Jazz"}}
+	allWant.Jellyfin = JellyfinConfig{
+		URL:      "https://jellyfin.example.com",
+		Token:    "optional-api-token",
+		User:     "alice",
+		Password: "secret",
+		UserID:   "optional-user-id",
+	}
+	allWant.YouTubeMusic = YouTubeMusicConfig{
+		Enabled:        true,
+		ClientID:       "your-google-oauth-client-id",
+		ClientSecret:   "your-google-oauth-client-secret",
+		CookiesFrom:    "chrome",
+		ExpandPlaylist: &tr,
+	}
+	allWant.Emby = EmbyConfig{
+		URL:      "https://emby.example.com",
+		Token:    "optional-api-key",
+		User:     "alice",
+		Password: "secret",
+		UserID:   "optional-user-id",
+	}
+	allWant.Audiobookshelf = AudiobookshelfConfig{
+		URL:       "https://abs.example.com",
+		Token:     "your-api-key",
+		User:      "listener",
+		Password:  "secret",
+		Libraries: []string{"Audiobooks", "Podcasts"},
+	}
+
 	tests := []struct {
 		name string
 		data string
 		want Config
 	}{
 		{"example as shipped", example, exampleWant},
+		{"example with every setting turned on", uncommentExample(example), allWant},
 		{"example plus every provider section", example + goldenSections, sectionsWant},
 		{"every top-level key", goldenTopLevel, topWant},
 	}

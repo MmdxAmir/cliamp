@@ -139,3 +139,71 @@ libraries = ["Mus\"ic", 'Ja\zz']
 		t.Errorf("Plex.Libraries = %q, want %q", got, want)
 	}
 }
+
+func TestScalar(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"-5", "-5"},
+		{"-5 # quieter", "-5"},
+		{"true\t# on", "true"},
+		{"1.25   #faster", "1.25"},
+		{"5#x", "5#x"},
+		{"5 x", "5 x"},
+		{"5 x # y", "5 x # y"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			if got := scalar(tt.in); got != tt.want {
+				t.Fatalf("scalar(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestLoadInlineComments checks that a # comment after a quoted string, a
+// number or a bool no longer resets the key, and that a # in an unquoted
+// string value stays part of the value.
+func TestLoadInlineComments(t *testing.T) {
+	cfg := loadConfigText(t, `
+volume = -5 # quieter
+speed = 1.5	# tab before the comment
+shuffle = true # on
+expanded = True   # any case
+repeat = "all" # loop the list
+seek_large_step_sec = 10#no space, so the value is invalid
+
+[spotify]
+client_id = "abc" # mine
+bitrate = 160 # kbps
+
+[navidrome]
+url = "https://music.example.com"
+user = alice
+password = pa #ss
+
+[plugins.lastfm]
+api_key = abc #123
+`)
+	checks := []struct {
+		name      string
+		got, want any
+	}{
+		{"Volume", cfg.Volume, -5.0},
+		{"Speed", cfg.Speed, 1.5},
+		{"Shuffle", cfg.Shuffle, true},
+		{"Expanded", cfg.Expanded, true},
+		{"Repeat", cfg.Repeat, "all"},
+		{"SeekStepLarge", cfg.SeekStepLarge, 30},
+		{"Spotify.ClientID", cfg.Spotify.ClientID, "abc"},
+		{"Spotify.Bitrate", cfg.Spotify.Bitrate, 160},
+		{"Navidrome.Password", cfg.Navidrome.Password, "pa #ss"},
+		{"plugins.lastfm.api_key", cfg.Plugins["lastfm"]["api_key"], "abc #123"},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %#v, want %#v", c.name, c.got, c.want)
+		}
+	}
+}
