@@ -3,8 +3,10 @@
 // played past the scrobble threshold (the same heuristic Last.fm and the
 // Navidrome scrobbler use) so skipped tracks never enter the list.
 //
-// The store is safe for concurrent callers and writes atomically (temp file +
-// rename) so a crash mid-write cannot leave a half-finished history.toml.
+// The store is safe for concurrent callers. Writers also take a file lock, so
+// two cliamp processes cannot overwrite each other's entries. It writes
+// atomically (temp file + rename) so a crash mid-write cannot leave a
+// half-finished history.toml.
 package history
 
 import (
@@ -87,6 +89,11 @@ func (s *Store) Record(track playlist.Track, playedAt time.Time) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unlock, err := s.lockFile()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = unlock() }()
 
 	entries, err := s.loadLocked()
 	if err != nil {
@@ -149,11 +156,27 @@ func (s *Store) Clear() error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	err := os.Remove(s.path)
+	unlock, err := s.lockFile()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = unlock() }()
+	err = os.Remove(s.path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	return err
+}
+
+// lockFile serializes writers across cliamp processes: the per-instance
+// mutex alone cannot stop two processes from rewriting the same file. It
+// creates the config directory first, because Record creates history.toml
+// there when the directory does not exist yet.
+func (s *Store) lockFile() (func() error, error) {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return nil, fmt.Errorf("create history dir: %w", err)
+	}
+	return fileutil.LockFile(s.path + ".lock")
 }
 
 func (s *Store) loadLocked() ([]Entry, error) {

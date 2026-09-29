@@ -1,9 +1,12 @@
 package history
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -364,5 +367,62 @@ func TestMergeTrackMeta(t *testing.T) {
 				t.Errorf("mergeTrackMeta:\n got %+v\nwant %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// Every cliamp process has its own Store, so the per-Store mutex cannot keep
+// two processes from overwriting each other's Record. The file lock must.
+func TestRecordFromSeparateStoresKeepsEveryEntry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fileutil.LockFile takes no lock on Windows")
+	}
+	tests := []struct {
+		name   string
+		stores int
+	}{
+		{"one store", 1},
+		{"two stores", 2},
+		{"four stores", 4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			const perStore = 20
+			path := filepath.Join(t.TempDir(), "history.toml")
+			base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+			errs := make(chan error, tt.stores*perStore)
+			var wg sync.WaitGroup
+			for i := range tt.stores {
+				s := NewAt(path)
+				wg.Go(func() {
+					for j := range perStore {
+						track := playlist.Track{Path: fmt.Sprintf("/%d-%d.mp3", i, j)}
+						errs <- s.Record(track, base.Add(time.Duration(j)*time.Second))
+					}
+				})
+			}
+			wg.Wait()
+			close(errs)
+			for err := range errs {
+				if err != nil {
+					t.Fatalf("Record: %v", err)
+				}
+			}
+			got, err := NewAt(path).Recent(0)
+			if err != nil {
+				t.Fatalf("Recent: %v", err)
+			}
+			if len(got) != tt.stores*perStore {
+				t.Fatalf("got %d entries, want %d", len(got), tt.stores*perStore)
+			}
+		})
+	}
+}
+
+func TestRecordCreatesMissingConfigDir(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "history.toml")
+	s := NewAt(path)
+	mustRecord(t, s, playlist.Track{Path: "/a.mp3"}, time.Now())
+	if got, err := s.Recent(0); err != nil || len(got) != 1 {
+		t.Fatalf("Recent = %d entries, %v; want 1 entry", len(got), err)
 	}
 }
