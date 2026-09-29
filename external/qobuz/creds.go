@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/bjarneo/cliamp/internal/appdir"
+	"github.com/bjarneo/cliamp/internal/fileutil"
 )
 
 // storedCreds holds persisted Qobuz credentials so the user only signs in once.
@@ -69,14 +70,11 @@ func saveCreds(creds *storedCreds) error {
 	if err != nil {
 		return fmt.Errorf("qobuz: credentials path: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("qobuz: create credentials dir: %w", err)
-	}
 	data, err := json.Marshal(creds)
 	if err != nil {
 		return fmt.Errorf("qobuz: encode credentials: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := fileutil.WriteFileAtomic(path, data, 0o600); err != nil {
 		return fmt.Errorf("qobuz: write credentials: %w", err)
 	}
 	return nil
