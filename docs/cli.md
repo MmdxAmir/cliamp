@@ -5,7 +5,7 @@ Override a config option for one session without editing `~/.config/cliamp/confi
 ## Playback
 
 ```sh
-cliamp --vol -5 track.mp3             # volume in dB [-30, +6]
+cliamp --vol -5 track.mp3             # startup volume in dB [volume_min, +6]
 cliamp --shuffle ~/Music              # enable shuffle
 cliamp --repeat all ~/Music           # repeat mode: off, all, one
 cliamp --mono track.mp3               # downmix to mono
@@ -113,7 +113,7 @@ Source the generated script directly or install it as your shell documentation d
 Put flags before, after, or between positional arguments:
 
 ```sh
-cliamp --shuffle track.mp3 --volume -5
+cliamp --shuffle track.mp3 --vol -5
 cliamp track.mp3 --repeat all --mono ~/Music
 ```
 
@@ -121,7 +121,7 @@ cliamp track.mp3 --repeat all --mono ~/Music
 
 | Flag | Type | Default | Range / Values |
 |------|------|---------|----------------|
-| `--vol` | float | 0 | -30 to +6 dB |
+| `--vol` | float | 0 | `volume_min` (default -50) to +6 dB |
 | `--shuffle` / `--no-shuffle` | bool | false | |
 | `--repeat` | string | off | off, all, one |
 | `--mono` / `--no-mono` | bool | false | |
@@ -236,7 +236,8 @@ cliamp play / pause / toggle / stop    # playback control
 cliamp next / prev                     # track navigation
 cliamp status                          # current state
 cliamp status --json                   # machine-readable state
-cliamp volume -5                       # adjust volume (dB)
+cliamp volume -5                       # set the volume to -5 dB
+cliamp remote call volume.adjust --params '{"value":3}'    # raise the volume by 3 dB
 cliamp seek 30                         # seek relative to current position (seconds)
 cliamp remote call seek.absolute --params '{"value":90}'   # seek to 90s exactly
 cliamp load "Playlist Name"            # load a playlist
@@ -253,5 +254,7 @@ cliamp remote state                     # v2 GUI-ready runtime snapshot
 cliamp remote capabilities              # v2 operation list
 cliamp remote events runtime.state      # v2 event stream
 ```
+
+`cliamp volume` sets an absolute level. A sign does not make the value relative, so `cliamp volume +3` sets the volume to +3 dB. To step the volume up or down, submit `volume.adjust` with `cliamp remote call`. A negative value lowers the volume. Both forms clamp the result to the range `volume_min` to +6 dB.
 
 See [remote-control.md](remote-control.md) for the protocol specification.

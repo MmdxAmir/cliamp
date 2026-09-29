@@ -43,7 +43,7 @@ Start cliamp once at login, for example with `~/.config/systemd/user/cliamp.serv
 ```sh
 cliamp toggle      # play/pause from anywhere
 cliamp next
-cliamp volume -3
+cliamp volume -3   # set the volume to -3 dB
 ```
 
 Use this minimal systemd user unit:
@@ -76,10 +76,12 @@ Poll `cliamp status --json` at an interval. Render the fields that you need.
   "interval": 2,
   "on-click": "cliamp toggle",
   "on-click-right": "cliamp next",
-  "on-scroll-up": "cliamp volume +3",
-  "on-scroll-down": "cliamp volume -3"
+  "on-scroll-up": "cliamp remote call volume.adjust --params '{\"value\":3}'",
+  "on-scroll-down": "cliamp remote call volume.adjust --params '{\"value\":-3}'"
 }
 ```
+
+The scroll actions submit `volume.adjust`, which changes the volume by the given number of dB. Do not use `cliamp volume +3` for a step. It sets the volume to +3 dB.
 
 **Polybar**:
 
@@ -121,8 +123,8 @@ Bind media keys directly to IPC subcommands.
 bind = , XF86AudioPlay,  exec, cliamp toggle
 bind = , XF86AudioNext,  exec, cliamp next
 bind = , XF86AudioPrev,  exec, cliamp prev
-bind = , XF86AudioRaiseVolume, exec, cliamp volume +3
-bind = , XF86AudioLowerVolume, exec, cliamp volume -3
+bind = , XF86AudioRaiseVolume, exec, cliamp remote call volume.adjust --params '{"value":3}'
+bind = , XF86AudioLowerVolume, exec, cliamp remote call volume.adjust --params '{"value":-3}'
 ```
 
 **sxhkd**:

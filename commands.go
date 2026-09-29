@@ -27,7 +27,7 @@ import (
 
 func buildApp() *cli.Command {
 	rootFlags := []cli.Flag{
-		&cli.Float64Flag{Name: "vol", Usage: "startup volume in dB [-30, +6]"},
+		&cli.Float64Flag{Name: "vol", Usage: "startup volume in dB [volume_min, +6]"},
 		&cli.BoolWithInverseFlag{Name: "shuffle", Usage: "shuffle playback"},
 		&cli.StringFlag{Name: "repeat", Usage: "repeat mode: off, all, one"},
 		&cli.BoolWithInverseFlag{Name: "mono", Usage: "mono output"},
@@ -801,8 +801,12 @@ func statusCommand() *cli.Command {
 func volumeCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "volume",
-		Usage:     "adjust volume in dB",
+		Usage:     "set the volume to an absolute level in dB",
 		ArgsUsage: "<dB>",
+		Description: "Sets the volume to <dB>. A sign does not make the value relative:\n" +
+			"cliamp volume -3 sets the volume to -3 dB. cliamp clamps the value to\n" +
+			"the range volume_min to +6 dB. To step the volume, run\n" +
+			"cliamp remote call volume.adjust --params '{\"value\":3}'.",
 		Action: func(ctx context.Context, c *cli.Command) error {
 			if c.Args().Len() == 0 {
 				return fmt.Errorf("usage: cliamp volume <dB>")
