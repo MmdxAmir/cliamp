@@ -7,11 +7,12 @@ import (
 )
 
 var (
-	_ provider.ArtistBrowser    = (*Provider)(nil)
-	_ provider.AlbumBrowser     = (*Provider)(nil)
-	_ provider.AlbumTrackLoader = (*Provider)(nil)
-	_ provider.PlaybackReporter = (*Provider)(nil)
-	_ provider.Searcher         = (*Provider)(nil)
+	_ provider.ArtistBrowser             = (*Provider)(nil)
+	_ provider.AlbumBrowser              = (*Provider)(nil)
+	_ provider.AlbumTrackLoader          = (*Provider)(nil)
+	_ provider.DefaultBrowseModeProvider = (*Provider)(nil)
+	_ provider.PlaybackReporter          = (*Provider)(nil)
+	_ provider.Searcher                  = (*Provider)(nil)
 )
 
 // Provider implements playlist.Provider for an Emby server. The shared

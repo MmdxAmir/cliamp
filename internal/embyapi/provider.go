@@ -12,13 +12,14 @@ import (
 )
 
 var (
-	_ playlist.Provider         = (*Provider)(nil)
-	_ playlist.Refresher        = (*Provider)(nil)
-	_ provider.ArtistBrowser    = (*Provider)(nil)
-	_ provider.AlbumBrowser     = (*Provider)(nil)
-	_ provider.AlbumTrackLoader = (*Provider)(nil)
-	_ provider.PlaybackReporter = (*Provider)(nil)
-	_ provider.Searcher         = (*Provider)(nil)
+	_ playlist.Provider                  = (*Provider)(nil)
+	_ playlist.Refresher                 = (*Provider)(nil)
+	_ provider.ArtistBrowser             = (*Provider)(nil)
+	_ provider.AlbumBrowser              = (*Provider)(nil)
+	_ provider.AlbumTrackLoader          = (*Provider)(nil)
+	_ provider.DefaultBrowseModeProvider = (*Provider)(nil)
+	_ provider.PlaybackReporter          = (*Provider)(nil)
+	_ provider.Searcher                  = (*Provider)(nil)
 )
 
 // Provider exposes a Client as a cliamp provider. The jellyfin and emby
@@ -41,6 +42,11 @@ func NewProvider(client *Client, name string) *Provider {
 
 // Name returns the display name used in the provider selector.
 func (p *Provider) Name() string { return p.name }
+
+// DefaultBrowseMode always opens the server as artist → album → songs.
+func (p *Provider) DefaultBrowseMode() provider.BrowseMode {
+	return provider.BrowseArtistAlbums
+}
 
 // Refresh clears cached playlist, track, and album data so the next call
 // re-fetches from the server. Implements playlist.Refresher.

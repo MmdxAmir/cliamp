@@ -18,6 +18,13 @@ func TestProviderName(t *testing.T) {
 	}
 }
 
+func TestProviderDefaultBrowseMode(t *testing.T) {
+	p := newProvider(NewClient("https://emby.example.com", "tok", "user-1", "", ""))
+	if got := p.DefaultBrowseMode(); got != provider.BrowseArtistAlbums {
+		t.Fatalf("DefaultBrowseMode() = %d, want BrowseArtistAlbums", got)
+	}
+}
+
 func TestProviderCanReportPlayback(t *testing.T) {
 	p := newProvider(NewClient("https://emby.example.com", "tok", "user-1", "", ""))
 	tests := []struct {
