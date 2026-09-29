@@ -64,7 +64,10 @@ type Player struct {
 
 	lastPlayedDuration time.Duration // real duration of the track finished by the last gapless swap
 
-	streamTitle      atomic.Value               // stores string, set by ICY reader callback
+	streamTitle atomic.Value // stores string, set by ICY reader callback
+
+	// The source registries are guarded by mu. Register writes them, and
+	// buildPipeline reads them when a track starts.
 	customFactories  map[string]StreamerFactory // URI scheme prefix -> factory (e.g. "spotify:" -> fn)
 	bufferedURLMatch func(string) bool          // optional: returns true for URLs needing navBuffer pipeline
 	sourceResolvers  map[string]SourceResolver  // URI scheme prefix -> play-time source resolver (e.g. "tidal://")

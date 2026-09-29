@@ -2,6 +2,7 @@ package player
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -339,6 +340,60 @@ func TestRegisterBufferedURLMatcher(t *testing.T) {
 	defer p.mu.Unlock()
 	if p.bufferedURLMatch == nil {
 		t.Error("matcher not stored")
+	}
+}
+
+// The registries are read while a track starts and written by Register
+// calls. Run with -race: the reads must hold the lock that the writes hold.
+func TestRegistryReadsHoldTheLock(t *testing.T) {
+	factory := func(string) (beep.StreamSeekCloser, beep.Format, time.Duration, error) {
+		return nil, beep.Format{}, 0, nil
+	}
+	resolver := func(string) (ResolvedSource, error) { return ResolvedSource{}, nil }
+	tests := []struct {
+		name     string
+		register func(p *Player, i int)
+		match    func(p *Player) bool
+	}{
+		{
+			name:     "streamer factory",
+			register: func(p *Player, i int) { p.RegisterStreamerFactory(fmt.Sprintf("s%d:", i), factory) },
+			match:    func(p *Player) bool { return p.matchCustomURI("s0:track") != nil },
+		},
+		{
+			name:     "source resolver",
+			register: func(p *Player, i int) { p.RegisterSourceResolver(fmt.Sprintf("r%d://", i), resolver) },
+			match:    func(p *Player) bool { return p.matchSourceResolver("r0://track") != nil },
+		},
+		{
+			name:     "buffered url matcher",
+			register: func(p *Player, _ int) { p.RegisterBufferedURLMatcher(func(string) bool { return true }) },
+			match:    func(p *Player) bool { return p.isBufferedURL("https://example.com/stream") },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestPlayer()
+			const writes = 200
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				for i := range writes {
+					tt.register(p, i)
+				}
+			}()
+			for {
+				select {
+				case <-done:
+					if !tt.match(p) {
+						t.Fatal("registered entry does not match after the writes")
+					}
+					return
+				default:
+					tt.match(p)
+				}
+			}
+		})
 	}
 }
 
