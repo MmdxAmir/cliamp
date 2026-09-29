@@ -1,11 +1,15 @@
 package radio
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 type hostRewriter struct {
@@ -67,6 +71,18 @@ func TestStationsSuccess(t *testing.T) {
 	}
 	if got.Bitrate != 128 || got.CountryCode != "GB" {
 		t.Errorf("station = %+v, want bitrate 128 and country code GB", got)
+	}
+}
+
+func TestStationsBodyTooLarge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("[" + strings.Repeat(" ", maxCatalogBody) + "]"))
+	}))
+	defer srv.Close()
+	installCatalogClient(t, srv.URL)
+
+	if _, err := Stations(StationQuery{Name: "jazz"}); !errors.Is(err, httpclient.ErrTooLarge) {
+		t.Fatalf("Stations() error = %v, want httpclient.ErrTooLarge", err)
 	}
 }
 

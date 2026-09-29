@@ -9,7 +9,6 @@ package radiometa
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -40,6 +39,11 @@ func Resolver(streamURL string) (fetch func(ctx context.Context) (string, error)
 	return nil, 0, false
 }
 
+// maxMetaBody limits a now-playing response. The documents are a few KB.
+const maxMetaBody = 1 << 20
+
+// getJSON performs one GET under ctx and decodes the response body into v. A
+// body over maxMetaBody returns httpclient.ErrTooLarge.
 func getJSON(ctx context.Context, url string, v any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -54,7 +58,7 @@ func getJSON(ctx context.Context, url string, v any) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%s: HTTP %d", url, resp.StatusCode)
 	}
-	return json.NewDecoder(resp.Body).Decode(v)
+	return httpclient.ReadJSON(resp.Body, maxMetaBody, v)
 }
 
 // --- NTS -------------------------------------------------------------------

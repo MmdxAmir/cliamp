@@ -1,6 +1,7 @@
 package lyrics
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -220,5 +221,17 @@ func TestFetchLRCLIBSendsUserAgent(t *testing.T) {
 	_, _ = fetchLRCLIB("artist title")
 	if got != httpclient.UserAgent {
 		t.Errorf("User-Agent = %q, want %q", got, httpclient.UserAgent)
+	}
+}
+
+func TestFetchLRCLIBBodyTooLarge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("[" + strings.Repeat(" ", maxResponseBody) + "]"))
+	}))
+	defer srv.Close()
+	installTestClient(t, srv.URL)
+
+	if _, err := fetchLRCLIB("artist title"); !errors.Is(err, httpclient.ErrTooLarge) {
+		t.Fatalf("fetchLRCLIB() error = %v, want httpclient.ErrTooLarge", err)
 	}
 }
