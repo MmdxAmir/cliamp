@@ -10,17 +10,47 @@ import (
 	"github.com/bjarneo/cliamp/internal/httpclient/httpclienttest"
 )
 
-// TestClientUsesEnvironmentProxy checks that API calls follow ALL_PROXY.
+// TestClientUsesEnvironmentProxy checks that API calls and the bundle fetch
+// follow ALL_PROXY.
 func TestClientUsesEnvironmentProxy(t *testing.T) {
-	proxy := httpclienttest.UseAllProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{}`)
-	}))
-	c := newClient("app", nil)
-	c.baseURL = "http://www.qobuz.invalid/api.json/0.2/"
-	if err := c.doGet(context.Background(), "track/get", nil, nil); err != nil {
-		t.Fatalf("doGet: %v", err)
+	tests := []struct {
+		name      string
+		call      func() error
+		wantHosts []string
+	}{
+		{
+			name: "api",
+			call: func() error {
+				c := newClient("app", nil)
+				c.baseURL = "http://www.qobuz.invalid/api.json/0.2/"
+				return c.doGet(context.Background(), "track/get", nil, nil)
+			},
+			wantHosts: []string{"www.qobuz.invalid"},
+		},
+		{
+			name: "bundle",
+			call: func() error {
+				_, err := fetchBundle(context.Background(), "http://play.qobuz.invalid")
+				return err
+			},
+			wantHosts: []string{"play.qobuz.invalid", "play.qobuz.invalid"},
+		},
 	}
-	if got := proxy.Hosts(); !slices.Equal(got, []string{"www.qobuz.invalid"}) {
-		t.Errorf("proxy hosts = %q, want [www.qobuz.invalid]", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proxy := httpclienttest.UseAllProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/login" {
+					_, _ = io.WriteString(w, `<script src="/resources/7.1.2-b012/bundle.js"></script>`)
+					return
+				}
+				_, _ = io.WriteString(w, `{}`)
+			}))
+			if err := tt.call(); err != nil {
+				t.Fatal(err)
+			}
+			if got := proxy.Hosts(); !slices.Equal(got, tt.wantHosts) {
+				t.Errorf("proxy hosts = %q, want %q", got, tt.wantHosts)
+			}
+		})
 	}
 }

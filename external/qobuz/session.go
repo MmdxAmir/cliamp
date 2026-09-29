@@ -28,9 +28,10 @@ type oauthResult struct {
 	Code   string
 }
 
-// newClientSilent builds an authenticated client from stored credentials only.
-// It never opens a browser; if no usable credentials exist it returns an error.
-func newClientSilent(ctx context.Context) (*client, error) {
+// newClientSilent builds an authenticated client for the API at baseURL from
+// stored credentials only. It never opens a browser; if no usable credentials
+// exist it returns an error.
+func newClientSilent(ctx context.Context, baseURL string) (*client, error) {
 	creds, err := credsFile.Load()
 	if err != nil {
 		return nil, fmt.Errorf("qobuz: no stored credentials: %w", err)
@@ -40,6 +41,7 @@ func newClientSilent(ctx context.Context) (*client, error) {
 	}
 
 	c := newClient(creds.AppID, creds.Secrets)
+	c.baseURL = baseURL
 	c.secret = creds.Secret
 	c.uat = creds.UserAuthToken
 	c.userID = creds.UserID
@@ -61,7 +63,7 @@ func newClientSilent(ctx context.Context) (*client, error) {
 // newClientInteractive scrapes fresh credentials from the Qobuz web player and
 // runs the interactive OAuth browser flow, persisting the result on success.
 func newClientInteractive(ctx context.Context) (*client, error) {
-	appID, secrets, privateKey, err := scrapeCredentials(ctx)
+	appID, secrets, privateKey, err := scrapeCredentials(ctx, bundleBaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("qobuz: scrape credentials: %w", err)
 	}

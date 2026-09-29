@@ -1,9 +1,14 @@
 package qobuz
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"maps"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -99,6 +104,73 @@ func TestBundleSecrets(t *testing.T) {
 			}
 			if !maps.Equal(got, tt.want) {
 				t.Errorf("secrets() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestScrapeCredentials serves a web player login page and its bundle from
+// an httptest server and checks what scrapeCredentials reads from them.
+func TestScrapeCredentials(t *testing.T) {
+	const (
+		bundlePath = "/resources/7.1.2-b012/bundle.js"
+		secret     = "0123456789abcdef0123456789abcdef"
+	)
+	seed, info, extras := seedParts(t, secret)
+	loginPage := `<html><script src="` + bundlePath + `"></script></html>`
+	validBundle := fmt.Sprintf(`production:{api:{appId:"798273057",appSecret:"05a4851e74ee47fda346f50cfdfc4f09"}}`+
+		`a.initialSeed("%s",window.utimezone.berlin);{name:"Europe/Berlin",info:"%s",extras:"%s"};privateKey: "scrapedKey123"`,
+		seed, info, extras)
+
+	tests := []struct {
+		name       string
+		loginPage  string
+		loginCode  int
+		bundle     string
+		bundleCode int
+		wantAppID  string
+		wantKey    string
+		wantErr    string
+	}{
+		{name: "login page and bundle", loginPage: loginPage, bundle: validBundle, wantAppID: "798273057", wantKey: "scrapedKey123"},
+		{name: "login page error", loginCode: http.StatusInternalServerError, wantErr: "get login page: HTTP 500"},
+		{name: "no bundle URL", loginPage: `<html></html>`, wantErr: "bundle URL not found"},
+		{name: "bundle error", loginPage: loginPage, bundleCode: http.StatusNotFound, wantErr: "get bundle.js: HTTP 404"},
+		{name: "no app id", loginPage: loginPage, bundle: `privateKey: "scrapedKey123"`, wantErr: "app_id not found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/login":
+					if tt.loginCode != 0 {
+						w.WriteHeader(tt.loginCode)
+					}
+					_, _ = io.WriteString(w, tt.loginPage)
+				case bundlePath:
+					if tt.bundleCode != 0 {
+						w.WriteHeader(tt.bundleCode)
+					}
+					_, _ = io.WriteString(w, tt.bundle)
+				default:
+					t.Errorf("unexpected request %s", r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+
+			appID, secrets, key, err := scrapeCredentials(context.Background(), srv.URL)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("scrapeCredentials() error = %v, want it to contain %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("scrapeCredentials() error = %v", err)
+			}
+			if appID != tt.wantAppID || key != tt.wantKey || !slices.Equal(secrets, []string{secret}) {
+				t.Errorf("scrapeCredentials() = %q, %q, %q, want %q, [%q], %q", appID, secrets, key, tt.wantAppID, secret, tt.wantKey)
 			}
 		})
 	}
