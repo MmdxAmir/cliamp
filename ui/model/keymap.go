@@ -63,7 +63,7 @@ func keyPressFor(key string) (tea.KeyPressMsg, bool) {
 	} else {
 		return tea.KeyPressMsg{}, false
 	}
-	return msg, key != "" && msg.String() == key
+	return msg, msg.String() == key
 }
 
 // ReservedKeys returns a fresh copy of every key described by commandRegistry.
