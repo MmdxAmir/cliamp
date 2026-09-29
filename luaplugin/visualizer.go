@@ -92,7 +92,7 @@ func (m *Manager) RenderVis(name string, bands [10]float64, rows, cols int, fram
 	vis.plugin.mu.Lock()
 	defer vis.plugin.mu.Unlock()
 
-	ret, _ := m.callLocked(vis.plugin, "render", hookTimeout, 1, func(L *lua.LState) (*lua.LFunction, []lua.LValue) {
+	ret, _ := m.callLocked(vis.plugin, renderLabel, hookTimeout, 1, func(L *lua.LState) (*lua.LFunction, []lua.LValue) {
 		return vis.render, []lua.LValue{vis.obj, floatsToTable(L, bands[:]), lua.LNumber(frame), lua.LNumber(rows), lua.LNumber(cols)}
 	})
 	if str, ok := ret.(lua.LString); ok {

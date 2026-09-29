@@ -1,7 +1,9 @@
 package luaplugin
 
 import (
+	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1224,6 +1226,47 @@ func TestCallbackErrorsAreLogged(t *testing.T) {
 			data, _ := os.ReadFile(logPath)
 			if got := strings.Count(string(data), "callback failed"); got != 1 {
 				t.Fatalf("plugins.log has %d entries for the error, want 1:\n%s", got, data)
+			}
+		})
+	}
+}
+
+// Callback errors go to plugins.log only. A write to stderr corrupts the TUI.
+// A render runs on each frame, so it logs its first error once, even when it
+// fails only on some frames.
+func TestRenderErrorsLogOnceAndSkipStderr(t *testing.T) {
+	tests := []struct {
+		name   string
+		render string
+	}{
+		{"fails on alternate frames", `if frame % 2 == 0 then error("render failed " .. frame) end`},
+		{"fails on each frame", `error("render failed")`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			defer log.SetOutput(log.Writer())
+			log.SetOutput(&stderr)
+
+			m := newTestManager()
+			logPath := filepath.Join(t.TempDir(), pluginLogName)
+			m.logger = newPluginLogger(logPath)
+			loadTestPlugin(t, m, "flaky-vis", `
+				local v = plugin.register({name = "flaky-vis", type = "visualizer"})
+				function v:render(bands, frame) `+tt.render+` return "ok" end
+			`)
+			m.finalizeVisualizers()
+			for frame := range uint64(10) {
+				m.RenderVis("flaky-vis", [10]float64{}, 8, 40, frame)
+			}
+			m.Close()
+
+			if stderr.Len() != 0 {
+				t.Errorf("stderr = %q, want nothing", stderr.String())
+			}
+			data, _ := os.ReadFile(logPath)
+			if got := strings.Count(string(data), "render failed"); got != 1 {
+				t.Errorf("plugins.log has %d render errors, want 1:\n%s", got, data)
 			}
 		})
 	}

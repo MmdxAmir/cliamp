@@ -462,7 +462,7 @@ cliamp.log.debug("response: " .. body)
 
 cliamp writes logs to `~/.config/cliamp/plugins.log`. Each line has a timestamp and the installed name of the plugin as the prefix, for example `[now-playing]`.
 
-cliamp also logs the Lua errors of event hooks, key bindings, commands, timers, exec callbacks, and visualizer callbacks to this file. A callback that fails again with the same error logs it once. cliamp logs it again after the callback succeeds or fails with a different error.
+cliamp also logs the Lua errors of event hooks, key bindings, commands, timers, exec callbacks, and visualizer callbacks to this file. A callback that fails again with the same error logs it once. cliamp logs it again after the callback succeeds or fails with a different error. A visualizer `render` runs on each frame, so cliamp logs only its first error until cliamp restarts. cliamp does not write plugin errors to the terminal.
 
 ### cliamp.player control (requires permissions)
 

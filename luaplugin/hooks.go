@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
@@ -70,10 +69,15 @@ func (m *Manager) call(p *Plugin, label string, timeout time.Duration, nret int,
 	return m.callLocked(p, label, timeout, nret, build)
 }
 
+// renderLabel is the call label of a visualizer render. See callLocked.
+const renderLabel = "render"
+
 // callLocked is call for a caller that already holds p.mu. The call stops
 // after timeout. When nret > 0, it returns the first result. It logs a Lua
 // error under label, but only when the error differs from the last one logged
-// for label. Thus a timer or a render that fails each time logs once.
+// for label. Thus a timer that fails each time logs once. A render runs on
+// each frame, so it logs only its first error while the plugin is loaded.
+// Otherwise a render that fails on some frames fills plugins.log.
 func (m *Manager) callLocked(p *Plugin, label string, timeout time.Duration, nret int, build callBuilder) (lua.LValue, error) {
 	if p.closed {
 		return lua.LNil, errClosed
@@ -94,7 +98,8 @@ func (m *Manager) callLocked(p *Plugin, label string, timeout time.Duration, nre
 		if ctx.Err() != nil {
 			key = ctx.Err().Error()
 		}
-		if p.lastErr[label] != key {
+		prev, logged := p.lastErr[label]
+		if !logged || (prev != key && label != renderLabel) {
 			if p.lastErr == nil {
 				p.lastErr = make(map[string]string)
 			}
@@ -103,7 +108,9 @@ func (m *Manager) callLocked(p *Plugin, label string, timeout time.Duration, nre
 		}
 		return lua.LNil, err
 	}
-	delete(p.lastErr, label)
+	if label != renderLabel {
+		delete(p.lastErr, label)
+	}
 	if nret == 0 {
 		return lua.LNil, nil
 	}
@@ -112,12 +119,10 @@ func (m *Manager) callLocked(p *Plugin, label string, timeout time.Duration, nre
 	return ret, nil
 }
 
-// logHookErr records a callback error to stderr and the plugin log.
+// logHookErr records a callback error in plugins.log. It never writes to
+// stderr, because stderr output corrupts the TUI.
 func (m *Manager) logHookErr(name, label string, err error) {
-	log.Printf("[lua:%s] %s error: %v", name, label, err)
-	if m.logger != nil {
-		m.logger.log(name, "error", "%s error: %v", label, err)
-	}
+	m.logger.log(name, "error", "%s error: %v", label, err)
 }
 
 // filterOutPlugin returns hooks with all entries owned by p removed. Reuses
