@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 
 	lua "github.com/yuin/gopher-lua"
@@ -134,31 +135,6 @@ func TestFSRemove(t *testing.T) {
 	}
 }
 
-// testHomeOutsideTemp sets HOME to a new dir outside the temp roots, so that
-// only the cliamp roots can make a path under it writable.
-func testHomeOutsideTemp(t *testing.T) string {
-	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Skipf("get working dir: %v", err)
-	}
-	home, err := os.MkdirTemp(wd, ".testhome-")
-	if err != nil {
-		t.Skipf("create home outside the temp dir: %v", err)
-	}
-	t.Cleanup(func() { os.RemoveAll(home) })
-	canonHome, _ := canonicalExistingPath(home)
-	for _, tmp := range []string{"/tmp", os.TempDir()} {
-		canonTmp, _ := canonicalExistingPath(tmp)
-		if isWithin(normalizeWritePath(canonHome), normalizeWritePath(canonTmp)) {
-			t.Skipf("working dir %s is inside the temp dir %s", wd, tmp)
-		}
-	}
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads it on Windows
-	return home
-}
-
 func TestIsWriteAllowed(t *testing.T) {
 	caseFolded := runtime.GOOS == "windows" || runtime.GOOS == "darwin"
 	layouts := []struct {
@@ -170,7 +146,9 @@ func TestIsWriteAllowed(t *testing.T) {
 	}
 	for _, layout := range layouts {
 		t.Run(layout.name, func(t *testing.T) {
-			home := testHomeOutsideTemp(t)
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home) // os.UserHomeDir reads it on Windows
 			cfg := filepath.Join(home, ".config", "cliamp")
 			if layout.linkConfig {
 				target := filepath.Join(home, "dotfiles", "cliamp")
@@ -209,13 +187,27 @@ func TestIsWriteAllowed(t *testing.T) {
 			}
 
 			rules := loadWriteRules()
+			if tmp := fsAllowedPath("test.txt"); !rules.allows(tmp) {
+				t.Errorf("allows(%q) = false, want true", tmp)
+			}
+			// HOME is in the temp dir. Drop the temp roots, so that only the
+			// cliamp roots can make a path under HOME writable.
+			var tempRoots []string
+			for _, tmp := range []string{"/tmp", os.TempDir()} {
+				if canon, ok := canonicalExistingPath(tmp); ok {
+					tempRoots = append(tempRoots, normalizeWritePath(canon))
+				}
+			}
+			rules.allow = slices.DeleteFunc(rules.allow, func(dir string) bool {
+				return slices.Contains(tempRoots, dir)
+			})
+
 			tests := []struct {
 				name string
 				path string
 				want bool
 				link bool // the path goes through a symlink in data
 			}{
-				{name: "temp dir", path: fsAllowedPath("test.txt"), want: true},
 				{name: "system file", path: fsDisallowedPath()},
 				{name: "home dotfile", path: filepath.Join(home, ".bashrc")},
 				{name: "config dir", path: cfg, want: true},
