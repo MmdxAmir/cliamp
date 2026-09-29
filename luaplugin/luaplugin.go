@@ -621,10 +621,10 @@ func (m *Manager) Close() {
 	m.mu.Unlock()
 
 	// Run the events that are already queued, so app.quit is the last event
-	// each plugin sees. Emit and EmitKey send only under m.mu while closing
-	// is false, so no send can reach a closed queue. After closeDrainBudget,
-	// drop the calls that still wait. The call that runs then stops within
-	// hookTimeout.
+	// each plugin sees. Emit, EmitKey and queueVis send only under m.mu while
+	// closing is false, so no send can reach a closed queue. After
+	// closeDrainBudget, drop the calls that still wait. The call that runs
+	// then stops within hookTimeout.
 	for _, p := range m.plugins {
 		close(p.queue)
 	}
