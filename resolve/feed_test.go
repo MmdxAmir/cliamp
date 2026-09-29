@@ -378,7 +378,7 @@ func TestFeedHTTPSErrorsAndRedirectLimit(t *testing.T) {
 	defer srv.Close()
 	oldClient := httpClient
 	client := *httpClient
-	client.Transport = &uaTransport{rt: srv.Client().Transport}
+	client.Transport = srv.Client().Transport
 	httpClient = &client
 	defer func() { httpClient = oldClient }()
 	if client.Timeout != 30*time.Second {

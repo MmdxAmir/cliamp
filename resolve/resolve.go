@@ -41,30 +41,17 @@ func SetYTDLCookiesForHost(host, browser string) {
 	ytdlcookies.SetForHost(host, browser)
 }
 
-// httpClient is used for feed and M3U resolution. It has a generous but
-// finite timeout to prevent hanging on unresponsive servers.
-var httpClient = &http.Client{
-	Timeout:   30 * time.Second,
-	Transport: &uaTransport{rt: http.DefaultTransport},
-}
+// httpClient is used for feed, M3U and YouTube page resolution. It has a
+// generous but finite timeout to prevent hanging on unresponsive servers.
+// httpclient.NewAPI sends the cliamp User-Agent and follows the proxy
+// variables.
+var httpClient = httpclient.NewAPI(30 * time.Second)
 
 // sniffClient probes content types during Args classification, which runs on
 // the startup path before the TUI launches. It uses a short timeout so a slow
 // or unresponsive server can stall startup by at most a few seconds rather
 // than the 30s the feed/M3U client allows.
-var sniffClient = &http.Client{
-	Timeout:   5 * time.Second,
-	Transport: &uaTransport{rt: http.DefaultTransport},
-}
-
-// uaTransport injects the cliamp User-Agent header into every request.
-type uaTransport struct{ rt http.RoundTripper }
-
-func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.Header.Set("User-Agent", httpclient.UserAgent)
-	return t.rt.RoundTrip(req)
-}
+var sniffClient = httpclient.NewAPI(5 * time.Second)
 
 // Result holds the output of Args: instantly-resolved tracks and
 // remote URLs (feeds, M3U) that need async HTTP fetching.
@@ -568,7 +555,8 @@ const YTDLRadioInitialItems = 20
 // For playlist URLs it enumerates all entries natively; for single video URLs
 // it returns a single track with metadata from the YouTube API.
 func resolveYouTube(ctx context.Context, pageURL string) ([]playlist.Track, error) {
-	client := youtube.Client{}
+	// The library sets its own User-Agent on each request.
+	client := youtube.Client{HTTPClient: httpClient}
 
 	// Only attempt playlist resolution if the URL contains a "list=" parameter,
 	// avoiding a wasted API call for single-video URLs (the common case).
