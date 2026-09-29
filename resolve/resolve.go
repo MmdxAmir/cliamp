@@ -455,7 +455,11 @@ func resolveM3U(m3uURL string) ([]playlist.Track, error) {
 		return nil, fmt.Errorf("http status %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPlaylistBody))
+	// Read one byte past the cap so that an oversized plain M3U is reported,
+	// as in resolvePLS. An HLS body only decides the stream type, and a long
+	// VOD media playlist can pass the cap, so an HLS body over the cap still
+	// plays.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPlaylistBody+1))
 	if err != nil {
 		return nil, err
 	}
@@ -471,6 +475,9 @@ func resolveM3U(m3uURL string) ([]playlist.Track, error) {
 		return []playlist.Track{t}, nil
 	}
 
+	if len(body) > maxPlaylistBody {
+		return nil, fmt.Errorf("m3u playlist exceeds %d bytes", maxPlaylistBody)
+	}
 	entries, err := parseM3U(bytes.NewReader(body), "")
 	if err != nil {
 		return nil, err

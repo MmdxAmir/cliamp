@@ -481,6 +481,69 @@ func TestResolvePLSStopsReadingAtTheCap(t *testing.T) {
 	}
 }
 
+// TestResolveM3UCapsBody pins the size rule for remote M3U bodies. A plain
+// M3U over the cap is an error, as for PLS, because truncation cuts the last
+// entry into a bogus track. An HLS body only decides the stream type, so a
+// long VOD media playlist over the cap still plays as one stream.
+func TestResolveM3UCapsBody(t *testing.T) {
+	plain := func(entries int) string {
+		var sb strings.Builder
+		sb.WriteString("#EXTM3U\n")
+		for i := 1; i <= entries; i++ {
+			fmt.Fprintf(&sb, "#EXTINF:120,Track %d\nhttps://example.com/%d.mp3\n", i, i)
+		}
+		return sb.String()
+	}
+	var hls strings.Builder
+	hls.WriteString("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n")
+	for i := 0; hls.Len() <= maxPlaylistBody; i++ {
+		fmt.Fprintf(&hls, "#EXTINF:6.0,\nsegment_%08d.ts\n", i)
+	}
+	hls.WriteString("#EXT-X-ENDLIST\n")
+
+	tests := []struct {
+		name       string
+		body       string
+		wantErr    bool
+		wantTracks int
+	}{
+		{name: "plain under the cap", body: plain(10), wantTracks: 10},
+		{name: "plain over the cap", body: plain(30000), wantErr: true},
+		{name: "hls over the cap", body: hls.String(), wantTracks: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if strings.HasSuffix(tt.name, "over the cap") && len(tt.body) <= maxPlaylistBody {
+				t.Fatalf("fixture is %d bytes, needs to exceed maxPlaylistBody (%d)", len(tt.body), maxPlaylistBody)
+			}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				io.WriteString(w, tt.body)
+			}))
+			defer srv.Close()
+
+			u := srv.URL + "/list.m3u8"
+			tracks, err := resolveM3U(u)
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "exceeds") {
+					t.Fatalf("resolveM3U = %d tracks, err %v, want an error that names the cap", len(tracks), err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveM3U: %v", err)
+			}
+			if len(tracks) != tt.wantTracks {
+				t.Fatalf("got %d tracks, want %d", len(tracks), tt.wantTracks)
+			}
+			for i, tr := range tracks {
+				if !playlist.IsURL(tr.Path) {
+					t.Fatalf("tracks[%d].Path = %q, want a URL", i, tr.Path)
+				}
+			}
+		})
+	}
+}
+
 func buildPLS(entries int) string {
 	var sb strings.Builder
 	sb.WriteString("[playlist]\n")
