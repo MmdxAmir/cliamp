@@ -1297,12 +1297,14 @@ func TestNewTreatsBadTrustManifestAsUntrusted(t *testing.T) {
 	tests := []struct {
 		name     string
 		manifest func(hash string) string
+		bad      bool
 	}{
-		{"not JSON", func(string) string { return "{" }},
-		{"null plugins map", func(string) string { return `{"version":1,"plugins":null}` }},
+		{"not JSON", func(string) string { return "{" }, true},
+		{"null plugins map", func(string) string { return `{"version":1,"plugins":null}` }, true},
 		{"unsupported version with a matching hash", func(hash string) string {
 			return `{"version":2,"plugins":{"hello":"` + hash + `"}}`
-		}},
+		}, true},
+		{"valid manifest without the approval", func(string) string { return `{"version":1,"plugins":{}}` }, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1333,13 +1335,25 @@ func TestNewTreatsBadTrustManifestAsUntrusted(t *testing.T) {
 			if got := m.PluginCount(); got != 0 {
 				t.Errorf("PluginCount() = %d, want 0", got)
 			}
-			if err == nil || !strings.Contains(err.Error(), "trust manifest") ||
-				!strings.Contains(err.Error(), "hello: "+plugintrust.ErrUntrusted.Error()) {
-				t.Errorf("New() error = %v, want the manifest error and hello as untrusted", err)
+			if err == nil || !strings.Contains(err.Error(), "hello: "+plugintrust.ErrUntrusted.Error()) {
+				t.Fatalf("New() error = %v, want hello as untrusted", err)
+			}
+			// cliamp plugins trust fails while the manifest does not load, so
+			// the error names the file to delete instead.
+			recovery := "delete " + filepath.Join(dir, ".trust.json") + " and approve each plugin again"
+			hint := "run `cliamp plugins trust hello`"
+			if got := strings.Contains(err.Error(), "trust manifest"); got != tt.bad {
+				t.Errorf("New() error = %v, want the manifest error: %v", err, tt.bad)
+			}
+			if got := strings.Contains(err.Error(), recovery); got != tt.bad {
+				t.Errorf("New() error = %v, want the recovery step %q: %v", err, recovery, tt.bad)
+			}
+			if got := strings.Contains(err.Error(), hint); got == tt.bad {
+				t.Errorf("New() error = %v, want the hint %q: %v", err, hint, !tt.bad)
 			}
 			log, _ := os.ReadFile(filepath.Join(cfg, pluginLogName))
-			if !strings.Contains(string(log), "trust manifest") {
-				t.Errorf("plugins.log = %q, want the manifest error", log)
+			if got := strings.Contains(string(log), "trust manifest"); got != tt.bad {
+				t.Errorf("plugins.log = %q, want the manifest error: %v", log, tt.bad)
 			}
 		})
 	}

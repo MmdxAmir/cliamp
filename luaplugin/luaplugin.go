@@ -194,11 +194,14 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 		return m, fmt.Errorf("read plugin dir: %w", err)
 	}
 	var loadErrs []string
-	trustManifest, err := plugintrust.Load(dir)
-	if err != nil {
+	trustManifest, trustErr := plugintrust.Load(dir)
+	if trustErr != nil {
 		// Fail safe: a manifest that does not load approves no plugin.
 		// Continue, so each plugin reports that it needs approval.
-		msg := fmt.Sprintf("%v; all plugins are untrusted", err)
+		// `cliamp plugins trust` also fails until the file is gone, so name
+		// the file to delete.
+		msg := fmt.Sprintf("%v; all plugins are untrusted; delete %s and approve each plugin again",
+			trustErr, plugintrust.ManifestPath(dir))
 		m.logger.log("cliamp", "error", "%s", msg)
 		loadErrs = append(loadErrs, msg)
 		trustManifest = plugintrust.Manifest{}
@@ -228,7 +231,11 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 			}
 		}
 		if err := plugintrust.Verify(trustManifest, f.Name, f.Path); err != nil {
-			loadErrs = append(loadErrs, fmt.Sprintf("%s: %v; run `cliamp plugins trust %s`", f.Name, err, f.Name))
+			if trustErr != nil {
+				loadErrs = append(loadErrs, fmt.Sprintf("%s: %v", f.Name, err))
+			} else {
+				loadErrs = append(loadErrs, fmt.Sprintf("%s: %v; run `cliamp plugins trust %s`", f.Name, err, f.Name))
+			}
 			continue
 		}
 

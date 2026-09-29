@@ -26,6 +26,11 @@ type Manifest struct {
 	Plugins map[string]string `json:"plugins"`
 }
 
+// ManifestPath returns the path of the trust manifest in the plugin dir.
+func ManifestPath(dir string) string {
+	return filepath.Join(dir, manifestName)
+}
+
 func HashFile(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -41,7 +46,7 @@ func HashFile(path string) (string, error) {
 
 func Load(dir string) (Manifest, error) {
 	m := Manifest{Version: 1, Plugins: make(map[string]string)}
-	data, err := os.ReadFile(filepath.Join(dir, manifestName))
+	data, err := os.ReadFile(ManifestPath(dir))
 	if errors.Is(err, os.ErrNotExist) {
 		return m, nil
 	}
@@ -64,7 +69,7 @@ func Save(dir string, m Manifest) error {
 		return fmt.Errorf("encode plugin trust manifest: %w", err)
 	}
 	data = append(data, '\n')
-	return fileutil.WriteFileAtomic(filepath.Join(dir, manifestName), data, 0o600)
+	return fileutil.WriteFileAtomic(ManifestPath(dir), data, 0o600)
 }
 
 func Approve(dir, name, path string) (string, error) {
