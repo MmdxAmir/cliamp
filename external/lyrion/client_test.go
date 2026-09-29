@@ -863,3 +863,10 @@ func TestDialErrorGetsNetdiagHint(t *testing.T) {
 		t.Errorf("error = %q, want it to contain %q", err, want)
 	}
 }
+
+func TestPingRejectsOversizedBody(t *testing.T) {
+	c, _ := newServer(t, `{"result":{"_version":"`+strings.Repeat("9", maxResponseBody)+`"}}`)
+	if err := c.Ping(); !errors.Is(err, httpclient.ErrTooLarge) {
+		t.Fatalf("Ping() error = %v, want httpclient.ErrTooLarge", err)
+	}
+}
