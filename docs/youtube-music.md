@@ -80,6 +80,8 @@ When `expand_playlist` is `true` (default), cliamp expands URLs with a `list=` p
 
 Run `cliamp`, `cliamp --provider ytmusic`, or `cliamp --provider youtube`. Select a provider and press Enter to sign in. cliamp stores credentials in `~/.config/cliamp/ytmusic_credentials.json`. Later launches refresh them without a message.
 
+If no browser opens, the provider view shows the sign-in URL. Open it in a browser on the same machine. Google sends the sign-in result to `http://127.0.0.1:19873/callback`.
+
 ## Usage
 
 After authentication, **YouTube** and **YouTube Music** appear as separate providers. Press `Esc`/`b` to open the provider browser.

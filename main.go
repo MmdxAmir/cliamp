@@ -297,6 +297,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 
 	var closeYouTube func()
+	var ytOAuth *ytmusic.Providers // set when YouTube signs in through OAuth
 	ytWanted := cfg.YouTubeMusic.IsSetOrFallback(ytmusic.FallbackCredentials)
 	if !ytWanted {
 		switch cfg.Provider {
@@ -341,6 +342,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 					oauthProviders := ytmusic.New(nil, ytClientID, ytClientSecret, hasCookies)
 					all, video, music = oauthProviders.All, oauthProviders.Video, oauthProviders.Music
 					closeYouTube = oauthProviders.Music.Close
+					ytOAuth = &oauthProviders
 				} else if hasCookies {
 					cookieProviders := ytmusic.NewCookieProviders(cfg.YouTubeMusic.CookiesFrom)
 					all, video, music = cookieProviders.All, cookieProviders.Video, cookieProviders.Music
@@ -349,6 +351,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 					oauthProviders := ytmusic.New(nil, ytClientID, ytClientSecret, false)
 					all, video, music = oauthProviders.All, oauthProviders.Video, oauthProviders.Music
 					closeYouTube = oauthProviders.Music.Close
+					ytOAuth = &oauthProviders
 				}
 				if all != nil {
 					providers = append(providers,
@@ -713,6 +716,17 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			prog.Send(model.ProvAuthURLMsg{ProviderName: tidalProv.Name(), URL: u})
 		})
 		defer tidal.SetAuthURLObserver(nil)
+	}
+	if ytOAuth != nil {
+		// The three YouTube providers share one sign-in. The model shows the
+		// URL only for the provider that is active.
+		ytNames := []string{ytOAuth.All.Name(), ytOAuth.Video.Name(), ytOAuth.Music.Name()}
+		ytmusic.SetAuthURLObserver(func(u string) {
+			for _, name := range ytNames {
+				prog.Send(model.ProvAuthURLMsg{ProviderName: name, URL: u})
+			}
+		})
+		defer ytmusic.SetAuthURLObserver(nil)
 	}
 
 	svc, svcErr := wireMediaCtl(prog)

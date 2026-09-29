@@ -10,7 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
+	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/appdir"
 	"github.com/bjarneo/cliamp/internal/browser"
 
@@ -28,6 +30,28 @@ type storedCreds struct {
 // CallbackPort is the fixed port for the OAuth2 callback server.
 // Must match the redirect URI registered in the Google Cloud console.
 const CallbackPort = 19873
+
+// authURLObserver is invoked with the OAuth URL when interactive auth begins.
+// Used by the TUI to display the URL when the launched browser does not reach
+// the user (containers, headless environments).
+var authURLObserver atomic.Pointer[func(string)]
+
+// SetAuthURLObserver registers a callback invoked once with the OAuth URL at
+// the start of an interactive sign-in. Pass nil to remove.
+func SetAuthURLObserver(fn func(string)) {
+	if fn == nil {
+		authURLObserver.Store(nil)
+		return
+	}
+	authURLObserver.Store(&fn)
+}
+
+func notifyAuthURL(u string) {
+	applog.Info("ytmusic: sign-in URL: %s", u)
+	if p := authURLObserver.Load(); p != nil {
+		(*p)(u)
+	}
+}
 
 // Session manages a YouTube Data API v3 service for YouTube Music integration.
 type Session struct {
@@ -101,7 +125,7 @@ func newSessionFromStored(ctx context.Context, clientID, clientSecret string, cr
 	if token.RefreshToken != "" {
 		refreshToken = token.RefreshToken
 		if err := saveCreds(&storedCreds{RefreshToken: refreshToken}); err != nil {
-			fmt.Fprintf(os.Stderr, "ytmusic: failed to save credentials: %v\n", err)
+			applog.UserError("ytmusic: failed to save credentials: %v", err)
 		}
 	}
 
@@ -139,7 +163,7 @@ func newInteractiveSession(ctx context.Context, clientID, clientSecret string) (
 
 	// Persist refresh token for future sessions.
 	if err := saveCreds(&storedCreds{RefreshToken: token.RefreshToken}); err != nil {
-		fmt.Fprintf(os.Stderr, "ytmusic: failed to save credentials: %v\n", err)
+		applog.UserError("ytmusic: failed to save credentials: %v", err)
 	}
 	cacheIdentity := token.RefreshToken
 	if cacheIdentity == "" {
@@ -155,12 +179,46 @@ func newInteractiveSession(ctx context.Context, clientID, clientSecret string) (
 	}, nil
 }
 
+// oauthCallbackHTML is the response sent to the browser after a successful OAuth2 callback.
+const oauthCallbackHTML = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>cliamp</title></head>
+<body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0">
+<div style="text-align:center">
+<h2>Authenticated!</h2>
+<p>You can close this tab now.</p>
+<script>setTimeout(function(){window.close()},1500)</script>
+</div></body></html>`
+
+// oauthCallbackHandler passes the code of a callback that carries state to
+// codeCh. It rejects other states and callbacks without a code. It drops a
+// code when codeCh is full, so a repeated callback never blocks.
+func oauthCallbackHandler(state string, codeCh chan<- string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		if query.Get("state") != state {
+			http.Error(w, "invalid OAuth state", http.StatusBadRequest)
+			return
+		}
+		code := query.Get("code")
+		if code == "" {
+			http.Error(w, "OAuth callback contains no code", http.StatusBadRequest)
+			return
+		}
+		select {
+		case codeCh <- code:
+		default:
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(oauthCallbackHTML))
+	})
+}
+
 // doOAuth performs an OAuth2 flow: starts localhost server, opens browser,
 // exchanges code for token. The context controls cancellation — if ctx is
 // cancelled (e.g. the user retries auth), the listener is closed and the
 // function returns promptly, freeing the callback port.
 func doOAuth(ctx context.Context, clientID, clientSecret string) (*oauth2.Token, error) {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", CallbackPort))
+	lis, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", CallbackPort))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic: listen on port %d (is another instance running?): %w", CallbackPort, err)
 	}
@@ -169,29 +227,17 @@ func doOAuth(ctx context.Context, clientID, clientSecret string) (*oauth2.Token,
 	oauthConf := googleOAuthConfig(clientID, clientSecret)
 
 	verifier := oauth2.GenerateVerifier()
-	authURL := oauthConf.AuthCodeURL("", oauth2.S256ChallengeOption(verifier), oauth2.AccessTypeOffline)
+	state := oauth2.GenerateVerifier()
+	authURL := oauthConf.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.AccessTypeOffline)
 
 	codeCh := make(chan string, 1)
 	go func() {
-		if err := http.Serve(lis, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			code := r.URL.Query().Get("code")
-			if code != "" {
-				codeCh <- code
-			}
-			w.Header().Set("Content-Type", "text/html")
-			_, _ = w.Write([]byte(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>cliamp</title></head>
-<body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0">
-<div style="text-align:center">
-<h2>Authenticated!</h2>
-<p>You can close this tab now.</p>
-<script>setTimeout(function(){window.close()},1500)</script>
-</div></body></html>`))
-		})); err != nil && !errors.Is(err, net.ErrClosed) {
-			fmt.Fprintf(os.Stderr, "ytmusic: auth callback server error: %v\n", err)
+		if err := http.Serve(lis, oauthCallbackHandler(state, codeCh)); err != nil && !errors.Is(err, net.ErrClosed) {
+			applog.UserError("ytmusic: auth callback server error: %v", err)
 		}
 	}()
 
+	notifyAuthURL(authURL)
 	_ = browser.Open(authURL) // best-effort — user can open the URL manually if this fails
 
 	var code string
@@ -206,7 +252,7 @@ func doOAuth(ctx context.Context, clientID, clientSecret string) (*oauth2.Token,
 		return nil, fmt.Errorf("ytmusic: token exchange: %w", err)
 	}
 
-	fmt.Println("YouTube Music: authenticated.")
+	applog.Info("ytmusic: authenticated")
 	return token, nil
 }
 
