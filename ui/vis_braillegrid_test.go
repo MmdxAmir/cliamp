@@ -122,3 +122,41 @@ func TestDotMaskForReusesAndClears(t *testing.T) {
 		t.Error("dotMaskFor reallocated a buffer that was large enough")
 	}
 }
+
+// The render-only Braille modes share one dot mask, one tier grid and one y
+// buffer. A mode must draw the same frame whichever mode used them before.
+func TestSharedDotBuffersDoNotLeakBetweenModes(t *testing.T) {
+	modes := []VisMode{
+		VisWave, VisScope, VisHeartbeat, VisFirework, VisBubbles,
+		VisLogo, VisSakura, VisButterfly, VisFirefly, VisMirror,
+	}
+	prime := func(mode VisMode) *Visualizer {
+		v := NewVisualizer(44100)
+		v.Cols, v.Rows, v.Mode = 24, 4, mode
+		for i := range v.bands {
+			v.bands[i] = 0.2 + 0.07*float64(i)
+		}
+		v.waveBuf = make([]float64, 512)
+		for i := range v.waveBuf {
+			v.waveBuf[i] = float64((i*13)%50)/50 - 0.5
+		}
+		return v
+	}
+	for _, next := range modes {
+		want := prime(next).Render()
+		for _, prev := range modes {
+			if prev == next {
+				continue
+			}
+			t.Run(visModes[prev].name+"_then_"+visModes[next].name, func(t *testing.T) {
+				v := prime(prev)
+				v.Render()
+				v.Mode = next
+				if got := v.Render(); got != want {
+					t.Errorf("frame differs after %s:\n%s\nwant:\n%s",
+						visModes[prev].name, ansi.Strip(got), ansi.Strip(want))
+				}
+			})
+		}
+	}
+}

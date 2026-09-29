@@ -410,7 +410,7 @@ type Visualizer struct {
 	Cols            int       // display width in terminal cells
 	Rows            int       // display height in terminal rows (default DefaultVisRows)
 	waveBuf         []float64 // raw samples for wave mode
-	waveYBuf        []int     // reusable y-position buffer for wave rendering
+	traceYBuf       []int     // per-frame y positions, see traceYs
 	frame           uint64    // elapsed-time animation clock
 	lastFrameTick   time.Time // wall clock of the previous frame-accounting tick
 	frameElapsed    time.Duration
@@ -424,8 +424,8 @@ type Visualizer struct {
 	luaRender       LuaVisRenderer
 	luaDriverCache  map[int]visModeDriver
 	pulseCoordCache *pulseCoords
-	dotMask         []bool // per-frame Braille dots, see dotMaskFor
-	mirrorGrid      brailleGrid
+	dotMask         []bool      // per-frame Braille dots, see dotMaskFor
+	dotGrid         brailleGrid // per-frame tier grid of the render-only Braille modes
 }
 
 // LuaVisRenderer is the callback type for rendering a Lua visualizer frame.

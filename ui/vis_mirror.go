@@ -17,9 +17,10 @@ func (v *Visualizer) renderMirror(bands []float64) string {
 	axisY := dotRows / 2
 	maxRadius := min(axisY, dotRows-1-axisY)
 
-	v.mirrorGrid.ensure(dotRows, dotCols)
+	grid := &v.dotGrid
+	grid.ensure(dotRows, dotCols)
 	for x := x0; x < x0+span; x++ {
-		v.mirrorGrid.set(x, axisY, 1)
+		grid.set(x, axisY, 1)
 	}
 
 	env := 0.0
@@ -51,9 +52,9 @@ func (v *Visualizer) renderMirror(bands []float64) string {
 			if float64(distanceToAxis)/float64(radius) >= 0.75 {
 				tier = 3
 			}
-			v.mirrorGrid.set(x, y, tier)
+			grid.set(x, y, tier)
 		}
 	}
 
-	return v.mirrorGrid.render(v.Rows)
+	return grid.render(v.Rows)
 }
