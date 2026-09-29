@@ -215,7 +215,12 @@ var commandRegistry = []commandSpec{
 		}
 		return "Load"
 	}, ContextHelp: true, Primary: true},
-	{Mode: commandModeProvider, Keys: []string{"esc", "backspace", "b"}, KeyLabel: "Esc", RunKey: "esc", Label: "Back", ContextHelp: true, Cancel: true},
+	{Mode: commandModeProvider, Keys: []string{"esc", "backspace", "b"}, KeyLabel: "Esc", RunKey: "esc", Label: "Back", LabelFor: func(m Model) string {
+		if m.providerCatalogSearching() {
+			return "Clear search"
+		}
+		return "Back"
+	}, ContextHelp: true, Cancel: true},
 	{Mode: commandModeProvider, Keys: []string{"l"}, KeyLabel: "l", Label: "Latest episode, added to the queue", Keymap: true, ContextHelp: true, Enabled: func(m Model) bool {
 		_, _, ok := m.selectedProviderShow()
 		return ok

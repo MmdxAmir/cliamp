@@ -38,7 +38,7 @@ entries, a status message tells you which key to press.
 | `Shift+Up` `Shift+Down` | Move track up/down in playlist/queue. Turn off shuffle to move a playlist track. |
 | `h` `l` | Adjust the focused setting (EQ: select band) |
 | `Enter` | Play selected track |
-| `/` | Search playlist (navigate results with `↑` `↓` / `Ctrl+N` `Ctrl+P`; `Ctrl+U` clears the query; `Tab` toggles the queue for the selected result) |
+| `/` | Filter the playlist (navigate results with `↑` `↓` / `Ctrl+N` `Ctrl+P`; `Ctrl+U` clears the query; `Tab` toggles the queue for the selected result) |
 | `Ctrl+X` | Expand/collapse playlist |
 | `Ctrl+Z` | Undo the last playlist or queue change |
 | `o` | Open file browser |
@@ -80,6 +80,24 @@ fields support these editor keys:
 
 The Metadata shortcut is inactive while a text input is active.
 
+### Search and filter modes
+
+`/` filters the list on the screen. `Ctrl+F` searches the active provider. In
+Radio and Podcasts, `/` sends the query to the provider when you press
+`Enter`.
+
+While a search or filter input is open, its line starts with a badge that
+names the mode and the source, such as `[Filter: Playlist]`, `[Filter: Files]`,
+`[Search: Spotify]` or `[Search: Radio]`. The line ends with `Esc Exit`. Press
+`Esc` to leave the input. On a narrow panel, the hint bar still shows `Esc`.
+
+If the active provider has no `Ctrl+F` search, `Ctrl+F` searches YouTube. The
+overlay shows `[Search: YouTube]` and names the provider that has no search.
+
+After a Radio or Podcasts search, the provider header shows `Search results`
+and the hint bar shows `Esc Clear search`. Press `Esc` to go back to the full
+list.
+
 ## EQ and Appearance
 
 | Key | Action |
@@ -104,7 +122,7 @@ and `Esc` clears it.
 |---|---|
 | `f` | Toggle bookmark ★ on the selected track. For directory radio stations outside saved local playlists, toggle Radio Favorites from the browser or playback playlist, including country and genre results. In the country browser, pin the selected country or region. On a podcast show, subscribe or unsubscribe. |
 | `n` | Toggle favorite ♥ on the selected track while the playback playlist has focus. Favorited tracks appear in the cross-playlist "Favorites" virtual playlist. |
-| `Ctrl+F` | Search with the active provider (Podcasts, Spotify, Qobuz, Tidal, Navidrome, Lyrion, Jellyfin, Emby, Plex, Audiobookshelf, Mixcloud, NetEase, Local), or search YouTube. Available in playlist and provider-browser views. |
+| `Ctrl+F` | Search with the active provider (Podcasts, Spotify, Qobuz, Tidal, Navidrome, Lyrion, Jellyfin, Emby, Plex, Audiobookshelf, Mixcloud, NetEase, Local), or search YouTube. Available in playlist and provider-browser views. The search line names the source. See [Search and filter modes](#search-and-filter-modes). |
 | `u` | Load URL (stream/playlist) |
 | `d` | Open the audio device picker |
 | `y` | Show or close lyrics |

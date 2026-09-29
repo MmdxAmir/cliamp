@@ -433,8 +433,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			}
 		case "esc", "backspace", "b":
 			// Clear completed results or cancel a search still in flight.
-			if cs, ok := m.provider.(provider.CatalogSearcher); ok && (m.provSearch.loading || cs.IsSearching()) {
-				return m.restoreCatalog(cs)
+			if m.providerCatalogSearching() {
+				return m.restoreCatalog(m.provider.(provider.CatalogSearcher))
 			}
 			if m.playlist.Len() > 0 {
 				m.focus = focusPlaylist
@@ -1176,6 +1176,7 @@ func (m *Model) openProviderSearchWith(prov playlist.Provider) {
 	m.netSearch = netSearchState{
 		active: true,
 		screen: netSearchInput,
+		from:   providerName(prov),
 	}
 	m.prevFocus = m.focus
 	m.focus = focusNetSearch
@@ -1351,6 +1352,13 @@ func (m *Model) handleCatalogSearchKey(msg tea.KeyPressMsg, cs provider.CatalogS
 		}
 	}
 	return nil
+}
+
+// providerCatalogSearching reports whether the provider pane shows catalog
+// search results, or waits for them. Esc then clears the search.
+func (m Model) providerCatalogSearching() bool {
+	cs, ok := m.provider.(provider.CatalogSearcher)
+	return ok && (m.provSearch.loading || cs.IsSearching())
 }
 
 // restoreCatalog clears search results and restores the normal catalog view.

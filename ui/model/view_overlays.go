@@ -40,7 +40,7 @@ func (m Model) renderVisPickerList() string {
 
 func (m Model) visPickerHeaderLine() string {
 	if m.visPicker.filtering || m.visPicker.filter != "" {
-		return m.filterCountHeader("visualizer-picker-filter", m.visPicker.filter, fmt.Sprintf("%d/%d", m.visPickerViewCount(), len(m.visPicker.modes)))
+		return m.filterHeader("Filter: Visualizers", "visualizer-picker-filter", m.visPicker.filter, fmt.Sprintf("%d/%d", m.visPickerViewCount(), len(m.visPicker.modes)))
 	}
 	return sepHeaderN("Visualizers", m.visPicker.cursor+1, m.visPickerViewCount())
 }
@@ -49,7 +49,11 @@ func (m Model) visPickerHeaderLine() string {
 
 func (m Model) plMgrHeaderLine() string {
 	if m.plManager.filtering {
-		return m.filterPromptHeader("playlist-manager-filter", m.plManager.filter)
+		label := "Filter: Playlists"
+		if m.plManager.screen == plMgrScreenTracks {
+			label = "Filter: Tracks"
+		}
+		return m.filterHeader(label, "playlist-manager-filter", m.plManager.filter, "")
 	}
 	switch m.plManager.screen {
 	case plMgrScreenTracks:

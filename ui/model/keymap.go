@@ -236,7 +236,7 @@ func (m *Model) keymapHelpLine() string {
 // separator with the match count.
 func (m Model) keymapHeaderLine() string {
 	if m.keymap.searching || m.keymap.search != "" {
-		return m.filterCountHeader("keymap", m.keymap.search, fmt.Sprintf("%d/%d", m.keymapCount(), len(m.keymap.entries)))
+		return m.filterHeader("Filter: Keymap", "keymap", m.keymap.search, fmt.Sprintf("%d/%d", m.keymapCount(), len(m.keymap.entries)))
 	}
 	return sepHeaderN("Keymap", m.keymap.cursor+1, len(m.keymap.entries))
 }

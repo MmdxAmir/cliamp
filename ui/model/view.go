@@ -787,8 +787,14 @@ func (m Model) renderPlaylistHeader() string {
 	}
 	if m.focus == focusProvider {
 		label := m.provider.Name() + " / Playlists"
-		if m.provSearch.active {
+		_, catalog := m.provider.(provider.CatalogSearcher)
+		switch {
+		case m.provSearch.active && catalog:
+			label += " / Search"
+		case m.provSearch.active:
 			label += " / Filter"
+		case m.providerCatalogSearching():
+			label += " / Search results"
 		}
 		return dimStyle.Render(labeledSeparator("", label))
 	}
@@ -900,9 +906,14 @@ func (m Model) renderProviderList() string {
 	var lines []string
 
 	if m.provSearch.active {
-		lines = append(lines, playlistSelectedStyle.Render("  / "+m.provSearch.query+"_"))
+		_, searchable := m.provider.(provider.CatalogSearcher)
+		mode := "Filter: "
+		if searchable {
+			mode = "Search: "
+		}
+		lines = append(lines, m.filterHeader(mode+m.provider.Name(), "provider-search", m.provSearch.query, ""))
 
-		if _, searchable := m.provider.(provider.CatalogSearcher); searchable {
+		if searchable {
 			if m.provSearch.query == "" {
 				lines = append(lines, dimStyle.Render("  Type a query, Enter to search..."))
 			} else {
@@ -1205,6 +1216,9 @@ func (m Model) renderHelp() string {
 	}
 	switch m.focus {
 	case focusProvider:
+		if m.provSearch.active {
+			return m.commandHelp(commandModeProviderSearch)
+		}
 		return m.commandHelp(commandModeProvider)
 	case focusProvPill:
 		return m.commandHelp(commandModeProviderPill)
