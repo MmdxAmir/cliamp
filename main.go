@@ -146,10 +146,12 @@ func offerYTDLPInstall(interactive bool, in io.Reader, out io.Writer) bool {
 	return false
 }
 
-// stdinIsTerminal reports whether stdin is a character device, such as a
-// terminal. A pipe or a file is not.
-func stdinIsTerminal() bool {
-	info, err := os.Stdin.Stat()
+// isCharDevice reports whether f is a character device, such as a terminal.
+// A pipe or a regular file is not. The null device is also a character
+// device, so a start with stdin at /dev/null shows the install prompt. The
+// EOF that follows skips the install.
+func isCharDevice(f *os.File) bool {
+	info, err := f.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
@@ -357,7 +359,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			if !player.YTDLPAvailable() {
 				fmt.Fprintf(os.Stderr, "\nYouTube requires yt-dlp for audio playback.\n")
 				fmt.Fprintf(os.Stderr, "Install command: %s\n\n", player.YtdlpInstallHint())
-				if offerYTDLPInstall(!daemon && stdinIsTerminal(), os.Stdin, os.Stderr) {
+				if offerYTDLPInstall(!daemon && isCharDevice(os.Stdin), os.Stdin, os.Stderr) {
 					fmt.Fprintf(os.Stderr, "Installing yt-dlp...\n")
 					if err := player.InstallYTDLP(); err != nil {
 						fmt.Fprintf(os.Stderr, "Installation failed: %v\n", err)
