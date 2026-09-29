@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,6 +121,26 @@ func logYouTubeSkipped(reason string) {
 	logProviderSkipped("YouTube (All)", "yt", reason)
 	logProviderSkipped("YouTube", "youtube", reason)
 	logProviderSkipped("YouTube Music", "ytmusic", reason)
+}
+
+// offerYTDLPInstall asks on in whether to install yt-dlp now. It asks only
+// when interactive is true. Only a bare Enter confirms. Any other answer, EOF
+// or a read error skips the install. So a start with stdin at /dev/null, as
+// under systemd, never installs a package.
+func offerYTDLPInstall(interactive bool, in io.Reader, out io.Writer) bool {
+	if !interactive {
+		return false
+	}
+	fmt.Fprint(out, "Press Enter to install it now, or type n and press Enter to skip... ")
+	answer, err := bufio.NewReader(in).ReadString('\n')
+	return err == nil && strings.TrimSpace(answer) == ""
+}
+
+// stdinIsTerminal reports whether stdin is a character device, such as a
+// terminal. A pipe or a file is not.
+func stdinIsTerminal() bool {
+	info, err := os.Stdin.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 // optionalProviders lists the providers that register only when configured
@@ -325,14 +347,14 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			if !player.YTDLPAvailable() {
 				fmt.Fprintf(os.Stderr, "\nYouTube requires yt-dlp for audio playback.\n")
 				fmt.Fprintf(os.Stderr, "Install command: %s\n\n", player.YtdlpInstallHint())
-				fmt.Fprintf(os.Stderr, "Press Enter to install automatically, or Ctrl+C to skip... ")
-				fmt.Scanln()
-				fmt.Fprintf(os.Stderr, "Installing yt-dlp...\n")
-				if err := player.InstallYTDLP(); err != nil {
-					fmt.Fprintf(os.Stderr, "Installation failed: %v\n", err)
-					fmt.Fprintf(os.Stderr, "YouTube providers disabled. Install manually and restart.\n\n")
-				} else {
-					fmt.Fprintf(os.Stderr, "yt-dlp installed successfully!\n\n")
+				if offerYTDLPInstall(!daemon && stdinIsTerminal(), os.Stdin, os.Stderr) {
+					fmt.Fprintf(os.Stderr, "Installing yt-dlp...\n")
+					if err := player.InstallYTDLP(); err != nil {
+						fmt.Fprintf(os.Stderr, "Installation failed: %v\n", err)
+						fmt.Fprintf(os.Stderr, "YouTube providers disabled. Install manually and restart.\n\n")
+					} else {
+						fmt.Fprintf(os.Stderr, "yt-dlp installed successfully!\n\n")
+					}
 				}
 			}
 			if player.YTDLPAvailable() {

@@ -64,6 +64,8 @@ WantedBy=default.target
 systemctl --user enable --now cliamp.service
 ```
 
+Headless mode never offers to install yt-dlp. If you configured YouTube, install yt-dlp before you start the service.
+
 ### Waybar / Polybar / i3blocks status modules
 
 Poll `cliamp status --json` at an interval. Render the fields that you need.
