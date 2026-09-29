@@ -39,6 +39,7 @@ type ipcRuntimeFingerprint struct {
 	playlistRevision uint64
 	state            string
 	trackPath        string
+	favorite         bool // ♥ state of the playing track
 	logicalPath      string
 	detached         bool
 	index            int
@@ -562,7 +563,7 @@ func (m *Model) runtimeSnapshot() ipc.RuntimeSnapshot {
 		snapshot.Shuffle = &shuffled
 		snapshot.Repeat = m.playlist.Repeat().String()
 		if track, index := m.playlist.Current(); index >= 0 {
-			info := ipcTrackInfo(track, index, m.playlist.QueuePosition(index))
+			info := ipcTrackInfo(track, index, m.playlist.QueuePosition(index), m.playlistTrackFavorited(track))
 			snapshot.LogicalTrack = &info
 		}
 	}
@@ -583,7 +584,7 @@ func (m *Model) runtimeSnapshot() ipc.RuntimeSnapshot {
 		if m.playlist != nil && index >= 0 {
 			queuePosition = m.playlist.QueuePosition(index)
 		}
-		info := ipcTrackInfo(track, index, queuePosition)
+		info := ipcTrackInfo(track, index, queuePosition, m.playlistTrackFavorited(track))
 		artist, title := m.resolveTrackDisplay(track)
 		if title != "" {
 			if track.Stream && title != track.Title {
@@ -668,6 +669,7 @@ func (m *Model) runtimeFingerprint() ipcRuntimeFingerprint {
 	}
 	if track, _ := m.currentPlaybackTrack(); track.Path != "" {
 		fingerprint.trackPath = track.Path
+		fingerprint.favorite = m.playlistTrackFavorited(track)
 	}
 	if track, _ := m.playlist.Current(); track.Path != "" {
 		fingerprint.logicalPath = track.Path
@@ -708,7 +710,7 @@ func (m *Model) v2PlaylistResponsePage(offset, limit int) ipc.Response {
 	items := make([]ipc.TrackInfo, end-offset)
 	for i, track := range tracks[offset:end] {
 		index := offset + i
-		items[i] = ipcTrackInfo(track, index, m.playlist.QueuePosition(index))
+		items[i] = ipcTrackInfo(track, index, m.playlist.QueuePosition(index), m.playlistTrackFavorited(track))
 	}
 	return ipc.Response{OK: true, Tracks: items, Index: m.playlist.Index(), Total: total}
 }
@@ -729,7 +731,7 @@ func (m *Model) v2PlayNextResponsePage(offset, limit int) ipc.Response {
 	end := min(total, offset+limit)
 	items := make([]ipc.TrackInfo, end-offset)
 	for i, entry := range entries[offset:end] {
-		items[i] = ipcTrackInfo(entry.Track, entry.TrackIndex, offset+i+1)
+		items[i] = ipcTrackInfo(entry.Track, entry.TrackIndex, offset+i+1, m.playlistTrackFavorited(entry.Track))
 	}
 	return ipc.Response{OK: true, Tracks: items, Total: total}
 }

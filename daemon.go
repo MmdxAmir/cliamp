@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -55,6 +56,7 @@ func runDaemon(p *player.Player, pl *playlist.Playlist, localProv *local.Provide
 	if d.eqPreset == "" {
 		d.eqPreset = "Custom"
 	}
+	d.refreshFavoritePaths()
 
 	// Wire MPRIS (Linux) / NowPlaying (macOS) so playerctl and OS media
 	// keys see the daemon. mediactl callbacks dispatch back through d.Send.
@@ -138,6 +140,10 @@ type daemon struct {
 	runtimeRevision  uint64
 	runtimeReady     bool
 	runtimeLast      daemonRuntimeFingerprint
+
+	// favoritePaths caches the favorite track paths, so IPC responses report
+	// the ♥ state without a read of favorites.toml for each track.
+	favoritePaths atomic.Pointer[map[string]struct{}]
 }
 
 func (d *daemon) Send(msg any) {
@@ -288,7 +294,7 @@ func (d *daemon) handleURL(m ipc.URLRequestMsg) {
 		d.playCurrent()
 	}
 	d.mu.Unlock()
-	reply(m.Reply, ipc.Response{OK: true, Tracks: trackInfos(tracks), Total: len(tracks)})
+	reply(m.Reply, ipc.Response{OK: true, Tracks: d.trackInfos(tracks), Total: len(tracks)})
 }
 
 func (d *daemon) handleSave(m ipc.SaveRequestMsg) {
@@ -644,7 +650,7 @@ func (d *daemon) queueResponse() ipc.Response {
 	tracks := d.playlist.Tracks()
 	items := make([]ipc.TrackInfo, len(tracks))
 	for i, track := range tracks {
-		items[i] = trackInfo(track, i, d.playlist.QueuePosition(i))
+		items[i] = d.trackInfo(track, i, d.playlist.QueuePosition(i))
 	}
 	return ipc.Response{OK: true, Tracks: items, Index: d.playlist.Index(), Total: len(items)}
 }
@@ -768,6 +774,9 @@ func (d *daemon) handleLibrary(m ipc.LibraryRequestMsg) {
 		}
 		track := trackFromInfo(*m.Track)
 		favorite, err := d.localProv.ToggleFavorite(track)
+		if err == nil {
+			d.refreshFavoritePaths()
+		}
 		replyError(m.Reply, err)
 		if err == nil {
 			d.syncTrackFavorite(track, favorite)
@@ -816,10 +825,10 @@ func (d *daemon) handleLibrary(m ipc.LibraryRequestMsg) {
 		}
 		if m.Op == "provider.tracks" {
 			page, total := daemonPage(tracks, m.Offset, m.Limit, 200)
-			reply(m.Reply, ipc.Response{OK: true, Tracks: trackInfos(page), Playlist: m.Playlist, Total: total})
+			reply(m.Reply, ipc.Response{OK: true, Tracks: d.trackInfos(page), Playlist: m.Playlist, Total: total})
 			return
 		}
-		reply(m.Reply, ipc.Response{OK: true, Tracks: trackInfos(tracks), Playlist: m.Playlist, Total: len(tracks)})
+		reply(m.Reply, ipc.Response{OK: true, Tracks: d.trackInfos(tracks), Playlist: m.Playlist, Total: len(tracks)})
 	case "provider.search":
 		limit := m.Limit
 		if limit <= 0 || limit > 100 {
@@ -832,7 +841,7 @@ func (d *daemon) handleLibrary(m ipc.LibraryRequestMsg) {
 			return
 		}
 		page, total := daemonPage(tracks, m.Offset, limit, 100)
-		reply(m.Reply, ipc.Response{OK: true, Tracks: trackInfos(page), Total: total})
+		reply(m.Reply, ipc.Response{OK: true, Tracks: d.trackInfos(page), Total: total})
 	case "provider.artists":
 		browser, ok := entry.Provider.(providerapi.ArtistBrowser)
 		if !ok {
@@ -909,10 +918,10 @@ func (d *daemon) handleLibrary(m ipc.LibraryRequestMsg) {
 		}
 		if m.Op == "provider.album_tracks" {
 			page, total := daemonPage(tracks, m.Offset, m.Limit, 200)
-			reply(m.Reply, ipc.Response{OK: true, Tracks: trackInfos(page), Total: total})
+			reply(m.Reply, ipc.Response{OK: true, Tracks: d.trackInfos(page), Total: total})
 			return
 		}
-		reply(m.Reply, ipc.Response{OK: true, Tracks: trackInfos(tracks), Total: len(tracks)})
+		reply(m.Reply, ipc.Response{OK: true, Tracks: d.trackInfos(tracks), Total: len(tracks)})
 	case "provider.favorite":
 		favorites, ok := entry.Provider.(providerapi.FavoriteToggler)
 		if !ok {
@@ -1063,7 +1072,7 @@ func (d *daemon) handleHistory(m ipc.HistoryRequestMsg) {
 	}
 	items := make([]ipc.HistoryInfo, len(entries))
 	for i, entry := range entries {
-		items[i] = ipc.HistoryInfo{Track: trackInfo(entry.Track, i, 0), PlayedAt: entry.PlayedAt.Format(time.RFC3339)}
+		items[i] = ipc.HistoryInfo{Track: d.trackInfo(entry.Track, i, 0), PlayedAt: entry.PlayedAt.Format(time.RFC3339)}
 	}
 	reply(m.Reply, ipc.Response{OK: true, History: items})
 }
@@ -1090,21 +1099,46 @@ func (d *daemon) recordHistory() {
 	}
 }
 
-func trackInfos(tracks []playlist.Track) []ipc.TrackInfo {
+// refreshFavoritePaths reloads the favorite track paths from the local store.
+func (d *daemon) refreshFavoritePaths() {
+	paths := make(map[string]struct{})
+	if d.localProv != nil {
+		if tracks, err := d.localProv.Tracks(favorites.PlaylistName); err == nil {
+			for _, track := range tracks {
+				paths[track.Path] = struct{}{}
+			}
+		}
+	}
+	d.favoritePaths.Store(&paths)
+}
+
+// isFavorite reports whether path is a ♥ favorite. It does no I/O.
+func (d *daemon) isFavorite(path string) bool {
+	paths := d.favoritePaths.Load()
+	if paths == nil {
+		return false
+	}
+	_, ok := (*paths)[path]
+	return ok
+}
+
+func (d *daemon) trackInfos(tracks []playlist.Track) []ipc.TrackInfo {
 	items := make([]ipc.TrackInfo, len(tracks))
 	for i, track := range tracks {
-		items[i] = trackInfo(track, i, 0)
+		items[i] = d.trackInfo(track, i, 0)
 	}
 	return items
 }
 
-func trackInfo(track playlist.Track, index, queuePosition int) ipc.TrackInfo {
+// trackInfo converts a track for IPC. The bookmark field keeps its JSON name
+// for old scripts and reports the ♥ favorite state.
+func (d *daemon) trackInfo(track playlist.Track, index, queuePosition int) ipc.TrackInfo {
 	return ipc.TrackInfo{
 		Title: track.Title, Artist: track.Artist, Album: track.Album, Genre: track.Genre,
 		Path: track.Path, AlbumArtURL: track.AlbumArtURL, Year: track.Year,
 		TrackNumber: track.TrackNumber, DurationSecs: track.DurationSecs, Index: index,
 		QueuePosition: queuePosition, Stream: track.Stream, Realtime: track.Realtime,
-		Feed: track.Feed, Bookmark: track.Bookmark, Unplayable: track.Unplayable,
+		Feed: track.Feed, Bookmark: d.isFavorite(track.Path), Unplayable: track.Unplayable,
 		DirSourced: track.DirSourced, ProviderMeta: maps.Clone(track.ProviderMeta),
 	}
 }
@@ -1115,7 +1149,7 @@ func trackFromInfo(info ipc.TrackInfo) playlist.Track {
 		Path: info.Path, AlbumArtURL: info.AlbumArtURL, Year: info.Year,
 		TrackNumber: info.TrackNumber, DurationSecs: info.DurationSecs,
 		Stream: info.Stream || playlist.IsURL(info.Path), Realtime: info.Realtime,
-		Feed: info.Feed, Bookmark: info.Bookmark, Unplayable: info.Unplayable,
+		Feed: info.Feed, Unplayable: info.Unplayable,
 		DirSourced: info.DirSourced, ProviderMeta: maps.Clone(info.ProviderMeta),
 	}
 }

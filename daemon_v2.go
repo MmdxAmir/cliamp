@@ -39,6 +39,7 @@ type daemonRuntimeFingerprint struct {
 	playlistRevision uint64
 	state            string
 	trackPath        string
+	favorite         bool // ♥ state of the playing track
 	logicalPath      string
 	detached         bool
 	index            int
@@ -387,7 +388,7 @@ func (d *daemon) playNextResponsePage(offset, limit int) ipc.Response {
 	end := min(total, offset+limit)
 	items := make([]ipc.TrackInfo, end-offset)
 	for i, entry := range entries[offset:end] {
-		items[i] = trackInfo(entry.Track, entry.TrackIndex, offset+i+1)
+		items[i] = d.trackInfo(entry.Track, entry.TrackIndex, offset+i+1)
 	}
 	return ipc.Response{OK: true, Tracks: items, Total: total}
 }
@@ -407,7 +408,7 @@ func (d *daemon) queueResponsePage(offset, limit int) ipc.Response {
 	items := make([]ipc.TrackInfo, end-offset)
 	for i, track := range tracks[offset:end] {
 		index := offset + i
-		items[i] = trackInfo(track, index, d.playlist.QueuePosition(index))
+		items[i] = d.trackInfo(track, index, d.playlist.QueuePosition(index))
 	}
 	return ipc.Response{OK: true, Tracks: items, Index: d.playlist.Index(), Total: total}
 }
@@ -527,7 +528,7 @@ func (d *daemon) runtimeSnapshotLocked() ipc.RuntimeSnapshot {
 		snapshot.Shuffle = &shuffled
 		snapshot.Repeat = d.playlist.Repeat().String()
 		if track, index := d.playlist.Current(); index >= 0 {
-			logical := trackInfo(track, index, d.playlist.QueuePosition(index))
+			logical := d.trackInfo(track, index, d.playlist.QueuePosition(index))
 			snapshot.LogicalTrack = &logical
 		}
 	}
@@ -544,7 +545,7 @@ func (d *daemon) runtimeSnapshotLocked() ipc.RuntimeSnapshot {
 	}
 
 	if track, index, ok := d.currentPlaybackTrackLocked(); ok {
-		actual := trackInfo(track, index, 0)
+		actual := d.trackInfo(track, index, 0)
 		if d.playlist != nil && index >= 0 {
 			actual.QueuePosition = d.playlist.QueuePosition(index)
 		}
@@ -644,6 +645,7 @@ func (d *daemon) runtimeFingerprintLocked() daemonRuntimeFingerprint {
 	}
 	if track, _, ok := d.currentPlaybackTrackLocked(); ok {
 		fingerprint.trackPath = track.Path
+		fingerprint.favorite = d.isFavorite(track.Path)
 		fingerprint.detached = track.Path != fingerprint.logicalPath
 		if track.Stream {
 			fingerprint.streamTitle = d.player.StreamTitle()

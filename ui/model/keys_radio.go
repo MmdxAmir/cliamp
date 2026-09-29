@@ -158,11 +158,30 @@ func (m *Model) togglePlaylistStar() tea.Cmd {
 // shows the state that f toggles. The render path calls it, so it must not do
 // I/O.
 func (m Model) playlistTrackFavorited(track playlist.Track) bool {
-	if m.loadedPlaylist == "" && m.radioFavorites != nil {
+	return trackFavorited(track, m.favSet, m.radioFavorites, m.loadedPlaylist != "")
+}
+
+// trackFavoriteLookup returns the ♥ rule as a function that is safe to call
+// from a tea.Cmd. It captures the current favSet, which refreshFavSet
+// replaces and never changes in place. Set playback for rows of the playback
+// playlist, so a saved playlist uses track favorites as its rows do.
+func (m Model) trackFavoriteLookup(playback bool) func(playlist.Track) bool {
+	favSet, stations := m.favSet, m.radioFavorites
+	saved := playback && m.loadedPlaylist != ""
+	return func(track playlist.Track) bool {
+		return trackFavorited(track, favSet, stations, saved)
+	}
+}
+
+// trackFavorited reports the ♥ state of track. A directory radio station
+// outside a saved playlist uses its station favorite. Every other track uses
+// the favorites store.
+func trackFavorited(track playlist.Track, favSet map[string]struct{}, stations *radio.Favorites, savedPlaylist bool) bool {
+	if !savedPlaylist && stations != nil {
 		if station, ok := radio.StationFromTrack(track); ok {
-			return m.radioFavorites.Contains(station.URL)
+			return stations.Contains(station.URL)
 		}
 	}
-	_, ok := m.favSet[track.Path]
+	_, ok := favSet[track.Path]
 	return ok
 }

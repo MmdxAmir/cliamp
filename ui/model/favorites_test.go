@@ -329,6 +329,52 @@ func TestTrackFavoriteSyncKeepsLastState(t *testing.T) {
 	}
 }
 
+// fixedTracksProvider returns the same tracks for every playlist.
+type fixedTracksProvider struct {
+	commandsTestProvider
+	tracks []playlist.Track
+}
+
+func (p fixedTracksProvider) Tracks(string) ([]playlist.Track, error) { return p.tracks, nil }
+
+// The bookmark field of IPC track info keeps its JSON name and reports the ♥
+// favorite state, so cliamp status --json matches the playlist rows.
+func TestIPCTrackInfoBookmarkReportsFavorite(t *testing.T) {
+	m, _ := favoriteKeyTestModel(t)
+	legacy := playlist.Track{Path: "/legacy.mp3", Title: "Legacy", Bookmark: true}
+	m.playlist.Add(legacy)
+	m.favSet = map[string]struct{}{"/playlist.mp3": {}}
+	m.playlist.SetIndex(0)
+
+	snapshot := m.runtimeSnapshot()
+	if snapshot.LogicalTrack == nil || !snapshot.LogicalTrack.Bookmark {
+		t.Fatalf("snapshot logical track = %+v, want bookmark true", snapshot.LogicalTrack)
+	}
+	queue := m.ipcQueueResponse().Tracks
+	if !queue[0].Bookmark || queue[1].Bookmark {
+		t.Fatalf("queue bookmarks = %v, %v; want true, false", queue[0].Bookmark, queue[1].Bookmark)
+	}
+	page := m.v2PlaylistResponsePage(0, 0).Tracks
+	if !page[0].Bookmark || page[1].Bookmark {
+		t.Fatalf("playlist page bookmarks = %v, %v; want true, false", page[0].Bookmark, page[1].Bookmark)
+	}
+	if ipcTrackFromInfo(ipc.TrackInfo{Path: "/x.mp3", Bookmark: true}).Bookmark {
+		t.Fatal("a favorite from IPC must not set the legacy bookmark flag")
+	}
+
+	// A command that runs later uses the favorites captured when it was made.
+	prov := fixedTracksProvider{commandsTestProvider{name: "Fixed"}, []playlist.Track{{Path: "/playlist.mp3"}, legacy}}
+	m.providers = append(m.providers, ProviderEntry{Key: "fixed", Name: "Fixed", Provider: prov})
+	reply := make(chan ipc.Response, 1)
+	cmd := m.handleIPCLibrary(ipc.LibraryRequestMsg{Op: "provider.tracks", Provider: "fixed", Playlist: "any", Reply: reply})
+	m.favSet = nil
+	runCmd(cmd)
+	tracks := (<-reply).Tracks
+	if len(tracks) != 2 || !tracks[0].Bookmark || tracks[1].Bookmark {
+		t.Fatalf("provider tracks = %+v", tracks)
+	}
+}
+
 // playlist.bookmark is a legacy IPC alias: it toggles the ♥ favorite.
 func TestIPCBookmarkAliasTogglesFavorite(t *testing.T) {
 	for _, tc := range []struct {

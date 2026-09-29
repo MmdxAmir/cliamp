@@ -69,7 +69,7 @@ func (m *Model) handleIPCURLResult(result ipcURLLoadResult) tea.Cmd {
 	m.playlist.Add(result.tracks...)
 	m.loadedPlaylist = ""
 	m.addToHeaderState(result.tracks)
-	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks), Total: len(result.tracks)}
+	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks, m.trackFavoriteLookup(true)), Total: len(result.tracks)}
 	if result.request.Play {
 		m.player.Stop()
 		m.player.ClearPreload()
@@ -231,9 +231,10 @@ func (m *Model) handleIPCFeedLoad(result ipcFeedLoadResult) tea.Cmd {
 
 func (m *Model) ipcQueueResponse() ipc.Response {
 	tracks := m.playlist.Tracks()
+	favorite := m.trackFavoriteLookup(true)
 	items := make([]ipc.TrackInfo, len(tracks))
 	for i, track := range tracks {
-		items[i] = ipcTrackInfo(track, i, m.playlist.QueuePosition(i))
+		items[i] = ipcTrackInfo(track, i, m.playlist.QueuePosition(i), favorite(track))
 	}
 	return ipc.Response{OK: true, Tracks: items, Index: m.playlist.Index(), Total: len(items)}
 }
@@ -403,13 +404,14 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 			return nil
 		}
 	case "provider.tracks":
+		favorite := m.trackFavoriteLookup(false)
 		return func() tea.Msg {
 			tracks, err := entry.Provider.Tracks(request.Playlist)
 			if err != nil {
 				request.Reply <- ipc.Response{OK: false, Error: err.Error()}
 			} else {
 				page, total := ipcPage(tracks, request.Offset, request.Limit, 200)
-				request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(page), Total: total}
+				request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(page, favorite), Total: total}
 			}
 			return nil
 		}
@@ -419,6 +421,7 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 			return ipcProviderLoadResult{request: request, tracks: tracks, loaded: request.Playlist, err: err}
 		}
 	case "provider.search":
+		favorite := m.trackFavoriteLookup(false)
 		return func() tea.Msg {
 			limit := request.Limit
 			if limit <= 0 || limit > 100 {
@@ -429,7 +432,7 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 				request.Reply <- ipc.Response{OK: false, Error: err.Error()}
 			} else {
 				page, total := ipcPage(tracks, request.Offset, limit, 100)
-				request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(page), Total: total}
+				request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(page, favorite), Total: total}
 			}
 			return nil
 		}
@@ -503,6 +506,7 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 			request.Reply <- ipc.Response{OK: false, Error: "provider does not support album tracks"}
 			return nil
 		}
+		favorite := m.trackFavoriteLookup(false)
 		return func() tea.Msg {
 			tracks, err := loader.AlbumTracks(request.Album)
 			if request.Op == "provider.load_album" {
@@ -512,7 +516,7 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 				request.Reply <- ipcResponseError(err)
 			} else {
 				page, total := ipcPage(tracks, request.Offset, request.Limit, 200)
-				request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(page), Total: total}
+				request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(page, favorite), Total: total}
 			}
 			return nil
 		}
@@ -614,7 +618,7 @@ func (m *Model) handleIPCProviderLoad(result ipcProviderLoadResult) tea.Cmd {
 	m.setHeaderStateFromTracks(result.tracks)
 	m.playlist.SetIndex(0)
 	m.plCursor = 0
-	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks), Playlist: result.request.Playlist, Total: len(result.tracks)}
+	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks, m.trackFavoriteLookup(true)), Playlist: result.request.Playlist, Total: len(result.tracks)}
 	return m.playCurrentTrack()
 }
 
@@ -663,6 +667,7 @@ func (m *Model) handleIPCLyrics(request ipc.LyricsRequestMsg) tea.Cmd {
 }
 
 func (m *Model) handleIPCHistory(request ipc.HistoryRequestMsg) tea.Cmd {
+	favorite := m.trackFavoriteLookup(false)
 	return func() tea.Msg {
 		if m.historyStore == nil {
 			request.Reply <- ipc.Response{OK: true}
@@ -679,7 +684,7 @@ func (m *Model) handleIPCHistory(request ipc.HistoryRequestMsg) tea.Cmd {
 		}
 		items := make([]ipc.HistoryInfo, len(entries))
 		for i, entry := range entries {
-			items[i] = ipc.HistoryInfo{Track: ipcTrackInfo(entry.Track, i, 0), PlayedAt: entry.PlayedAt.Format(time.RFC3339)}
+			items[i] = ipc.HistoryInfo{Track: ipcTrackInfo(entry.Track, i, 0, favorite(entry.Track)), PlayedAt: entry.PlayedAt.Format(time.RFC3339)}
 		}
 		request.Reply <- ipc.Response{OK: true, History: items}
 		return nil
@@ -695,10 +700,12 @@ func (m *Model) ipcProvider(key string) (ProviderEntry, bool) {
 	return ProviderEntry{}, false
 }
 
-func ipcTrackInfos(tracks []playlist.Track) []ipc.TrackInfo {
+// ipcTrackInfos converts tracks for IPC. favorite reports the ♥ state of a
+// track, see trackFavoriteLookup.
+func ipcTrackInfos(tracks []playlist.Track, favorite func(playlist.Track) bool) []ipc.TrackInfo {
 	items := make([]ipc.TrackInfo, len(tracks))
 	for i, track := range tracks {
-		items[i] = ipcTrackInfo(track, i, 0)
+		items[i] = ipcTrackInfo(track, i, 0, favorite(track))
 	}
 	return items
 }
@@ -711,13 +718,15 @@ func ipcAlbumInfos(albums []provider.AlbumInfo) []ipc.AlbumInfo {
 	return items
 }
 
-func ipcTrackInfo(track playlist.Track, index, queuePosition int) ipc.TrackInfo {
+// ipcTrackInfo converts a track for IPC. The bookmark field keeps its JSON
+// name for old scripts and reports the ♥ favorite state.
+func ipcTrackInfo(track playlist.Track, index, queuePosition int, favorite bool) ipc.TrackInfo {
 	return ipc.TrackInfo{
 		Title: track.Title, Artist: track.Artist, Album: track.Album, Genre: track.Genre,
 		Path: track.Path, AlbumArtURL: track.AlbumArtURL, Year: track.Year,
 		TrackNumber: track.TrackNumber, DurationSecs: track.DurationSecs, Index: index,
 		QueuePosition: queuePosition, Stream: track.Stream, Realtime: track.Realtime,
-		Feed: track.Feed, Bookmark: track.Bookmark, Unplayable: track.Unplayable,
+		Feed: track.Feed, Bookmark: favorite, Unplayable: track.Unplayable,
 		DirSourced: track.DirSourced, ProviderMeta: maps.Clone(track.ProviderMeta),
 	}
 }
@@ -728,7 +737,7 @@ func ipcTrackFromInfo(info ipc.TrackInfo) playlist.Track {
 		Path: info.Path, AlbumArtURL: info.AlbumArtURL, Year: info.Year,
 		TrackNumber: info.TrackNumber, DurationSecs: info.DurationSecs,
 		Stream: info.Stream || playlist.IsURL(info.Path), Realtime: info.Realtime,
-		Feed: info.Feed, Bookmark: info.Bookmark, Unplayable: info.Unplayable,
+		Feed: info.Feed, Unplayable: info.Unplayable,
 		DirSourced: info.DirSourced, ProviderMeta: maps.Clone(info.ProviderMeta),
 	}
 }

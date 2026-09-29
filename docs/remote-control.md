@@ -92,10 +92,15 @@ changes when the live playlist or play-next list changes. Position-only playback
 ticks do not create events. Send `if_revision` with destructive live-playlist or
 play-next operations to reject stale GUI actions with the `conflict` error code.
 
-`track` keeps `provider_meta`, embedded playback flags, the legacy bookmark
-flag, and directory-source state. A GUI can send a provider result through `track.play`,
+`track` keeps `provider_meta`, embedded playback flags, and directory-source
+state. A GUI can send a provider result through `track.play`,
 `track.queue`, `playlist.add`, `playlist.add_many`, or `playlist.replace`
 without losing provider identity.
+
+The `bookmark` field of `track` keeps its name for existing scripts. It reports
+the favorite ♥ state of the track, the same state as the playlist row marker.
+`cliamp status --json` shows it for the current track. cliamp ignores the field
+when a client sends a track, so use `playlist.bookmark` to change a favorite.
 
 ## Operations
 
