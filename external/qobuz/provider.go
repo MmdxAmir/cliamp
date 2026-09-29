@@ -2,6 +2,7 @@ package qobuz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"slices"
@@ -163,6 +164,23 @@ func (p *QobuzProvider) Refresh() {
 	p.mu.Unlock()
 }
 
+// mapErr translates client errors into provider-level errors. A rejected
+// user_auth_token drops the cached client, so the next access asks for
+// sign-in instead of failing until restart.
+func (p *QobuzProvider) mapErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, errUnauthorized) {
+		applog.UserWarn("qobuz: session expired, sign in again")
+		p.mu.Lock()
+		p.client = nil
+		p.mu.Unlock()
+		return playlist.ErrNeedsAuth
+	}
+	return err
+}
+
 // Playlists returns the user's Qobuz playlists plus synthetic Favorite Tracks
 // and Random Tracks entries.
 func (p *QobuzProvider) Playlists() ([]playlist.PlaylistInfo, error) {
@@ -184,7 +202,7 @@ func (p *QobuzProvider) Playlists() ([]playlist.PlaylistInfo, error) {
 
 	pls, err := c.userPlaylists(ctx)
 	if err != nil {
-		return nil, err
+		return nil, p.mapErr(err)
 	}
 
 	lists := []playlist.PlaylistInfo{
@@ -244,7 +262,7 @@ func (p *QobuzProvider) Tracks(playlistID string) ([]playlist.Track, error) {
 		apiTracks, err = c.playlistTracks(ctx, playlistID)
 	}
 	if err != nil {
-		return nil, err
+		return nil, p.mapErr(err)
 	}
 
 	tracks := p.resolveTracks(ctx, c, apiTracks, nil)
@@ -337,7 +355,7 @@ func (p *QobuzProvider) SearchTracks(ctx context.Context, query string, limit in
 	}
 	apiTracks, err := c.searchTracks(ctx, query, limit)
 	if err != nil {
-		return nil, err
+		return nil, p.mapErr(err)
 	}
 	return p.resolveTracks(ctx, c, apiTracks, nil), nil
 }
@@ -355,7 +373,7 @@ func (p *QobuzProvider) Artists() ([]provider.ArtistInfo, error) {
 	for offset := 0; ; offset += favoritesPageSize {
 		page, err := c.favoriteArtists(ctx, offset, favoritesPageSize)
 		if err != nil {
-			return nil, err
+			return nil, p.mapErr(err)
 		}
 		for _, a := range page {
 			artists = append(artists, provider.ArtistInfo{
@@ -382,7 +400,7 @@ func (p *QobuzProvider) ArtistAlbums(artistID string) ([]provider.AlbumInfo, err
 
 	albums, err := c.artistAlbums(ctx, artistID)
 	if err != nil {
-		return nil, err
+		return nil, p.mapErr(err)
 	}
 	out := make([]provider.AlbumInfo, 0, len(albums))
 	for _, a := range albums {
@@ -406,7 +424,7 @@ func (p *QobuzProvider) AlbumList(_ string, offset, size int) ([]provider.AlbumI
 
 	albums, err := c.favoriteAlbums(ctx, offset, size)
 	if err != nil {
-		return nil, err
+		return nil, p.mapErr(err)
 	}
 	out := make([]provider.AlbumInfo, 0, len(albums))
 	for _, a := range albums {
@@ -430,7 +448,7 @@ func (p *QobuzProvider) AlbumTracks(albumID string) ([]playlist.Track, error) {
 
 	album, err := c.albumGet(ctx, albumID)
 	if err != nil {
-		return nil, err
+		return nil, p.mapErr(err)
 	}
 	var tracks []apiTrack
 	if album.Tracks != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -37,6 +38,10 @@ func validQuality(quality int) bool {
 
 // maxResponseBody limits JSON API responses to 20 MB.
 const maxResponseBody = 20 << 20
+
+// errUnauthorized marks an HTTP 401 answer. The API sends it when the
+// user_auth_token is no longer valid.
+var errUnauthorized = errors.New("HTTP 401")
 
 // client is a Qobuz API client. It is safe for concurrent use once
 // authenticated (its fields are not mutated after login).
@@ -99,6 +104,9 @@ func (c *client) doRequest(ctx context.Context, method, endpoint string, params 
 		return nil, fmt.Errorf("qobuz: %s: read response: %w", endpoint, err)
 	}
 
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf("qobuz: %s: %w: %s", endpoint, errUnauthorized, strings.TrimSpace(string(respBody)))
+	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("qobuz: %s: HTTP %d: %s", endpoint, resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}

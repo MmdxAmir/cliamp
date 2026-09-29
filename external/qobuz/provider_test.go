@@ -1,10 +1,16 @@
 package qobuz
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"math/rand/v2"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
+
+	"github.com/bjarneo/cliamp/playlist"
 )
 
 func TestTrackArtist(t *testing.T) {
@@ -136,6 +142,64 @@ func TestNewQualityNormalization(t *testing.T) {
 	for _, q := range []int{0, 1, 99} {
 		if got := New(q).quality; got != defaultQuality {
 			t.Errorf("New(%d).quality = %d, want default %d", q, got, defaultQuality)
+		}
+	}
+}
+
+// providerCalls runs each QobuzProvider method that talks to the API.
+var providerCalls = []struct {
+	name string
+	call func(*QobuzProvider) error
+}{
+	{"Playlists", func(p *QobuzProvider) error { _, err := p.Playlists(); return err }},
+	{"Tracks", func(p *QobuzProvider) error { _, err := p.Tracks("123"); return err }},
+	{"Tracks favorites", func(p *QobuzProvider) error { _, err := p.Tracks(favoriteTracksID); return err }},
+	{"Tracks random", func(p *QobuzProvider) error { _, err := p.Tracks(randomTracksID); return err }},
+	{"SearchTracks", func(p *QobuzProvider) error {
+		_, err := p.SearchTracks(context.Background(), "q", 5)
+		return err
+	}},
+	{"Artists", func(p *QobuzProvider) error { _, err := p.Artists(); return err }},
+	{"ArtistAlbums", func(p *QobuzProvider) error { _, err := p.ArtistAlbums("1"); return err }},
+	{"AlbumList", func(p *QobuzProvider) error { _, err := p.AlbumList("favorites", 0, 10); return err }},
+	{"AlbumTracks", func(p *QobuzProvider) error { _, err := p.AlbumTracks("1"); return err }},
+}
+
+func TestAPIErrorsMapToSignIn(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     int
+		wantAuth   bool
+		wantClient bool
+	}{
+		{name: "401 asks for sign-in", status: http.StatusUnauthorized, wantAuth: true},
+		{name: "500 keeps the client", status: http.StatusInternalServerError, wantClient: true},
+	}
+	for _, tt := range tests {
+		for _, pc := range providerCalls {
+			t.Run(tt.name+"/"+pc.name, func(t *testing.T) {
+				t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					http.Error(w, `{"status":"error"}`, tt.status)
+				}))
+				defer srv.Close()
+
+				p := New(6)
+				p.client = testClient(srv)
+				err := pc.call(p)
+				if err == nil {
+					t.Fatal("error = nil, want an error")
+				}
+				if got := errors.Is(err, playlist.ErrNeedsAuth); got != tt.wantAuth {
+					t.Errorf("errors.Is(%v, ErrNeedsAuth) = %v, want %v", err, got, tt.wantAuth)
+				}
+				p.mu.Lock()
+				hasClient := p.client != nil
+				p.mu.Unlock()
+				if hasClient != tt.wantClient {
+					t.Errorf("client kept = %v, want %v", hasClient, tt.wantClient)
+				}
+			})
 		}
 	}
 }
