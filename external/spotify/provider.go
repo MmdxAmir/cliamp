@@ -168,7 +168,6 @@ func (p *SpotifyProvider) Authenticate() error {
 		p.session = sess
 	}
 	p.resetSessionScopedStateLocked()
-	p.listCache = nil
 	p.mu.Unlock()
 	return nil
 }
@@ -205,13 +204,17 @@ func (p *SpotifyProvider) Refresh() {
 	defer p.mu.Unlock()
 	p.listCache = nil
 	p.trackCache = make(map[string]*playlistCache)
+	clear(p.writable)
 }
 
 // resetSessionScopedStateLocked clears /v1/me-derived caches when the session
-// changes. p.mu must be held.
+// changes. The playlist list goes too, because playlist ownership decides
+// which playlists are writable. p.mu must be held.
 func (p *SpotifyProvider) resetSessionScopedStateLocked() {
 	p.userID = ""
 	p.meFetched = false
+	p.listCache = nil
+	clear(p.writable)
 }
 
 func (p *SpotifyProvider) Name() string { return "Spotify" }

@@ -170,7 +170,7 @@ func (s *spotifyStreamer) recover(cause error) {
 
 		stream, cancel, openErr := s.reopen(s.life, positionMs)
 		if openErr == nil {
-			if s.adopt(stream, cancel) {
+			if s.adopt(stream, cancel, positionMs) {
 				applog.Status("spotify: stream reconnected")
 			}
 			return
@@ -193,14 +193,25 @@ func (s *spotifyStreamer) recover(cause error) {
 	}
 }
 
-// adopt swaps in a reopened stream. It returns false and releases the
-// stream when the streamer closed while the stream was opening.
-func (s *spotifyStreamer) adopt(stream *librespotPlayer.Stream, cancel context.CancelFunc) bool {
+// adopt swaps in a stream that was reopened at openedMs. A seek during the
+// reopen moved resumeMs, so adopt seeks the new stream to it. It returns
+// false and releases the stream when the streamer closed while the stream
+// was opening, or when that seek fails.
+func (s *spotifyStreamer) adopt(stream *librespotPlayer.Stream, cancel context.CancelFunc, openedMs int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closing.Load() || s.closed {
 		cancel()
 		return false
+	}
+	if s.resumeMs != openedMs {
+		if err := stream.Source.SetPositionMs(s.resumeMs); err != nil {
+			cancel()
+			s.recovering = false
+			s.err = fmt.Errorf("spotify: seek reconnected stream: %w", err)
+			applog.UserError("spotify: stream reconnect failed, skipping the track: %v", s.err)
+			return false
+		}
 	}
 	s.source = stream.Source
 	s.recovering = false

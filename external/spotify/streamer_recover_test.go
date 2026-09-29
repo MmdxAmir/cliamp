@@ -24,7 +24,8 @@ func (s *droppingSource) PositionMs() int64       { return s.position }
 
 // valueSource fills every read with one sample value.
 type valueSource struct {
-	value float32
+	value    float32
+	position atomic.Int64
 }
 
 func (s *valueSource) Read(p []float32) (int, error) {
@@ -33,8 +34,11 @@ func (s *valueSource) Read(p []float32) (int, error) {
 	}
 	return len(p), nil
 }
-func (*valueSource) SetPositionMs(int64) error { return nil }
-func (*valueSource) PositionMs() int64         { return 0 }
+func (s *valueSource) SetPositionMs(ms int64) error {
+	s.position.Store(ms)
+	return nil
+}
+func (s *valueSource) PositionMs() int64 { return s.position.Load() }
 
 func noRecoverBackoff(t *testing.T) {
 	t.Helper()
@@ -183,5 +187,31 @@ func TestSpotifyStreamerCloseDuringRecoveryReleasesNewStream(t *testing.T) {
 	waitFor(t, "the late stream to be cancelled", cancelled.Load)
 	if err := s.Err(); err != nil {
 		t.Fatalf("Err() after Close = %v, want nil", err)
+	}
+}
+
+func TestSpotifyStreamerSeekDuringSuccessfulReopenMovesNewStream(t *testing.T) {
+	noRecoverBackoff(t)
+	s := newSpotifyStreamer(&librespotPlayer.Stream{Source: &droppingSource{position: 1_000}}, nil)
+	opening := make(chan struct{})
+	proceed := make(chan struct{})
+	replacement := &valueSource{}
+	s.reopen = func(_ context.Context, positionMs int64) (*librespotPlayer.Stream, context.CancelFunc, error) {
+		replacement.position.Store(positionMs)
+		close(opening)
+		<-proceed
+		return &librespotPlayer.Stream{Source: replacement}, func() {}, nil
+	}
+
+	s.Stream(make([][2]float64, 4))
+	<-opening
+	if err := s.Seek(20 * spotifySampleRate); err != nil {
+		t.Fatalf("Seek() during reopen = %v, want nil", err)
+	}
+	close(proceed)
+	waitFor(t, "recovery", func() bool { return !s.isRecovering() })
+
+	if got := replacement.PositionMs(); got != 20_000 {
+		t.Fatalf("new stream position = %d ms, want 20000 from the seek", got)
 	}
 }

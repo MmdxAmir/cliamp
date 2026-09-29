@@ -183,11 +183,26 @@ func TestRefreshDropsCachedLists(t *testing.T) {
 	p.listCache = []playlist.PlaylistInfo{{ID: "stale"}}
 	p.listCacheAt = time.Now()
 	p.trackCache["mine"] = &playlistCache{snapshotID: "s1", tracks: []playlist.Track{{Path: "spotify:track:1"}}}
+	p.writable["mine"] = true
 
 	p.Refresh()
 
-	if p.listCache != nil || len(p.trackCache) != 0 {
-		t.Fatalf("after Refresh: listCache = %v, trackCache = %v, want both empty", p.listCache, p.trackCache)
+	if p.listCache != nil || len(p.trackCache) != 0 || len(p.writable) != 0 {
+		t.Fatalf("after Refresh: listCache = %v, trackCache = %v, writable = %v, want all empty", p.listCache, p.trackCache, p.writable)
+	}
+}
+
+func TestSessionResetDropsWritablePlaylists(t *testing.T) {
+	p := New(nil, "own", 320)
+	p.listCache = []playlist.PlaylistInfo{{ID: "mine"}}
+	p.writable["mine"] = true
+
+	p.mu.Lock()
+	p.resetSessionScopedStateLocked()
+	p.mu.Unlock()
+
+	if p.listCache != nil || p.CanAddToPlaylist(playlist.PlaylistInfo{ID: "mine"}) {
+		t.Fatalf("after reset: listCache = %v, writable = %v, want both empty", p.listCache, p.writable)
 	}
 }
 
