@@ -143,9 +143,13 @@ func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 		fileName := e.Name()
 		// Migrate a physical Favorites.toml to a safe name before the
 		// virtual Favorites playlist reserves it; once migrated the
-		// renamed file is listed like any other playlist.
+		// renamed file is listed like any other playlist. A file that
+		// did not move stays hidden, and an existing legacy file is
+		// listed from its own entry.
 		if fileName == "Favorites.toml" {
-			p.migrateFavoritesToml()
+			if !p.migrateFavoritesToml() {
+				continue
+			}
 			fileName = favoritesLegacyName + ".toml"
 		}
 		name := strings.TrimSuffix(fileName, filepath.Ext(fileName))
@@ -172,18 +176,19 @@ func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 const favoritesLegacyName = "Favorites (Local)"
 
 // migrateFavoritesToml renames a physical Favorites.toml playlist to a safe
-// name so the virtual Favorites playlist can reserve it. The rename is
-// best-effort: if the destination already exists the source is left in place.
-func (p *Provider) migrateFavoritesToml() {
+// name so the virtual Favorites playlist can reserve it, and reports whether
+// the file moved. The rename is best-effort: if the destination already
+// exists the source is left in place.
+func (p *Provider) migrateFavoritesToml() bool {
 	src := filepath.Join(p.dir, "Favorites.toml")
 	dst := filepath.Join(p.dir, favoritesLegacyName+".toml")
 	if _, err := os.Stat(src); err != nil {
-		return
+		return false
 	}
 	if _, err := os.Stat(dst); err == nil {
-		return
+		return false
 	}
-	os.Rename(src, dst)
+	return os.Rename(src, dst) == nil
 }
 
 // historyInfo returns the synthetic PlaylistInfo entry for "Recently Played",
