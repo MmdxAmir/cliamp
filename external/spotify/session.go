@@ -474,8 +474,12 @@ func performOAuth2PKCEFlows(ctx context.Context, flows []oauthFlow) ([]*oauth2.T
 	}
 
 	callbackCh := make(chan oauthCallback, len(flows))
+	// Close each connection after its response. The browser then cannot
+	// send the callback of a later sign-in to this server after it stops.
+	srv := &http.Server{Handler: oauthCallbackHandler(pending, callbackCh)}
+	srv.SetKeepAlivesEnabled(false)
 	go func() {
-		if err := http.Serve(lis, oauthCallbackHandler(pending, callbackCh)); err != nil && !errors.Is(err, net.ErrClosed) {
+		if err := srv.Serve(lis); err != nil && !errors.Is(err, net.ErrClosed) {
 			applog.UserError("spotify: auth callback server error: %v", err)
 		}
 	}()

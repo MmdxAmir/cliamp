@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -457,5 +460,57 @@ func TestSessionBearer(t *testing.T) {
 				t.Errorf("bearer() = %q after %d token calls, want %q after %d", got, calls, tt.want, tt.wantCalls)
 			}
 		})
+	}
+}
+
+// TestPerformOAuthReturnsAuthorizationError checks that a denied sign-in
+// ends the wait at once. The retry reuses the HTTP client, as a browser
+// does, so a kept-alive connection to the first callback server must not
+// swallow the second callback.
+func TestPerformOAuthReturnsAuthorizationError(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // keep browser.Open from starting a real browser
+	urls := make(chan string, 1)
+	SetAuthURLObserver(func(u string) { urls <- u })
+	t.Cleanup(func() { SetAuthURLObserver(nil) })
+	client := &http.Client{}
+	flows := []oauthFlow{{name: "web api", clientID: "client", scopes: oauthScopes}}
+
+	for _, attempt := range []string{"first sign-in", "retry after a denial"} {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		t.Cleanup(cancel)
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := performOAuth2PKCEFlows(ctx, flows)
+			errCh <- err
+		}()
+
+		var authURL string
+		select {
+		case authURL = <-urls:
+		case err := <-errCh:
+			t.Skipf("%s: callback port unavailable: %v", attempt, err)
+		}
+		parsed, err := url.Parse(authURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		callback := fmt.Sprintf("http://%s/login?state=%s&error=access_denied",
+			callbackAddress(), url.QueryEscape(parsed.Query().Get("state")))
+		resp, err := client.Get(callback)
+		if err != nil {
+			t.Fatalf("%s: %v", attempt, err)
+		}
+		// Read the whole body, so the client can keep the connection.
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		select {
+		case err := <-errCh:
+			if err == nil || !strings.Contains(err.Error(), "access_denied") {
+				t.Fatalf("%s: performOAuth2PKCEFlows() error = %v, want access_denied", attempt, err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: performOAuth2PKCEFlows() still waits after the error callback", attempt)
+		}
 	}
 }
