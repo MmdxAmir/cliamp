@@ -230,11 +230,7 @@ func classicPeakRenderWidth(cols int) int {
 }
 
 func classicPeakStep(current, target, dt float64) float64 {
-	rate := classicPeakBarFallRate
-	if target > current {
-		rate = classicPeakBarRiseRate
-	}
-	return current + (target-current)*(1-math.Exp(-rate*dt))
+	return easeToward(current, target, classicPeakBarRiseRate, classicPeakBarFallRate, dt)
 }
 
 func (d *classicPeakDriver) landed(i int) bool {
@@ -284,15 +280,7 @@ func (d *classicPeakDriver) advance(v *Visualizer, now time.Time) {
 		return
 	}
 
-	dtSeconds := tickClassicPeak.Seconds()
-	if !now.IsZero() && !d.lastTick.IsZero() {
-		dtSeconds = now.Sub(d.lastTick).Seconds()
-	}
-	// Clamp dt so long gaps (pause, sleep, stalled frame) step like one frame
-	// instead of integrating physics over a huge interval.
-	if dtSeconds <= 0 || dtSeconds > 10*tickClassicPeak.Seconds() {
-		dtSeconds = tickClassicPeak.Seconds()
-	}
+	dtSeconds := clampFrameDT(now, d.lastTick, tickClassicPeak).Seconds()
 	d.lastTick = now
 
 	for i, level := range levels {

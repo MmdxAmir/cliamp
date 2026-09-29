@@ -123,22 +123,12 @@ func (d *stereoDriver) sample(ctx VisTickContext) {
 }
 
 func (d *stereoDriver) advance(now time.Time) {
-	dt := TickAnim
-	if !now.IsZero() && !d.lastTick.IsZero() {
-		dt = now.Sub(d.lastTick)
-	}
-	if dt <= 0 || dt > maxSmoothDtFrames*TickAnim {
-		dt = TickAnim
-	}
+	dt := clampFrameDT(now, d.lastTick, TickAnim)
 	d.lastTick = now
 	dtSeconds := dt.Seconds()
 
 	for channel := range 2 {
-		rate := stereoFallRate
-		if d.targetLevel[channel] > d.level[channel] {
-			rate = stereoRiseRate
-		}
-		d.level[channel] += (d.targetLevel[channel] - d.level[channel]) * (1 - math.Exp(-rate*dtSeconds))
+		d.level[channel] = easeToward(d.level[channel], d.targetLevel[channel], stereoRiseRate, stereoFallRate, dtSeconds)
 
 		switch {
 		case d.targetPeak[channel] > d.peak[channel]:

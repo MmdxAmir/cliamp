@@ -132,25 +132,11 @@ func (d *classicLEDDriver) advance(v *Visualizer, now time.Time) {
 		return
 	}
 
-	frame := d.frameInterval()
-	dt := frame
-	if !now.IsZero() && !d.lastTick.IsZero() {
-		dt = now.Sub(d.lastTick)
-	}
-	// Clamp dt so long gaps (sleep, overlay dismiss) step like one frame rather
-	// than integrating peak decay over a huge interval.
-	if dt <= 0 || dt > 10*frame {
-		dt = frame
-	}
+	dtS := clampFrameDT(now, d.lastTick, d.frameInterval()).Seconds()
 	d.lastTick = now
-	dtS := dt.Seconds()
 
 	for i, target := range levels {
-		rate := classicLEDFallRate
-		if target > d.body[i] {
-			rate = classicLEDRiseRate
-		}
-		d.body[i] += (target - d.body[i]) * (1 - math.Exp(-rate*dtS))
+		d.body[i] = easeToward(d.body[i], target, classicLEDRiseRate, classicLEDFallRate, dtS)
 
 		switch {
 		case d.body[i] >= d.peak[i]:

@@ -15,8 +15,7 @@ const (
 	DefaultVisRows       = 7
 	minSpectrumHz        = 20.0
 	maxSpectrumHz        = 20000.0
-	// Cap on dt fed into smoothing easing — long gaps (sleep, paused, stalled
-	// frame) step like ~1 frame instead of integrating over a huge interval.
+	// Cap on dt fed into easing and peak physics, in frames. See clampFrameDT.
 	maxSmoothDtFrames        = 10
 	maxAnimationCatchUpSteps = 4
 	// Band level below which paused spectrum content is treated as fully
@@ -836,13 +835,7 @@ func (v *Visualizer) advanceSmoothing(now time.Time) {
 		v.lastSmoothTick = now
 		return
 	}
-	dt := TickAnim.Seconds()
-	if !now.IsZero() && !v.lastSmoothTick.IsZero() {
-		dt = now.Sub(v.lastSmoothTick).Seconds()
-	}
-	if dt <= 0 || dt > maxSmoothDtFrames*TickAnim.Seconds() {
-		dt = TickAnim.Seconds()
-	}
+	dt := clampFrameDT(now, v.lastSmoothTick, TickAnim).Seconds()
 	v.lastSmoothTick = now
 	for i, target := range v.bands {
 		v.smoothedBands[i] = classicPeakStep(v.smoothedBands[i], target, dt)
