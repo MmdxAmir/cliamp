@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -65,12 +66,39 @@ type providerTestTransport func(*http.Request) (*http.Response, error)
 func (f providerTestTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestProviderNewOffline(t *testing.T) {
-	oldTransport := http.DefaultTransport
-	http.DefaultTransport = providerTestTransport(func(r *http.Request) (*http.Response, error) {
-		t.Errorf("constructor or local operation attempted HTTP: %s", r.URL)
-		return nil, errors.New("network disabled")
-	})
-	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+	errNetworkDisabled := errors.New("network disabled")
+	var mu sync.Mutex
+	var requests []string
+	takeRequests := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		got := requests
+		requests = nil
+		return got
+	}
+	// The API transport is a clone of http.DefaultTransport, so a swap of
+	// DefaultTransport does not reach it. Replace the client instead.
+	oldClient := defaultHTTPClient
+	defaultHTTPClient = &http.Client{Transport: providerTestTransport(func(r *http.Request) (*http.Response, error) {
+		mu.Lock()
+		requests = append(requests, r.URL.String())
+		mu.Unlock()
+		return nil, errNetworkDisabled
+	})}
+	t.Cleanup(func() { defaultHTTPClient = oldClient })
+
+	// A request through a new client must reach the guard.
+	resp, err := newClient().http.Get("https://example.com/probe")
+	if err == nil {
+		resp.Body.Close()
+	}
+	if !errors.Is(err, errNetworkDisabled) {
+		t.Fatalf("probe request error = %v, want %v", err, errNetworkDisabled)
+	}
+	if got := takeRequests(); !slices.Equal(got, []string{"https://example.com/probe"}) {
+		t.Fatalf("guard saw %q, want the probe request", got)
+	}
+
 	for _, tt := range []struct{ country, want string }{
 		{"", "us"}, {" \t", "us"}, {" NO\n", "no"}, {"gB", "gb"},
 		{"USA", "us"}, {"u", "us"}, {"1a", "us"}, {"a1", "us"}, {"\u00e9", "us"},
@@ -101,6 +129,9 @@ func TestProviderNewOffline(t *testing.T) {
 			}})
 			if added, _, err := p.ToggleFavorite("f:" + s.FeedURL); err != nil || added {
 				t.Fatalf("unsubscribe = %v, %v", added, err)
+			}
+			if got := takeRequests(); len(got) > 0 {
+				t.Errorf("constructor or local operation attempted HTTP: %q", got)
 			}
 		})
 	}

@@ -2,14 +2,13 @@
 package plex
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/internal/netdiag"
 )
 
@@ -18,7 +17,7 @@ const maxResponseBody = 10 << 20
 
 // apiClient is used for all Plex API calls with a finite timeout.
 // It is distinct from httpclient.Streaming (which has no timeout) used for audio streams.
-var apiClient = &http.Client{Timeout: 30 * time.Second}
+var apiClient = httpclient.NewAPI(30 * time.Second)
 
 // Client speaks to a Plex Media Server over its HTTP API.
 type Client struct {
@@ -101,11 +100,10 @@ func (c *Client) get(path string, params url.Values, result any) error {
 		return fmt.Errorf("plex: %s: HTTP %s", path, resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
-	if err != nil {
+	if err := httpclient.ReadJSON(resp.Body, maxResponseBody, result); err != nil {
 		return fmt.Errorf("plex: %s: %w", path, err)
 	}
-	return json.Unmarshal(body, result)
+	return nil
 }
 
 // Ping checks that the server is reachable and the token is valid.

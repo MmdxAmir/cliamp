@@ -19,6 +19,7 @@ import (
 
 	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/internal/httpclient"
+	"github.com/bjarneo/cliamp/internal/netdiag"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -34,7 +35,7 @@ var (
 )
 
 // httpClient is used for all Navidrome API calls with a finite timeout.
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+var httpClient = httpclient.NewAPI(30 * time.Second)
 
 // maxResponseBody limits JSON API responses to 128 MB to prevent unbounded
 // memory growth. A getPlaylist response runs roughly 1.2 KB per entry, so this
@@ -222,7 +223,11 @@ func (c *NavidromeClient) httpGetContext(ctx context.Context, rawURL string) (*h
 		return nil, err
 	}
 	req.Header.Set("User-Agent", httpclient.UserAgent)
-	return httpClient.Do(req)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, netdiag.Explain(err)
+	}
+	return resp, nil
 }
 
 // subsonicGet performs a GET to the Subsonic API endpoint, decodes the JSON
@@ -242,16 +247,11 @@ func (c *NavidromeClient) subsonicGetContext(ctx context.Context, endpoint strin
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("navidrome: %s: http status %s", endpoint, resp.Status)
 	}
-	// Read one byte past the cap so an oversized response is reported rather
-	// than silently truncated: io.LimitReader alone would cut mid-object and
-	// hand json.Unmarshal a partial body, which fails as the opaque
-	// "unexpected end of JSON input".
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody+1))
+	// The body is decoded twice, once for the error envelope and once into
+	// result, so read the bytes here rather than through ReadJSON.
+	body, err := httpclient.ReadBody(resp.Body, maxResponseBody)
 	if err != nil {
 		return fmt.Errorf("navidrome: %s: %w", endpoint, err)
-	}
-	if len(body) > maxResponseBody {
-		return fmt.Errorf("navidrome: %s: response exceeds %d bytes", endpoint, maxResponseBody)
 	}
 	// Check for API-level errors.
 	var env struct {

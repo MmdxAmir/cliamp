@@ -145,3 +145,11 @@ Other values, such as `"mp3"`, `"aac"`, or `"opus"`, are sent as the requested f
 ## Requirements
 
 You need only a running Navidrome instance. The client uses the Go standard `net/http` and `crypto/md5` packages. The Navidrome server must have the Subsonic API enabled. This is the default.
+
+## Troubleshooting
+
+### macOS: `dial tcp ... connect: no route to host`
+
+If cliamp reports `no route to host` for a Navidrome server on the LAN, but `curl` works with the same URL, macOS likely denies Local Network access to the app. cliamp then adds a hint to the error.
+
+Fix: Open **System Settings > Privacy & Security > Local Network**. Enable access for the terminal app, then restart cliamp. For more steps, see [Plex troubleshooting](plex.md#troubleshooting).

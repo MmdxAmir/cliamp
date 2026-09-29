@@ -86,7 +86,8 @@ func (p *Pins) Contains(id string) bool {
 }
 
 // Toggle adds place when absent and removes it when present, persisting either
-// way. It reports whether the place is pinned after the call.
+// way. It reports whether the place is pinned after the call. A failed save
+// leaves the pins unchanged.
 //
 // Pins carries its own lock so that the write, which fsyncs the file and its
 // directory, never runs under the provider mutex the renderer reads through.
@@ -95,16 +96,25 @@ func (p *Pins) Toggle(place Place) (pinned bool, err error) {
 	defer p.mu.Unlock()
 
 	id := place.ID()
-	if i := slices.IndexFunc(p.places, func(c Place) bool { return c.ID() == id }); i >= 0 {
-		p.places = slices.Delete(p.places, i, i+1)
-		return false, p.save()
+	i := slices.IndexFunc(p.places, func(c Place) bool { return c.ID() == id })
+	wasPinned := i >= 0
+	// Build a new slice, so that p.places stays as it was until the save
+	// succeeds.
+	var places []Place
+	if wasPinned {
+		places = slices.Concat(p.places[:i], p.places[i+1:])
+	} else {
+		places = append(slices.Clone(p.places), place)
 	}
-	p.places = append(p.places, place)
-	return true, p.save()
+	if err := p.save(places); err != nil {
+		return wasPinned, err
+	}
+	p.places = places
+	return !wasPinned, nil
 }
 
-// save persists the pin list. p.mu must be held.
-func (p *Pins) save() error {
+// save persists places as the pin list. p.mu must be held.
+func (p *Pins) save(places []Place) error {
 	if p.path == "" {
 		dir, err := appdir.Dir()
 		if err != nil {
@@ -113,7 +123,7 @@ func (p *Pins) save() error {
 		p.path = filepath.Join(dir, pinsFile)
 	}
 	var b strings.Builder
-	for i, place := range p.places {
+	for i, place := range places {
 		if i > 0 {
 			fmt.Fprintln(&b)
 		}

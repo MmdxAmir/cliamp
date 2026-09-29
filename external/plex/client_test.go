@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 // newTestClient returns a Client pointed at the given test server.
@@ -581,4 +583,20 @@ func TestRequestHeaders(t *testing.T) {
 	defer srv.Close()
 
 	_ = newTestClient(srv).Ping()
+}
+
+func TestClientSendsUserAgent(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.UserAgent()
+		w.Write([]byte(`{"MediaContainer":{"friendlyName":"test"}}`))
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "tok").Ping(); err != nil {
+		t.Fatalf("Ping() error: %v", err)
+	}
+	if got != httpclient.UserAgent {
+		t.Errorf("User-Agent = %q, want %q", got, httpclient.UserAgent)
+	}
 }

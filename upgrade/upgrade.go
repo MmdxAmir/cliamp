@@ -3,6 +3,7 @@
 package upgrade
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,11 +16,27 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 const repo = "bjarneo/cliamp"
 
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+// httpClient serves the GitHub API and checksum requests.
+var httpClient = httpclient.NewAPI(30 * time.Second)
+
+// downloadClient fetches the release binary. A client timeout also covers the
+// body read, so this client has none and a slow connection can finish the
+// download. downloadIdleTimeout ends a download that stops sending.
+var downloadClient = httpclient.NewAPI(0)
+
+// downloadIdleTimeout is the longest wait of the binary download for the
+// response headers or for the next body bytes.
+var downloadIdleTimeout = 30 * time.Second
+
+// errDownloadStalled ends a binary download that got no data within
+// downloadIdleTimeout.
+var errDownloadStalled = errors.New("download stalled")
 
 type release struct {
 	TagName    string `json:"tag_name"`
@@ -161,8 +178,21 @@ func downloadAndReplace(url, destPath, expectedHash string) error {
 	if len(expectedHash) != sha256.Size*2 {
 		return errors.New("valid expected SHA-256 is required")
 	}
-	resp, err := httpClient.Get(url)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	idle := time.AfterFunc(downloadIdleTimeout, func() {
+		cancel(fmt.Errorf("%w: no data for %s", errDownloadStalled, downloadIdleTimeout))
+	})
+	defer idle.Stop()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
+		return fmt.Errorf("downloading: %w", err)
+	}
+	resp, err := downloadClient.Do(req)
+	if err != nil {
+		if stall := stallError(ctx); stall != nil {
+			err = stall
+		}
 		return fmt.Errorf("downloading: %w", err)
 	}
 	defer resp.Body.Close()
@@ -184,10 +214,14 @@ func downloadAndReplace(url, destPath, expectedHash string) error {
 	// rogue redirect or compromised CDN.
 	const maxBinarySize = 200 << 20
 	h := sha256.New()
-	written, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(resp.Body, maxBinarySize+1))
+	body := &idleReader{r: resp.Body, timer: idle, timeout: downloadIdleTimeout}
+	written, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(body, maxBinarySize+1))
 	if err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
+		if stall := stallError(ctx); stall != nil {
+			return fmt.Errorf("downloading: %w", stall)
+		}
 		return fmt.Errorf("writing binary: %w", err)
 	}
 	if written == 0 || written > maxBinarySize {
@@ -228,6 +262,31 @@ func downloadAndReplace(url, destPath, expectedHash string) error {
 		return fmt.Errorf("replacing binary: %w", err)
 	}
 
+	return nil
+}
+
+// idleReader restarts timer each time a read returns data, so the timer
+// fires only when the body stops sending for timeout.
+type idleReader struct {
+	r       io.Reader
+	timer   *time.Timer
+	timeout time.Duration
+}
+
+func (r *idleReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 {
+		r.timer.Reset(r.timeout)
+	}
+	return n, err
+}
+
+// stallError returns the stall error when the idle timer canceled ctx, and
+// nil otherwise. The canceled request reports only a generic context error.
+func stallError(ctx context.Context) error {
+	if cause := context.Cause(ctx); errors.Is(cause, errDownloadStalled) {
+		return cause
+	}
 	return nil
 }
 
