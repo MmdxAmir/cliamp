@@ -295,6 +295,26 @@ func TestIsLiveStream(t *testing.T) {
 	}
 }
 
+func TestHasSourceResolver(t *testing.T) {
+	p := newTestPlayer()
+	p.RegisterSourceResolver("qobuz://track/", func(string) (ResolvedSource, error) {
+		return ResolvedSource{}, nil
+	})
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{path: "qobuz://track/42", want: true},
+		{path: "tidal://track/42", want: false},
+		{path: "/music/song.flac", want: false},
+	}
+	for _, tt := range tests {
+		if got := p.HasSourceResolver(tt.path); got != tt.want {
+			t.Errorf("HasSourceResolver(%q) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}
+
 func TestSampleRate(t *testing.T) {
 	p := &Player{sr: 44100}
 	if p.SampleRate() != 44100 {

@@ -491,8 +491,11 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 }
 
 // isCustomStreamURI reports whether a provider decodes path itself, as the
-// Spotify provider does for spotify: URIs.
+// Spotify provider does for spotify: URIs, or resolves it at play time.
 func (m *Model) isCustomStreamURI(path string) bool {
+	if m.hasSourceResolver(path) {
+		return true
+	}
 	for _, pe := range m.providers {
 		cs, ok := pe.Provider.(provider.CustomStreamer)
 		if !ok {
@@ -505,6 +508,14 @@ func (m *Model) isCustomStreamURI(path string) bool {
 		}
 	}
 	return false
+}
+
+// hasSourceResolver reports whether the player resolves path when playback
+// starts, as it does for qobuz:// and tidal:// URIs. Favorites, history and
+// saved playlists reload such tracks with Stream false.
+func (m *Model) hasSourceResolver(path string) bool {
+	r, ok := m.player.(interface{ HasSourceResolver(string) bool })
+	return ok && r.HasSourceResolver(path)
 }
 
 func (m *Model) backfillLoadedPlaylistDuration(track playlist.Track) {

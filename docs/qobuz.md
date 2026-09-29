@@ -82,7 +82,6 @@ After you load a playlist or album, cliamp returns to the standard playlist view
 - **"Couldn't play" error on a track**: Qobuz refused the stream URL when the track started. The track may not be available for the subscription tier or region.
 - **Hi-Res not delivered**: `quality = 27` does not add Hi-Res to a plan that lacks it. Qobuz returns the best quality allowed by the plan.
 - **Long-idle sessions**: cliamp resolves stream URLs when each track starts. Queued tracks continue after an idle period without manual refresh. `Ctrl+R` gets playlists and tracks again.
-- **The UI stops for a short time when a Qobuz track starts from Favorites, Recently Played or a saved playlist**: cliamp gets the stream URL of these tracks on the UI thread. The UI continues when the stream opens. Tracks from a Qobuz list in the provider panel start in the background.
 
 ## Requirements
 
