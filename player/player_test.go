@@ -179,8 +179,10 @@ func TestClearPreloadDoesNotWaitForClose(t *testing.T) {
 			select {
 			case <-done:
 			case <-time.After(2 * time.Second):
-				close(decoder.release)
-				<-done
+				if decoder != nil {
+					close(decoder.release)
+					<-done
+				}
 				t.Fatal("ClearPreload waited for the old pipeline to close")
 			}
 
