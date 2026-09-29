@@ -324,8 +324,8 @@ func TestFavoritesConcurrentProcesses(t *testing.T) {
 }
 
 // ToggleFavorite must not hold the provider lock while the favorites store
-// writes. The store takes a file lock and fsyncs, and the renderer reads the
-// radio pane through the provider lock.
+// writes. The store takes a file lock and fsyncs, and IPC, Lua and list
+// fetches read the provider through that lock.
 func TestToggleFavoriteReleasesProviderLockDuringWrite(t *testing.T) {
 	station := CatalogStation{Name: "Jazz FM", URL: "https://jazz.example/stream"}
 	for _, tc := range []struct {

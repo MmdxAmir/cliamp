@@ -365,7 +365,9 @@ func (p *Provider) ToggleFavorite(id string) (added bool, name string, err error
 		return false, "", err
 	}
 	// The store takes a file lock and fsyncs, so it runs off the provider
-	// lock that the renderer reads the pane through.
+	// lock. Readers of the provider lock, such as IPC, Lua and list fetches,
+	// then wait only when they also read the favorites. The caller still
+	// waits for the write.
 	added, err = p.favorites.Toggle(s)
 	return added, s.Name, err
 }
