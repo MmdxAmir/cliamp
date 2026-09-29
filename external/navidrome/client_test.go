@@ -838,3 +838,36 @@ func TestDialErrorGetsNetdiagHint(t *testing.T) {
 		})
 	}
 }
+
+func TestSaveAlbumSort(t *testing.T) {
+	saveErr := errors.New("disk full")
+	tests := []struct {
+		name     string
+		sortType string
+		saveErr  error
+		want     string
+	}{
+		{name: "sort type", sortType: SortByYear, want: SortByYear},
+		{name: "empty means by name", sortType: "", want: SortAlphabeticalByName},
+		{name: "save error", sortType: SortNewest, saveErr: saveErr, want: SortNewest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := New("https://music.example.com", "u", "p")
+			var saved []string
+			c.saveSort = func(sortType string) error {
+				saved = append(saved, sortType)
+				return tt.saveErr
+			}
+			if err := c.SaveAlbumSort(tt.sortType); !errors.Is(err, tt.saveErr) {
+				t.Fatalf("SaveAlbumSort() error = %v, want %v", err, tt.saveErr)
+			}
+			if len(saved) != 1 || saved[0] != tt.want {
+				t.Errorf("saved %q, want [%q]", saved, tt.want)
+			}
+			if got := c.DefaultAlbumSort(); got != tt.want {
+				t.Errorf("DefaultAlbumSort() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

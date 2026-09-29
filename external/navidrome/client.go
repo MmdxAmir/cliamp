@@ -94,6 +94,7 @@ type NavidromeClient struct {
 	browseSort       string
 	format           string
 	scrobbleDisabled bool
+	saveSort         func(string) error // config.SaveNavidromeSort, or a fake in tests
 	mu               sync.Mutex
 	playlistCache    []playlist.PlaylistInfo
 	trackCache       map[string][]playlist.Track
@@ -106,6 +107,7 @@ func New(serverURL, user, password string) *NavidromeClient {
 		user:       user,
 		password:   password,
 		browseSort: SortAlphabeticalByName,
+		saveSort:   config.SaveNavidromeSort,
 	}
 }
 
@@ -163,7 +165,7 @@ func (c *NavidromeClient) SaveAlbumSort(sortType string) error {
 		sortType = SortAlphabeticalByName
 	}
 	c.browseSort = sortType
-	return config.SaveNavidromeSort(sortType)
+	return c.saveSort(sortType)
 }
 
 // subsonicError represents an application-level error from the Subsonic API.
