@@ -139,6 +139,36 @@ func TestWriteTrackAllFields(t *testing.T) {
 	}
 }
 
+// The shared track keys come first and the playlist-only keys follow.
+func TestWriteTrackGolden(t *testing.T) {
+	const want = `[[track]]
+path = "https://cdn.example.com/ep1.mp3"
+title = "Episode"
+album = "Show"
+duration_secs = 3768
+provider_meta.podcast.feed = "https://rss.example.com/show"
+provider_meta.podcast.guid = "guid-1"
+album_art_url = "https://cdn.example.com/cover.jpg"
+bookmark = true
+`
+	var buf bytes.Buffer
+	writeTrack(&buf, playlist.Track{
+		Path:         "https://cdn.example.com/ep1.mp3",
+		Title:        "Episode",
+		Album:        "Show",
+		DurationSecs: 3768,
+		AlbumArtURL:  "https://cdn.example.com/cover.jpg",
+		Bookmark:     true,
+		ProviderMeta: map[string]string{
+			provider.MetaPodcastGUID: "guid-1",
+			provider.MetaPodcastFeed: "https://rss.example.com/show",
+		},
+	})
+	if got := buf.String(); got != want {
+		t.Fatalf("writeTrack:\n got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 // --- loadTOML round-trip ---
 
 func TestLoadTOMLRoundTrip(t *testing.T) {

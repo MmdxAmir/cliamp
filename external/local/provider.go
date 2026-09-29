@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/bjarneo/cliamp/favorites"
@@ -1138,44 +1137,11 @@ func (p *Provider) RemoveTrack(name string, index int) error {
 	return p.savePlaylist(name, kept)
 }
 
-// writeTrack writes a single [[track]] TOML section to w.
+// writeTrack writes a single [[track]] TOML section to w: the track fields
+// that favorites and history also keep, then the keys only playlists keep.
 func writeTrack(w io.Writer, t playlist.Track) {
 	fmt.Fprintln(w, "[[track]]")
-	fmt.Fprintf(w, "path = %q\n", t.Path)
-	fmt.Fprintf(w, "title = %q\n", t.Title)
-	if t.Feed {
-		fmt.Fprintln(w, "feed = true")
-	}
-	if t.Realtime {
-		fmt.Fprintln(w, "realtime = true")
-	}
-	if t.Artist != "" {
-		fmt.Fprintf(w, "artist = %q\n", t.Artist)
-	}
-	if t.Album != "" {
-		fmt.Fprintf(w, "album = %q\n", t.Album)
-	}
-	if t.Genre != "" {
-		fmt.Fprintf(w, "genre = %q\n", t.Genre)
-	}
-	if t.Year != 0 {
-		fmt.Fprintf(w, "year = %d\n", t.Year)
-	}
-	if t.TrackNumber != 0 {
-		fmt.Fprintf(w, "track_number = %d\n", t.TrackNumber)
-	}
-	// The podcast feed and GUID are what make an episode recognizable after a
-	// restart: the feed marks it as seekable, and the GUID keys its listening
-	// position. Nothing else in ProviderMeta survives a save.
-	if feed := t.Meta(provider.MetaPodcastFeed); feed != "" {
-		fmt.Fprintf(w, "podcast_feed = %q\n", feed)
-	}
-	if guid := t.Meta(provider.MetaPodcastGUID); guid != "" {
-		fmt.Fprintf(w, "podcast_guid = %q\n", guid)
-	}
-	if t.DurationSecs != 0 {
-		fmt.Fprintf(w, "duration_secs = %d\n", t.DurationSecs)
-	}
+	playlist.WriteTrackTOML(w, t)
 	if t.EmbeddedLyrics != "" {
 		fmt.Fprintf(w, "embedded_lyrics = %q\n", t.EmbeddedLyrics)
 	}
@@ -1189,36 +1155,23 @@ func writeTrack(w io.Writer, t playlist.Track) {
 
 // parseTrackFields converts a parsed [[track]] section into a Track.
 func parseTrackFields(f map[string]string) playlist.Track {
-	t := playlist.Track{
-		Path:     f["path"],
-		Title:    f["title"],
-		Artist:   f["artist"],
-		Album:    f["album"],
-		Genre:    f["genre"],
-		Feed:     f["feed"] == "true",
-		Realtime: f["realtime"] == "true",
-	}
+	t := playlist.TrackFromTOML(f)
 	t.EmbeddedLyrics = f["embedded_lyrics"]
 	t.AlbumArtURL = f["album_art_url"]
-	t.Stream = playlist.IsURL(t.Path)
 	// "favorite" is the pre-rename alias for "bookmark"; prefer bookmark.
 	bookmark, ok := f["bookmark"]
 	if !ok {
 		bookmark = f["favorite"]
 	}
 	t.Bookmark = bookmark == "true"
-	if n, err := strconv.Atoi(f["year"]); err == nil {
-		t.Year = n
-	}
-	if n, err := strconv.Atoi(f["track_number"]); err == nil {
-		t.TrackNumber = n
-	}
-	if n, err := strconv.Atoi(f["duration_secs"]); err == nil {
-		t.DurationSecs = n
-	}
-	if feed := f["podcast_feed"]; feed != "" {
-		t.ProviderMeta = map[string]string{provider.MetaPodcastFeed: feed}
-		if guid := f["podcast_guid"]; guid != "" {
+	// Older versions kept only the podcast feed and GUID, as podcast_feed and
+	// podcast_guid. A GUID without its feed was never read back.
+	if feed := f["podcast_feed"]; feed != "" && t.Meta(provider.MetaPodcastFeed) == "" {
+		if t.ProviderMeta == nil {
+			t.ProviderMeta = make(map[string]string, 2)
+		}
+		t.ProviderMeta[provider.MetaPodcastFeed] = feed
+		if guid := f["podcast_guid"]; guid != "" && t.Meta(provider.MetaPodcastGUID) == "" {
 			t.ProviderMeta[provider.MetaPodcastGUID] = guid
 		}
 	}
