@@ -6,8 +6,6 @@ import (
 	"sync"
 	"testing"
 
-	"golang.org/x/oauth2"
-
 	"github.com/bjarneo/cliamp/playlist"
 )
 
@@ -17,7 +15,7 @@ import (
 func TestCloseDuringPlaylists(t *testing.T) {
 	// Without stored credentials, ensureSession cannot rebuild the session.
 	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
-	stubSpotifyAPI(t, "client", map[string]func(*http.Request) *http.Response{
+	rt := routeTransport(map[string]func(*http.Request) *http.Response{
 		"/v1/me":           apiResponse(http.StatusOK, `{"id":"me"}`),
 		"/v1/me/tracks":    apiResponse(http.StatusOK, `{"total":0}`),
 		"/v1/me/playlists": apiResponse(http.StatusOK, `{"items":[],"total":0}`),
@@ -25,8 +23,7 @@ func TestCloseDuringPlaylists(t *testing.T) {
 	})
 
 	for range 50 {
-		sess := &Session{tokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "token"})}
-		p := New(sess, "client", 320)
+		p := New(stubSession(rt), "client", 320)
 		var wg sync.WaitGroup
 		wg.Go(func() {
 			if _, err := p.Playlists(); err != nil && !errors.Is(err, playlist.ErrNeedsAuth) {

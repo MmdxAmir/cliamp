@@ -139,7 +139,7 @@ func (s *Session) webAPIOnce(ctx context.Context, method, path string, query url
 		req.Header.Set("Content-Type", contentType)
 	}
 
-	return webHTTPClient.Do(req)
+	return s.webClient().Do(req)
 }
 
 // maxRateLimitWait is the longest Retry-After that webAPIWithRetry waits for.

@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/oauth2"
-
 	"github.com/bjarneo/cliamp/lyrics"
 )
 
@@ -108,8 +106,7 @@ func TestParseColorLyrics(t *testing.T) {
 func lyricsSpotify(t *testing.T, status int, body string) (*SpotifyProvider, *[]*http.Request) {
 	t.Helper()
 	var requests []*http.Request
-	originalTransport := http.DefaultTransport
-	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	rt := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests = append(requests, req)
 		return &http.Response{
 			StatusCode: status,
@@ -119,13 +116,13 @@ func lyricsSpotify(t *testing.T, status int, body string) (*SpotifyProvider, *[]
 			Request:    req,
 		}, nil
 	})
-	t.Cleanup(func() { http.DefaultTransport = originalTransport })
 
-	sess := &Session{tokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "token"})}
+	sess := stubSession(rt)
 	return New(sess, "client", 320), &requests
 }
 
 func TestProviderTrackLyrics(t *testing.T) {
+	t.Parallel()
 	body := `{"lyrics":{"syncType":"LINE_SYNCED","lines":[{"startTimeMs":"1000","words":"hello"}]}}`
 
 	t.Run("fetches synced lyrics", func(t *testing.T) {

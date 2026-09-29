@@ -70,6 +70,15 @@ type Session struct {
 	devID       string
 	clientID    string             // Spotify Developer app client ID
 	tokenSource oauth2.TokenSource // auto-refreshing OAuth2 token source
+	web         *http.Client       // Web API and lyrics client, or nil for webHTTPClient
+}
+
+// webClient returns the client for Web API and lyrics requests.
+func (s *Session) webClient() *http.Client {
+	if s.web != nil {
+		return s.web
+	}
+	return webHTTPClient
 }
 
 type streamContextTransport struct {
