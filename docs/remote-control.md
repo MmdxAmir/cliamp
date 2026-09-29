@@ -125,7 +125,9 @@ accepts that name or `default` to select the terminal colors.
 
 `playlist.bookmark` keeps its name for existing scripts. It toggles the favorite
 ♥ of `track`, as `f` does in the TUI. It needs a known `provider` key, but it
-does not change the playlist.
+does not change the playlist. In the TUI, a radio station outside a saved
+playlist toggles its station favorite, so the `bookmark` field of that row
+changes too.
 
 Use IDs returned by `provider.playlists` for subsequent provider operations.
 Radio favorite IDs are stable `f:<station URL>` values, not positional

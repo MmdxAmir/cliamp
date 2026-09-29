@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/external/radio"
+	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
 )
 
@@ -206,6 +207,46 @@ func TestRadioRowFavoriteDispatch(t *testing.T) {
 	}
 }
 
+// IPC playlist.bookmark on a station row toggles the store that f toggles
+// and that the reported bookmark reads. Outside a saved playlist that is the
+// station favorite. In a saved playlist it is the favorites store.
+func TestIPCBookmarkStationRowMatchesReportedBookmark(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		saved       bool
+		wantStation bool
+	}{
+		{name: "unsaved playlist", wantStation: true},
+		{name: "saved playlist", saved: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, _, tracks := radioFavoriteTestModel(t)
+			m.replacePlayerPlaylist(tracks)
+			if tc.saved {
+				m.loadedPlaylist = "Saved radios"
+			}
+			store := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
+			m.localProvider, m.favMgr = store, store
+			info := ipcTrackInfo(tracks[0], 0, 0, false)
+
+			for _, want := range []bool{true, false} {
+				if response := runV2(t, &m, "playlist.bookmark", ipc.Request{Provider: "radio", Track: &info}); !response.OK {
+					t.Fatalf("bookmark response = %+v", response)
+				}
+				if got := runV2(t, &m, "queue.list", ipc.Request{}).Tracks[0].Bookmark; got != want {
+					t.Fatalf("reported bookmark = %v, want %v", got, want)
+				}
+				if got := m.radioFavorites.Contains(tracks[0].Path); got != (want && tc.wantStation) {
+					t.Fatalf("station favorite = %v, want %v", got, want && tc.wantStation)
+				}
+				if got := store.IsFavorited(tracks[0].Path); got != (want && !tc.wantStation) {
+					t.Fatalf("track favorite = %v, want %v", got, want && !tc.wantStation)
+				}
+			}
+		})
+	}
+}
+
 func TestRadioFavoriteWriteFailure(t *testing.T) {
 	m, _, tracks := radioFavoriteTestModel(t)
 	m.replacePlayerPlaylist(tracks)
@@ -223,7 +264,7 @@ func TestRadioFavoriteWriteFailure(t *testing.T) {
 	if m.renderPlaylist() != before {
 		t.Fatal("failed write changed the playlist rows")
 	}
-	if m.status.kind != feedbackError || !strings.Contains(m.status.text, "Favorite save failed") {
+	if m.status.kind != feedbackError || !strings.Contains(m.status.text, "Favorite failed") {
 		t.Fatalf("missing error feedback: %q", m.status.text)
 	}
 }

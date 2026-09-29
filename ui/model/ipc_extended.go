@@ -274,7 +274,7 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 			request.Reply <- ipc.Response{OK: false, Error: "track is required"}
 			return nil
 		}
-		cmd, err := m.toggleTrackFavorite(ipcTrackFromInfo(*request.Track))
+		cmd, err := m.togglePlaylistTrackFavorite(ipcTrackFromInfo(*request.Track))
 		request.Reply <- ipcResponseError(err)
 		return cmd
 	case "provider.playlists":
