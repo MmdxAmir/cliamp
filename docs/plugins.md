@@ -285,7 +285,7 @@ All APIs are in the global `cliamp` table.
 cliamp.player.state()         --> "playing" | "paused" | "stopped"
 cliamp.player.position()      --> number (seconds)
 cliamp.player.duration()      --> number (seconds)
-cliamp.player.volume()        --> number (dB, -30 to +6)
+cliamp.player.volume()        --> number (dB, volume_min to +6)
 cliamp.player.speed()         --> number (ratio, 1.0 = normal)
 cliamp.player.mono()          --> boolean
 cliamp.player.repeat_mode()   --> "Off" | "All" | "One"
