@@ -2,7 +2,12 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BINARY  ?= cliamp
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build test vet lint staticcheck fmt fmt-check coverage security ci check clean install
+# CI installs these versions through make tools. Bump STATICCHECK_VERSION
+# together with the go line in go.mod and mise.toml.
+STATICCHECK_VERSION ?= v0.6.1
+GOVULNCHECK_VERSION ?= v1.1.4
+
+.PHONY: build test vet lint staticcheck tools fmt fmt-check coverage security ci check clean install
 
 build:
 	go build -trimpath -ldflags="$(LDFLAGS)" -o $(BINARY) .
@@ -14,11 +19,15 @@ vet:
 	go vet ./...
 
 lint: vet
-	@if command -v staticcheck >/dev/null 2>&1; then staticcheck ./...; else echo "staticcheck not installed — skipping (go install honnef.co/go/tools/cmd/staticcheck@latest)"; fi
+	@if command -v staticcheck >/dev/null 2>&1; then staticcheck ./...; else echo "staticcheck is not installed, so lint skips it. Run make tools to install $(STATICCHECK_VERSION)."; fi
 
 staticcheck:
-	@command -v staticcheck >/dev/null 2>&1 || { echo "staticcheck is required"; exit 1; }
+	@command -v staticcheck >/dev/null 2>&1 || { echo "staticcheck is required. Run make tools."; exit 1; }
 	staticcheck ./...
+
+tools:
+	go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
+	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 
 GOFILES = $$(git ls-files '*.go')
 
@@ -33,7 +42,7 @@ coverage:
 	go tool cover -func=coverage.out
 
 security:
-	@command -v govulncheck >/dev/null 2>&1 || { echo "govulncheck is required"; exit 1; }
+	@command -v govulncheck >/dev/null 2>&1 || { echo "govulncheck is required. Run make tools."; exit 1; }
 	govulncheck ./...
 
 ci: fmt-check vet staticcheck security

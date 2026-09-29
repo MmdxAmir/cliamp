@@ -24,8 +24,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libflac-dev libvorbis-dev libogg-dev libmpg123-dev shellcheck
-      - run: go install honnef.co/go/tools/cmd/staticcheck@v0.6.1
-      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      - run: make tools
       - run: make ci
 
   build:
