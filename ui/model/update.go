@@ -829,7 +829,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		var resumeCmd tea.Cmd
-		if msg.err != nil {
+		if errors.Is(msg.err, playlist.ErrNeedsAuth) {
+			// The provider session went stale, for example after Spotify
+			// rejected the stream keys. Ask for sign-in, not a raw error.
+			m.provSignIn = true
+			m.err = nil
+			m.status.Warningf(statusTTLLong, "Sign-in required to play %s.", track.DisplayName())
+		} else if msg.err != nil {
 			m.err = msg.err
 			if track, idx := m.currentPlaybackTrack(); idx >= 0 {
 				m.status.Errorf(statusTTLLong, "Couldn't play %s — track is gated, restricted, or unavailable.", track.DisplayName())
@@ -992,11 +998,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.provAuthURL = ""
 		if msg.err != nil {
+			// Keep the sign-in prompt, so Enter retries without a restart.
 			m.err = msg.err
 			m.provLoading = false
-			m.provSignIn = false
+			m.provSignIn = true
 			return m, nil
 		}
+		m.err = nil
 		m.provSignIn = false
 		m.provLoading = true
 		cmd := m.fetchProviderPlaylists()

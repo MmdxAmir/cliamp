@@ -78,7 +78,7 @@ func favRemovedMark() string { return favRemovedStyle.Render(favHeart) }
 var providerEmptyStateHint = map[string]string{
 	"local playlists":     "Add .toml playlists to ~/.config/cliamp/playlists/.",
 	"local":               "Add .toml playlists to ~/.config/cliamp/playlists/.",
-	"spotify":             "Sign in via Spotify, or check SPOTIFY_REFRESH_TOKEN.",
+	"spotify":             "Press Ctrl+R to reload, or run `cliamp spotify reset` to sign in again.",
 	"navidrome":           "Verify [navidrome] url/username/password in config.toml.",
 	"jellyfin":            "Verify [jellyfin] url and token in config.toml.",
 	"emby":                "Verify [emby] url and token or username/password in config.toml.",

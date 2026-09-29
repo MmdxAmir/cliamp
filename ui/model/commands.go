@@ -600,12 +600,22 @@ func fetchSpotSearchCmd(ctx context.Context, s provider.Searcher, providerName, 
 func fetchSpotPlaylistsCmd(prov playlist.Provider, gen uint64) tea.Cmd {
 	return func() tea.Msg {
 		playlists, err := prov.Playlists()
-		if err == nil && prov.Name() == "Local" {
+		if err != nil && len(playlists) > 0 {
+			// A partial list, such as playlists without saved albums, still
+			// holds every target the picker needs.
+			err = nil
+		}
+		targets, canFilter := prov.(provider.PlaylistTargetFilter)
+		if err == nil && (canFilter || prov.Name() == "Local") {
 			filtered := playlists[:0]
 			for _, pl := range playlists {
-				if pl.Name != history.PlaylistName {
-					filtered = append(filtered, pl)
+				if pl.Name == history.PlaylistName && prov.Name() == "Local" {
+					continue
 				}
+				if canFilter && !targets.CanAddToPlaylist(pl) {
+					continue
+				}
+				filtered = append(filtered, pl)
 			}
 			playlists = filtered
 		}
