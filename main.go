@@ -724,13 +724,8 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 	prog := tea.NewProgram(m, progOpts...)
 	if daemon {
-		signals := make(chan os.Signal, 1)
-		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-		defer func() {
-			signal.Stop(signals)
-			close(signals)
-		}()
-		go quitOnSignal(signals, prog.Send)
+		stopSignals := quitOnSignals(prog.Send)
+		defer stopSignals()
 	}
 
 	if spotifyProv != nil {
@@ -863,7 +858,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 
 // headlessProgramOptions build a program with no terminal: no renderer, no
 // input and no output. The frame ticker runs at its lowest rate. run
-// handles the signals itself, see quitOnSignal.
+// handles the signals itself, see quitOnSignals.
 func headlessProgramOptions() []tea.ProgramOption {
 	return []tea.ProgramOption{
 		tea.WithoutRenderer(),
@@ -871,6 +866,18 @@ func headlessProgramOptions() []tea.ProgramOption {
 		tea.WithOutput(io.Discard),
 		tea.WithFPS(1),
 		tea.WithoutSignalHandler(),
+	}
+}
+
+// quitOnSignals sends SIGINT and SIGTERM to quitOnSignal until stop is
+// called.
+func quitOnSignals(send func(tea.Msg)) (stop func()) {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	go quitOnSignal(signals, send)
+	return func() {
+		signal.Stop(signals)
+		close(signals)
 	}
 }
 
