@@ -782,6 +782,73 @@ func TestRenderVisReusesLastOnError(t *testing.T) {
 	}
 }
 
+// RenderVis runs on the UI goroutine. When another callback of the plugin
+// holds the lock, it returns the last frame at once instead of waiting.
+func TestRenderVisReturnsLastFrameWhenPluginBusy(t *testing.T) {
+	m := newTestManager()
+	p := loadTestPlugin(t, m, "busy-vis", `
+		local v = plugin.register({name = "busy-vis", type = "visualizer"})
+		function v:render(bands, frame) return "frame-" .. frame end
+	`)
+	m.finalizeVisualizers()
+	defer m.Close()
+	if got := m.RenderVis("busy-vis", [10]float64{}, 8, 40, 1); got != "frame-1" {
+		t.Fatalf("RenderVis() = %q, want frame-1", got)
+	}
+
+	p.mu.Lock()
+	done := make(chan string, 1)
+	go func() { done <- m.RenderVis("busy-vis", [10]float64{}, 8, 40, 2) }()
+	select {
+	case got := <-done:
+		if got != "frame-1" {
+			t.Errorf("RenderVis() = %q, want the last frame frame-1", got)
+		}
+	case <-time.After(time.Second):
+		t.Error("RenderVis waited for the plugin lock")
+	}
+	p.mu.Unlock()
+	if got := m.RenderVis("busy-vis", [10]float64{}, 8, 40, 3); got != "frame-3" {
+		t.Errorf("RenderVis() = %q, want frame-3 after the lock is free", got)
+	}
+}
+
+// A render that runs past renderTimeout stops, and RenderVis returns the last
+// frame.
+func TestRenderVisTimeout(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"busy loop", "while true do end"},
+		{"sleep", "cliamp.sleep(10)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			loadTestPlugin(t, m, "slow-vis", `
+				local v = plugin.register({name = "slow-vis", type = "visualizer"})
+				function v:render(bands, frame)
+					if frame > 1 then `+tt.body+` end
+					return "frame-" .. frame
+				end
+			`)
+			m.finalizeVisualizers()
+			defer m.Close()
+			m.RenderVis("slow-vis", [10]float64{}, 8, 40, 1)
+
+			start := time.Now()
+			got := m.RenderVis("slow-vis", [10]float64{}, 8, 40, 2)
+			if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+				t.Errorf("RenderVis() took %v, want about %v", elapsed, renderTimeout)
+			}
+			if got != "frame-1" {
+				t.Errorf("RenderVis() = %q, want the last frame frame-1", got)
+			}
+		})
+	}
+}
+
 func TestDataToTableConversion(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
