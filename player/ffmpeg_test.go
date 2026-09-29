@@ -834,15 +834,16 @@ func TestProbeFrames(t *testing.T) {
 		t.Skip("uses POSIX shell fixtures")
 	}
 	tests := []struct {
-		name   string
-		script string
-		want   int
+		name    string
+		script  string
+		timeout time.Duration
+		want    int
 	}{
-		{name: "duration", script: "printf '2.5\\n'", want: 250},
-		{name: "no duration", script: "printf 'N/A\\n'", want: 0},
-		{name: "probe error", script: "exit 1", want: 0},
+		{name: "duration", script: "printf '2.5\\n'", timeout: ffprobeTimeout, want: 250},
+		{name: "no duration", script: "printf 'N/A\\n'", timeout: ffprobeTimeout, want: 0},
+		{name: "probe error", script: "exit 1", timeout: ffprobeTimeout, want: 0},
 		// The child sleep keeps stdout open after the shell is killed.
-		{name: "hung probe", script: "sleep 30\nprintf '2.5\\n'", want: 0},
+		{name: "hung probe", script: "sleep 30\nprintf '2.5\\n'", timeout: 100 * time.Millisecond, want: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -852,14 +853,14 @@ func TestProbeFrames(t *testing.T) {
 
 			done := make(chan int, 1)
 			go func() {
-				done <- probeFramesWithin(filepath.Join(dir, "track.m4a"), beep.SampleRate(100), 100*time.Millisecond)
+				done <- probeFramesWithin(filepath.Join(dir, "track.m4a"), beep.SampleRate(100), tt.timeout)
 			}()
 			select {
 			case got := <-done:
 				if got != tt.want {
 					t.Fatalf("probeFramesWithin() = %d, want %d", got, tt.want)
 				}
-			case <-time.After(5 * time.Second):
+			case <-time.After(tt.timeout + 5*time.Second):
 				t.Fatal("probeFramesWithin() did not return after its timeout")
 			}
 		})
