@@ -7,7 +7,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 STATICCHECK_VERSION ?= v0.6.1
 GOVULNCHECK_VERSION ?= v1.1.4
 
-.PHONY: build test vet lint staticcheck tools fmt fmt-check coverage security ci check clean install
+.PHONY: build test vet lint staticcheck tools fmt fmt-check tidy-check coverage security ci check clean install
 
 build:
 	go build -trimpath -ldflags="$(LDFLAGS)" -o $(BINARY) .
@@ -37,6 +37,9 @@ fmt:
 fmt-check:
 	@test -z "$$(gofmt -l $(GOFILES))" || { gofmt -l $(GOFILES); exit 1; }
 
+tidy-check:
+	go mod tidy -diff
+
 coverage:
 	go test -count=1 -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out
@@ -45,7 +48,7 @@ security:
 	@command -v govulncheck >/dev/null 2>&1 || { echo "govulncheck is required. Run make tools."; exit 1; }
 	govulncheck ./...
 
-ci: fmt-check vet staticcheck security
+ci: fmt-check tidy-check vet staticcheck security
 	go test -count=1 -race ./...
 	$(MAKE) coverage
 	shellcheck site/install.sh
