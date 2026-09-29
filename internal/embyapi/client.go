@@ -29,6 +29,14 @@ var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
 // maxResponseBody limits API responses to 10 MB to prevent unbounded memory growth.
 const maxResponseBody = 10 << 20
 
+const (
+	// albumPageSize is the number of albums one /Items request asks for. An
+	// album item is about 1.5 KB, so a page stays far below maxResponseBody.
+	albumPageSize = 500
+	// albumMaxPages stops the paging loop if a server ignores startIndex.
+	albumMaxPages = 1000
+)
+
 // Client speaks to an Emby or Jellyfin server over its HTTP API.
 type Client struct {
 	baseURL    string
@@ -388,31 +396,41 @@ func (c *Client) DefaultAlbumSort() string {
 	return SortAlbumsByName
 }
 
-// AlbumsByLibrary returns all albums under one music library view.
+// AlbumsByLibrary returns all albums under one music library view. It reads
+// the library in pages of albumPageSize, so a large library does not need one
+// response that is larger than maxResponseBody.
 func (c *Client) AlbumsByLibrary(libraryID string) ([]Album, error) {
 	userID, err := c.UserID()
 	if err != nil {
 		return nil, err
 	}
 
-	params := url.Values{
-		"userId":                 {userID},
-		"parentId":               {libraryID},
-		"recursive":              {"true"},
-		"includeItemTypes":       {"MusicAlbum"},
-		"sortBy":                 {"SortName"},
-		"sortOrder":              {"Ascending"},
-		"enableTotalRecordCount": {"false"},
-	}
+	var out []Album
+	for page := 0; page < albumMaxPages; page++ {
+		params := url.Values{
+			"userId":                 {userID},
+			"parentId":               {libraryID},
+			"recursive":              {"true"},
+			"includeItemTypes":       {"MusicAlbum"},
+			"sortBy":                 {"SortName"},
+			"sortOrder":              {"Ascending"},
+			"enableTotalRecordCount": {"false"},
+			"startIndex":             {strconv.Itoa(page * albumPageSize)},
+			"limit":                  {strconv.Itoa(albumPageSize)},
+		}
 
-	var resp itemsResponseDTO
-	if err := c.get("/Items", params, &resp); err != nil {
-		return nil, err
-	}
-
-	out := make([]Album, 0, len(resp.Items))
-	for _, it := range resp.Items {
-		out = append(out, albumFromItem(it))
+		var resp itemsResponseDTO
+		if err := c.get("/Items", params, &resp); err != nil {
+			return nil, err
+		}
+		for _, it := range resp.Items {
+			out = append(out, albumFromItem(it))
+		}
+		// A short page is the last page. A page longer than the limit means
+		// that the server ignored the limit and sent the whole library.
+		if len(resp.Items) != albumPageSize {
+			break
+		}
 	}
 	return out, nil
 }
