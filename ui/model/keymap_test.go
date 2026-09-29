@@ -203,3 +203,53 @@ func TestKeymapEnterExplainsCommandsItCannotRun(t *testing.T) {
 		})
 	}
 }
+
+// The keymap lists the commands of the playlist manager screen that is open,
+// the same commands as that screen's help line.
+func TestKeymapContextFollowsPlaylistManagerScreen(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		screen      plMgrScreenType
+		wantMode    commandMode
+		wantLabel   string
+		wantRuns    []string
+		wantMissing []string
+	}{
+		{name: "list", screen: plMgrScreenList, wantMode: commandModePlaylistManager, wantLabel: "Playlists", wantRuns: []string{"Select"}},
+		{name: "tracks", screen: plMgrScreenTracks, wantMode: commandModePlaylistManager, wantLabel: "Playlists", wantRuns: []string{"Select"}},
+		{
+			name: "dirs", screen: plMgrScreenDirs,
+			wantMode: commandModePlaylistManagerDirs, wantLabel: "Directory Sources",
+			wantRuns:    []string{"Add dir", "Remove", "Toggle recursive"},
+			wantMissing: []string{"Select", "Add to the current playlist"},
+		},
+		{name: "new name", screen: plMgrScreenNewName, wantMode: commandModePlaylistManagerInput, wantLabel: "Playlist Name"},
+		{name: "rename", screen: plMgrScreenRename, wantMode: commandModePlaylistManagerInput, wantLabel: "Playlist Name"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := keybindingTestModel()
+			m.plManager = plManagerState{visible: true, screen: tc.screen}
+
+			mode, label := m.keymapContext()
+			if mode != tc.wantMode || label != tc.wantLabel {
+				t.Fatalf("keymapContext() = %v %q, want %v %q", mode, label, tc.wantMode, tc.wantLabel)
+			}
+			runs := map[string]bool{}
+			for _, entry := range m.buildKeymapEntries() {
+				if entry.run != "" {
+					runs[entry.action] = true
+				}
+			}
+			for _, action := range tc.wantRuns {
+				if !runs[action] {
+					t.Errorf("keymap cannot run %q on this screen", action)
+				}
+			}
+			for _, action := range tc.wantMissing {
+				if runs[action] {
+					t.Errorf("keymap runs %q, which this screen does not handle", action)
+				}
+			}
+		})
+	}
+}

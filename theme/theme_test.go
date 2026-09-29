@@ -156,6 +156,26 @@ func TestThemeValidate(t *testing.T) {
 	}
 }
 
+func TestIsDefaultName(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		want bool
+	}{
+		{"", true},
+		{"default", true},
+		{"DEFAULT", true},
+		{DefaultName, true},
+		{strings.ToLower(DefaultName), true},
+		{"dracula", false},
+		{"default ", false},
+		{"Default - Terminal", false},
+	} {
+		if got := IsDefaultName(tt.name); got != tt.want {
+			t.Errorf("IsDefaultName(%q) = %t, want %t", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestFind(t *testing.T) {
 	all := LoadAll()
 	if len(all) == 0 {

@@ -169,8 +169,11 @@ func (m Model) keymapContext() (commandMode, string) {
 		}
 		return commandModeVisPicker, "Visualizers"
 	case screenPlaylistManager:
-		if m.plManager.screen == plMgrScreenNewName || m.plManager.screen == plMgrScreenRename {
+		switch m.plManager.screen {
+		case plMgrScreenNewName, plMgrScreenRename:
 			return commandModePlaylistManagerInput, "Playlist Name"
+		case plMgrScreenDirs:
+			return commandModePlaylistManagerDirs, "Directory Sources"
 		}
 		return commandModePlaylistManager, "Playlists"
 	case screenQueue:

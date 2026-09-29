@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -120,8 +121,7 @@ func (m *Model) prevTrack() tea.Cmd {
 	if m.player.Position() > 3*time.Second {
 		if m.player.Seekable() {
 			// Seekable media rewinds in place; non-seekable streams must be restarted.
-			m.player.Seek(-m.player.Position())
-			return nil
+			return m.seekAbsolute(0)
 		}
 		track, idx := m.currentPlaybackTrack()
 		if idx >= 0 {
@@ -477,11 +477,7 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 		// this branch, where applyResume performs the seek synchronously.
 		m.applyResume()
 		m.nowPlaying(track)
-		m.backfillLoadedPlaylistDuration(track)
-		if fetchCmd != nil {
-			return tea.Batch(m.preloadNext(), fetchCmd)
-		}
-		return m.preloadNext()
+		return tea.Batch(m.preloadNext(), fetchCmd, m.backfillLoadedPlaylistDuration(track))
 	}
 
 	if fetchCmd != nil {
@@ -518,39 +514,68 @@ func (m *Model) hasSourceResolver(path string) bool {
 	return ok && r.HasSourceResolver(path)
 }
 
-func (m *Model) backfillLoadedPlaylistDuration(track playlist.Track) {
-	if m.loadedPlaylist == "" || track.DurationSecs > 0 || track.Stream || playlist.IsURL(track.Path) || strings.HasPrefix(track.Path, "ssh://") {
-		return
+// backfillLoadedPlaylistDuration records the decoded duration of a local
+// track that has none. It sets the duration in the queue at once. The
+// returned command writes it to the loaded playlist file, because Tracks
+// rescans the directory sources with tag reads. A track from a directory
+// source gets no command, because SavePlaylist never stores those tracks.
+func (m *Model) backfillLoadedPlaylistDuration(track playlist.Track) tea.Cmd {
+	name := m.writableLoadedPlaylist()
+	if name == "" || track.DurationSecs > 0 || track.Stream || playlist.IsURL(track.Path) || strings.HasPrefix(track.Path, "ssh://") {
+		return nil
 	}
 	dur := int(m.player.Duration().Seconds())
 	if dur <= 0 {
-		return
+		return nil
 	}
 	saver, ok := m.localProvider.(provider.PlaylistSaver)
 	if !ok {
-		return
+		return nil
 	}
-	tracks, err := m.localProvider.Tracks(m.loadedPlaylist)
-	if err != nil {
-		return
-	}
-	changed := false
-	for i := range tracks {
-		if tracks[i].Path == track.Path && tracks[i].DurationSecs == 0 {
-			tracks[i].DurationSecs = dur
-			changed = true
-			break
-		}
-	}
-	if !changed {
-		return
-	}
-	if err := saver.SavePlaylist(m.loadedPlaylist, tracks); err == nil {
-		if idx := m.playlist.Index(); idx >= 0 {
+	if idx := m.playlist.Index(); idx >= 0 {
+		if current, ok := m.playlist.Track(idx); ok && current.Path == track.Path {
 			track.DurationSecs = dur
 			m.playlist.SetTrack(idx, track)
 		}
 	}
+	if track.DirSourced {
+		return nil
+	}
+	source := m.localProvider
+	return func() tea.Msg {
+		before := playlistDocument(source, name)
+		tracks, err := source.Tracks(name)
+		if err != nil {
+			return nil
+		}
+		for i := range tracks {
+			if tracks[i].DirSourced || tracks[i].Path != track.Path || tracks[i].DurationSecs != 0 {
+				continue
+			}
+			tracks[i].DurationSecs = dur
+			// A queue edit can save the file while Tracks scans. Skip the
+			// write then, so that the edit is kept.
+			if bytes.Equal(before, playlistDocument(source, name)) {
+				_ = saver.SavePlaylist(name, tracks)
+			}
+			return nil
+		}
+		return nil
+	}
+}
+
+// playlistDocument returns the raw file of the named playlist, or nil when
+// the provider cannot give it.
+func playlistDocument(p playlist.Provider, name string) []byte {
+	documenter, ok := p.(provider.PlaylistDocumenter)
+	if !ok {
+		return nil
+	}
+	data, err := documenter.PlaylistDocument(name)
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 // beginPlaybackTrack centralizes metadata refresh and model state reset for a
@@ -743,7 +768,7 @@ func (m *Model) applyResume() tea.Cmd {
 		return nil
 	}
 	target := m.clampPosition(time.Duration(m.resume.secs) * time.Second)
-	if playlist.IsMixcloudURL(track.Path) && m.player.IsYTDLSeek() {
+	if m.player.IsYTDLSeek() {
 		m.seek.active = true
 		m.seek.inFlight = true
 		m.seek.pending = false

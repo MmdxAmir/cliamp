@@ -11,11 +11,11 @@ import (
 	"github.com/bjarneo/cliamp/ui"
 )
 
-// newInlineOverlayModel builds a Model with a real player/playlist/visualizer
+// newInlineOverlayModel builds a Model with a fake engine, playlist and visualizer
 // for exercising the inline overlay render path.
 func newInlineOverlayModel(t *testing.T, w, h int) Model {
 	t.Helper()
-	sharedPlayer.Stop()
+	p := &playbackFakeEngine{}
 
 	pl := playlist.New()
 	for i := range 8 {
@@ -26,9 +26,9 @@ func newInlineOverlayModel(t *testing.T, w, h int) Model {
 	}
 
 	m := Model{
-		player:    sharedPlayer,
+		player:    p,
 		playlist:  pl,
-		vis:       ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		vis:       ui.NewVisualizer(float64(p.SampleRate())),
 		width:     w,
 		height:    h,
 		focus:     focusPlaylist,
@@ -45,10 +45,6 @@ func newInlineOverlayModel(t *testing.T, w, h int) Model {
 // playlist region beneath the live now-playing/visualizer/controls chrome, so
 // the total frame must still fit.
 func TestInlineOverlaysFitTerminal(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
-
 	sizes := []struct{ w, h int }{
 		{80, 24},
 		{80, 20},

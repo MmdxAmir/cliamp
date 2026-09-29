@@ -173,16 +173,13 @@ func (m *Model) handleV2Request(msg V2RequestMsg) tea.Cmd {
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true, Volume: m.player.Volume()})
 		return nil
 	case "seek":
-		_ = m.player.Seek(secondsDuration(request.Value))
-		m.notifyAll()
+		cmd := m.seekRelative(secondsDuration(request.Value), 0)
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
-		return nil
+		return cmd
 	case "seek.absolute":
-		position, _ := m.player.PositionAndDuration()
-		_ = m.player.Seek(secondsDuration(request.Value) - position)
-		m.notifyAll()
+		cmd := m.seekAbsolute(secondsDuration(request.Value))
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
-		return nil
+		return cmd
 	case "speed":
 		if request.Value <= 0 || math.IsNaN(request.Value) || math.IsInf(request.Value, 0) {
 			m.failV2Job(msg.Jobs, msg.JobID, v2InvalidParamsError())
@@ -251,7 +248,7 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 		}
 		track := ipcTrackFromInfo(*request.Track)
 		if track.Feed {
-			return ipcFeedLoadCmd(ctx, ipc.QueueRequestMsg{Op: request.Cmd}, track, jobs, jobID, request.Revision)
+			return ipcFeedLoadCmd(ctx, request.Cmd, track, jobs, jobID, request.Revision)
 		}
 		if request.Cmd == "track.play" {
 			cmd := m.playTrackImmediate(track)
@@ -353,7 +350,7 @@ func (m *Model) handleV2Theme(jobs *ipc.JobStore, jobID string, request ipc.Requ
 		return nil
 	}
 	themeName := request.Name
-	if strings.EqualFold(themeName, theme.DefaultName) {
+	if theme.IsDefaultName(themeName) {
 		themeName = ""
 	}
 	if err := m.configSaver.Save("theme", fmt.Sprintf("%q", themeName)); err != nil {
@@ -442,6 +439,12 @@ func (m *Model) handleV2EQ(jobs *ipc.JobStore, jobID string, request ipc.Request
 		}
 		m.setCustomEQBand(request.Band, request.Value)
 	} else if request.Name != "" {
+		// Only plugins may name a curve. An IPC name must be a built-in
+		// preset or Custom, as the daemon requires.
+		if _, ok := EQPresetByName(request.Name); !ok && !strings.EqualFold(request.Name, "Custom") {
+			m.failV2Job(jobs, jobID, v2NotFoundError())
+			return nil
+		}
 		m.SetEQPreset(request.Name, nil)
 		m.scheduleEQSave()
 	} else {
@@ -460,9 +463,10 @@ func (m *Model) handleV2Mode(jobs *ipc.JobStore, jobID string, request ipc.Reque
 			m.playlist.ToggleShuffle()
 		}
 		value := m.playlist.Shuffled()
-		_ = m.configSaver.Save("shuffle", fmt.Sprintf("%v", value))
-		m.player.ClearPreload()
+		m.saveConfigKey("shuffle", fmt.Sprintf("%v", value))
+		cmd := m.rearmPreload()
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Shuffle: &value})
+		return cmd
 	case "repeat":
 		switch name {
 		case "off":
@@ -474,9 +478,10 @@ func (m *Model) handleV2Mode(jobs *ipc.JobStore, jobID string, request ipc.Reque
 		default:
 			m.playlist.CycleRepeat()
 		}
-		_ = m.configSaver.Save("repeat", fmt.Sprintf("%q", m.playlist.Repeat().String()))
-		m.player.ClearPreload()
+		m.saveConfigKey("repeat", fmt.Sprintf("%q", m.playlist.Repeat().String()))
+		cmd := m.rearmPreload()
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Repeat: m.playlist.Repeat().String()})
+		return cmd
 	case "mono":
 		if (name == "on" && !m.player.Mono()) || (name == "off" && m.player.Mono()) || (name != "on" && name != "off") {
 			m.player.ToggleMono()

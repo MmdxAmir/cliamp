@@ -59,7 +59,7 @@ func (m *Model) themePickerSelect() {
 		return
 	}
 	themeName := m.ThemeName()
-	if themeName == theme.DefaultName {
+	if theme.IsDefaultName(themeName) {
 		themeName = ""
 	}
 	m.saveConfigKey("theme", fmt.Sprintf("%q", themeName))

@@ -10,7 +10,6 @@ import (
 
 	"github.com/bjarneo/cliamp/external/radio"
 	"github.com/bjarneo/cliamp/external/spotify"
-	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/lyrics"
 	"github.com/bjarneo/cliamp/player"
@@ -80,11 +79,13 @@ type feedsLoadedMsg struct {
 	tracks   []playlist.Track
 	urls     []string // original source URLs that produced these tracks
 	autoPlay bool     // whether to start playback automatically
+	err      error
 }
 
 // feedTrackResolvedMsg carries episodes resolved from a feed track in the playlist.
 type feedTrackResolvedMsg struct {
 	tracks []playlist.Track
+	err    error
 }
 
 // lyricsLoadedMsg carries parsed LRC output.
@@ -120,13 +121,6 @@ type streamPreloadedMsg struct {
 
 type attachNotifierMsg struct{ notifier playback.Notifier }
 
-// ytdlResolvedMsg carries a lazily resolved yt-dlp track (direct audio URL).
-type ytdlResolvedMsg struct {
-	index int
-	track playlist.Track
-	err   error
-}
-
 // ytdlBatchMsg carries an incrementally loaded batch of yt-dlp tracks.
 // The gen field ties the response to a specific batch session so stale
 // responses from a previous or reloaded playlist are discarded.
@@ -136,10 +130,11 @@ type ytdlBatchMsg struct {
 	err    error
 }
 
-// ytdlSavedMsg signals that an async yt-dlp download-to-disk completed.
-type ytdlSavedMsg struct {
-	path string
-	err  error
+// trackSavedMsg reports the result of an async track save.
+type trackSavedMsg struct {
+	path     string
+	err      error
+	download bool // the save ran yt-dlp and counts as a pending download
 }
 
 // — Navidrome browser message types —
@@ -240,20 +235,14 @@ func fetchYTDLBatchCmd(gen uint64, pageURL string, start, count int) tea.Cmd {
 func resolveFeedTrackCmd(feedURL string) tea.Cmd {
 	return func() tea.Msg {
 		tracks, err := resolve.Remote([]string{feedURL})
-		if err != nil {
-			return err
-		}
-		return feedTrackResolvedMsg{tracks: tracks}
+		return feedTrackResolvedMsg{tracks: tracks, err: err}
 	}
 }
 
 func resolveRemoteCmd(urls []string, autoPlay bool) tea.Cmd {
 	return func() tea.Msg {
 		tracks, err := resolve.Remote(urls)
-		if err != nil {
-			return err
-		}
-		return feedsLoadedMsg{tracks: tracks, urls: urls, autoPlay: autoPlay}
+		return feedsLoadedMsg{tracks: tracks, urls: urls, autoPlay: autoPlay, err: err}
 	}
 }
 
@@ -264,7 +253,7 @@ func resolveURLCmd(rawURL string, autoPlay bool) tea.Cmd {
 	return func() tea.Msg {
 		tracks, err := resolve.URL(rawURL)
 		if err != nil {
-			return fmt.Errorf("resolving URL: %w", err)
+			return feedsLoadedMsg{err: fmt.Errorf("resolving URL: %w", err)}
 		}
 		return feedsLoadedMsg{tracks: tracks, urls: []string{rawURL}, autoPlay: autoPlay}
 	}
@@ -334,13 +323,6 @@ func preloadYTDLStreamCmd(p player.Engine, pageURL string, knownDuration time.Du
 	return func() tea.Msg {
 		err := p.PreloadYTDLForGeneration(pageURL, knownDuration, preloadGen)
 		return streamPreloadedMsg{path: pageURL, gen: gen, err: err}
-	}
-}
-
-func saveYTDLCmd(pageURL string, saveDir string) tea.Cmd {
-	return func() tea.Msg {
-		path, err := resolve.DownloadYTDL(pageURL, saveDir)
-		return ytdlSavedMsg{path: path, err: err}
 	}
 }
 
@@ -605,19 +587,8 @@ func fetchSpotPlaylistsCmd(prov playlist.Provider, gen uint64) tea.Cmd {
 			// holds every target the picker needs.
 			err = nil
 		}
-		targets, canFilter := prov.(provider.PlaylistTargetFilter)
-		if err == nil && (canFilter || prov.Name() == "Local") {
-			filtered := playlists[:0]
-			for _, pl := range playlists {
-				if pl.Name == history.PlaylistName && prov.Name() == "Local" {
-					continue
-				}
-				if canFilter && !targets.CanAddToPlaylist(pl) {
-					continue
-				}
-				filtered = append(filtered, pl)
-			}
-			playlists = filtered
+		if err == nil {
+			playlists = playlistTargets(prov, playlists)
 		}
 		return spotPlaylistsMsg{playlists: playlists, err: err, providerName: prov.Name(), gen: gen}
 	}

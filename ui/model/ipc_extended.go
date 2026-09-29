@@ -18,10 +18,11 @@ import (
 )
 
 type ipcProviderLoadResult struct {
-	request ipc.LibraryRequestMsg
-	tracks  []playlist.Track
-	loaded  string
-	err     error
+	request  ipc.LibraryRequestMsg
+	tracks   []playlist.Track
+	provider string // Name of the provider that served the tracks
+	loaded   string
+	err      error
 }
 
 type ipcURLLoadResult struct {
@@ -31,8 +32,7 @@ type ipcURLLoadResult struct {
 }
 
 type ipcFeedLoadResult struct {
-	ctx      context.Context
-	request  ipc.QueueRequestMsg
+	op       string
 	feed     playlist.Track
 	jobs     *ipc.JobStore
 	jobID    string
@@ -102,74 +102,7 @@ func (m *Model) handleIPCSave(request ipc.SaveRequestMsg) tea.Cmd {
 	}
 }
 
-func (m *Model) handleIPCQueue(request ipc.QueueRequestMsg) tea.Cmd {
-	switch request.Op {
-	case "queue.list":
-		request.Reply <- m.ipcQueueResponse()
-	case "queue.play":
-		if request.Index < 0 || request.Index >= m.playlist.Len() {
-			request.Reply <- ipc.Response{OK: false, Error: "queue index out of range"}
-			return nil
-		}
-		m.playlist.SetIndex(request.Index)
-		m.plCursor = request.Index
-		request.Reply <- m.ipcQueueResponse()
-		return m.playCurrentTrack()
-	case "queue.enqueue":
-		if request.Index < 0 || request.Index >= m.playlist.Len() {
-			request.Reply <- ipc.Response{OK: false, Error: "queue index out of range"}
-			return nil
-		}
-		m.playlist.Queue(request.Index)
-		m.normalizeQueueOverlay()
-		request.Reply <- m.ipcQueueResponse()
-		return m.rearmPreload()
-	case "queue.remove":
-		if request.Index == m.playlist.Index() {
-			m.stopPlayback()
-		}
-		if !m.playlist.Remove(request.Index) {
-			request.Reply <- ipc.Response{OK: false, Error: "queue index out of range"}
-			return nil
-		}
-		m.normalizeQueueOverlay()
-		request.Reply <- m.ipcQueueResponse()
-		return m.rearmPreload()
-	case "queue.move":
-		if !m.playlist.Move(request.Index, request.To) {
-			request.Reply <- ipc.Response{OK: false, Error: "invalid queue move"}
-			return nil
-		}
-		m.normalizeQueueOverlay()
-		request.Reply <- m.ipcQueueResponse()
-		return m.rearmPreload()
-	case "queue.clear":
-		m.stopPlayback()
-		m.retireTracksPaging()
-		m.replacePlaylist(nil)
-		m.loadedPlaylist = ""
-		request.Reply <- m.ipcQueueResponse()
-	case "track.play", "track.queue":
-		if request.Track == nil || request.Track.Path == "" {
-			request.Reply <- ipc.Response{OK: false, Error: "track is required"}
-			return nil
-		}
-		track := ipcTrackFromInfo(*request.Track)
-		if track.Feed {
-			return ipcFeedLoadCmd(context.Background(), request, track, nil, "", 0)
-		}
-		request.Reply <- ipc.Response{OK: true}
-		if request.Op == "track.play" {
-			return m.playTrackImmediate(track)
-		}
-		return m.queueTrackNext(track)
-	default:
-		request.Reply <- ipc.Response{OK: false, Error: "unknown queue operation"}
-	}
-	return nil
-}
-
-func ipcFeedLoadCmd(ctx context.Context, request ipc.QueueRequestMsg, feed playlist.Track, jobs *ipc.JobStore, jobID string, revision uint64) tea.Cmd {
+func ipcFeedLoadCmd(ctx context.Context, op string, feed playlist.Track, jobs *ipc.JobStore, jobID string, revision uint64) tea.Cmd {
 	return func() tea.Msg {
 		resolveCtx, cancel := context.WithTimeout(requestContext(ctx), 30*time.Second)
 		defer cancel()
@@ -178,65 +111,41 @@ func ipcFeedLoadCmd(ctx context.Context, request ipc.QueueRequestMsg, feed playl
 			err = resolveCtx.Err()
 		}
 		return ipcFeedLoadResult{
-			ctx: ctx, request: request, feed: feed, jobs: jobs, jobID: jobID, revision: revision,
+			op: op, feed: feed, jobs: jobs, jobID: jobID, revision: revision,
 			tracks: tracks, err: err,
 		}
 	}
 }
 
 func (m *Model) handleIPCFeedLoad(result ipcFeedLoadResult) tea.Cmd {
-	if result.jobs != nil {
-		ctx, ok := result.jobs.Context(result.jobID)
-		if !ok || ctx.Err() != nil {
-			return nil
-		}
-	} else if result.ctx != nil && result.ctx.Err() != nil {
-		result.request.Reply <- ipcResponseError(result.ctx.Err())
+	ctx, ok := result.jobs.Context(result.jobID)
+	if !ok || ctx.Err() != nil {
 		return nil
 	}
 	if result.err == nil && len(result.tracks) == 0 {
 		result.err = fmt.Errorf("no playable episodes found in feed")
 	}
 	if result.err != nil {
-		if result.jobs != nil {
-			err := v2InternalError()
-			err.Detail = result.err.Error()
-			m.failV2Job(result.jobs, result.jobID, err)
-		} else {
-			result.request.Reply <- ipcResponseError(result.err)
-		}
+		err := v2InternalError()
+		err.Detail = result.err.Error()
+		m.failV2Job(result.jobs, result.jobID, err)
 		return nil
 	}
-	if result.jobs != nil && result.revision != 0 && result.revision != m.playlist.Revision() {
+	if result.revision != 0 && result.revision != m.playlist.Revision() {
 		m.failV2Job(result.jobs, result.jobID, v2ConflictError())
 		return nil
 	}
 	// Expand before touching the playlist: playing a feed placeholder would
 	// invoke the legacy feed resolver, which replaces the entire playlist.
 	var cmd tea.Cmd
-	if result.request.Op == "track.play" {
+	if result.op == "track.play" {
 		cmd = m.playAlbumImmediate(result.feed, result.tracks)
 	} else {
 		cmd = m.queueAlbumNext(result.feed, result.tracks)
 	}
-	response := m.v2PlaylistResponse()
-	if result.jobs != nil {
-		// Capture completion with this mutation, not in a later waiter update.
-		m.completeV2Job(result.jobs, result.jobID, response)
-	} else {
-		result.request.Reply <- response
-	}
+	// Capture completion with this mutation, not in a later waiter update.
+	m.completeV2Job(result.jobs, result.jobID, m.v2PlaylistResponse())
 	return cmd
-}
-
-func (m *Model) ipcQueueResponse() ipc.Response {
-	tracks := m.playlist.Tracks()
-	favorite := m.trackFavoriteLookup(true)
-	items := make([]ipc.TrackInfo, len(tracks))
-	for i, track := range tracks {
-		items[i] = ipcTrackInfo(track, i, m.playlist.QueuePosition(i), favorite(track))
-	}
-	return ipc.Response{OK: true, Tracks: items, Index: m.playlist.Index(), Total: len(items)}
 }
 
 func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
@@ -360,12 +269,14 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 		return ipcMutationCmd(request.Context, request.Reply, func() error { return saver.SavePlaylist(request.Playlist, tracks) })
 	case "playlist.bookmark":
 		// playlist.bookmark keeps its name for old scripts. It toggles the ♥
-		// favorite of the track, as f does.
+		// favorite of the track, as f does. The track can come from the queue
+		// or from a provider list, so the saved rule applies only to a queue row.
 		if request.Track == nil {
 			request.Reply <- ipc.Response{OK: false, Error: "track is required"}
 			return nil
 		}
-		cmd, err := m.toggleTrackFavorite(ipcTrackFromInfo(*request.Track))
+		track := ipcTrackFromInfo(*request.Track)
+		cmd, err := m.togglePlaylistTrackFavorite(track, m.savedPlaylistRow(track))
 		request.Reply <- ipcResponseError(err)
 		return cmd
 	case "provider.playlists":
@@ -416,9 +327,10 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 			return nil
 		}
 	case "provider.load":
+		name := entry.Provider.Name()
 		return func() tea.Msg {
 			tracks, err := entry.Provider.Tracks(request.Playlist)
-			return ipcProviderLoadResult{request: request, tracks: tracks, loaded: request.Playlist, err: err}
+			return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: request.Playlist, err: err}
 		}
 	case "provider.search":
 		favorite := m.trackFavoriteLookup(false)
@@ -507,10 +419,11 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 			return nil
 		}
 		favorite := m.trackFavoriteLookup(false)
+		name := entry.Provider.Name()
 		return func() tea.Msg {
 			tracks, err := loader.AlbumTracks(request.Album)
 			if request.Op == "provider.load_album" {
-				return ipcProviderLoadResult{request: request, tracks: tracks, loaded: "album:" + request.Album, err: err}
+				return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: "album:" + request.Album, err: err}
 			}
 			if err != nil {
 				request.Reply <- ipcResponseError(err)
@@ -614,7 +527,7 @@ func (m *Model) handleIPCProviderLoad(result ipcProviderLoadResult) tea.Cmd {
 	// append onto the list loaded here.
 	m.retireTracksPaging()
 	m.replacePlaylist(result.tracks)
-	m.loadedPlaylist = result.loaded
+	m.setLoadedLocalPlaylist(result.provider, result.loaded)
 	m.setHeaderStateFromTracks(result.tracks)
 	m.playlist.SetIndex(0)
 	m.plCursor = 0

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,6 +121,38 @@ func logYouTubeSkipped(reason string) {
 	logProviderSkipped("YouTube (All)", "yt", reason)
 	logProviderSkipped("YouTube", "youtube", reason)
 	logProviderSkipped("YouTube Music", "ytmusic", reason)
+}
+
+// offerYTDLPInstall asks on in whether to install yt-dlp now. It asks only
+// when interactive is true. A bare Enter, y or yes in any case confirms. Any
+// other answer, EOF or a read error skips the install. So a start with stdin
+// at /dev/null, as under systemd, never installs a package.
+func offerYTDLPInstall(interactive bool, in io.Reader, out io.Writer) bool {
+	if !interactive {
+		return false
+	}
+	fmt.Fprint(out, "Press Enter to install it now, or type n and press Enter to skip... ")
+	answer, err := bufio.NewReader(in).ReadString('\n')
+	if err == nil {
+		switch strings.ToLower(strings.TrimSpace(answer)) {
+		case "", "y", "yes":
+			return true
+		}
+	} else {
+		// EOF leaves the cursor on the prompt line.
+		fmt.Fprintln(out)
+	}
+	fmt.Fprint(out, "Skipped. YouTube providers are disabled.\n\n")
+	return false
+}
+
+// isCharDevice reports whether f is a character device, such as a terminal.
+// A pipe or a regular file is not. The null device is also a character
+// device, so a start with stdin at /dev/null shows the install prompt. The
+// EOF that follows skips the install.
+func isCharDevice(f *os.File) bool {
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 // optionalProviders lists the providers that register only when configured
@@ -325,14 +359,14 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			if !player.YTDLPAvailable() {
 				fmt.Fprintf(os.Stderr, "\nYouTube requires yt-dlp for audio playback.\n")
 				fmt.Fprintf(os.Stderr, "Install command: %s\n\n", player.YtdlpInstallHint())
-				fmt.Fprintf(os.Stderr, "Press Enter to install automatically, or Ctrl+C to skip... ")
-				fmt.Scanln()
-				fmt.Fprintf(os.Stderr, "Installing yt-dlp...\n")
-				if err := player.InstallYTDLP(); err != nil {
-					fmt.Fprintf(os.Stderr, "Installation failed: %v\n", err)
-					fmt.Fprintf(os.Stderr, "YouTube providers disabled. Install manually and restart.\n\n")
-				} else {
-					fmt.Fprintf(os.Stderr, "yt-dlp installed successfully!\n\n")
+				if offerYTDLPInstall(!daemon && isCharDevice(os.Stdin), os.Stdin, os.Stderr) {
+					fmt.Fprintf(os.Stderr, "Installing yt-dlp...\n")
+					if err := player.InstallYTDLP(); err != nil {
+						fmt.Fprintf(os.Stderr, "Installation failed: %v\n", err)
+						fmt.Fprintf(os.Stderr, "YouTube providers disabled. Install manually and restart.\n\n")
+					} else {
+						fmt.Fprintf(os.Stderr, "yt-dlp installed successfully!\n\n")
+					}
 				}
 			}
 			if player.YTDLPAvailable() {
@@ -825,10 +859,6 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 
 func newTUIV2Dispatcher(prog *tea.Program, jobs *ipc.JobStore, plugins *luaplugin.Manager) ipc.V2Dispatcher {
 	return ipc.V2DispatcherFunc(func(ctx context.Context, request ipc.V2Request) (ipc.V2Result, *ipc.V2Error) {
-		if request.Operation == "runtime.snapshot" || request.Operation == "runtime.status" {
-			request.Method = "state.get"
-			request.Operation = ""
-		}
 		switch request.Method {
 		case "state.get", "spectrum.get":
 			reply := make(chan model.V2RequestResult, 1)

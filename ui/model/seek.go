@@ -57,8 +57,10 @@ func (m *Model) seekRelative(d time.Duration, debounceTicks int) tea.Cmd {
 		return nil
 	}
 
+	// A pending or running seek has not moved Position yet, so build on its
+	// target or back-to-back relative seeks overwrite each other.
 	target := m.player.Position()
-	if m.seek.active && debounceTicks > 0 {
+	if m.seek.active {
 		target = m.seek.targetPos
 	}
 	return m.queueSeekTarget(target+d, debounceTicks)
@@ -75,15 +77,25 @@ func (m *Model) needsDebouncedSeek() bool {
 }
 
 func (m *Model) seekAbsolute(target time.Duration) tea.Cmd {
+	cmd, _ := m.trySeekAbsolute(target)
+	return cmd
+}
+
+// trySeekAbsolute is seekAbsolute that also returns the error of an in-place
+// seek. A seek that restarts a decoder runs in the returned Cmd and reports
+// its error through seekTickMsg.
+func (m *Model) trySeekAbsolute(target time.Duration) (tea.Cmd, error) {
 	if m.player.IsStreamSeek() {
-		return m.streamSeekAbsolute(target)
+		return m.streamSeekAbsolute(target), nil
 	}
 	if !m.needsDebouncedSeek() {
-		m.player.Seek(target - m.player.Position())
+		if err := m.player.Seek(target - m.player.Position()); err != nil {
+			return nil, err
+		}
 		m.finishSeek()
-		return nil
+		return nil, nil
 	}
-	return m.queueSeekTarget(target, 0)
+	return m.queueSeekTarget(target, 0), nil
 }
 
 func (m *Model) queueSeekTarget(target time.Duration, debounceTicks int) tea.Cmd {

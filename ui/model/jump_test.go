@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -72,6 +73,24 @@ func TestInvalidJumpKeepsInputOpen(t *testing.T) {
 	}
 	if m.status.text == "" {
 		t.Fatal("status is empty after invalid target")
+	}
+}
+
+func TestJumpSeekFailureKeepsInputOpen(t *testing.T) {
+	eng := &playbackFakeEngine{playing: true, seekable: true, duration: time.Hour, seekErr: errors.New("decoder refused")}
+	m := Model{player: eng, jumping: true, jumpInput: "1:00"}
+
+	if cmd := m.handleJumpKey(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
+		t.Fatalf("cmd = %v, want nil for an in-place seek", cmd)
+	}
+	if len(eng.seekCalls) != 1 || eng.seekCalls[0] != time.Minute {
+		t.Fatalf("Seek calls = %v, want [1m0s]", eng.seekCalls)
+	}
+	if !m.jumping || m.jumpInput != "1:00" {
+		t.Fatalf("jump mode = %v with input %q, want it open with the input kept", m.jumping, m.jumpInput)
+	}
+	if m.jumpErr != "Seek failed: decoder refused" {
+		t.Fatalf("jumpErr = %q, want the seek error", m.jumpErr)
 	}
 }
 

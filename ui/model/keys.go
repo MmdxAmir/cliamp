@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
-	"github.com/bjarneo/cliamp/internal/fileutil"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/tracksave"
@@ -399,7 +397,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		case "a":
 			return m.appendShowFromProviderList()
 		case "p":
-			if m.isActiveProvider("Local") && m.localProvider != nil {
+			if m.activeProviderKey() == providerKeyLocal && m.localProvider != nil {
 				m.openPlaylistManager()
 			}
 		case "up", "k":
@@ -1067,61 +1065,25 @@ func (m *Model) handleFullVisualizerKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // saveTrack saves the current track in the configured downloads directory.
-// For yt-dlp tracks (piped streams), triggers an async download via yt-dlp.
-// For local temp files, copies synchronously.
+// tracksave.SaveTo runs in a tea.Cmd, so neither a yt-dlp download nor a file
+// copy blocks the Update goroutine. IPC save uses the same routine.
 func (m *Model) saveTrack() tea.Cmd {
 	track, idx := m.currentPlaybackTrack()
 	if idx < 0 {
 		m.status.Warning("Nothing to save", statusTTLShort)
 		return nil
 	}
-
-	saveDir, err := tracksave.Directory(m.downloadsDirectory)
-	if err != nil {
-		m.status.Errorf(statusTTLShort, "Save failed: %s", err)
-		return nil
-	}
-
-	if err := os.MkdirAll(saveDir, 0o755); err != nil {
-		m.status.Errorf(statusTTLShort, "Save failed: %s", err)
-		return nil
-	}
-
-	// YouTube/yt-dlp tracks: download asynchronously into the selected directory.
-	if playlist.IsYouTubeURL(track.Path) || playlist.IsYTDL(track.Path) {
+	// tracksave downloads these tracks with yt-dlp, which can take minutes.
+	download := playlist.IsYouTubeURL(track.Path) || playlist.IsYTDL(track.Path)
+	if download {
 		m.status.Clear()
 		m.save.startDownload()
-		return saveYTDLCmd(track.Path, saveDir)
 	}
-
-	// Only save local temp files (yt-dlp downloads), not streams or user's own files.
-	if track.Stream || !strings.HasPrefix(track.Path, os.TempDir()) {
-		m.status.Warning("Only downloaded tracks can be saved", statusTTLShort)
-		return nil
+	directory := m.downloadsDirectory
+	return func() tea.Msg {
+		path, err := tracksave.SaveTo(track, directory)
+		return trackSavedMsg{path: path, err: err, download: download}
 	}
-
-	ext := filepath.Ext(track.Path)
-	name := track.Title
-	if track.Artist != "" {
-		name = track.Artist + " - " + name
-	}
-	// Sanitize filename: remove path separators and other problematic chars.
-	name = strings.Map(func(r rune) rune {
-		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' {
-			return '_'
-		}
-		return r
-	}, name)
-
-	dest := filepath.Join(saveDir, name+ext)
-
-	if err := fileutil.CopyFile(track.Path, dest); err != nil {
-		m.status.Errorf(statusTTLShort, "Save failed: %s", err)
-		return nil
-	}
-
-	m.status.Showf(statusTTLDefault, "Saved to %s", dest)
-	return nil
 }
 
 func (m *Model) resetJumpInput() {
@@ -1200,16 +1162,14 @@ func (m *Model) handleJumpKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.status.Warning(m.jumpErr, statusTTLDefault)
 			return nil
 		}
-		if err := m.player.Seek(target - m.player.Position()); err != nil {
+		cmd, err := m.trySeekAbsolute(target)
+		if err != nil {
 			m.jumpErr = "Seek failed: " + err.Error()
 			m.status.Warning(m.jumpErr, statusTTLDefault)
 			return nil
 		}
-		// finishSeek notifies plugins as well as MPRIS, matching every other
-		// completed seek; the previous manual block skipped Lua plugins.
-		m.finishSeek()
 		m.closeJumpMode()
-		return nil
+		return cmd
 	}
 
 	if m.editText("jump", &m.jumpInput, msg) {
@@ -1455,6 +1415,13 @@ func (m *Model) handlePaste(content string) tea.Cmd {
 		m.insertText("playlist-manager-filter", &m.plManager.filter, content)
 		m.plManager.cursor = 0
 		m.plMgrRecomputeFilter()
+		return nil
+	}
+
+	// Subscribed-shows `/` filter
+	if m.subs.visible && m.subs.filtering {
+		m.insertText("subs-filter", &m.subs.filter, content)
+		m.updateSubsFilter()
 		return nil
 	}
 
@@ -2703,7 +2670,8 @@ func compareUITracks(a, b playlist.Track, mode string) int {
 }
 
 func (m *Model) persistLoadedPlaylistOrder() {
-	if m.loadedPlaylist == "" {
+	name := m.writableLoadedPlaylist()
+	if name == "" {
 		return
 	}
 	saver, ok := m.localProvider.(provider.PlaylistSaver)
@@ -2718,15 +2686,15 @@ func (m *Model) persistLoadedPlaylistOrder() {
 			break
 		}
 	}
-	if err := saver.SavePlaylist(m.loadedPlaylist, tracks); err != nil {
+	if err := saver.SavePlaylist(name, tracks); err != nil {
 		m.status.Errorf(statusTTLDefault, "Save failed: %s", err)
 		return
 	}
 	if hasDirTracks {
-		m.status.Warningf(statusTTLDefault, "Reordered %q (directory-sourced tracks keep scan order)", m.loadedPlaylist)
+		m.status.Warningf(statusTTLDefault, "Reordered %q (directory-sourced tracks keep scan order)", name)
 		return
 	}
-	m.status.Showf(statusTTLDefault, "Reordered %q", m.loadedPlaylist)
+	m.status.Showf(statusTTLDefault, "Reordered %q", name)
 }
 
 func (m *Model) createPlaylistFromManager(name string) bool {

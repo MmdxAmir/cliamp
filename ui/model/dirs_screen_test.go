@@ -132,6 +132,7 @@ func newDirsScreenTestModel(prov playlist.Provider) Model {
 		playlist:      playlist.New(),
 		localProvider: prov,
 		provider:      prov,
+		providers:     []ProviderEntry{{Key: "local", Name: "Local", Provider: prov}},
 		favMgr:        favMgr,
 		vis:           ui.NewVisualizer(48000),
 		plManager: plManagerState{
@@ -332,6 +333,8 @@ func TestPlMgrDeleteSkipsPaneFetchWhenRemoteActive(t *testing.T) {
 	}}
 	remote := &commandsTestProvider{name: "Navidrome", lists: []playlist.PlaylistInfo{{ID: "nd", Name: "nd"}}}
 	m := newDirsScreenTestModel(local)
+	m.providers = append(m.providers, ProviderEntry{Key: "navidrome", Name: "Navidrome", Provider: remote})
+	m.provPillIdx = 1
 	m.provider = remote
 	m.plManager.screen = plMgrScreenList
 	m.plManager.playlists = []playlist.PlaylistInfo{{ID: "top40", Name: "top40"}}
@@ -644,6 +647,32 @@ func TestFbConfirmMixedSelectionSplitsDirsAndFiles(t *testing.T) {
 	}
 	if len(prov.added) != 1 || prov.added[0] != "/music/Album" {
 		t.Fatalf("added = %v, want the directory as a source", prov.added)
+	}
+}
+
+// The Local rules follow the provider key, not the display name.
+func TestProviderPanePUsesLocalProviderKey(t *testing.T) {
+	for _, tc := range []struct {
+		name, key, display string
+		wantOpen           bool
+	}{
+		{name: "local key", key: "local", display: "Local", wantOpen: true},
+		{name: "renamed local", key: "local", display: "My Files", wantOpen: true},
+		{name: "remote named Local", key: "plex", display: "Local"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: tc.display}}
+			m := newDirsScreenTestModel(prov)
+			m.providers = []ProviderEntry{{Key: tc.key, Name: tc.display, Provider: prov}}
+			m.focus = focusProvider
+			m.plManager.visible = false
+
+			m.handleKey(tea.KeyPressMsg{Text: "p"})
+
+			if m.plManager.visible != tc.wantOpen {
+				t.Fatalf("playlist manager open = %v, want %v", m.plManager.visible, tc.wantOpen)
+			}
+		})
 	}
 }
 

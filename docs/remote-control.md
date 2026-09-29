@@ -120,9 +120,20 @@ Run `cliamp remote capabilities` to get the current machine-readable list.
 `queue.*` applies to the live playlist. `playnext.*` applies only to the
 play-next list. They use separate zero-based indexes.
 
+`theme list` returns `Default - Terminal colors` as the first item. `theme`
+accepts that name or `default` to select the terminal colors.
+
+`eq` takes a built-in preset name, such as `Rock`, or a `band` and a `value`.
+The TUI also accepts `Custom` to restore the saved custom curve. An unknown
+preset name fails the job and does not change the EQ.
+
 `playlist.bookmark` keeps its name for existing scripts. It toggles the favorite
 ♥ of `track`, as `f` does in the TUI. It needs a known `provider` key, but it
-does not change the playlist.
+does not change the playlist. In the TUI, a radio station toggles its station
+favorite, and its `bookmark` field in provider lists changes too. A station
+that is a row of a loaded saved playlist toggles the favorites store instead.
+The `bookmark` field of that row in `queue.list` changes. cliamp matches the
+row by path.
 
 Use IDs returned by `provider.playlists` for subsequent provider operations.
 Radio favorite IDs are stable `f:<station URL>` values, not positional

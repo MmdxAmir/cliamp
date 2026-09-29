@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/external/radio"
+	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
 )
 
@@ -40,6 +41,7 @@ func radioFavoriteTestModel(t *testing.T) (Model, *radio.Provider, []playlist.Tr
 	m.SetRadioFavorites(favorites)
 	m.provider = p
 	m.providers = append(m.providers, ProviderEntry{Key: "radio", Name: "Radio", Provider: p})
+	m.provPillIdx = len(m.providers) - 1
 	m.catalogBatch.done = true // No network work during provider-list refresh.
 	return m, p, tracks
 }
@@ -206,6 +208,58 @@ func TestRadioRowFavoriteDispatch(t *testing.T) {
 	}
 }
 
+// IPC playlist.bookmark on a station toggles the store that f toggles and
+// that the reported bookmark reads. A row of a loaded saved playlist uses the
+// favorites store. Any other station uses its station favorite, also while a
+// saved playlist is loaded.
+func TestIPCBookmarkStationRowMatchesReportedBookmark(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		saved       bool
+		notInQueue  bool
+		list        string
+		wantStation bool
+	}{
+		{name: "unsaved playlist", list: "queue.list", wantStation: true},
+		{name: "saved playlist", saved: true, list: "queue.list"},
+		{name: "provider list with a saved playlist loaded", saved: true, notInQueue: true, list: "provider.tracks", wantStation: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, _, tracks := radioFavoriteTestModel(t)
+			if tc.notInQueue {
+				m.replacePlayerPlaylist([]playlist.Track{{Path: "a.mp3", Title: "A"}})
+			} else {
+				m.replacePlayerPlaylist(tracks)
+			}
+			if tc.saved {
+				m.loadedPlaylist = "Saved radios"
+			}
+			store := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
+			m.localProvider, m.favMgr = store, store
+			info := ipcTrackInfo(tracks[0], 0, 0, false)
+
+			for _, want := range []bool{true, false} {
+				if response := runV2(t, &m, "playlist.bookmark", ipc.Request{Provider: "radio", Track: &info}); !response.OK {
+					t.Fatalf("bookmark response = %+v", response)
+				}
+				listed := runV2(t, &m, tc.list, ipc.Request{Provider: "radio", Playlist: "c:0"})
+				if !listed.OK || len(listed.Tracks) == 0 {
+					t.Fatalf("%s response = %+v", tc.list, listed)
+				}
+				if got := listed.Tracks[0].Bookmark; got != want {
+					t.Fatalf("reported bookmark = %v, want %v", got, want)
+				}
+				if got := m.radioFavorites.Contains(tracks[0].Path); got != (want && tc.wantStation) {
+					t.Fatalf("station favorite = %v, want %v", got, want && tc.wantStation)
+				}
+				if got := store.IsFavorited(tracks[0].Path); got != (want && !tc.wantStation) {
+					t.Fatalf("track favorite = %v, want %v", got, want && !tc.wantStation)
+				}
+			}
+		})
+	}
+}
+
 func TestRadioFavoriteWriteFailure(t *testing.T) {
 	m, _, tracks := radioFavoriteTestModel(t)
 	m.replacePlayerPlaylist(tracks)
@@ -223,7 +277,7 @@ func TestRadioFavoriteWriteFailure(t *testing.T) {
 	if m.renderPlaylist() != before {
 		t.Fatal("failed write changed the playlist rows")
 	}
-	if m.status.kind != feedbackError || !strings.Contains(m.status.text, "Favorite save failed") {
+	if m.status.kind != feedbackError || !strings.Contains(m.status.text, "Favorite failed") {
 		t.Fatalf("missing error feedback: %q", m.status.text)
 	}
 }

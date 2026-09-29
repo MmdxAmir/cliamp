@@ -1,6 +1,8 @@
 package model
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,8 +33,6 @@ func armedModel() (Model, *playbackFakeEngine) {
 	return m, player
 }
 
-func reply() chan ipc.Response { return make(chan ipc.Response, 1) }
-
 // Every way of changing the next track drops the armed b.mp3, and the next
 // tick arms the new next track instead.
 func TestUpdateDropsStalePreload(t *testing.T) {
@@ -42,7 +42,7 @@ func TestUpdateDropsStalePreload(t *testing.T) {
 		msg      tea.Msg
 		wantNext string
 	}{
-		{name: "IPC repeat one", msg: ipc.RepeatMsg{Name: "one", Reply: reply()}, wantNext: "a.mp3"},
+		{name: "IPC repeat one", msg: v2Request(t, "repeat", ipc.Request{Name: "one"}), wantNext: "a.mp3"},
 		{name: "plugin swap next away", msg: PluginQueueMsg{Op: "move", Index: 1, To: 2}, wantNext: "c.mp3"},
 		{name: "plugin remove next", msg: PluginQueueMsg{Op: "remove", Index: 1}, wantNext: "c.mp3"},
 		{name: "TUI move next down", cursor: 1, msg: tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift}, wantNext: "c.mp3"},
@@ -75,8 +75,10 @@ func TestUpdateDropsStalePreloadOnRepeatAllAppend(t *testing.T) {
 	m.playlist.SetRepeat(playlist.RepeatAll)
 	m.preloadFor = "a.mp3"
 
-	next, _ := m.Update(ipc.QueueMsg{Path: "d.mp3"})
-	next, _ = next.(Model).Update(tickMsg(time.Now()))
+	if response := runV2(t, &m, "queue", ipc.Request{Path: "d.mp3"}); !response.OK {
+		t.Fatalf("queue response = %+v", response)
+	}
+	next, _ := m.Update(tickMsg(time.Now()))
 	if m = next.(Model); player.clearPreloadCalls != 1 || m.preloadFor != "d.mp3" {
 		t.Fatalf("ClearPreload %d, preloading %q; want a.mp3 dropped and d.mp3 armed", player.clearPreloadCalls, m.preloadFor)
 	}
@@ -133,5 +135,32 @@ func TestUpdateDropsStaleInFlightPreload(t *testing.T) {
 	next, _ = next.(Model).Update(streamPreloadedMsg{path: "b.mp3", gen: stale})
 	if m = next.(Model); !m.preloading || m.preloadFor != "c.mp3" {
 		t.Fatalf("preloading %v for %q, want c.mp3 still in flight", m.preloading, m.preloadFor)
+	}
+}
+
+// A shuffle or repeat change over IPC re-arms the preload for the new next
+// track at once, and a failed config save shows in the TUI, as the keys do.
+func TestV2ModeChangeRearmsPreloadAndReportsSaveError(t *testing.T) {
+	for _, tc := range []struct {
+		op, name string
+	}{
+		{op: "shuffle", name: "on"},
+		{op: "repeat", name: "one"},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			m, player := armedModel()
+			m.configSaver = &recordingSaver{err: errors.New("disk full")}
+
+			if response := runV2(t, &m, tc.op, ipc.Request{Name: tc.name}); !response.OK {
+				t.Fatalf("response = %+v", response)
+			}
+			next, ok := m.playlist.PeekNext()
+			if !ok || player.clearPreloadCalls == 0 || !m.preloading || m.preloadFor != next.Path {
+				t.Fatalf("preloading %v for %q after ClearPreload %d, want %q armed at once", m.preloading, m.preloadFor, player.clearPreloadCalls, next.Path)
+			}
+			if !strings.Contains(m.status.text, "Config save failed: disk full") {
+				t.Fatalf("status = %q, want the config save error", m.status.text)
+			}
+		})
 	}
 }

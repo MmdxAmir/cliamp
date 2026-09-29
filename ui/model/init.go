@@ -176,7 +176,7 @@ func (m *Model) SetSeekStepLarge(d time.Duration) {
 
 // SetTheme finds a theme by name and applies it. Returns true if found.
 func (m *Model) SetTheme(name string) bool {
-	if name == "" || strings.EqualFold(name, "default") {
+	if theme.IsDefaultName(name) {
 		m.themeIdx = -1
 		applyThemeAll(theme.Default())
 		return true

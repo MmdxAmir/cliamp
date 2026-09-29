@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/ui"
@@ -37,21 +38,51 @@ func (p *playlistManagerTestProvider) SavePlaylist(name string, tracks []playlis
 	return nil
 }
 
-func TestFetchSpotPlaylistsFiltersHistoryOnlyForLocal(t *testing.T) {
+// Both add-to-playlist pickers offer only the lists that the provider accepts
+// through provider.PlaylistTargetFilter. The local provider rejects its
+// virtual Favorites and Recently Played lists that way. No list is hidden by
+// its name, so a provider without a filter keeps a list named Recently Played.
+func TestPlaylistPickersOfferOnlyAddTargets(t *testing.T) {
 	lists := []playlist.PlaylistInfo{
-		{ID: "recent", Name: history.PlaylistName},
+		{ID: favorites.PlaylistName, Name: favorites.PlaylistName},
+		{ID: history.PlaylistName, Name: history.PlaylistName},
 		{ID: "mix", Name: "Mix"},
 	}
-
-	msg := fetchSpotPlaylistsCmd(commandsTestProvider{name: "Spotify", lists: lists}, 1)().(spotPlaylistsMsg)
-	if len(msg.playlists) != 2 {
-		t.Fatalf("Spotify playlists = %d, want 2", len(msg.playlists))
+	local := targetFilterTestProvider{
+		commandsTestProvider: commandsTestProvider{name: "Local", lists: lists},
+		writable:             map[string]bool{"mix": true},
+	}
+	ids := func(lists []playlist.PlaylistInfo) []string {
+		var out []string
+		for _, pl := range lists {
+			out = append(out, pl.ID)
+		}
+		return out
 	}
 
-	msg = fetchSpotPlaylistsCmd(commandsTestProvider{name: "Local", lists: lists}, 2)().(spotPlaylistsMsg)
-	if len(msg.playlists) != 1 || msg.playlists[0].Name != "Mix" {
-		t.Fatalf("Local playlists = %+v, want only Mix", msg.playlists)
-	}
+	t.Run("search picker", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			prov playlist.Provider
+			want []string
+		}{
+			{name: "local", prov: local, want: []string{"mix"}},
+			{name: "no filter", prov: commandsTestProvider{name: "Local", lists: lists}, want: ids(lists)},
+		} {
+			msg := fetchSpotPlaylistsCmd(tc.prov, 1)().(spotPlaylistsMsg)
+			if got := ids(msg.playlists); !slices.Equal(got, tc.want) {
+				t.Errorf("%s: targets = %v, want %v", tc.name, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("track picker", func(t *testing.T) {
+		m := Model{localProvider: local, playlist: playlist.New()}
+		m.openPlaylistPicker([]playlist.Track{{Path: "/a.mp3"}}, "Track: A")
+		if got := ids(m.plPicker.playlists); !slices.Equal(got, []string{"mix"}) {
+			t.Fatalf("targets = %v, want [mix]", got)
+		}
+	})
 }
 
 func TestTracksLoadedMsgMarksOnlyExactLocalPlaylist(t *testing.T) {

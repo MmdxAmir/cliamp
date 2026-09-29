@@ -9,67 +9,22 @@ import (
 	"github.com/bjarneo/cliamp/internal/playback"
 )
 
+// fakeEngine plays an hour-long track. It overrides only the stream-seek
+// methods of playbackFakeEngine.
 type fakeEngine struct {
+	playbackFakeEngine
 	streamSeek bool
-	seekCalls  []time.Duration
-	position   time.Duration
 }
 
-func (f *fakeEngine) Play(string, time.Duration) error                  { return nil }
-func (f *fakeEngine) PlayAt(string, time.Duration, time.Duration) error { return nil }
-func (f *fakeEngine) PlayYTDL(string, time.Duration) error              { return nil }
-func (f *fakeEngine) SetPlaybackGeneration(uint64)                      {}
-func (f *fakeEngine) PlayAtForGeneration(path string, dur, offset time.Duration, _ uint64) error {
-	return f.PlayAt(path, dur, offset)
+func newFakeEngine(streamSeek bool, position time.Duration) *fakeEngine {
+	return &fakeEngine{
+		playbackFakeEngine: playbackFakeEngine{playing: true, duration: time.Hour, position: position},
+		streamSeek:         streamSeek,
+	}
 }
-func (f *fakeEngine) PlayYTDLForGeneration(path string, dur time.Duration, _ uint64) error {
-	return f.PlayYTDL(path, dur)
-}
-func (f *fakeEngine) Preload(string, time.Duration) error     { return nil }
-func (f *fakeEngine) PreloadYTDL(string, time.Duration) error { return nil }
-func (f *fakeEngine) BeginPreload() uint64                    { return 0 }
-func (f *fakeEngine) PreloadForGeneration(path string, dur time.Duration, _ uint64) error {
-	return f.Preload(path, dur)
-}
-func (f *fakeEngine) PreloadYTDLForGeneration(path string, dur time.Duration, _ uint64) error {
-	return f.PreloadYTDL(path, dur)
-}
-func (f *fakeEngine) ClearPreload()                                       {}
-func (f *fakeEngine) Stop()                                               {}
-func (f *fakeEngine) Close()                                              {}
-func (f *fakeEngine) TogglePause()                                        {}
-func (f *fakeEngine) Seek(d time.Duration) error                          { f.seekCalls = append(f.seekCalls, d); return nil }
-func (f *fakeEngine) SeekYTDL(time.Duration) error                        { return nil }
-func (f *fakeEngine) CancelSeekYTDL()                                     {}
-func (f *fakeEngine) IsPlaying() bool                                     { return true }
-func (f *fakeEngine) IsPaused() bool                                      { return false }
-func (f *fakeEngine) Drained() bool                                       { return false }
-func (f *fakeEngine) HasPreload() bool                                    { return false }
-func (f *fakeEngine) Seekable() bool                                      { return f.streamSeek }
-func (f *fakeEngine) IsStreamSeek() bool                                  { return f.streamSeek }
-func (f *fakeEngine) IsYTDLSeek() bool                                    { return false }
-func (f *fakeEngine) GaplessAdvanced() bool                               { return false }
-func (f *fakeEngine) LastPlayedDuration() time.Duration                   { return 0 }
-func (f *fakeEngine) Position() time.Duration                             { return f.position }
-func (f *fakeEngine) Duration() time.Duration                             { return time.Hour }
-func (f *fakeEngine) PositionAndDuration() (time.Duration, time.Duration) { return 0, time.Hour }
-func (f *fakeEngine) SetVolumeMin(float64)                                {}
-func (f *fakeEngine) VolumeMin() float64                                  { return -50 }
-func (f *fakeEngine) SetVolume(float64)                                   {}
-func (f *fakeEngine) Volume() float64                                     { return 0 }
-func (f *fakeEngine) SetSpeed(float64)                                    {}
-func (f *fakeEngine) Speed() float64                                      { return 1 }
-func (f *fakeEngine) ToggleMono()                                         {}
-func (f *fakeEngine) Mono() bool                                          { return false }
-func (f *fakeEngine) SetEQBand(int, float64)                              {}
-func (f *fakeEngine) EQBands() [10]float64                                { return [10]float64{} }
-func (f *fakeEngine) StreamErr() error                                    { return nil }
-func (f *fakeEngine) StreamTitle() string                                 { return "" }
-func (f *fakeEngine) StreamBytes() (downloaded, total int64)              { return 0, 0 }
-func (f *fakeEngine) SamplesInto([]float64) int                           { return 0 }
-func (f *fakeEngine) WaveformSamplesInto([]float64) int                   { return 0 }
-func (f *fakeEngine) StereoSamplesInto([][2]float64) int                  { return 0 }
-func (f *fakeEngine) SampleRate() int                                     { return 44100 }
+
+func (f *fakeEngine) Seekable() bool     { return f.streamSeek }
+func (f *fakeEngine) IsStreamSeek() bool { return f.streamSeek }
 
 func assertStreamSeekCmd(t *testing.T, eng *fakeEngine, cmd tea.Cmd, want time.Duration) {
 	t.Helper()
@@ -102,20 +57,6 @@ func assertDeferredStreamSeek(t *testing.T, eng *fakeEngine, cmd tea.Cmd, positi
 	assertStreamSeekCmd(t, eng, cmd, want)
 }
 
-func assertImmediateStreamSeek(t *testing.T, eng *fakeEngine, cmd tea.Cmd, want time.Duration) {
-	t.Helper()
-
-	if cmd != nil {
-		t.Fatalf("cmd = %v, want nil for synchronous seek", cmd)
-	}
-	if len(eng.seekCalls) != 1 {
-		t.Fatalf("Seek call count = %d, want 1", len(eng.seekCalls))
-	}
-	if got := eng.seekCalls[0]; got != want {
-		t.Fatalf("Seek arg = %v, want %v", got, want)
-	}
-}
-
 func TestDeferredHTTPStreamSeek(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -123,6 +64,7 @@ func TestDeferredHTTPStreamSeek(t *testing.T) {
 		settlePos  time.Duration
 		want       time.Duration
 		invoke     func(*Model) tea.Cmd
+		check      func(*testing.T, *Model)
 	}{
 		{
 			name:      "right key",
@@ -142,29 +84,11 @@ func TestDeferredHTTPStreamSeek(t *testing.T) {
 				return cmd
 			},
 		},
-	}
-
-	for _, tt := range cases {
-		t.Run(tt.name, func(t *testing.T) {
-			eng := &fakeEngine{streamSeek: true, position: tt.initialPos}
-			m := Model{player: eng}
-
-			cmd := tt.invoke(&m)
-			assertDeferredStreamSeek(t, eng, cmd, tt.settlePos, tt.want)
-		})
-	}
-}
-
-func TestImmediateHTTPStreamSeek(t *testing.T) {
-	cases := []struct {
-		name   string
-		want   time.Duration
-		invoke func(*Model) tea.Cmd
-		check  func(*testing.T, *Model)
-	}{
 		{
-			name: "jump enter",
-			want: 7 * time.Second,
+			name:       "jump enter",
+			initialPos: 3 * time.Second,
+			settlePos:  5 * time.Second,
+			want:       5 * time.Second,
 			invoke: func(m *Model) tea.Cmd {
 				m.jumping = true
 				m.jumpInput = "10"
@@ -181,8 +105,10 @@ func TestImmediateHTTPStreamSeek(t *testing.T) {
 			},
 		},
 		{
-			name: "ipc seek",
-			want: 4 * time.Second,
+			name:       "seek message",
+			initialPos: 3 * time.Second,
+			settlePos:  5 * time.Second,
+			want:       4 * time.Second,
 			invoke: func(m *Model) tea.Cmd {
 				_, cmd := m.Update(playback.SeekMsg{Offset: 4 * time.Second})
 				return cmd
@@ -192,14 +118,14 @@ func TestImmediateHTTPStreamSeek(t *testing.T) {
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := &fakeEngine{streamSeek: true, position: 3 * time.Second}
+			eng := newFakeEngine(true, tt.initialPos)
 			m := Model{player: eng}
 
 			cmd := tt.invoke(&m)
 			if tt.check != nil {
 				tt.check(t, &m)
 			}
-			assertImmediateStreamSeek(t, eng, cmd, tt.want)
+			assertDeferredStreamSeek(t, eng, cmd, tt.settlePos, tt.want)
 		})
 	}
 }

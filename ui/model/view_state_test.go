@@ -26,9 +26,6 @@ func withFrameWidth(t *testing.T, width int) {
 }
 
 func TestMainViewShrinksPlaylistForFooterMessages(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
 	withFrameWidth(t, 80)
 
 	pl := playlist.New()
@@ -40,9 +37,9 @@ func TestMainViewShrinksPlaylistForFooterMessages(t *testing.T) {
 	}
 
 	m := Model{
-		player:    sharedPlayer,
+		player:    &playbackFakeEngine{},
 		playlist:  pl,
-		vis:       ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		vis:       ui.NewVisualizer(44100),
 		width:     80,
 		plVisible: 3,
 	}
@@ -100,12 +97,7 @@ func TestRenderTransientIncludesNonColorSeverityLabels(t *testing.T) {
 }
 
 func TestRenderPlaylistKeepsCursorVisibleWhenFooterShrinksBudget(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
 	withFrameWidth(t, 80)
-
-	sharedPlayer.Stop()
 
 	pl := playlist.New()
 	for i := range 12 {
@@ -116,9 +108,9 @@ func TestRenderPlaylistKeepsCursorVisibleWhenFooterShrinksBudget(t *testing.T) {
 	}
 
 	m := Model{
-		player:    sharedPlayer,
+		player:    &playbackFakeEngine{},
 		playlist:  pl,
-		vis:       ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		vis:       ui.NewVisualizer(44100),
 		width:     80,
 		focus:     focusPlaylist,
 		plVisible: 3,
@@ -142,15 +134,12 @@ func TestRenderPlaylistKeepsCursorVisibleWhenFooterShrinksBudget(t *testing.T) {
 }
 
 func TestViewConsumesInitialVisualizerRefresh(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
 	withFrameWidth(t, 80)
 
 	m := Model{
-		player:   sharedPlayer,
+		player:   &playbackFakeEngine{},
 		playlist: playlist.New(),
-		vis:      ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		vis:      ui.NewVisualizer(44100),
 		width:    80,
 		height:   24,
 	}
@@ -170,18 +159,14 @@ func TestViewConsumesInitialVisualizerRefresh(t *testing.T) {
 }
 
 func TestOverlayViewIncludesFooterMessages(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
 	withFrameWidth(t, 80)
-	sharedPlayer.Stop()
 
 	// Footer/transient messages are now rendered by the inline overlay layout
 	// (mainSectionsOverlay) rather than by each overlay renderer.
 	m := Model{
-		player:    sharedPlayer,
+		player:    &playbackFakeEngine{},
 		playlist:  playlist.New(),
-		vis:       ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		vis:       ui.NewVisualizer(44100),
 		width:     80,
 		height:    24,
 		plVisible: 5,
@@ -198,16 +183,12 @@ func TestOverlayViewIncludesFooterMessages(t *testing.T) {
 }
 
 func TestKeymapRendersInline(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
 	withFrameWidth(t, 80)
-	sharedPlayer.Stop()
 
 	m := Model{
-		player:    sharedPlayer,
+		player:    &playbackFakeEngine{},
 		playlist:  playlist.New(),
-		vis:       ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		vis:       ui.NewVisualizer(44100),
 		width:     80,
 		height:    24,
 		plVisible: 5,
@@ -230,17 +211,12 @@ func TestKeymapRendersInline(t *testing.T) {
 }
 
 func TestFullVisualizerViewFitsTerminalWidth(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
 	withFrameWidth(t, 80)
 
-	sharedPlayer.Stop()
-
 	m := Model{
-		player:   sharedPlayer,
+		player:   &playbackFakeEngine{},
 		playlist: playlist.New(),
-		vis:      ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		vis:      ui.NewVisualizer(44100),
 		width:    80,
 		height:   24,
 		fullVis:  true,
@@ -259,12 +235,7 @@ func stripAnsi(str string) string {
 }
 
 func TestRenderPlaylistAddsPaddingToTrackNumber(t *testing.T) {
-	if sharedPlayer == nil {
-		t.Skip("audio hardware unavailable")
-	}
 	withFrameWidth(t, 80)
-
-	sharedPlayer.Stop()
 
 	pl := playlist.New()
 	for i := range 120 {
@@ -275,9 +246,9 @@ func TestRenderPlaylistAddsPaddingToTrackNumber(t *testing.T) {
 	}
 
 	m := Model{
-		player:    sharedPlayer,
+		player:    &playbackFakeEngine{},
 		playlist:  pl,
-		vis:       ui.NewVisualizer(float64(sharedPlayer.SampleRate())),
+		vis:       ui.NewVisualizer(44100),
 		width:     80,
 		plVisible: 120,
 	}

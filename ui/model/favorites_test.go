@@ -350,7 +350,7 @@ func TestIPCTrackInfoBookmarkReportsFavorite(t *testing.T) {
 	if snapshot.LogicalTrack == nil || !snapshot.LogicalTrack.Bookmark {
 		t.Fatalf("snapshot logical track = %+v, want bookmark true", snapshot.LogicalTrack)
 	}
-	queue := m.ipcQueueResponse().Tracks
+	queue := runV2(t, &m, "queue.list", ipc.Request{}).Tracks
 	if !queue[0].Bookmark || queue[1].Bookmark {
 		t.Fatalf("queue bookmarks = %v, %v; want true, false", queue[0].Bookmark, queue[1].Bookmark)
 	}
