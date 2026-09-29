@@ -161,17 +161,20 @@ func (m *Manager) Emit(event string, data map[string]any) {
 	}
 }
 
-// enqueue adds fn to the queue of p without blocking. When the queue is full,
-// it drops fn and logs once until the queue accepts a call again. The caller
-// holds m.mu for reading and saw closing false, so the queue is open.
-func (m *Manager) enqueue(p *Plugin, label string, fn func()) {
+// enqueue adds fn to the queue of p without blocking and reports whether it
+// did. When the queue is full, it drops fn and logs once until the queue
+// accepts a call again. The caller holds m.mu for reading and saw closing
+// false, so the queue is open.
+func (m *Manager) enqueue(p *Plugin, label string, fn func()) bool {
 	select {
 	case p.queue <- fn:
 		p.dropping.Store(false)
+		return true
 	default:
 		if !p.dropping.Swap(true) {
 			m.logger.log(p.installName, "warn", "%s dropped. %d events and key presses are waiting. cliamp drops new ones until the plugin catches up.", label, eventQueueSize)
 		}
+		return false
 	}
 }
 

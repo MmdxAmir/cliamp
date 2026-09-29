@@ -664,7 +664,7 @@ end
 | `p:init(rows, cols)` | Setup when selected | No |
 | `p:destroy()` | Cleanup when deselected | No |
 
-`render` has a 20 ms limit for each frame. If it runs longer or fails, cliamp shows the previous frame. cliamp also shows the previous frame while another callback of the same plugin runs, so a slow hook does not delay the UI.
+`render` has a 20 ms limit for each frame. If it runs longer or fails, cliamp shows the previous frame. cliamp also shows the previous frame while another callback of the same plugin runs, so a slow hook does not delay the UI. cliamp runs `init` and `destroy` in order with the events of the plugin, and `render` shows the previous frame until `init` has run.
 
 ## Sandbox
 

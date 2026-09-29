@@ -23,6 +23,15 @@ func newTestManager() *Manager {
 	return newManager(defaultAllowedBinaries, nil)
 }
 
+// setRenderTimeout sets renderTimeout until the test ends. A test that needs
+// a render to succeed sets a long limit, so a slow runner cannot fail it.
+func setRenderTimeout(t *testing.T, d time.Duration) {
+	t.Helper()
+	old := renderTimeout
+	renderTimeout = d
+	t.Cleanup(func() { renderTimeout = old })
+}
+
 // loadTestPlugin writes a Lua script to a temp file and loads it into the
 // manager. loadPlugin adds the plugin to m.plugins if registration succeeded.
 func loadTestPlugin(t *testing.T, m *Manager, name, code string) *Plugin {
@@ -710,20 +719,18 @@ func TestVisualizerPlugin(t *testing.T) {
 	m := newTestManager()
 	loadTestPlugin(t, m, "test-vis", `
 		local v = plugin.register({name = "test-vis", type = "visualizer"})
-		_G.init_called = false
-		_G.destroy_called = false
 		v.init = function(self, rows, cols)
-			_G.init_called = true
 			_G.init_rows = rows
 		end
 		v.render = function(self, bands, frame, rows, cols)
 			return "frame-" .. tostring(frame)
 		end
 		v.destroy = function(self)
-			_G.destroy_called = true
+			_G.destroyed = true
 		end
 	`)
 	m.finalizeVisualizers()
+	defer m.Close()
 
 	names := m.Visualizers()
 	if len(names) != 1 || names[0] != "test-vis" {
@@ -733,13 +740,7 @@ func TestVisualizerPlugin(t *testing.T) {
 	m.InitVis("test-vis", 8, 40)
 
 	vis := m.visMap["test-vis"]
-	vis.plugin.mu.Lock()
-	initCalled := vis.plugin.L.GetGlobal("init_called")
-	vis.plugin.mu.Unlock()
-
-	if initCalled != lua.LTrue {
-		t.Fatal("init callback was not called")
-	}
+	waitGlobal(t, vis.plugin, "init_rows")
 
 	got := m.RenderVis("test-vis", [10]float64{}, 8, 40, 42)
 	if got != "frame-42" {
@@ -747,13 +748,89 @@ func TestVisualizerPlugin(t *testing.T) {
 	}
 
 	m.DestroyVis("test-vis")
+	waitGlobal(t, vis.plugin, "destroyed")
+}
 
-	vis.plugin.mu.Lock()
-	destroyCalled := vis.plugin.L.GetGlobal("destroy_called")
-	vis.plugin.mu.Unlock()
+// waitGlobal waits until the Lua global name of p is set.
+func waitGlobal(t *testing.T, p *Plugin, name string) {
+	t.Helper()
+	waitExec(t, p, p.L, name, time.Second)
+}
 
-	if destroyCalled != lua.LTrue {
-		t.Fatal("destroy callback was not called")
+// InitVis and DestroyVis run on the UI goroutine. They must return at once
+// while a hook of the plugin holds the lock, because that hook can wait for
+// the UI goroutine. The call runs after the lock is free.
+func TestVisLifecycleCallsDoNotBlock(t *testing.T) {
+	tests := []struct {
+		name   string
+		call   func(m *Manager)
+		global string
+	}{
+		{"init", func(m *Manager) { m.InitVis("life-vis", 8, 40) }, "init_rows"},
+		{"destroy", func(m *Manager) { m.DestroyVis("life-vis") }, "destroyed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			p := loadTestPlugin(t, m, "life-vis", `
+				local v = plugin.register({name = "life-vis", type = "visualizer"})
+				function v:init(rows, cols) init_rows = rows end
+				function v:render(bands, frame) return "frame-" .. frame end
+				function v:destroy() destroyed = true end
+			`)
+			m.finalizeVisualizers()
+			defer m.Close()
+
+			p.mu.Lock()
+			done := make(chan struct{})
+			go func() {
+				tt.call(m)
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(100 * time.Millisecond):
+				t.Error("the call waited for the plugin lock")
+			}
+			p.mu.Unlock()
+			waitGlobal(t, p, tt.global)
+		})
+	}
+}
+
+// RenderVis must not run render before a queued init has run.
+func TestRenderVisWaitsForInit(t *testing.T) {
+	setRenderTimeout(t, time.Second)
+	m := newTestManager()
+	p := loadTestPlugin(t, m, "init-vis", `
+		local v = plugin.register({name = "init-vis", type = "visualizer"})
+		local ready = false
+		function v:init() ready = true end
+		function v:render()
+			if ready then return "ready" end
+			return "early"
+		end
+	`)
+	m.finalizeVisualizers()
+	defer m.Close()
+
+	// Hold the queue of the plugin, so init waits behind this call.
+	release := make(chan struct{})
+	m.mu.RLock()
+	m.enqueue(p, "block", func() { <-release })
+	m.mu.RUnlock()
+
+	m.InitVis("init-vis", 8, 40)
+	if got := m.RenderVis("init-vis", [10]float64{}, 8, 40, 1); got != "" {
+		t.Errorf("RenderVis() = %q while init waits, want the empty last frame", got)
+	}
+	close(release)
+	deadline := time.Now().Add(time.Second)
+	for m.RenderVis("init-vis", [10]float64{}, 8, 40, 2) != "ready" {
+		if time.Now().After(deadline) {
+			t.Fatal("RenderVis() did not render after init ran")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
