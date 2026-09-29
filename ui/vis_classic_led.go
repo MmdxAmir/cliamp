@@ -12,6 +12,8 @@ const (
 	classicLEDBarGap   = 1
 	// Frame cadence. Real Winamp ran around 30 FPS; matching that gives the
 	// characteristic chunky LED feel without burning CPU on smooth interpolation.
+	// The driver does not own its cadence, so the model redraws it at TickFast,
+	// or at TickAnim with the 60 FPS setting. The physics use the wall clock.
 	classicLEDFPS = 30
 	// Body smoothing rates. Fast attack so a kick drum lights LEDs immediately,
 	// medium decay so the bar visibly settles a frame at a time.
@@ -47,9 +49,9 @@ func classicLEDRenderWidth(bars int) int {
 	return bars*(classicLEDBarWidth+classicLEDBarGap) - classicLEDBarGap
 }
 
-func (d *classicLEDDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
+func (d *classicLEDDriver) AnalysisSpec(v *Visualizer) VisAnalysisSpec {
 	return VisAnalysisSpec{
-		BandCount: classicLEDBarCount(PanelWidth),
+		BandCount: classicLEDBarCount(v.columns()),
 		FFTSize:   classicLEDFFTSize,
 	}
 }
@@ -61,7 +63,7 @@ func (d *classicLEDDriver) OnEnter(*Visualizer) {
 func (d *classicLEDDriver) OnLeave(*Visualizer) {}
 
 func (d *classicLEDDriver) levels(v *Visualizer) []float64 {
-	return resampleBandsLinear(v.bands, classicLEDBarCount(PanelWidth))
+	return resampleBandsLinear(v.bands, classicLEDBarCount(v.columns()))
 }
 
 func (d *classicLEDDriver) frameInterval() time.Duration {
@@ -132,25 +134,11 @@ func (d *classicLEDDriver) advance(v *Visualizer, now time.Time) {
 		return
 	}
 
-	frame := d.frameInterval()
-	dt := frame
-	if !now.IsZero() && !d.lastTick.IsZero() {
-		dt = now.Sub(d.lastTick)
-	}
-	// Clamp dt so long gaps (sleep, overlay dismiss) step like one frame rather
-	// than integrating peak decay over a huge interval.
-	if dt <= 0 || dt > 10*frame {
-		dt = frame
-	}
+	dtS := clampFrameDT(now, d.lastTick, d.frameInterval()).Seconds()
 	d.lastTick = now
-	dtS := dt.Seconds()
 
 	for i, target := range levels {
-		rate := classicLEDFallRate
-		if target > d.body[i] {
-			rate = classicLEDRiseRate
-		}
-		d.body[i] += (target - d.body[i]) * (1 - math.Exp(-rate*dtS))
+		d.body[i] = easeToward(d.body[i], target, classicLEDRiseRate, classicLEDFallRate, dtS)
 
 		switch {
 		case d.body[i] >= d.peak[i]:
@@ -166,10 +154,11 @@ func (d *classicLEDDriver) advance(v *Visualizer, now time.Time) {
 
 func (d *classicLEDDriver) Render(v *Visualizer) string {
 	height := v.Rows
-	bars := classicLEDBarCount(PanelWidth)
+	width := v.columns()
+	bars := classicLEDBarCount(width)
 	body, peak := d.renderState(v, bars)
 
-	rowPad := max(0, PanelWidth-classicLEDRenderWidth(bars))
+	rowPad := max(0, width-classicLEDRenderWidth(bars))
 	heightF := float64(height)
 
 	lines := make([]string, height)
