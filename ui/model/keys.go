@@ -413,6 +413,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 				if auth, ok := m.provider.(playlist.Authenticator); ok {
 					m.provSignIn = false
 					m.provLoading = true
+					m.err = nil
 					return authenticateProviderCmd(auth, m.provider.Name(), nextRequest(&m.requests.auth))
 				}
 			}
