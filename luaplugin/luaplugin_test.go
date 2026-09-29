@@ -708,3 +708,136 @@ func TestNewTreatsBadTrustManifestAsUntrusted(t *testing.T) {
 		})
 	}
 }
+
+// Close must wait for a timer callback that runs, then close the VM. Before
+// it took the plugin lock, the callback kept running on the closed VM and
+// crashed the process.
+func TestCloseDuringTimerCallback(t *testing.T) {
+	for i := range 20 {
+		m := newTestManager()
+		loadTestPlugin(t, m, fmt.Sprintf("busy-timer-%d", i), `
+			plugin.register({name = "busy-timer", type = "hook"})
+			cliamp.timer.every(0.001, function()
+				local x = 0
+				for n = 1, 20000 do x = x + n end
+			end)
+		`)
+		time.Sleep(20 * time.Millisecond)
+		m.Close()
+	}
+	// Give a callback that outlived Close the time to touch its VM.
+	time.Sleep(50 * time.Millisecond)
+}
+
+func TestCloseBoundsQuitHook(t *testing.T) {
+	defer func(d time.Duration) { hookTimeout = d }(hookTimeout)
+	hookTimeout = 50 * time.Millisecond
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"busy loop", "while true do end"},
+		{"sleep", "cliamp.sleep(10)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			loadTestPlugin(t, m, "slow-quit", `
+				local p = plugin.register({name = "slow-quit", type = "hook"})
+				p:on("app.quit", function() `+tt.body+` end)
+			`)
+			done := make(chan struct{})
+			go func() {
+				m.Close()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("Close did not return while an app.quit hook ran")
+			}
+		})
+	}
+}
+
+// Every entry point must be safe after Close and must not run Lua.
+func TestCallsAfterClose(t *testing.T) {
+	m := newTestManager()
+	loadTestPlugin(t, m, "closed", `
+		local p = plugin.register({name = "closed", type = "visualizer", permissions = {"keymap"}})
+		p:on("test.event", function() end)
+		p:bind("ctrl+y", function() end)
+		p:command("ping", function() return "pong" end)
+		function p:init() end
+		function p:render() return "frame" end
+		function p:destroy() end
+	`)
+	m.finalizeVisualizers()
+	m.Close()
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{"Emit", func() error { m.Emit("test.event", nil); return nil }},
+		{"EmitSync", func() error { m.EmitSync("test.event", nil); return nil }},
+		{"EmitKey", func() error {
+			if m.EmitKey("ctrl+y") {
+				return fmt.Errorf("EmitKey() = true, want false")
+			}
+			return nil
+		}},
+		{"EmitCommand", func() error {
+			if out, err := m.EmitCommand("closed", "ping", nil); err == nil {
+				return fmt.Errorf("EmitCommand() = %q, nil, want an error", out)
+			}
+			return nil
+		}},
+		{"InitVis", func() error { m.InitVis("closed", 8, 40); return nil }},
+		{"RenderVis", func() error {
+			if got := m.RenderVis("closed", [10]float64{}, 8, 40, 1); got != "" {
+				return fmt.Errorf("RenderVis() = %q, want the empty last frame", got)
+			}
+			return nil
+		}},
+		{"DestroyVis", func() error { m.DestroyVis("closed"); return nil }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.call(); err != nil {
+				t.Error(err)
+			}
+			m.wg.Wait()
+		})
+	}
+}
+
+// Timer callback errors reach plugins.log. An error that repeats is logged
+// once, so a fast timer cannot flood the log.
+func TestCallbackErrorsAreLogged(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{"timer.after", `cliamp.timer.after(0.001, function() error("callback failed") end)`},
+		{"timer.every repeats one error", `cliamp.timer.every(0.001, function() error("callback failed") end)`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			logPath := filepath.Join(t.TempDir(), pluginLogName)
+			m.logger = newPluginLogger(logPath)
+			loadTestPlugin(t, m, "failing", `
+				plugin.register({name = "failing", type = "hook"})
+				`+tt.code)
+			time.Sleep(50 * time.Millisecond)
+			m.Close()
+
+			data, _ := os.ReadFile(logPath)
+			if got := strings.Count(string(data), "callback failed"); got != 1 {
+				t.Fatalf("plugins.log has %d entries for the error, want 1:\n%s", got, data)
+			}
+		})
+	}
+}

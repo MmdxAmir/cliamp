@@ -2,6 +2,7 @@ package luaplugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -9,7 +10,12 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-const hookTimeout = 5 * time.Second
+// hookTimeout bounds each event hook, key bind, timer and exec callback, and
+// each visualizer init or destroy call. It is a var so tests can shorten it.
+var hookTimeout = 5 * time.Second
+
+// errClosed is the error for a call into a plugin whose VM is closed.
+var errClosed = errors.New("plugin is closed")
 
 // Event name constants.
 const (
@@ -41,15 +47,65 @@ type luaHook struct {
 	fn     *lua.LFunction
 }
 
-// callBounded runs fn on the plugin's LState under hookTimeout so a runaway
-// callback cannot hold the plugin mutex forever. The caller must already hold
-// p.mu. Results (if nret > 0) are left on the stack for the caller to read.
-func (p *Plugin) callBounded(nret int, fn *lua.LFunction, args ...lua.LValue) error {
-	ctx, cancel := context.WithTimeout(context.Background(), hookTimeout)
+// callBuilder returns the Lua function to call and its arguments. call runs
+// it under the plugin lock, so it can make tables on L. A nil function skips
+// the call.
+type callBuilder func(L *lua.LState) (*lua.LFunction, []lua.LValue)
+
+// fixedArgs returns a callBuilder for fn with arguments that need no LState.
+func fixedArgs(fn *lua.LFunction, args ...lua.LValue) callBuilder {
+	return func(*lua.LState) (*lua.LFunction, []lua.LValue) { return fn, args }
+}
+
+// call is the one way Go calls into a plugin's Lua VM. It holds p.mu for the
+// whole call because an LState is not safe for concurrent use. It returns
+// errClosed after the VM is closed. See callLocked for the rest.
+func (m *Manager) call(p *Plugin, label string, timeout time.Duration, nret int, build callBuilder) (lua.LValue, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return m.callLocked(p, label, timeout, nret, build)
+}
+
+// callLocked is call for a caller that already holds p.mu. The call stops
+// after timeout. When nret > 0, it returns the first result. It logs a Lua
+// error under label, but only when the error differs from the last one logged
+// for label. Thus a timer or a render that fails each time logs once.
+func (m *Manager) callLocked(p *Plugin, label string, timeout time.Duration, nret int, build callBuilder) (lua.LValue, error) {
+	if p.closed {
+		return lua.LNil, errClosed
+	}
+	fn, args := build(p.L)
+	if fn == nil {
+		return lua.LNil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	p.L.SetContext(ctx)
 	defer p.L.RemoveContext()
-	return p.L.CallByParam(lua.P{Fn: fn, NRet: nret, Protect: true}, args...)
+
+	if err := p.L.CallByParam(lua.P{Fn: fn, NRet: nret, Protect: true}, args...); err != nil {
+		// A timeout stops the VM at a different line each time, so key it by
+		// the context error and not by the Lua message.
+		key := err.Error()
+		if ctx.Err() != nil {
+			key = ctx.Err().Error()
+		}
+		if p.lastErr[label] != key {
+			if p.lastErr == nil {
+				p.lastErr = make(map[string]string)
+			}
+			p.lastErr[label] = key
+			m.logHookErr(p.Name, label, err)
+		}
+		return lua.LNil, err
+	}
+	delete(p.lastErr, label)
+	if nret == 0 {
+		return lua.LNil, nil
+	}
+	ret := p.L.Get(-nret)
+	p.L.Pop(nret)
+	return ret, nil
 }
 
 // logHookErr records a callback error to stderr and the plugin log.
@@ -57,18 +113,6 @@ func (m *Manager) logHookErr(name, label string, err error) {
 	log.Printf("[lua:%s] %s error: %v", name, label, err)
 	if m.logger != nil {
 		m.logger.log(name, "error", "%s error: %v", label, err)
-	}
-}
-
-// invokeHook calls a plugin's Lua callback under the plugin's mutex with a
-// bounded context. Logs any error to the plugin log. Used by every dispatch
-// site that fires Lua from Go (events, key binds, command handlers).
-func (m *Manager) invokeHook(h *luaHook, label string, args ...lua.LValue) {
-	h.plugin.mu.Lock()
-	defer h.plugin.mu.Unlock()
-
-	if err := h.plugin.callBounded(0, h.fn, args...); err != nil {
-		m.logHookErr(h.plugin.Name, label, err)
 	}
 }
 
@@ -106,41 +150,29 @@ func (m *Manager) Emit(event string, data map[string]any) {
 		m.wg.Add(1)
 		go func(h *luaHook) {
 			defer m.wg.Done()
-			m.invokeHookWithData(h, label, data)
+			m.fire(h, label, data)
 		}(h)
 	}
 }
 
-// invokeHookWithData is Emit's per-hook goroutine: builds the arg table on the
-// plugin's LState (which requires holding plugin.mu) and then fires the
-// callback under the same lock via invokeHook's contract.
-func (m *Manager) invokeHookWithData(h *luaHook, label string, data map[string]any) {
-	h.plugin.mu.Lock()
-	defer h.plugin.mu.Unlock()
-
-	arg := dataToTable(h.plugin.L, data)
-	if err := h.plugin.callBounded(0, h.fn, arg); err != nil {
-		m.logHookErr(h.plugin.Name, label, err)
-	}
-}
-
-// EmitSync dispatches an event synchronously, blocking until all callbacks finish.
-// Used during shutdown to ensure all handlers complete before LStates are closed.
+// EmitSync dispatches an event synchronously, blocking until all callbacks
+// finish or time out. Close uses it for app.quit before it closes the VMs.
 func (m *Manager) EmitSync(event string, data map[string]any) {
 	m.mu.RLock()
 	hooks := m.hooks[event]
 	m.mu.RUnlock()
 
+	label := event + " handler"
 	for _, h := range hooks {
-		h.plugin.mu.Lock()
-		arg := dataToTable(h.plugin.L, data)
-		_ = h.plugin.L.CallByParam(lua.P{
-			Fn:      h.fn,
-			NRet:    0,
-			Protect: true,
-		}, arg)
-		h.plugin.mu.Unlock()
+		m.fire(h, label, data)
 	}
+}
+
+// fire calls an event hook with data as its table argument.
+func (m *Manager) fire(h *luaHook, label string, data map[string]any) {
+	m.call(h.plugin, label, hookTimeout, 0, func(L *lua.LState) (*lua.LFunction, []lua.LValue) {
+		return h.fn, []lua.LValue{dataToTable(L, data)}
+	})
 }
 
 // dataToTable converts a Go map to a Lua table.

@@ -140,7 +140,9 @@ func (em *execManager) stopAll() {
 // registerExecAPI adds cliamp.exec.run(binary, args, opts?) -> handle, err.
 // The exec API is only functional for plugins declaring permissions = {"exec"}.
 // Without the permission, cliamp.exec is a no-op table that logs once.
-func registerExecAPI(L *lua.LState, cliamp *lua.LTable, em *execManager, p *Plugin, logger *pluginLogger) {
+// The output and exit callbacks go through m.call.
+func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) {
+	em, logger := m.execs, m.logger
 	tbl := L.NewTable()
 
 	warned := false
@@ -279,7 +281,7 @@ func registerExecAPI(L *lua.LState, cliamp *lua.LTable, em *execManager, p *Plug
 		// Shared output budget across stdout+stderr.
 		var outUsed atomic.Int64
 
-		pipeStream := func(r io.Reader, fn *lua.LFunction) {
+		pipeStream := func(r io.Reader, fn *lua.LFunction, label string) {
 			scanner := bufio.NewScanner(r)
 			// Allow longer lines than default 64KiB for noisy tools like ffmpeg.
 			scanner.Buffer(make([]byte, 64*1024), 1<<20)
@@ -294,20 +296,14 @@ func registerExecAPI(L *lua.LState, cliamp *lua.LTable, em *execManager, p *Plug
 				if fn == nil {
 					continue
 				}
-				p.mu.Lock()
-				_ = p.L.CallByParam(lua.P{
-					Fn:      fn,
-					NRet:    0,
-					Protect: true,
-				}, lua.LString(line))
-				p.mu.Unlock()
+				m.call(p, label, hookTimeout, 0, fixedArgs(fn, lua.LString(line)))
 			}
 		}
 
 		var wg sync.WaitGroup
 		wg.Add(2)
-		go func() { defer wg.Done(); pipeStream(stdout, onStdout) }()
-		go func() { defer wg.Done(); pipeStream(stderr, onStderr) }()
+		go func() { defer wg.Done(); pipeStream(stdout, onStdout, "exec on_stdout") }()
+		go func() { defer wg.Done(); pipeStream(stderr, onStderr, "exec on_stderr") }()
 
 		go func() {
 			wg.Wait()
@@ -331,13 +327,7 @@ func registerExecAPI(L *lua.LState, cliamp *lua.LTable, em *execManager, p *Plug
 			}
 
 			if onExit != nil {
-				p.mu.Lock()
-				_ = p.L.CallByParam(lua.P{
-					Fn:      onExit,
-					NRet:    0,
-					Protect: true,
-				}, lua.LNumber(code))
-				p.mu.Unlock()
+				m.call(p, "exec on_exit", hookTimeout, 0, fixedArgs(onExit, lua.LNumber(code)))
 			}
 			close(entry.done)
 		}()

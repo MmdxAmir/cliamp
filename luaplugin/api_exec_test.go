@@ -28,12 +28,12 @@ func newExecTestState(t *testing.T, perms []string) (*lua.LState, *Plugin, *exec
 		}
 	}
 
-	em := newExecManager(execTestAllowedBinaries())
+	m := &Manager{execs: newExecManager(execTestAllowedBinaries()), logger: newPluginLogger("")}
 	cliamp := L.NewTable()
-	registerExecAPI(L, cliamp, em, p, newPluginLogger(""))
+	m.registerExecAPI(L, cliamp, p)
 	L.SetGlobal("cliamp", cliamp)
 
-	return L, p, em, func() { em.stopAll(); L.Close() }
+	return L, p, m.execs, func() { m.execs.stopAll(); L.Close() }
 }
 
 func execTestAllowedBinaries() []string {
@@ -383,9 +383,9 @@ func TestExecBinaryNotOnPath(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	p := &Plugin{Name: "test", L: L, perms: map[string]bool{"exec": true}}
-	em := newExecManager([]string{"definitely-not-a-real-binary-xyz"})
+	m := &Manager{execs: newExecManager([]string{"definitely-not-a-real-binary-xyz"}), logger: newPluginLogger("")}
 	cliamp := L.NewTable()
-	registerExecAPI(L, cliamp, em, p, newPluginLogger(""))
+	m.registerExecAPI(L, cliamp, p)
 	L.SetGlobal("cliamp", cliamp)
 
 	err := L.DoString(`

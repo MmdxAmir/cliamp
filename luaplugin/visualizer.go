@@ -65,11 +65,7 @@ func (m *Manager) InitVis(name string, rows, cols int) {
 	if !ok || vis.init == nil {
 		return
 	}
-
-	vis.plugin.mu.Lock()
-	defer vis.plugin.mu.Unlock()
-
-	_ = vis.plugin.callBounded(0, vis.init, vis.obj, lua.LNumber(rows), lua.LNumber(cols))
+	m.call(vis.plugin, "init", hookTimeout, 0, fixedArgs(vis.init, vis.obj, lua.LNumber(rows), lua.LNumber(cols)))
 }
 
 // DestroyVis calls a Lua visualizer's destroy() if it exists.
@@ -80,11 +76,7 @@ func (m *Manager) DestroyVis(name string) {
 	if !ok || vis.destroy == nil {
 		return
 	}
-
-	vis.plugin.mu.Lock()
-	defer vis.plugin.mu.Unlock()
-
-	_ = vis.plugin.callBounded(0, vis.destroy, vis.obj)
+	m.call(vis.plugin, "destroy", hookTimeout, 0, fixedArgs(vis.destroy, vis.obj))
 }
 
 // RenderVis calls a Lua visualizer's render(bands, frame) and returns
@@ -100,25 +92,16 @@ func (m *Manager) RenderVis(name string, bands [10]float64, rows, cols int, fram
 	vis.plugin.mu.Lock()
 	defer vis.plugin.mu.Unlock()
 
-	L := vis.plugin.L
-
-	// Build bands table (1-indexed).
-	tbl := L.NewTable()
-	for i, b := range bands {
-		tbl.RawSetInt(i+1, lua.LNumber(b))
-	}
-
-	err := vis.plugin.callBounded(1, vis.render, vis.obj, tbl, lua.LNumber(frame), lua.LNumber(rows), lua.LNumber(cols))
-	if err != nil {
-		return vis.last
-	}
-
-	result := L.Get(-1)
-	L.Pop(1)
-
-	if str, ok := result.(lua.LString); ok {
+	ret, _ := m.callLocked(vis.plugin, "render", hookTimeout, 1, func(L *lua.LState) (*lua.LFunction, []lua.LValue) {
+		// Build bands table (1-indexed).
+		tbl := L.NewTable()
+		for i, b := range bands {
+			tbl.RawSetInt(i+1, lua.LNumber(b))
+		}
+		return vis.render, []lua.LValue{vis.obj, tbl, lua.LNumber(frame), lua.LNumber(rows), lua.LNumber(cols)}
+	})
+	if str, ok := ret.(lua.LString); ok {
 		vis.last = string(str)
-		return vis.last
 	}
 	return vis.last
 }

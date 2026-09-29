@@ -207,7 +207,7 @@ and the `status` command already exposes playback metadata.
 
 ## Events
 
-Use `p:on(event, callback)` to subscribe to events. Callbacks run in goroutines and time out after 5 seconds.
+Use `p:on(event, callback)` to subscribe to events. Callbacks run in goroutines and time out after 5 seconds. `app.quit` handlers run one at a time before shutdown, with the same 5 second limit.
 
 ### Available events
 
@@ -440,6 +440,8 @@ cliamp.log.debug("response: " .. body)
 
 cliamp writes logs to `~/.config/cliamp/plugins.log`. Each line has a timestamp and the `[plugin-name]` prefix.
 
+cliamp also logs the Lua errors of event hooks, key bindings, commands, timers, exec callbacks, and visualizer callbacks to this file. A callback that fails again with the same error logs it once. cliamp logs it again after the callback succeeds or fails with a different error.
+
 ### cliamp.player control (requires permissions)
 
 Plugins that declare `permissions = {"control"}` can control the player:
@@ -512,6 +514,7 @@ handle:alive()                            -- --> boolean
 - Each plugin can run up to 4 processes at one time.
 - cliamp kills every plugin-owned process when the plugin unloads and when cliamp exits.
 - Negative `on_exit` codes indicate cancellation or timeout (`-1`), or a start failure (`-2`).
+- Each call of `on_stdout`, `on_stderr`, or `on_exit` times out after 5 seconds.
 
 Without `permissions = {"exec"}`, `cliamp.exec.run` returns `nil, "exec permission required"`.
 
@@ -532,7 +535,7 @@ limits durations above 60 seconds.
 cliamp.sleep(2.5)  -- block for 2.5 seconds (max 10)
 ```
 
-This blocks the plugin's Lua VM. Other hooks for the same plugin wait until the sleep ends. Use `cliamp.timer.after()` for a non-blocking delay.
+This blocks the plugin's Lua VM. Other hooks for the same plugin wait until the sleep ends. Use `cliamp.timer.after()` for a non-blocking delay. The sleep ends early when the time limit of the running callback ends.
 
 ### cliamp.timer
 
@@ -550,6 +553,8 @@ end)
 -- Cancel
 cliamp.timer.cancel(id)
 ```
+
+Each timer callback times out after 5 seconds.
 
 ## Configuration
 

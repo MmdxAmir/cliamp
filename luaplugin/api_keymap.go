@@ -1,7 +1,6 @@
 package luaplugin
 
 import (
-	"context"
 	"sort"
 	"strings"
 	"time"
@@ -63,7 +62,7 @@ func (m *Manager) EmitKey(key string) bool {
 		m.wg.Add(1)
 		go func(h *luaHook) {
 			defer m.wg.Done()
-			m.invokeHook(h, label, lua.LString(key))
+			m.call(h.plugin, label, hookTimeout, 0, fixedArgs(h.fn, lua.LString(key)))
 		}(h)
 	}
 	return true
@@ -158,18 +157,25 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 // commandTimeout for the handler to return a result. A missing plugin/command
 // returns ("", err); a handler error returns ("", err); success returns
 // (result, nil). The result is whatever the handler returned as a string
-// (nil or false stringifies to "").
+// (nil or false stringifies to ""). After Close starts it returns errClosed.
 func (m *Manager) EmitCommand(pluginName, cmdName string, args []string) (string, error) {
 	m.mu.RLock()
-	plugCmds, ok := m.commands[pluginName]
+	if m.closing {
+		m.mu.RUnlock()
+		return "", errClosed
+	}
 	var hook *luaHook
-	if ok {
+	if plugCmds, ok := m.commands[pluginName]; ok {
 		hook = plugCmds[cmdName]
 	}
-	m.mu.RUnlock()
 	if hook == nil {
+		m.mu.RUnlock()
 		return "", errCommandNotFound(pluginName, cmdName)
 	}
+	// Add under RLock, as Emit does, so Close waits for this goroutine
+	// before it closes the VM.
+	m.wg.Add(1)
+	m.mu.RUnlock()
 
 	type result struct {
 		out string
@@ -178,31 +184,15 @@ func (m *Manager) EmitCommand(pluginName, cmdName string, args []string) (string
 	done := make(chan result, 1)
 
 	go func() {
-		hook.plugin.mu.Lock()
-		defer hook.plugin.mu.Unlock()
-
-		ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
-		defer cancel()
-		hook.plugin.L.SetContext(ctx)
-		defer hook.plugin.L.RemoveContext()
-
-		argsTbl := hook.plugin.L.NewTable()
-		for i, a := range args {
-			argsTbl.RawSetInt(i+1, lua.LString(a))
-		}
-
-		err := hook.plugin.L.CallByParam(lua.P{
-			Fn:      hook.fn,
-			NRet:    1,
-			Protect: true,
-		}, argsTbl)
-		if err != nil {
-			done <- result{err: err}
-			return
-		}
-		ret := hook.plugin.L.Get(-1)
-		hook.plugin.L.Pop(1)
-		done <- result{out: luaValueToString(ret)}
+		defer m.wg.Done()
+		ret, err := m.call(hook.plugin, "command "+cmdName, commandTimeout, 1, func(L *lua.LState) (*lua.LFunction, []lua.LValue) {
+			argsTbl := L.NewTable()
+			for i, a := range args {
+				argsTbl.RawSetInt(i+1, lua.LString(a))
+			}
+			return hook.fn, []lua.LValue{argsTbl}
+		})
+		done <- result{out: luaValueToString(ret), err: err}
 	}()
 
 	select {

@@ -27,6 +27,8 @@ type Plugin struct {
 	Type           string // "hook" or "visualizer"
 	L              *lua.LState
 	mu             sync.Mutex        // serializes all LState access (LState is not thread-safe)
+	closed         bool              // guarded by mu; set when L is closed, so no callback runs after it
+	lastErr        map[string]string // guarded by mu; call label -> last logged error
 	config         map[string]string // per-plugin config from config.toml
 	perms          map[string]bool   // declared permissions (e.g. "control")
 	namespaceOwner string            // installed filename; plugin.register() cannot change it
@@ -484,13 +486,13 @@ func (m *Manager) registerCliampAPI(L *lua.LState, p *Plugin) {
 	registerHTTPAPI(L, cliamp)
 	registerPlayerAPI(L, cliamp, &m.state)
 	registerTrackAPI(L, cliamp, &m.state)
-	registerTimerAPI(L, cliamp, m.timers, p)
+	m.registerTimerAPI(L, cliamp, p)
 	registerQueueAPI(L, cliamp, &m.state, &m.control, p, m.logger)
 	registerNotifyAPI(L, cliamp, m.logger, p.Name)
 	registerControlAPI(L, cliamp, &m.control, p, m.logger)
 	registerMessageAPI(L, cliamp, &m.ui)
 	registerSleepAPI(L, cliamp)
-	registerExecAPI(L, cliamp, m.execs, p, m.logger)
+	m.registerExecAPI(L, cliamp, p)
 	L.SetGlobal("cliamp", cliamp)
 }
 
@@ -610,8 +612,20 @@ func (m *Manager) Close() {
 	// Wait for any in-flight async hook goroutines to finish before closing
 	// the LStates they call into.
 	m.wg.Wait()
+	// Close each VM under its lock. A timer or exec callback that runs now
+	// finishes first, and each later call sees closed and returns errClosed.
+	for _, p := range m.plugins {
+		p.mu.Lock()
+		p.closed = true
+		p.L.Close()
+		p.mu.Unlock()
+	}
+	// No Lua runs from here on. Stop the timers and processes that a
+	// callback started after the first stop.
+	m.timers.stopAll()
+	m.execs.stopAll()
 	// Drop retained events only once every publisher has stopped, so a late
-	// async handler cannot leave a retained value behind.
+	// callback cannot leave a retained value behind.
 	m.mu.RLock()
 	publisher := m.publisher
 	m.mu.RUnlock()
@@ -625,9 +639,6 @@ func (m *Manager) Close() {
 	}
 	if m.logger != nil {
 		m.logger.close()
-	}
-	for _, p := range m.plugins {
-		p.L.Close()
 	}
 }
 
