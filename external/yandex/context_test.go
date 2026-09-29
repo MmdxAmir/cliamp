@@ -51,3 +51,29 @@ func TestSearchTracksHonorsCancellation(t *testing.T) {
 		t.Fatal("SearchTracks() did not return after cancel")
 	}
 }
+
+// TestAccountLookupDoesNotHoldLock checks that a slow first account status
+// call does not stall stream resolution, which also takes p.mu.
+func TestAccountLookupDoesNotHoldLock(t *testing.T) {
+	ts, reached := blockingServer(t)
+	p := New("test-token")
+	p.api.apiBase = ts.URL
+	p.urlCache["77"] = urlEntry{url: "https://s1.music.yandex.ru/get-mp3/cached", at: time.Now()}
+
+	go func() { _, _ = p.Playlists() }()
+	<-reached
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := p.ResolveSource(TrackURIPrefix + "77")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("ResolveSource() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ResolveSource() waited for the account status call")
+	}
+}

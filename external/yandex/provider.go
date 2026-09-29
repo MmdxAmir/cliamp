@@ -103,19 +103,23 @@ func (p *Provider) CanRefreshPlaylist(id string) bool {
 	return id == wavePlaylistID
 }
 
-// userID returns the account user id, verifying the token on first use.
-// It takes p.mu itself: all callers must not hold the lock.
+// accountUserID returns the account user id, verifying the token on first use.
+// It takes p.mu itself: all callers must not hold the lock. The network call
+// runs without the lock, so a slow first check does not stall ResolveSource.
 func (p *Provider) accountUserID(ctx context.Context) (uint64, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.userID != 0 {
-		return p.userID, nil
+	uid := p.userID
+	p.mu.Unlock()
+	if uid != 0 {
+		return uid, nil
 	}
 	uid, err := p.api.accountStatus(ctx)
 	if err != nil {
 		return 0, err
 	}
+	p.mu.Lock()
 	p.userID = uid
+	p.mu.Unlock()
 	return uid, nil
 }
 
