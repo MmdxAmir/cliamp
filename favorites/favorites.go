@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -275,8 +274,13 @@ func (s *Store) Clear() error {
 }
 
 // lockFile serializes writers across cliamp processes: the per-instance
-// mutex alone cannot stop two processes from rewriting the same file.
+// mutex alone cannot stop two processes from rewriting the same file. It
+// creates the config directory first, because a write can run before the
+// directory exists.
 func (s *Store) lockFile() (func() error, error) {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return nil, fmt.Errorf("create favorites dir: %w", err)
+	}
 	return fileutil.LockFile(s.path + ".lock")
 }
 
@@ -308,113 +312,22 @@ func (s *Store) saveLocked(entries []Entry) error {
 func writeEntry(w io.Writer, e Entry) {
 	fmt.Fprintln(w, "[[entry]]")
 	fmt.Fprintf(w, "favorited_at = %q\n", e.FavoritedAt.UTC().Format(time.RFC3339))
-	fmt.Fprintf(w, "path = %q\n", e.Track.Path)
-	fmt.Fprintf(w, "title = %q\n", e.Track.Title)
-	if e.Track.Artist != "" {
-		fmt.Fprintf(w, "artist = %q\n", e.Track.Artist)
-	}
-	if e.Track.Album != "" {
-		fmt.Fprintf(w, "album = %q\n", e.Track.Album)
-	}
-	if e.Track.Genre != "" {
-		fmt.Fprintf(w, "genre = %q\n", e.Track.Genre)
-	}
-	if e.Track.Year != 0 {
-		fmt.Fprintf(w, "year = %d\n", e.Track.Year)
-	}
-	if e.Track.TrackNumber != 0 {
-		fmt.Fprintf(w, "track_number = %d\n", e.Track.TrackNumber)
-	}
-	if e.Track.DurationSecs != 0 {
-		fmt.Fprintf(w, "duration_secs = %d\n", e.Track.DurationSecs)
-	}
-	if e.Track.Feed {
-		fmt.Fprintln(w, "feed = true")
-	}
-	if e.Track.Realtime {
-		fmt.Fprintln(w, "realtime = true")
-	}
-	for k, v := range e.Track.ProviderMeta {
-		fmt.Fprintf(w, "provider_meta.%s = %q\n", k, v)
-	}
+	playlist.WriteTrackTOML(w, e.Track)
 }
 
 // parse skips unknown keys to keep the on-disk format forward-compatible.
+// It drops entries without a path, the only required field.
 func parse(data []byte) []Entry {
 	var entries []Entry
-	var cur *Entry
-
-	flush := func() {
-		if cur != nil {
-			entries = append(entries, *cur)
+	tomlutil.ParseSections(data, "entry", func(f map[string]string) {
+		e := Entry{Track: playlist.TrackFromTOML(f)}
+		if strings.TrimSpace(e.Track.Path) == "" {
+			return
 		}
-	}
-
-	for rawLine := range strings.SplitSeq(string(data), "\n") {
-		line := strings.TrimSpace(rawLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+		if t, err := time.Parse(time.RFC3339, f["favorited_at"]); err == nil {
+			e.FavoritedAt = t
 		}
-		if line == "[[entry]]" {
-			flush()
-			cur = &Entry{}
-			continue
-		}
-		if cur == nil {
-			continue
-		}
-		key, val, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		val = tomlutil.Unquote(strings.TrimSpace(val))
-		switch key {
-		case "favorited_at":
-			if t, err := time.Parse(time.RFC3339, val); err == nil {
-				cur.FavoritedAt = t
-			}
-		case "path":
-			cur.Track.Path = val
-			cur.Track.Stream = playlist.IsURL(val)
-		case "title":
-			cur.Track.Title = val
-		case "artist":
-			cur.Track.Artist = val
-		case "album":
-			cur.Track.Album = val
-		case "genre":
-			cur.Track.Genre = val
-		case "year":
-			if n, err := strconv.Atoi(val); err == nil {
-				cur.Track.Year = n
-			}
-		case "track_number":
-			if n, err := strconv.Atoi(val); err == nil {
-				cur.Track.TrackNumber = n
-			}
-		case "duration_secs":
-			if n, err := strconv.Atoi(val); err == nil {
-				cur.Track.DurationSecs = n
-			}
-		case "feed":
-			cur.Track.Feed = val == "true"
-		case "realtime":
-			cur.Track.Realtime = val == "true"
-		default:
-			if metaKey, ok := strings.CutPrefix(key, "provider_meta."); ok {
-				if cur.Track.ProviderMeta == nil {
-					cur.Track.ProviderMeta = make(map[string]string)
-				}
-				cur.Track.ProviderMeta[metaKey] = val
-			}
-		}
-	}
-	flush()
-
-	// Drop entries that failed to parse a path (the only required field).
-	entries = slices.DeleteFunc(entries, func(e Entry) bool {
-		return strings.TrimSpace(e.Track.Path) == ""
+		entries = append(entries, e)
 	})
 	return entries
 }

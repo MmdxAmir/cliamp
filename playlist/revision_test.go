@@ -359,7 +359,6 @@ func TestRevisionUnchangedByReadOnlyCalls(t *testing.T) {
 		func() { p.Track(0) },
 		func() { p.OrderWindow(0, 1) },
 		func() { p.OrderPosition(1) },
-		func() { p.BookmarkCount() },
 		func() { p.Shuffled() },
 		func() { p.Repeat() },
 	}

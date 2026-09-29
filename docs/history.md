@@ -1,9 +1,8 @@
 # Recently Played
 
 cliamp stores local listening history in `~/.config/cliamp/history.toml`. It
-records a play after you listen to at least 50% of a track. This is the same
-threshold that Last.fm and the Navidrome scrobbler use. Skipped tracks do not
-enter the list.
+records a track when the track starts to play, so the track that plays now is
+at the top of the list. A track that you skip stays in the list.
 
 ## Browsing in the TUI
 
@@ -43,13 +42,20 @@ year = 1979
 duration_secs = 208
 ```
 
-The default limit is 200 entries. cliamp removes older plays in FIFO order.
-Consecutive plays of the same track within 5 minutes update the top entry time
-instead of adding another entry.
+An entry can also hold `feed = true`, `realtime = true` and
+`provider_meta.<key>` lines, as `favorites.toml` does. With these keys, a
+Navidrome or Jellyfin track that you replay from Recently Played still
+scrobbles, and cliamp still recognizes a radio station or a podcast episode.
 
-## What is not recorded
+The default limit is 200 entries. cliamp removes the oldest entries first.
 
-- Tracks skipped before the 50% threshold.
-- Live streams without a known duration, such as radio stations and ICY streams.
-  cliamp cannot detect their 50% point.
-- Tracks with empty paths. This is a defensive check.
+The list holds each path one time only. When a track that is already in the
+list plays again, cliamp moves its entry to the top and sets the new time. The
+time since the last play has no effect. The entry keeps its stored tags and
+`provider_meta` keys when the new play does not have them.
+
+## What is recorded
+
+cliamp records every track that starts to play. This includes live streams,
+such as radio stations and ICY streams, and tracks with no known duration. The
+only exception is a track with an empty path.

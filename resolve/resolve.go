@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/internal/ytdlcookies"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
@@ -61,7 +62,7 @@ type uaTransport struct{ rt http.RoundTripper }
 
 func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
-	req.Header.Set("User-Agent", "cliamp/1.0 (https://github.com/bjarneo/cliamp)")
+	req.Header.Set("User-Agent", httpclient.UserAgent)
 	return t.rt.RoundTrip(req)
 }
 
@@ -72,6 +73,44 @@ type Result struct {
 	Pending []string         // feed/M3U URLs to resolve asynchronously
 }
 
+// remoteKind names the resolver that Remote uses for a URL.
+type remoteKind int
+
+const (
+	kindStream remoteKind = iota // no resolver claims the URL: play it as is
+	kindXiaoyuzhou
+	kindYouTubeMusic
+	kindYouTube
+	kindYTDL
+	kindFeed
+	kindM3U
+	kindPLS
+)
+
+// classifyRemote picks the resolver for the URL u from its form alone. It is
+// the one list that both Args and Remote use. The case order matters:
+// IsYTDL also matches YouTube and YouTube Music URLs, and a yt-dlp site wins
+// over a playlist or feed file extension.
+func classifyRemote(u string) remoteKind {
+	switch {
+	case playlist.IsXiaoyuzhouEpisode(u):
+		return kindXiaoyuzhou
+	case playlist.IsYouTubeMusicURL(u):
+		return kindYouTubeMusic
+	case playlist.IsYouTubeURL(u):
+		return kindYouTube
+	case playlist.IsYTDL(u):
+		return kindYTDL
+	case playlist.IsFeed(u):
+		return kindFeed
+	case playlist.IsM3U(u):
+		return kindM3U
+	case playlist.IsPLS(u):
+		return kindPLS
+	}
+	return kindStream
+}
+
 // Args separates CLI arguments into immediately-resolved local tracks
 // and pending remote URLs (feeds, M3U) that require HTTP fetching.
 func Args(args []string) (Result, error) {
@@ -80,7 +119,7 @@ func Args(args []string) (Result, error) {
 
 	for _, arg := range args {
 		if playlist.IsURL(arg) {
-			if playlist.IsFeed(arg) || playlist.IsM3U(arg) || playlist.IsPLS(arg) || playlist.IsYouTubeURL(arg) || playlist.IsYTDL(arg) || playlist.IsXiaoyuzhouEpisode(arg) || sniffFeedURL(arg) {
+			if classifyRemote(arg) != kindStream || sniffFeedURL(arg) {
 				r.Pending = append(r.Pending, arg)
 			} else {
 				files = append(files, arg)
@@ -123,20 +162,25 @@ func Args(args []string) (Result, error) {
 // Remote fetches feed and M3U URLs and returns the resolved tracks.
 //
 // Callers must pass URLs that have already been classified as remote
-// playlists, as Args does: a URL matching none of the cases below falls
-// through to resolveFeed. Use URL for input that has not been classified yet,
+// playlists, as Args does: a URL that classifyRemote reports as kindStream
+// goes to Feed. Use URL for input that has not been classified yet,
 // such as an address typed interactively.
 func Remote(urls []string) ([]playlist.Track, error) {
+	return remote(context.Background(), urls)
+}
+
+// remote is Remote with caller-controlled cancellation.
+func remote(ctx context.Context, urls []string) ([]playlist.Track, error) {
 	var tracks []playlist.Track
 	for _, u := range urls {
-		switch {
-		case playlist.IsXiaoyuzhouEpisode(u):
-			t, err := resolveXiaoyuzhouEpisode(u)
+		switch classifyRemote(u) {
+		case kindXiaoyuzhou:
+			t, err := resolveXiaoyuzhouEpisode(ctx, u)
 			if err != nil {
 				return nil, fmt.Errorf("resolving xiaoyuzhou episode %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
-		case playlist.IsYouTubeMusicURL(u):
+		case kindYouTubeMusic:
 			// YouTube Music requires yt-dlp; the native YouTube API client
 			// does not support music.youtube.com playlists.
 			//
@@ -149,65 +193,59 @@ func Remote(urls []string) ([]playlist.Track, error) {
 			target := u
 			if !ExpandYTPlaylist {
 				target = stripPlaylistParam(u)
-				t, err := resolveYTDL(target)
+				t, err := resolveYTDL(ctx, target, 0)
 				if err != nil {
 					return nil, fmt.Errorf("resolving youtube music %s: %w", u, err)
 				}
 				tracks = append(tracks, t...)
 			} else if hasListParam(u) {
-				t, err := resolveYTDL(target, YTDLRadioInitialItems)
+				t, err := resolveYTDL(ctx, target, YTDLRadioInitialItems)
 				if err != nil {
 					target = stripPlaylistParam(u)
-					t, err = resolveYTDL(target)
+					t, err = resolveYTDL(ctx, target, 0)
 				}
 				if err != nil {
 					return nil, fmt.Errorf("resolving youtube music %s: %w", u, err)
 				}
 				tracks = append(tracks, t...)
 			} else {
-				t, err := resolveYTDL(target)
+				t, err := resolveYTDL(ctx, target, 0)
 				if err != nil {
 					return nil, fmt.Errorf("resolving youtube music %s: %w", u, err)
 				}
 				tracks = append(tracks, t...)
 			}
-		case playlist.IsYouTubeURL(u):
+		case kindYouTube:
 			target := u
 			if !ExpandYTPlaylist {
 				target = stripPlaylistParam(u)
 			}
-			t, err := resolveYouTube(target)
+			t, err := resolveYouTube(ctx, target)
 			if err != nil {
 				return nil, fmt.Errorf("resolving youtube %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
-		case playlist.IsYTDL(u):
-			t, err := resolveYTDL(u)
+		case kindYTDL:
+			t, err := resolveYTDL(ctx, u, 0)
 			if err != nil {
 				return nil, fmt.Errorf("resolving yt-dlp %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
-		case playlist.IsFeed(u):
-			t, err := resolveFeed(u)
-			if err != nil {
-				return nil, fmt.Errorf("resolving feed %s: %w", u, err)
-			}
-			tracks = append(tracks, t...)
-		case playlist.IsM3U(u):
-			t, err := resolveM3U(u)
+		case kindM3U:
+			t, err := resolveM3U(ctx, u)
 			if err != nil {
 				return nil, fmt.Errorf("resolving m3u %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
-		case playlist.IsPLS(u):
-			t, err := resolvePLS(u)
+		case kindPLS:
+			t, err := resolvePLS(ctx, u)
 			if err != nil {
 				return nil, fmt.Errorf("resolving pls %s: %w", u, err)
 			}
 			tracks = append(tracks, t...)
 		default:
-			// URL was classified as a feed by content-type sniffing.
-			t, err := resolveFeed(u)
+			// kindFeed, or kindStream that Args sniffed as a feed.
+			t, err := Feed(ctx, u)
 			if err != nil {
 				return nil, fmt.Errorf("resolving feed %s: %w", u, err)
 			}
@@ -220,17 +258,24 @@ func Remote(urls []string) ([]playlist.Track, error) {
 // URL resolves one interactive URL using the same classification as command-line
 // arguments, including raw streams, feeds, remote playlists, and video pages.
 func URL(rawURL string) ([]playlist.Track, error) {
+	return URLContext(context.Background(), rawURL)
+}
+
+// URLContext is URL with caller-controlled cancellation. ctx covers the fetch
+// of a feed, a remote playlist or a video page. The feed sniff of a URL that
+// no resolver claims keeps its own 5 s limit.
+func URLContext(ctx context.Context, rawURL string) ([]playlist.Track, error) {
 	result, err := Args([]string{rawURL})
 	if err != nil {
 		return nil, err
 	}
 	tracks := result.Tracks
 	if len(result.Pending) > 0 {
-		remote, err := Remote(result.Pending)
+		pending, err := remote(ctx, result.Pending)
 		if err != nil {
 			return nil, err
 		}
-		tracks = append(tracks, remote...)
+		tracks = append(tracks, pending...)
 	}
 	return tracks, nil
 }
@@ -398,9 +443,13 @@ func scanTracks(files []string) []playlist.Track {
 	return tracks
 }
 
-// resolveFeed fetches a podcast RSS feed and returns tracks with metadata.
-func resolveFeed(feedURL string) ([]playlist.Track, error) {
-	return Feed(context.Background(), feedURL)
+// httpGet sends a GET request for rawURL with httpClient under ctx.
+func httpGet(ctx context.Context, rawURL string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	return httpClient.Do(req)
 }
 
 // maxPlaylistBody caps how much of a remote playlist we read before
@@ -412,8 +461,8 @@ const maxPlaylistBody = 1 << 20
 // single live/VOD stream — not a track list — so the original URL is handed to
 // the player, where ffmpeg resolves the relative chunklist/segment URIs and
 // follows the live segment window. Plain M3U files are parsed as track lists.
-func resolveM3U(m3uURL string) ([]playlist.Track, error) {
-	resp, err := httpClient.Get(m3uURL)
+func resolveM3U(ctx context.Context, m3uURL string) ([]playlist.Track, error) {
+	resp, err := httpGet(ctx, m3uURL)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +472,11 @@ func resolveM3U(m3uURL string) ([]playlist.Track, error) {
 		return nil, fmt.Errorf("http status %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPlaylistBody))
+	// Read one byte past the cap so that an oversized plain M3U is reported,
+	// as in resolvePLS. An HLS body only decides the stream type, and a long
+	// VOD media playlist can pass the cap, so an HLS body over the cap still
+	// plays.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPlaylistBody+1))
 	if err != nil {
 		return nil, err
 	}
@@ -439,6 +492,9 @@ func resolveM3U(m3uURL string) ([]playlist.Track, error) {
 		return []playlist.Track{t}, nil
 	}
 
+	if len(body) > maxPlaylistBody {
+		return nil, fmt.Errorf("m3u playlist exceeds %d bytes", maxPlaylistBody)
+	}
 	entries, err := parseM3U(bytes.NewReader(body), "")
 	if err != nil {
 		return nil, err
@@ -447,8 +503,8 @@ func resolveM3U(m3uURL string) ([]playlist.Track, error) {
 }
 
 // resolvePLS fetches a PLS playlist URL and returns tracks.
-func resolvePLS(plsURL string) ([]playlist.Track, error) {
-	resp, err := httpClient.Get(plsURL)
+func resolvePLS(ctx context.Context, plsURL string) ([]playlist.Track, error) {
+	resp, err := httpGet(ctx, plsURL)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +567,7 @@ const YTDLRadioInitialItems = 20
 // resolveYouTube uses the kkdai/youtube library to resolve YouTube URLs.
 // For playlist URLs it enumerates all entries natively; for single video URLs
 // it returns a single track with metadata from the YouTube API.
-func resolveYouTube(pageURL string) ([]playlist.Track, error) {
+func resolveYouTube(ctx context.Context, pageURL string) ([]playlist.Track, error) {
 	client := youtube.Client{}
 
 	// Only attempt playlist resolution if the URL contains a "list=" parameter,
@@ -526,13 +582,13 @@ func resolveYouTube(pageURL string) ([]playlist.Track, error) {
 		listID = u.Query().Get("list")
 	}
 	if isList && strings.HasPrefix(listID, "RD") {
-		if tracks, err := resolveYTDL(pageURL, YTDLRadioInitialItems); err == nil && len(tracks) > 0 {
+		if tracks, err := resolveYTDL(ctx, pageURL, YTDLRadioInitialItems); err == nil && len(tracks) > 0 {
 			return tracks, nil
 		}
 	}
 
 	if isList {
-		pl, err := client.GetPlaylist(pageURL)
+		pl, err := client.GetPlaylistContext(ctx, pageURL)
 		if err == nil && len(pl.Videos) > 0 {
 			tracks := make([]playlist.Track, 0, len(pl.Videos))
 			for _, entry := range pl.Videos {
@@ -548,13 +604,13 @@ func resolveYouTube(pageURL string) ([]playlist.Track, error) {
 		}
 		// Native library failed (e.g. YouTube Radio/Mix playlists are dynamic
 		// and unsupported). Fall back to yt-dlp which handles them.
-		if tracks, err := resolveYTDL(pageURL); err == nil && len(tracks) > 0 {
+		if tracks, err := resolveYTDL(ctx, pageURL, 0); err == nil && len(tracks) > 0 {
 			return tracks, nil
 		}
 	}
 
 	// Single video.
-	video, err := client.GetVideo(pageURL)
+	video, err := client.GetVideoContext(ctx, pageURL)
 	if err != nil {
 		return nil, fmt.Errorf("youtube resolve: %w", err)
 	}
@@ -568,69 +624,31 @@ func resolveYouTube(pageURL string) ([]playlist.Track, error) {
 	}}, nil
 }
 
-// ResolveYTDLBatch is like resolveYTDL but fetches a specific range
-// [start, start+count) from the playlist. Exported for UI incremental loading.
-// ResolveYTDLBatch fetches tracks starting at offset `start`.
-// If count > 0, fetches at most `count` items; if count == 0, fetches all remaining.
-// If an optional browser is provided, cookies from that browser are used;
-// otherwise, the cookie source configured for pageURL's host is used.
+// ytdlTimeout bounds one yt-dlp enumeration when the caller sets no limit.
+const ytdlTimeout = 30 * time.Second
+
+// ResolveYTDLBatch is ResolveYTDLBatchContext with a 30 s limit.
 func ResolveYTDLBatch(pageURL string, start, count int, browser ...string) ([]playlist.Track, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), ytdlTimeout)
 	defer cancel()
 	return ResolveYTDLBatchContext(ctx, pageURL, start, count, browser...)
 }
 
-// ResolveYTDLBatchPage returns the valid tracks and number of source entries
-// emitted by yt-dlp for a playlist range.
-func ResolveYTDLBatchPage(pageURL string, start, count int, browser ...string) ([]playlist.Track, int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return ResolveYTDLBatchPageContext(ctx, pageURL, start, count, browser...)
-}
-
-// ResolveYTDLBatchPageContext is ResolveYTDLBatchPage with caller-controlled
-// cancellation and timeout.
-func ResolveYTDLBatchPageContext(ctx context.Context, pageURL string, start, count int, browser ...string) ([]playlist.Track, int, error) {
-	end := 0
-	if count > 0 {
-		end = start + count
-	}
-	return resolveYTDLRangePageContext(ctx, pageURL, start, end, browser...)
-}
-
-// ResolveYTDLBatchContext is ResolveYTDLBatch with caller-controlled
-// cancellation and timeout.
+// ResolveYTDLBatchContext is ResolveYTDLBatchPageContext without the count of
+// source entries.
 func ResolveYTDLBatchContext(ctx context.Context, pageURL string, start, count int, browser ...string) ([]playlist.Track, error) {
-	end := 0
-	if count > 0 {
-		end = start + count
-	}
-	return resolveYTDLRangeContext(ctx, pageURL, start, end, browser...)
-}
-
-// resolveYTDL uses yt-dlp --flat-playlist to quickly enumerate tracks.
-// Tracks are returned with their page URLs as Path (not direct audio URLs).
-// If maxItems > 0, only the first maxItems tracks are fetched.
-func resolveYTDL(pageURL string, maxItems ...int) ([]playlist.Track, error) {
-	end := 0
-	if len(maxItems) > 0 {
-		end = maxItems[0]
-	}
-	return resolveYTDLRange(pageURL, 0, end)
-}
-
-func resolveYTDLRange(pageURL string, start, end int, browser ...string) ([]playlist.Track, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return resolveYTDLRangeContext(ctx, pageURL, start, end, browser...)
-}
-
-func resolveYTDLRangeContext(ctx context.Context, pageURL string, start, end int, browser ...string) ([]playlist.Track, error) {
-	tracks, _, err := resolveYTDLRangePageContext(ctx, pageURL, start, end, browser...)
+	tracks, _, err := ResolveYTDLBatchPageContext(ctx, pageURL, start, count, browser...)
 	return tracks, err
 }
 
-func resolveYTDLRangePageContext(ctx context.Context, pageURL string, start, end int, browser ...string) ([]playlist.Track, int, error) {
+// ResolveYTDLBatchPageContext uses yt-dlp --flat-playlist to list the entries
+// of pageURL from offset start. It fetches at most count entries, or all the
+// remaining entries when count is 0. The tracks keep their page URLs as Path,
+// not direct audio URLs. It also returns the number of source entries that
+// yt-dlp emitted, which includes entries that give no track. A non-empty
+// browser supplies the cookies. Otherwise the cookie source configured for the
+// host of pageURL applies.
+func ResolveYTDLBatchPageContext(ctx context.Context, pageURL string, start, count int, browser ...string) ([]playlist.Track, int, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return nil, 0, fmt.Errorf("yt-dlp not found in PATH — see https://github.com/yt-dlp/yt-dlp#installation")
 	}
@@ -648,6 +666,10 @@ func resolveYTDLRangePageContext(ctx context.Context, pageURL string, start, end
 	}
 	if start > 0 {
 		args = append(args, "--playlist-start", strconv.Itoa(start+1)) // yt-dlp is 1-based
+	}
+	end := 0
+	if count > 0 {
+		end = start + count
 	}
 	if end > 0 {
 		args = append(args, "--playlist-end", strconv.Itoa(end))
@@ -669,6 +691,14 @@ func resolveYTDLRangePageContext(ctx context.Context, pageURL string, start, end
 		return nil, 0, fmt.Errorf("yt-dlp: %w", err)
 	}
 	return parseYTDLTracks(bytes.NewReader(stdout))
+}
+
+// resolveYTDL lists the first maxItems entries of pageURL, or all entries when
+// maxItems is 0. Each call gets its own 30 s limit under ctx.
+func resolveYTDL(ctx context.Context, pageURL string, maxItems int) ([]playlist.Track, error) {
+	ctx, cancel := context.WithTimeout(ctx, ytdlTimeout)
+	defer cancel()
+	return ResolveYTDLBatchContext(ctx, pageURL, 0, maxItems)
 }
 
 func parseYTDLTracks(r io.Reader) ([]playlist.Track, int, error) {

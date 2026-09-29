@@ -470,7 +470,7 @@ func TestPlaylistsCountIncludesDirTracks(t *testing.T) {
 	}
 }
 
-func TestSetBookmarkMaterializesDirTrack(t *testing.T) {
+func TestSavePlaylistMaterializesDirTrack(t *testing.T) {
 	p := newTestProvider(t)
 	audio := t.TempDir()
 	writeAudioFile(t, filepath.Join(audio, "a.mp3"))
@@ -478,10 +478,16 @@ func TestSetBookmarkMaterializesDirTrack(t *testing.T) {
 		t.Fatalf("CreateDirPlaylist: %v", err)
 	}
 
-	if err := p.SetBookmark("music", 0); err != nil {
-		t.Fatalf("SetBookmark: %v", err)
-	}
 	tracks, err := p.Tracks("music")
+	if err != nil {
+		t.Fatalf("Tracks: %v", err)
+	}
+	tracks[0].Bookmark = true
+	tracks[0].DirSourced = false
+	if err := p.SavePlaylist("music", tracks); err != nil {
+		t.Fatalf("SavePlaylist: %v", err)
+	}
+	tracks, err = p.Tracks("music")
 	if err != nil {
 		t.Fatalf("Tracks: %v", err)
 	}
@@ -515,8 +521,9 @@ func TestSavePlaylistReadErrorAbortsRewrite(t *testing.T) {
 	}
 	// A failed read must abort the rewrite instead of replacing the playlist
 	// with a copy missing its [[dir]] sections.
-	if err := p.SetBookmark("music", 0); err == nil {
-		t.Fatal("SetBookmark should fail when the playlist cannot be read")
+	track := playlist.Track{Path: filepath.Join(audio, "a.mp3"), Title: "A"}
+	if err := p.SavePlaylist("music", []playlist.Track{track}); err == nil {
+		t.Fatal("SavePlaylist should fail when the playlist cannot be read")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -524,26 +531,6 @@ func TestSavePlaylistReadErrorAbortsRewrite(t *testing.T) {
 	}
 	if !info.IsDir() {
 		t.Fatal("playlist was rewritten despite read failure")
-	}
-}
-
-func TestSetBookmarkByPathMaterializesDirTrack(t *testing.T) {
-	p := newTestProvider(t)
-	audio := t.TempDir()
-	writeAudioFile(t, filepath.Join(audio, "a.mp3"))
-	if err := p.CreateDirPlaylist("music", []string{audio}); err != nil {
-		t.Fatalf("CreateDirPlaylist: %v", err)
-	}
-	trackPath := filepath.Join(audio, "a.mp3")
-	if err := p.SetBookmarkByPath("music", trackPath); err != nil {
-		t.Fatalf("SetBookmarkByPath: %v", err)
-	}
-	tracks, err := p.Tracks("music")
-	if err != nil {
-		t.Fatalf("Tracks: %v", err)
-	}
-	if len(tracks) != 1 || !tracks[0].Bookmark || tracks[0].DirSourced {
-		t.Fatalf("materialized bookmark failed: %+v", tracks)
 	}
 }
 
@@ -761,7 +748,7 @@ func TestSavePlaylistPreservesSectionOrder(t *testing.T) {
 	}
 }
 
-func TestSetBookmarkKeepsDirPosition(t *testing.T) {
+func TestSavePlaylistMaterializedKeepsDirPosition(t *testing.T) {
 	p := newTestProvider(t)
 	dirA := t.TempDir()
 	writeAudioFile(t, filepath.Join(dirA, "a.mp3"))
@@ -774,11 +761,17 @@ func TestSetBookmarkKeepsDirPosition(t *testing.T) {
 	writeAudioFile(t, y)
 	writeInterleavedDoc(t, p, x, dirA, y, dirB)
 
-	// Expanded: x, a, y, b, c. Bookmark b (index 3).
-	if err := p.SetBookmark("mix", 3); err != nil {
-		t.Fatalf("SetBookmark: %v", err)
-	}
+	// Expanded: x, a, y, b, c. Materialize b (index 3) with a flag set.
 	tracks, err := p.Tracks("mix")
+	if err != nil {
+		t.Fatalf("Tracks: %v", err)
+	}
+	tracks[3].Bookmark = true
+	tracks[3].DirSourced = false
+	if err := p.SavePlaylist("mix", tracks); err != nil {
+		t.Fatalf("SavePlaylist: %v", err)
+	}
+	tracks, err = p.Tracks("mix")
 	if err != nil {
 		t.Fatalf("Tracks: %v", err)
 	}
@@ -1047,6 +1040,57 @@ func TestPlaylistsMigratesLegacyFavoritesToml(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("migrated playlist not listed; got %v", lists)
+	}
+}
+
+// A physical Favorites.toml is listed under the legacy name only when it
+// moved there. Otherwise the legacy file is listed once, from its own entry.
+func TestPlaylistsListsLegacyFavoritesOnce(t *testing.T) {
+	const two = "[[track]]\npath = \"/a.mp3\"\n\n[[track]]\npath = \"/b.mp3\"\n"
+	const one = "[[track]]\npath = \"/c.mp3\"\n"
+	tests := []struct {
+		name       string
+		legacy     string // content of the legacy file before the listing, if any
+		wantTracks int    // track count of the listed legacy playlist
+		wantSource bool   // Favorites.toml is still on disk after the listing
+	}{
+		{name: "only Favorites.toml", wantTracks: 2},
+		{name: "both files", legacy: one, wantTracks: 1, wantSource: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestProvider(t)
+			src := filepath.Join(p.dir, "Favorites.toml")
+			if err := os.WriteFile(src, []byte(two), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tt.legacy != "" {
+				dst := filepath.Join(p.dir, favoritesLegacyName+".toml")
+				if err := os.WriteFile(dst, []byte(tt.legacy), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			lists, err := p.Playlists()
+			if err != nil {
+				t.Fatalf("Playlists: %v", err)
+			}
+			var legacy []playlist.PlaylistInfo
+			for _, l := range lists {
+				if l.ID == favoritesLegacyName {
+					legacy = append(legacy, l)
+				}
+			}
+			if len(legacy) != 1 {
+				t.Fatalf("legacy playlist listed %d times, want 1: %+v", len(legacy), lists)
+			}
+			if legacy[0].TrackCount != tt.wantTracks {
+				t.Errorf("legacy TrackCount = %d, want %d", legacy[0].TrackCount, tt.wantTracks)
+			}
+			if _, err := os.Stat(src); (err == nil) != tt.wantSource {
+				t.Errorf("Favorites.toml on disk = %v, want %v", err == nil, tt.wantSource)
+			}
+		})
 	}
 }
 
