@@ -1,7 +1,5 @@
 package ui
 
-import "time"
-
 // geyserDriver draws a particle fountain rooted at the bottom of the panel.
 // Sustained loudness keeps a steady column of mist, bass transients launch
 // strong vertical jets, and every particle then arcs back down under gravity
@@ -9,6 +7,8 @@ import "time"
 // produced them, so dense bass passages paint the column red and treble
 // embellishments add green sparkles to the canopy.
 type geyserDriver struct {
+	spectrumDriverBase
+
 	grid      brailleGrid
 	particles []geyserParticle
 	rng       uint64
@@ -23,10 +23,6 @@ type geyserParticle struct {
 }
 
 func newGeyserDriver() visModeDriver { return &geyserDriver{rng: 0xFEED5EED} }
-
-func (*geyserDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
-	return spectrumAnalysisSpec(DefaultSpectrumBands)
-}
 
 func (d *geyserDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	defaultDriverTick(v, ctx, d.AnalysisSpec(v))
@@ -114,16 +110,12 @@ func (d *geyserDriver) spawn(x, y, spread int, vy, bass, mid float64) {
 	})
 }
 
-func (*geyserDriver) TickInterval(_ *Visualizer, ctx VisTickContext) time.Duration {
-	return defaultDriverTickInterval(ctx)
-}
 func (d *geyserDriver) pauseSettled() bool { return len(d.particles) == 0 }
 func (d *geyserDriver) OnEnter(*Visualizer) {
 	d.grid = brailleGrid{}
 	d.particles = nil
 	d.prevBass = 0
 }
-func (*geyserDriver) OnLeave(*Visualizer) {}
 func (d *geyserDriver) Render(v *Visualizer) string {
 	return d.grid.render(v.Rows)
 }

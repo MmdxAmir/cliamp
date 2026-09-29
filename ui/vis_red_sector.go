@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"math"
 	"strings"
-	"time"
 
 	"charm.land/lipgloss/v2"
 )
@@ -93,6 +92,8 @@ var redSectorFaces = [6][4]int{
 // frames. Both outlive a single render, which is why this mode carries a
 // driver of its own rather than a plain render function.
 type redSectorDriver struct {
+	spectrumDriverBase
+
 	grid    brailleGrid
 	ceiling [redSectorBars]float64
 	floor   [redSectorBars]float64
@@ -115,10 +116,6 @@ func (d *redSectorDriver) reset() {
 	d.grid = newRedSectorGrid()
 }
 
-func (*redSectorDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
-	return spectrumAnalysisSpec(DefaultSpectrumBands)
-}
-
 func (d *redSectorDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	defaultDriverTick(v, ctx, d.AnalysisSpec(v))
 	if ctx.OverlayActive {
@@ -127,13 +124,7 @@ func (d *redSectorDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	d.advance(v.SmoothedBands())
 }
 
-func (*redSectorDriver) TickInterval(_ *Visualizer, ctx VisTickContext) time.Duration {
-	return defaultDriverTickInterval(ctx)
-}
-
 func (d *redSectorDriver) OnEnter(*Visualizer) { d.reset() }
-
-func (*redSectorDriver) OnLeave(*Visualizer) {}
 
 // advance reads each bar's pair of bands and eases its height.
 //

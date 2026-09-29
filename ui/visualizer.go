@@ -316,6 +316,21 @@ func (*renderOnlyDriver) OnEnter(*Visualizer) {}
 
 func (*renderOnlyDriver) OnLeave(*Visualizer) {}
 
+// spectrumDriverBase gives a stateful spectrum driver the default analysis
+// spec, the default tick cadence and an empty OnLeave. A driver embeds it and
+// writes only its own Tick, Render and OnEnter.
+type spectrumDriverBase struct{}
+
+func (spectrumDriverBase) AnalysisSpec(*Visualizer) VisAnalysisSpec {
+	return spectrumAnalysisSpec(DefaultSpectrumBands)
+}
+
+func (spectrumDriverBase) TickInterval(_ *Visualizer, ctx VisTickContext) time.Duration {
+	return defaultDriverTickInterval(ctx)
+}
+
+func (spectrumDriverBase) OnLeave(*Visualizer) {}
+
 type noOpDriver struct{}
 
 func (*noOpDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec { return VisAnalysisSpec{} }
@@ -1022,11 +1037,8 @@ func (v *Visualizer) driverFor(mode VisMode) visModeDriver {
 }
 
 type luaModeDriver struct {
+	spectrumDriverBase
 	index int
-}
-
-func (*luaModeDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
-	return spectrumAnalysisSpec(DefaultSpectrumBands)
 }
 
 func (d *luaModeDriver) Render(v *Visualizer) string {
@@ -1094,13 +1106,7 @@ func (d *luaModeDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	defaultDriverTick(v, ctx, d.AnalysisSpec(v))
 }
 
-func (*luaModeDriver) TickInterval(_ *Visualizer, ctx VisTickContext) time.Duration {
-	return defaultDriverTickInterval(ctx)
-}
-
 func (*luaModeDriver) OnEnter(*Visualizer) {}
-
-func (*luaModeDriver) OnLeave(*Visualizer) {}
 
 func luaBands(src []float64) [DefaultSpectrumBands]float64 {
 	var bands [DefaultSpectrumBands]float64

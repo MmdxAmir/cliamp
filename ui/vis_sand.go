@@ -1,9 +1,6 @@
 package ui
 
-import (
-	"strings"
-	"time"
-)
+import "strings"
 
 // sandDriver runs a falling-sand cellular automaton on the dot grid. Each
 // frame, new grains drop from the top — colored by which spectrum band
@@ -12,6 +9,8 @@ import (
 // nudging a row sideways, which destabilises slopes and triggers little
 // avalanches; loud passages keep the panel actively pouring.
 type sandDriver struct {
+	spectrumDriverBase
+
 	grid     brailleGrid // tiers 1, 2 and 3 are green, yellow and red
 	rng      uint64
 	prevBass float64 // for detecting bass transients that bump the bed
@@ -35,10 +34,6 @@ type sandParticle struct {
 
 func newSandDriver() visModeDriver {
 	return &sandDriver{rng: 0x5A4D5A4D5A4D}
-}
-
-func (*sandDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
-	return spectrumAnalysisSpec(DefaultSpectrumBands)
 }
 
 func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
@@ -286,10 +281,6 @@ func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	}
 }
 
-func (*sandDriver) TickInterval(_ *Visualizer, ctx VisTickContext) time.Duration {
-	return defaultDriverTickInterval(ctx)
-}
-
 func (d *sandDriver) pauseSettled() bool {
 	return d.explosionTTL == 0 && len(d.particles) == 0
 }
@@ -300,8 +291,6 @@ func (d *sandDriver) OnEnter(*Visualizer) {
 	d.particles = nil
 	d.explosionTTL = 0
 }
-
-func (*sandDriver) OnLeave(*Visualizer) {}
 
 // startExplosion converts every grain on the grid into a ballistic particle
 // with a random outward velocity, then enters the multi-frame explosion

@@ -582,3 +582,30 @@ func TestTerrainTickSkipsAnalyzeUnderOverlay(t *testing.T) {
 		t.Fatalf("terrain buffer changed under overlay: got %v want %v", driver.buf, snapshot)
 	}
 }
+
+// The stateful spectrum drivers and the Lua driver take their analysis spec,
+// cadence and OnLeave from spectrumDriverBase.
+func TestSpectrumDriverBaseDefaults(t *testing.T) {
+	v := NewVisualizer(44100)
+	v.RegisterLuaVisualizers([]string{"plugin"}, nil)
+	t.Cleanup(func() { delete(visNameMap, "plugin") })
+	contexts := []VisTickContext{
+		{Playing: true},
+		{},
+		{Playing: true, OverlayActive: true},
+	}
+	for _, mode := range []VisMode{VisFlame, VisTerrain, VisMosaic, VisSand, VisGeyser, VisRedSector, VisCount} {
+		driver := v.driverFor(mode)
+		v.Mode = mode
+		t.Run(v.ModeName(), func(t *testing.T) {
+			if got, want := driver.AnalysisSpec(v), spectrumAnalysisSpec(DefaultSpectrumBands); got != want {
+				t.Errorf("AnalysisSpec = %+v, want %+v", got, want)
+			}
+			for _, ctx := range contexts {
+				if got, want := driver.TickInterval(v, ctx), defaultDriverTickInterval(ctx); got != want {
+					t.Errorf("TickInterval(%+v) = %v, want %v", ctx, got, want)
+				}
+			}
+		})
+	}
+}

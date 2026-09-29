@@ -1,9 +1,6 @@
 package ui
 
-import (
-	"strings"
-	"time"
-)
+import "strings"
 
 // mosaicDriver renders a static heatmap of small tiles. The grid never
 // scrolls: each tile sits in a fixed (row, column) position and lights up or
@@ -12,6 +9,8 @@ import (
 // while quiet passages light only the most-sensitive ones — producing a
 // speckled, gradually-saturating pattern that tracks the music.
 type mosaicDriver struct {
+	spectrumDriverBase
+
 	rows, tiles int
 	cells       []mosaicCellState
 	rng         uint64
@@ -25,10 +24,6 @@ type mosaicCellState struct {
 
 func newMosaicDriver() visModeDriver {
 	return &mosaicDriver{rng: 0xC1AB1A1015D5}
-}
-
-func (*mosaicDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
-	return spectrumAnalysisSpec(DefaultSpectrumBands)
 }
 
 const (
@@ -205,10 +200,6 @@ func (d *mosaicDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	}
 }
 
-func (*mosaicDriver) TickInterval(_ *Visualizer, ctx VisTickContext) time.Duration {
-	return defaultDriverTickInterval(ctx)
-}
-
 func (d *mosaicDriver) OnEnter(*Visualizer) {
 	// Force the grid to be regenerated on next Render/Tick so each visit
 	// reshuffles thresholds and band assignments — keeps the visualizer fresh.
@@ -216,5 +207,3 @@ func (d *mosaicDriver) OnEnter(*Visualizer) {
 	d.rows = 0
 	d.tiles = 0
 }
-
-func (*mosaicDriver) OnLeave(*Visualizer) {}

@@ -1,9 +1,6 @@
 package ui
 
-import (
-	"strings"
-	"time"
-)
+import "strings"
 
 // flameDriver renders a fire effect using the classic doom-fire propagation:
 // a heat field is fed at the bottom row from the spectrum, then each frame
@@ -13,6 +10,8 @@ import (
 // loud passages feed taller flames; quiet passages settle into a low,
 // flickering bed of coals.
 type flameDriver struct {
+	spectrumDriverBase
+
 	heat             []float64
 	dotRows, dotCols int
 	rng              uint64
@@ -21,10 +20,6 @@ type flameDriver struct {
 
 func newFlameDriver() visModeDriver {
 	return &flameDriver{rng: 0xF1A3C0DE0BADCAFE}
-}
-
-func (*flameDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
-	return spectrumAnalysisSpec(DefaultSpectrumBands)
 }
 
 func (d *flameDriver) ensure(rows, cols int) {
@@ -105,10 +100,6 @@ func (d *flameDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	}
 }
 
-func (*flameDriver) TickInterval(_ *Visualizer, ctx VisTickContext) time.Duration {
-	return defaultDriverTickInterval(ctx)
-}
-
 func (d *flameDriver) OnEnter(v *Visualizer) {
 	if v == nil {
 		d.heat = nil
@@ -121,8 +112,6 @@ func (d *flameDriver) OnEnter(v *Visualizer) {
 		d.heat[i] = 0
 	}
 }
-
-func (*flameDriver) OnLeave(*Visualizer) {}
 
 func (d *flameDriver) Render(v *Visualizer) string {
 	height := v.Rows
