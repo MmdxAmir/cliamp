@@ -251,7 +251,7 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 		}
 		track := ipcTrackFromInfo(*request.Track)
 		if track.Feed {
-			return ipcFeedLoadCmd(ctx, ipc.QueueRequestMsg{Op: request.Cmd}, track, jobs, jobID, request.Revision)
+			return ipcFeedLoadCmd(ctx, request.Cmd, track, jobs, jobID, request.Revision)
 		}
 		if request.Cmd == "track.play" {
 			cmd := m.playTrackImmediate(track)

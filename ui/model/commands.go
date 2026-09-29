@@ -120,13 +120,6 @@ type streamPreloadedMsg struct {
 
 type attachNotifierMsg struct{ notifier playback.Notifier }
 
-// ytdlResolvedMsg carries a lazily resolved yt-dlp track (direct audio URL).
-type ytdlResolvedMsg struct {
-	index int
-	track playlist.Track
-	err   error
-}
-
 // ytdlBatchMsg carries an incrementally loaded batch of yt-dlp tracks.
 // The gen field ties the response to a specific batch session so stale
 // responses from a previous or reloaded playlist are discarded.

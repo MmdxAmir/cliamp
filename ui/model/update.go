@@ -10,11 +10,8 @@ import (
 
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/playback"
-	"github.com/bjarneo/cliamp/ipc"
-	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/theme"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -886,19 +883,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case ytdlResolvedMsg:
-		m.buffering = false
-		if msg.err != nil {
-			m.err = msg.err
-			return m, nil
-		}
-		// Update the track with the downloaded local file and metadata.
-		m.playlist.SetTrack(msg.index, msg.track)
-		// Play the local file (seekable).
-		cmd := m.playTrack(msg.track)
-		m.notifyAll()
-		return m, cmd
-
 	case error:
 		if errors.Is(msg, playlist.ErrNeedsAuth) {
 			m.provLoading = false
@@ -1143,218 +1127,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status.Show(msg.Text, ttl)
 		return m, nil
 
-	case ipc.LoadMsg:
-		tracks, err := m.localProvider.Tracks(msg.Playlist)
-		if err != nil {
-			if msg.Reply != nil {
-				msg.Reply <- ipc.Response{OK: false, Error: fmt.Sprintf("playlist %q: %v", msg.Playlist, err)}
-			}
-			return m, nil
-		}
-		m.retireTracksPaging()
-		m.replacePlaylist(tracks)
-		m.setHeaderStateFromTracks(tracks)
-		if msg.Playlist != history.PlaylistName {
-			m.loadedPlaylist = msg.Playlist
-		} else {
-			m.loadedPlaylist = ""
-		}
-		cmd := m.playCurrentTrack()
-		m.notifyAll()
-		if msg.Reply != nil {
-			msg.Reply <- ipc.Response{OK: true, Playlist: msg.Playlist, Total: len(tracks)}
-		}
-		return m, cmd
-	case ipc.QueueMsg:
-		t := playlist.TrackFromPath(msg.Path)
-		m.playlist.Add(t)
-		m.loadedPlaylist = ""
-		m.addToHeaderState([]playlist.Track{t})
-		m.notifyAll()
-		return m, nil
-	case ipc.ThemeMsg:
-		// Reload themes from disk to pick up new custom themes.
-		// Same pattern as openThemePicker() — LoadAll is fast (<1ms for local TOML files).
-		m.themes = theme.LoadAll()
-		if m.SetTheme(msg.Name) {
-			// Persist immediately so the setting survives ungraceful exits.
-			themeName := msg.Name
-			if strings.EqualFold(themeName, "default") {
-				themeName = ""
-			}
-			_ = m.configSaver.Save("theme", fmt.Sprintf("%q", themeName))
-			if msg.Reply != nil {
-				msg.Reply <- ipc.Response{OK: true}
-			}
-		} else {
-			if msg.Reply != nil {
-				msg.Reply <- ipc.Response{OK: false, Error: fmt.Sprintf("theme %q not found", msg.Name)}
-			}
-		}
-		return m, nil
-	case ipc.VisMsg:
-		if m.vis == nil {
-			if msg.Reply != nil {
-				msg.Reply <- ipc.Response{OK: false, Error: "visualizer not available"}
-			}
-			return m, nil
-		}
-		var resp ipc.Response
-		if strings.EqualFold(msg.Name, "next") {
-			m.vis.CycleMode()
-			m.vis.RequestRefresh()
-			m.refreshChrome()
-			resp = ipc.Response{OK: true, Visualizer: m.vis.ModeName()}
-		} else if m.SetVisualizer(msg.Name) {
-			resp = ipc.Response{OK: true, Visualizer: m.vis.ModeName()}
-		} else {
-			resp = ipc.Response{OK: false, Error: fmt.Sprintf("visualizer %q not found", msg.Name)}
-		}
-		if msg.Reply != nil {
-			msg.Reply <- resp
-		}
-		return m, nil
-	case ipc.ShuffleMsg:
-		switch strings.ToLower(msg.Name) {
-		case "on":
-			if !m.playlist.Shuffled() {
-				m.playlist.ToggleShuffle()
-			}
-		case "off":
-			if m.playlist.Shuffled() {
-				m.playlist.ToggleShuffle()
-			}
-		default: // "toggle" or empty
-			m.playlist.ToggleShuffle()
-		}
-		shuffled := m.playlist.Shuffled()
-		if err := m.configSaver.Save("shuffle", fmt.Sprintf("%v", shuffled)); err != nil {
-			m.status.Errorf(statusTTLDefault, "Config save failed: %s", err)
-		}
-		cmd := m.rearmPreload()
-		if msg.Reply != nil {
-			msg.Reply <- ipc.Response{OK: true, Shuffle: &shuffled}
-		}
-		return m, cmd
-
-	case ipc.RepeatMsg:
-		switch strings.ToLower(msg.Name) {
-		case "off":
-			m.playlist.SetRepeat(playlist.RepeatOff)
-		case "all":
-			m.playlist.SetRepeat(playlist.RepeatAll)
-		case "one":
-			m.playlist.SetRepeat(playlist.RepeatOne)
-		default: // "cycle" or empty
-			m.playlist.CycleRepeat()
-		}
-		mode := m.playlist.Repeat()
-		if err := m.configSaver.Save("repeat", fmt.Sprintf("%q", mode.String())); err != nil {
-			m.status.Errorf(statusTTLDefault, "Config save failed: %s", err)
-		}
-		cmd := m.rearmPreload()
-		if msg.Reply != nil {
-			msg.Reply <- ipc.Response{OK: true, Repeat: mode.String()}
-		}
-		return m, cmd
-
-	case ipc.MonoMsg:
-		switch strings.ToLower(msg.Name) {
-		case "on":
-			if !m.player.Mono() {
-				m.player.ToggleMono()
-			}
-		case "off":
-			if m.player.Mono() {
-				m.player.ToggleMono()
-			}
-		default: // "toggle" or empty
-			m.player.ToggleMono()
-		}
-		mono := m.player.Mono()
-		if msg.Reply != nil {
-			msg.Reply <- ipc.Response{OK: true, Mono: &mono}
-		}
-		return m, nil
-
-	case ipc.SpeedMsg:
-		m.player.SetSpeed(msg.Speed)
-		m.saveSpeed()
-		if msg.Reply != nil {
-			msg.Reply <- ipc.Response{OK: true, Speed: m.player.Speed()}
-		}
-		return m, nil
-
-	case ipc.EQMsg:
-		if msg.Band > 0 || (msg.Band == 0 && msg.Name == "") {
-			// Set a specific band (0-9).
-			m.setCustomEQBand(msg.Band, msg.Value)
-			if msg.Reply != nil {
-				msg.Reply <- ipc.Response{OK: true, EQPreset: m.EQPresetName()}
-			}
-		} else if msg.Name != "" {
-			// Apply a preset by name.
-			m.SetEQPreset(msg.Name, nil)
-			m.scheduleEQSave()
-			if msg.Reply != nil {
-				msg.Reply <- ipc.Response{OK: true, EQPreset: m.EQPresetName()}
-			}
-		} else {
-			if msg.Reply != nil {
-				msg.Reply <- ipc.Response{OK: false, Error: "eq requires a preset name or --band"}
-			}
-		}
-		return m, nil
-
-	case ipc.DeviceMsg:
-		if strings.EqualFold(msg.Name, "list") {
-			devices, err := player.ListAudioDevices()
-			if err != nil {
-				if msg.Reply != nil {
-					msg.Reply <- ipc.Response{OK: false, Error: fmt.Sprintf("list devices: %v", err)}
-				}
-				return m, nil
-			}
-			// Encode device list as newline-separated string in the Device field.
-			var lines []string
-			items := make([]ipc.DeviceInfo, 0, len(devices))
-			for _, d := range devices {
-				marker := "  "
-				if d.Active {
-					marker = "* "
-				}
-				lines = append(lines, fmt.Sprintf("%s%s", marker, d.Name))
-				items = append(items, ipc.DeviceInfo{Name: d.Name, Active: d.Active})
-			}
-			if msg.Reply != nil {
-				msg.Reply <- ipc.Response{OK: true, Device: strings.Join(lines, "\n"), Devices: items}
-			}
-			return m, nil
-		}
-		err := player.SwitchAudioDevice(msg.Name)
-		if err != nil {
-			if msg.Reply != nil {
-				msg.Reply <- ipc.Response{OK: false, Error: fmt.Sprintf("switch device: %v", err)}
-			}
-			return m, nil
-		}
-		_ = m.configSaver.Save("audio_device", msg.Name)
-		m.status.Showf(statusTTLDefault, "Audio output: %s", msg.Name)
-		// Invalidate cached list so the next open refreshes Active markers.
-		m.devicePicker.devices = nil
-		if msg.Reply != nil {
-			msg.Reply <- ipc.Response{OK: true, Device: msg.Name}
-		}
-		return m, nil
-
-	case ipc.QueueRequestMsg:
-		cmd := m.handleIPCQueue(msg)
-		return m, cmd
-
-	case ipc.LibraryRequestMsg:
-		cmd := m.handleIPCLibrary(msg)
-		return m, cmd
-
 	case ipcProviderLoadResult:
 		cmd := m.handleIPCProviderLoad(msg)
 		return m, cmd
@@ -1363,24 +1135,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.handleIPCFeedLoad(msg)
 		return m, cmd
 
-	case ipc.LyricsRequestMsg:
-		cmd := m.handleIPCLyrics(msg)
-		return m, cmd
-
-	case ipc.HistoryRequestMsg:
-		cmd := m.handleIPCHistory(msg)
-		return m, cmd
-
-	case ipc.URLRequestMsg:
-		cmd := m.handleIPCURL(msg)
-		return m, cmd
-
 	case ipcURLLoadResult:
 		cmd := m.handleIPCURLResult(msg)
-		return m, cmd
-
-	case ipc.SaveRequestMsg:
-		cmd := m.handleIPCSave(msg)
 		return m, cmd
 
 	case V2RequestMsg:
