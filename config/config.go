@@ -89,7 +89,10 @@ func unquote(s string) string {
 // # comment that whitespace separates from the value.
 func isComment(rest string) bool {
 	trimmed := strings.TrimLeft(rest, " \t")
-	return rest == "" || (len(trimmed) < len(rest) && strings.HasPrefix(trimmed, "#"))
+	if trimmed == "" {
+		return true
+	}
+	return len(trimmed) < len(rest) && trimmed[0] == '#'
 }
 
 var quoteEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
