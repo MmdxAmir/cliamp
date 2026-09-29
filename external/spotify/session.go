@@ -509,7 +509,7 @@ func doWebAPIAuth(ctx context.Context, clientID string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Spotify: Web API token refreshed.")
+	applog.Info("spotify: web api token refreshed")
 	return token, nil
 }
 
@@ -600,9 +600,10 @@ func (s *Session) initPlayer() error {
 	return nil
 }
 
-// NewStream creates a decoded audio stream for the given Spotify track ID. The
-// caller must retain and invoke the returned cancel function for the lifetime
-// of a successful stream. ctx bounds setup independently of that lifetime.
+// NewStream creates a decoded audio stream for the given Spotify track ID,
+// starting at positionMs. The caller must retain and invoke the returned
+// cancel function for the lifetime of a successful stream. ctx bounds setup
+// independently of that lifetime.
 //
 // Holds s.mu.RLock() across the librespot network call. Multiple concurrent
 // NewStream / webApi callers can run in parallel (RLock is shared), so rapid
@@ -610,7 +611,7 @@ func (s *Session) initPlayer() error {
 // Lock and will wait for in-flight callers to finish before tearing down the
 // player — without this, the swap could call oldPlayer.Close() while we are
 // still reading from it.
-func (s *Session) NewStream(ctx context.Context, spotID librespot.SpotifyId, bitrate int) (*librespotPlayer.Stream, context.CancelFunc, error) {
+func (s *Session) NewStream(ctx context.Context, spotID librespot.SpotifyId, bitrate int, positionMs int64) (*librespotPlayer.Stream, context.CancelFunc, error) {
 	streamCtx, cancel := context.WithCancel(context.Background())
 	client := newSpotifyStreamHTTPClient(streamCtx, http.DefaultTransport)
 
@@ -623,7 +624,7 @@ func (s *Session) NewStream(ctx context.Context, spotID librespot.SpotifyId, bit
 		if s.player == nil {
 			return nil, fmt.Errorf("spotify: session closed")
 		}
-		return s.player.NewStream(ctx, client, spotID, bitrate, 0)
+		return s.player.NewStream(ctx, client, spotID, bitrate, positionMs)
 	})
 }
 
@@ -640,7 +641,7 @@ func (s *Session) webApiWithBody(ctx context.Context, method, path string, query
 	s.mu.RUnlock()
 
 	if ts == nil {
-		return nil, fmt.Errorf("spotify: web api token unavailable, run 'cliamp spotify reset' and sign in again: %w", playlist.ErrNeedsAuth)
+		return nil, fmt.Errorf("spotify: web api token unavailable, sign in again: %w", playlist.ErrNeedsAuth)
 	}
 	tok, err := ts.Token()
 	if err != nil {

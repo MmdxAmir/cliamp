@@ -101,6 +101,61 @@ func restoreJellyfinContext(state resume.State, prov *jellyfin.Provider) ([]play
 	return tracks, index, tracks[index].Path, true
 }
 
+// logProviderRegistered records that a provider joined the active set. It
+// writes to the log file only, so it never disturbs the TUI. See issue #406.
+func logProviderRegistered(name, key string) {
+	applog.Info("provider registered: name=%s key=%s", name, key)
+}
+
+// logProviderSkipped records why a provider did not register. It writes to
+// the log file only, so it never disturbs the TUI. See issue #406.
+func logProviderSkipped(name, key, reason string) {
+	applog.Info("provider skipped: name=%s key=%s reason=%s", name, key, reason)
+}
+
+// logYouTubeSkipped records the skip reason for all three YouTube providers
+// (All, video, music), since they register or skip as one group.
+func logYouTubeSkipped(reason string) {
+	logProviderSkipped("YouTube (All)", "yt", reason)
+	logProviderSkipped("YouTube", "youtube", reason)
+	logProviderSkipped("YouTube Music", "ytmusic", reason)
+}
+
+// optionalProviders lists the providers that register only when configured
+// and skip with a plain "not configured" reason. YouTube and Local are not
+// listed here: they have their own specific skip reasons.
+var optionalProviders = []struct{ key, name string }{
+	{"navidrome", "Navidrome"},
+	{"lyrion", "Lyrion"},
+	{"plex", "Plex"},
+	{"jellyfin", "Jellyfin"},
+	{"emby", "Emby"},
+	{"audiobookshelf", "Audiobookshelf"},
+	{"spotify", "Spotify"},
+	{"qobuz", "Qobuz"},
+	{"tidal", "Tidal"},
+	{"soundcloud", "SoundCloud"},
+	{"mixcloud", "Mixcloud"},
+	{"netease", "NetEase"},
+	{"yandex", "Yandex Music"},
+}
+
+// logProviderWiring logs the final provider registry: one line per
+// registered provider, plus a skip line for each optional provider absent
+// from it. See issue #406.
+func logProviderWiring(providers []model.ProviderEntry) {
+	registered := make(map[string]bool, len(providers))
+	for _, p := range providers {
+		logProviderRegistered(p.Name, p.Key)
+		registered[p.Key] = true
+	}
+	for _, p := range optionalProviders {
+		if !registered[p.key] {
+			logProviderSkipped(p.name, p.key, "not configured")
+		}
+	}
+}
+
 func run(overrides config.Overrides, positional []string, daemon, visualizer60FPS bool) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -138,6 +193,8 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	providers = append(providers, model.ProviderEntry{Key: "radio", Name: "Radio", Provider: radioProv})
 	if localProv != nil {
 		providers = append(providers, model.ProviderEntry{Key: "local", Name: "Local", Provider: localProv})
+	} else {
+		logProviderSkipped("Local", "local", "config directory unavailable")
 	}
 	podcastProv := podcast.New(cfg.Podcast.Country)
 	// Flush per-episode listening state that the throttled writer still holds.
@@ -247,7 +304,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			ytWanted = true
 		}
 	}
-	if ytWanted {
+	if !ytWanted {
+		logYouTubeSkipped("not configured")
+	} else {
 		explicitOAuth := strings.TrimSpace(cfg.YouTubeMusic.ClientID) != "" && strings.TrimSpace(cfg.YouTubeMusic.ClientSecret) != ""
 		hasCookies := strings.TrimSpace(cfg.YouTubeMusic.CookiesFrom) != ""
 		if hasCookies {
@@ -261,6 +320,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 
 		if !explicitOAuth && !hasCookies && !hasFallbackOAuth {
 			fmt.Fprintf(os.Stderr, "YouTube: no credentials available (configure client_id/client_secret or cookies_from in config.toml)\n")
+			logYouTubeSkipped("no credentials available")
 		} else {
 			if !player.YTDLPAvailable() {
 				fmt.Fprintf(os.Stderr, "\nYouTube requires yt-dlp for audio playback.\n")
@@ -297,9 +357,13 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 						model.ProviderEntry{Key: "ytmusic", Name: "YouTube Music", Provider: music},
 					)
 				}
+			} else {
+				logYouTubeSkipped("yt-dlp not available")
 			}
 		}
 	}
+
+	logProviderWiring(providers)
 
 	if spotifyProv != nil {
 		defer spotifyProv.Close()

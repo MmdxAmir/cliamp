@@ -205,7 +205,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.quit()
 	}
 	if msg.String() == "ctrl+z" {
-		return m.undoPlaylistMutation()
+		var cmd tea.Cmd
+		m.keepPlCursorRow(func() { cmd = m.undoPlaylistMutation() })
+		return cmd
 	}
 	if msg.String() == "ctrl+k" && !m.keymap.visible {
 		if m.fullVis {
@@ -413,6 +415,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 				if auth, ok := m.provider.(playlist.Authenticator); ok {
 					m.provSignIn = false
 					m.provLoading = true
+					m.err = nil
 					return authenticateProviderCmd(auth, m.provider.Name(), nextRequest(&m.requests.auth))
 				}
 			}
@@ -431,8 +434,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			}
 		case "esc", "backspace", "b":
 			// Clear completed results or cancel a search still in flight.
-			if cs, ok := m.provider.(provider.CatalogSearcher); ok && (m.provSearch.loading || cs.IsSearching()) {
-				return m.restoreCatalog(cs)
+			if m.providerCatalogSearching() {
+				return m.restoreCatalog(m.provider.(provider.CatalogSearcher))
 			}
 			if m.playlist.Len() > 0 {
 				m.focus = focusPlaylist
@@ -601,6 +604,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 
+	// Move works in track order, so it cannot move a row of the shuffle view.
+	if (key == "shift+up" || key == "shift+down") && m.focus == focusPlaylist && m.playlist.Shuffled() {
+		m.status.Warning(shuffleMoveWarning, statusTTLShort)
+		return nil
+	}
+
 	switch key {
 	case "q", "ctrl+c":
 		return m.quit()
@@ -710,12 +719,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			bands := m.player.EQBands()
 			m.setCustomEQBand(m.eqCursor, bands[m.eqCursor]+1)
 		} else {
-			if m.plCursor > 0 {
-				m.plCursor--
-				m.adjustScroll()
+			if row := m.plCursorRow(); row > 0 {
+				m.setPlCursorRow(row - 1)
 			} else if m.playlist.Len() > 0 {
-				m.plCursor = m.playlist.Len() - 1
-				m.adjustScroll()
+				m.setPlCursorRow(m.playlist.Len() - 1)
 			}
 		}
 
@@ -724,39 +731,33 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			bands := m.player.EQBands()
 			m.setCustomEQBand(m.eqCursor, bands[m.eqCursor]-1)
 		} else {
-			if m.plCursor < m.playlist.Len()-1 {
-				m.plCursor++
-				m.adjustScroll()
+			if row := m.plCursorRow(); row < m.playlist.Len()-1 {
+				m.setPlCursorRow(row + 1)
 			} else if m.playlist.Len() > 0 {
-				m.plCursor = 0
-				m.adjustScroll()
+				m.setPlCursorRow(0)
 			}
 		}
 
 	case "pgup", "ctrl+u":
-		if m.focus == focusPlaylist && m.plCursor > 0 {
+		if row := m.plCursorRow(); m.focus == focusPlaylist && row > 0 {
 			visible := max(1, m.effectivePlaylistVisible())
-			m.plCursor -= min(m.plCursor, visible)
-			m.adjustScroll()
+			m.setPlCursorRow(row - min(row, visible))
 		}
 
 	case "pgdown", "ctrl+d":
-		if m.focus == focusPlaylist && m.plCursor < m.playlist.Len()-1 {
+		if row := m.plCursorRow(); m.focus == focusPlaylist && row < m.playlist.Len()-1 {
 			visible := max(1, m.effectivePlaylistVisible())
-			m.plCursor = min(m.playlist.Len()-1, m.plCursor+visible)
-			m.adjustScroll()
+			m.setPlCursorRow(min(m.playlist.Len()-1, row+visible))
 		}
 
 	case "g", "home":
-		if m.focus == focusPlaylist && m.plCursor != 0 {
-			m.plCursor = 0
-			m.adjustScroll()
+		if m.focus == focusPlaylist && m.plCursorRow() != 0 {
+			m.setPlCursorRow(0)
 		}
 
 	case "G", "end":
-		if m.focus == focusPlaylist && m.playlist.Len() > 0 && m.plCursor != m.playlist.Len()-1 {
-			m.plCursor = m.playlist.Len() - 1
-			m.adjustScroll()
+		if m.focus == focusPlaylist && m.playlist.Len() > 0 && m.plCursorRow() != m.playlist.Len()-1 {
+			m.setPlCursorRow(m.playlist.Len() - 1)
 		}
 
 	case "enter":
@@ -788,6 +789,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case "z":
 		m.playlist.ToggleShuffle()
+		m.adjustScroll()
 		m.saveConfigKey("shuffle", fmt.Sprintf("%v", m.playlist.Shuffled()))
 		return m.rearmPreload()
 
@@ -971,7 +973,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case "x":
 		if m.focus == focusPlaylist {
-			m.removeSelectedFromPlaylist()
+			m.keepPlCursorRow(m.removeSelectedFromPlaylist)
 		}
 
 	case "d":
@@ -1158,6 +1160,7 @@ func (m *Model) openProviderSearchWith(prov playlist.Provider) {
 	m.netSearch = netSearchState{
 		active: true,
 		screen: netSearchInput,
+		from:   providerName(prov),
 	}
 	m.prevFocus = m.focus
 	m.focus = focusNetSearch
@@ -1333,6 +1336,13 @@ func (m *Model) handleCatalogSearchKey(msg tea.KeyPressMsg, cs provider.CatalogS
 		}
 	}
 	return nil
+}
+
+// providerCatalogSearching reports whether the provider pane shows catalog
+// search results, or waits for them. Esc then clears the search.
+func (m Model) providerCatalogSearching() bool {
+	cs, ok := m.provider.(provider.CatalogSearcher)
+	return ok && (m.provSearch.loading || cs.IsSearching())
 }
 
 // restoreCatalog clears search results and restores the normal catalog view.

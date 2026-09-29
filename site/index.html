@@ -427,7 +427,7 @@ footer a{color:var(--fg-2)}
     <p class="sub">Navidrome uses the player's transcoding settings, or streams the original file if none are configured. Set <code>format = "raw"</code> under <code>[navidrome]</code> to always request the original. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/navidrome.md#transcoding">Navidrome guide</a>.</p>
     <p class="sub">With Jellyfin as the default provider, reopen cliamp without files, URLs, or a playlist to restore the last track, position, and complete source list. Queued tracks keep their own album context. Press <kbd>Enter</kbd> to resume; restored sessions stay silent even with <code>auto_play</code>. Playback is checkpointed every two seconds and on normal exit, without saving unfinished seeks. Stream URLs use current API-key or password authentication when playback starts. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/jellyfin.md">Jellyfin guide</a>.</p>
     <p class="sub">One favorite key: <kbd>f</kbd> toggles the ♥ favorite on a track in the playlist, the playlist manager, a browser track list, or search results. On a Spotify track, it also saves the track to Liked Songs. On a Navidrome song, it also stars the song. If the service call fails, the local favorite stays and a warning names the provider. Old ★ bookmarks move into favorites one time. Your playlist files do not change. <code>cliamp playlist bookmark</code> still works as an alias. <kbd>n</kbd> has no action now. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/playlists.md#favorites">Favorites guide</a>.</p>
-    <p class="sub">Large Spotify playlists fill in as they load: the first tracks appear right away, later pages append in the background, and playback works while the list is still arriving. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/spotify.md">Spotify guide</a>.</p>
+    <p class="sub">Large Spotify playlists fill in as they load: the first tracks appear right away, later pages append in the background, and playback works while the list is still arriving. If the connection drops mid-track, playback reconnects and resumes where it stopped. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/spotify.md">Spotify guide</a>.</p>
   </section>
 
   <!-- ═══ FEATURES ═══ -->
@@ -448,7 +448,7 @@ footer a{color:var(--fg-2)}
       </div>
       <div class="feat">
         <div class="feat-k">PLAYLISTS &amp; QUEUE</div>
-        <p>TOML playlists with live <b>[[dir]]</b> folder sources, M3U/M3U8/PLS import and export, cross-playlist favorites, a play-next queue that reads like the playlist and toggles in place with <kbd>A</kbd>, saved playlists you can append to what is playing or put the current track at the front of, and undo.</p>
+        <p>TOML playlists with live <b>[[dir]]</b> folder sources, M3U/M3U8/PLS import and export, cross-playlist favorites, a play-next queue that reads like the playlist and toggles in place with <kbd>A</kbd>, a shuffle view that lists tracks in the order they play, saved playlists you can append to what is playing or put the current track at the front of, and undo.</p>
       </div>
       <div class="feat">
         <div class="feat-k">REMOTE CONTROL</div>
@@ -516,7 +516,7 @@ footer a{color:var(--fg-2)}
   <section id="keys" class="keys">
     <div>
       <h2>Keyboard first</h2>
-      <p class="sub">Everything is one keystroke away — no mouse, no menus. Vim-style <code>j</code>/<code>k</code> movement, <kbd>Tab</kbd> cycles the controls, and <kbd>?</kbd> or <kbd>Ctrl+K</kbd> shows the full keymap for the screen you are on. <a href="https://docs.cliamp.stream/docs/cliamp/keybindings">All keybindings ↗</a></p>
+      <p class="sub">Everything is one keystroke away — no mouse, no menus. Vim-style <code>j</code>/<code>k</code> movement, <kbd>Tab</kbd> cycles the controls, and <kbd>?</kbd> or <kbd>Ctrl+K</kbd> shows the full keymap for the screen you are on. Select a command and press <kbd>Enter</kbd> to run it. <a href="https://docs.cliamp.stream/docs/cliamp/keybindings">All keybindings ↗</a></p>
     </div>
     <div id="keys-grid" class="keys-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-content:start"></div>
   </section>
@@ -668,8 +668,8 @@ var KIND={streaming:"var(--accent)","self-hosted":"var(--warm)",local:"var(--blu
 var KEYS=[
   ["Space","play / pause"],["> / <","next / prev"],["+ / -","volume"],["← / →","seek 5s"],
   ["e","EQ preset"],["v / V","visualizer / full screen"],["t","theme, or hide the title in full screen"],["y","lyrics"],
-  ["/","search playlist"],["Ctrl+F","search provider"],["z / r","shuffle / repeat"],["a","queue next"],["f","favorite ♥"],
-  ["o","file browser"],["R / O","radio / podcasts"],["?","all keybindings"]
+  ["/","filter playlist"],["Ctrl+F","search provider or YouTube"],["z / r","shuffle / repeat"],["a","queue next"],["f","favorite ♥"],
+  ["o","file browser"],["R / O","radio / podcasts"],["? / Ctrl+K","find and run commands"]
 ];
 
 var COMMUNITY=[

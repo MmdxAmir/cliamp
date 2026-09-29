@@ -32,9 +32,23 @@ func (m *Model) scheduleReconnect(now time.Time) {
 // Update handles messages: key presses, ticks, and window resizes. After each
 // message it drops a gapless preload that no longer matches the next track.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(spinnerTickMsg); ok {
+		m.spinnerTicking = m.spinnerVisible()
+		if !m.spinnerTicking {
+			return m, nil
+		}
+		return m, spinnerTickCmd()
+	}
+	spinning := m.spinnerVisible()
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm.dropStalePreload()
+		// A load that starts now gets its own redraws at once. The main tick
+		// can still wait up to ui.TickIdle before it runs at the spinner rate.
+		if !spinning && !nm.spinnerTicking && nm.spinnerVisible() {
+			nm.spinnerTicking = true
+			cmd = tea.Batch(cmd, spinnerTickCmd())
+		}
 		next = nm
 	}
 	return next, cmd
@@ -829,7 +843,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		var resumeCmd tea.Cmd
-		if msg.err != nil {
+		if errors.Is(msg.err, playlist.ErrNeedsAuth) {
+			// The provider session went stale, for example after Spotify
+			// rejected the stream keys. Ask for sign-in, not a raw error.
+			m.provSignIn = true
+			m.err = nil
+			m.status.Warningf(statusTTLLong, "Sign-in required to play %s.", track.DisplayName())
+		} else if msg.err != nil {
 			m.err = msg.err
 			if track, idx := m.currentPlaybackTrack(); idx >= 0 {
 				m.status.Errorf(statusTTLLong, "Couldn't play %s — track is gated, restricted, or unavailable.", track.DisplayName())
@@ -992,11 +1012,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.provAuthURL = ""
 		if msg.err != nil {
+			// Keep the sign-in prompt, so Enter retries without a restart.
 			m.err = msg.err
 			m.provLoading = false
-			m.provSignIn = false
+			m.provSignIn = true
 			return m, nil
 		}
+		m.err = nil
 		m.provSignIn = false
 		m.provLoading = true
 		cmd := m.fetchProviderPlaylists()

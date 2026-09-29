@@ -123,7 +123,7 @@ func (m *Model) handleSpotSearchResultsKey(msg tea.KeyPressMsg) tea.Cmd {
 			// The playlist picker adds one track; an album is many, and Spotify
 			// has no single call to add a whole record.
 			if track.IsAlbum() {
-				m.setSpotSearchError("Open the album with Enter, then add tracks from the queue.")
+				m.setSpotSearchError("You cannot add a whole album to a playlist. Select a track, then press p.")
 				return nil
 			}
 			m.spotSearch.selTrack = track
@@ -180,8 +180,11 @@ func (m *Model) spotSearchBusy() bool {
 
 func (m *Model) setSpotSearchError(message string) {
 	m.spotSearch.err = message
-	if m.spotSearch.screen == spotSearchResults {
+	switch m.spotSearch.screen {
+	case spotSearchResults:
 		m.spotSearchResultsMaybeAdjustScroll(m.spotSearchResultsVisible())
+	case spotSearchPlaylist:
+		m.spotSearchPlaylistMaybeAdjustScroll(m.spotSearchPlaylistVisible())
 	}
 }
 
@@ -202,7 +205,11 @@ func (m *Model) expandSpotAlbum(album playlist.Track, action spotAlbumAction) te
 
 func (m *Model) spotSearchPlaylistMaybeAdjustScroll(visible int) {
 	count := len(m.spotSearch.playlists) + 1
-	clampScroll(&m.spotSearch.cursor, &m.spotSearch.scroll, count, max(1, visible-1))
+	rows := visible - 1 // the selected track line
+	if m.spotSearch.err != "" {
+		rows-- // the error line
+	}
+	clampScroll(&m.spotSearch.cursor, &m.spotSearch.scroll, count, max(1, rows))
 }
 
 // handleSpotSearchPlaylistKey handles picking a playlist to add to.
@@ -238,10 +245,6 @@ func (m *Model) handleSpotSearchPlaylistKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.spotSearch.cursor < len(m.spotSearch.playlists) {
 			// Add to existing playlist.
 			pl := m.spotSearch.playlists[m.spotSearch.cursor]
-			// Skip "Your Music" — uses a different endpoint.
-			if pl.ID == "YOUR MUSIC" {
-				return nil
-			}
 			m.spotSearch.loading = true
 			m.spotSearch.err = ""
 			return addToSpotPlaylistCmd(m.newSpotRequestContext(15*time.Second), w, pl.ID, m.spotSearch.selTrack, m.spotSearch.prov.Name(), pl.Name, nextRequest(&m.requests.spotMutation))
