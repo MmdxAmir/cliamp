@@ -139,7 +139,7 @@ func (m *Model) replaceProviderLists(lists []playlist.PlaylistInfo) {
 // remote provider's pane must not receive an unrelated fetch (or surface an
 // unrelated fetch error) because of a local write.
 func (m *Model) refreshPaneAfterLocalWrite() tea.Cmd {
-	if !m.isActiveProvider("Local") {
+	if m.activeProviderKey() != providerKeyLocal {
 		return nil
 	}
 	return m.fetchProviderPlaylists()
@@ -219,6 +219,23 @@ func (m *Model) replacePlayerPlaylist(tracks []playlist.Track) {
 
 func (m Model) isActiveProvider(name string) bool {
 	return m.provider != nil && m.provider.Name() == name
+}
+
+// Provider keys of the sources that have their own UI rules. main.go
+// registers the providers under these keys.
+const (
+	providerKeyLocal = "local"
+	providerKeyRadio = "radio"
+)
+
+// activeProviderKey returns the config key of the active provider pill, such
+// as providerKeyLocal. A display name can change, so the special rules for a
+// source check this key. It returns "" when no provider is active.
+func (m Model) activeProviderKey() string {
+	if m.provider == nil || m.provPillIdx < 0 || m.provPillIdx >= len(m.providers) {
+		return ""
+	}
+	return m.providers[m.provPillIdx].Key
 }
 
 func (m Model) isCurrentNavRequest(gen uint64) bool {

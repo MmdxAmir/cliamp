@@ -419,7 +419,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case radioListsRefreshMsg:
-		if msg.gen != m.requests.provider || !m.isActiveProvider("Radio") {
+		if msg.gen != m.requests.provider || m.activeProviderKey() != providerKeyRadio {
 			return m, nil
 		}
 		cmd := m.refreshRadioLists()

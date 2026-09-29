@@ -164,7 +164,7 @@ func (m *Model) togglePlaylistTrackFavorite(track playlist.Track) (tea.Cmd, erro
 	// Only the displayed Radio pane needs refreshing. Switching back from
 	// another provider fetches its list normally; never replace that provider's
 	// list with Radio's results.
-	if m.isActiveProvider("Radio") {
+	if m.activeProviderKey() == providerKeyRadio {
 		m.refreshProviderListsAfterMutation()
 	}
 	return nil, nil

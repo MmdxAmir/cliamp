@@ -397,7 +397,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		case "a":
 			return m.appendShowFromProviderList()
 		case "p":
-			if m.isActiveProvider("Local") && m.localProvider != nil {
+			if m.activeProviderKey() == providerKeyLocal && m.localProvider != nil {
 				m.openPlaylistManager()
 			}
 		case "up", "k":

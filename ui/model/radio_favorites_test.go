@@ -41,6 +41,7 @@ func radioFavoriteTestModel(t *testing.T) (Model, *radio.Provider, []playlist.Tr
 	m.SetRadioFavorites(favorites)
 	m.provider = p
 	m.providers = append(m.providers, ProviderEntry{Key: "radio", Name: "Radio", Provider: p})
+	m.provPillIdx = len(m.providers) - 1
 	m.catalogBatch.done = true // No network work during provider-list refresh.
 	return m, p, tracks
 }
