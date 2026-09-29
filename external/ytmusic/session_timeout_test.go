@@ -3,10 +3,12 @@ package ytmusic
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -80,5 +82,80 @@ func TestSessionTokenRefreshOutlivesSetupContext(t *testing.T) {
 	}
 	if token.AccessToken != "new" {
 		t.Errorf("access token = %q, want new", token.AccessToken)
+	}
+}
+
+// TestInteractiveSessionRefreshesAfterSignIn checks that a session from the
+// browser sign-in still refreshes its access token after initSession cancels
+// the sign-in context.
+func TestInteractiveSessionRefreshesAfterSignIn(t *testing.T) {
+	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+	t.Setenv("PATH", t.TempDir()) // keep browser.Open from starting a real browser
+	var requests atomic.Int32
+	setOAuthTransport(t, 5*time.Second, roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if err := req.Context().Err(); err != nil {
+			return nil, err
+		}
+		// The first token expires at once, so the next Token call refreshes it.
+		n := requests.Add(1)
+		body := fmt.Sprintf(`{"access_token":"access-%d","refresh_token":"refresh","token_type":"Bearer","expires_in":1}`, n)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    req,
+		}, nil
+	}))
+	urls := make(chan string, 1)
+	SetAuthURLObserver(func(u string) { urls <- u })
+	t.Cleanup(func() { SetAuthURLObserver(nil) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	type result struct {
+		s   *Session
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		s, err := newInteractiveSession(ctx, "client", "secret")
+		done <- result{s, err}
+	}()
+
+	var authURL string
+	select {
+	case authURL = <-urls:
+	case r := <-done:
+		t.Skipf("callback port unavailable: %v", r.err)
+	}
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callback := fmt.Sprintf("http://127.0.0.1:%d/callback?state=%s&code=abc",
+		CallbackPort, url.QueryEscape(parsed.Query().Get("state")))
+	resp, err := http.Get(callback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	var r result
+	select {
+	case r = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("newInteractiveSession() did not return after the callback")
+	}
+	if r.err != nil {
+		t.Fatalf("newInteractiveSession() error = %v", r.err)
+	}
+	cancel() // initSession cancels the sign-in context when the sign-in ends
+
+	token, err := r.s.tokenSource.Token()
+	if err != nil {
+		t.Fatalf("Token() after the sign-in context ended: %v", err)
+	}
+	if token.AccessToken != "access-2" {
+		t.Errorf("access token = %q, want the refreshed access-2", token.AccessToken)
 	}
 }

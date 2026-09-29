@@ -162,14 +162,6 @@ func newInteractiveSession(ctx context.Context, clientID, clientSecret string) (
 		return nil, err
 	}
 
-	conf := googleOAuthConfig(clientID, clientSecret)
-	ts := conf.TokenSource(ctx, token)
-
-	svc, err := youtube.NewService(ctx, option.WithTokenSource(ts))
-	if err != nil {
-		return nil, fmt.Errorf("ytmusic: create service: %w", err)
-	}
-
 	// Persist refresh token for future sessions.
 	if err := credsFile.Save(&storedCreds{RefreshToken: token.RefreshToken}); err != nil {
 		applog.UserError("ytmusic: failed to save credentials: %v", err)
@@ -179,13 +171,7 @@ func newInteractiveSession(ctx context.Context, clientID, clientSecret string) (
 		cacheIdentity = token.AccessToken
 	}
 
-	return &Session{
-		clientID:     clientID,
-		clientSecret: clientSecret,
-		service:      svc,
-		tokenSource:  ts,
-		cacheScope:   oauthCacheScope(clientID, cacheIdentity),
-	}, nil
+	return newTokenSession(ctx, clientID, clientSecret, token, cacheIdentity)
 }
 
 // oauthCallbackHTML is the response sent to the browser after a successful OAuth2 callback.
@@ -286,7 +272,7 @@ func doOAuth(ctx context.Context, clientID, clientSecret string) (*oauth2.Token,
 		return nil, fmt.Errorf("ytmusic: authorization: %s", result.errCode)
 	}
 
-	token, err := oauthConf.Exchange(ctx, result.code, oauth2.VerifierOption(verifier))
+	token, err := oauthConf.Exchange(oauthContext(ctx), result.code, oauth2.VerifierOption(verifier))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic: token exchange: %w", err)
 	}
