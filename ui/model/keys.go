@@ -1418,6 +1418,13 @@ func (m *Model) handlePaste(content string) tea.Cmd {
 		return nil
 	}
 
+	// Subscribed-shows `/` filter
+	if m.subs.visible && m.subs.filtering {
+		m.insertText("subs-filter", &m.subs.filter, content)
+		m.updateSubsFilter()
+		return nil
+	}
+
 	if m.jumping {
 		m.insertText("jump", &m.jumpInput, content)
 		m.jumpErr = ""

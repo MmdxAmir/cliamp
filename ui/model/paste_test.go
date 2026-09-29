@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 )
 
 func TestHandlePasteRoutesToActiveInput(t *testing.T) {
@@ -111,6 +112,24 @@ func TestHandlePasteRoutesToActiveInput(t *testing.T) {
 			check: func(t *testing.T, m *Model) {
 				if m.provSearch.query != "rock ballads" {
 					t.Fatalf("provSearch.query = %q, want %q", m.provSearch.query, "rock ballads")
+				}
+			},
+		},
+		{
+			name: "subscriptions filter",
+			model: Model{subs: subsOverlay{
+				visible:   true,
+				filtering: true,
+				filter:    "dead ",
+				shows:     []provider.SubscriptionInfo{{Name: "Dead Drop"}, {Name: "Part Of The Problem"}},
+			}},
+			content: "drop",
+			check: func(t *testing.T, m *Model) {
+				if m.subs.filter != "dead drop" {
+					t.Fatalf("subs.filter = %q, want %q", m.subs.filter, "dead drop")
+				}
+				if len(m.subs.filtered) != 1 || m.subs.filtered[0] != 0 {
+					t.Fatalf("subs.filtered = %v, want [0]", m.subs.filtered)
 				}
 			},
 		},
