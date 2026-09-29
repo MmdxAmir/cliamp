@@ -55,7 +55,10 @@ Desktop widgets with a progress bar receive `Seeked` signals and stay in sync.
 ### Volume
 
 Volume is available as a linear value from 0.0 to 1.0. Internally, cliamp uses
-a decibel scale from -30 dB to +6 dB. It converts the values automatically.
+a decibel scale from `volume_min` to +6 dB. The default `volume_min` is -50 dB.
+See [configuration.md](configuration.md). cliamp converts the values
+automatically. A value of 0.0 sets the volume to `volume_min`. A value of 1.0
+sets the volume to +6 dB.
 
 ```sh
 playerctl volume               # print current volume (0.0 to 1.0)

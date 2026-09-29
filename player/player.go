@@ -27,10 +27,21 @@ type StreamerFactory func(uri string) (beep.StreamSeekCloser, beep.Format, time.
 
 // Player is the audio engine managing the playback pipeline:
 //
-//	[Gapless] -> [10x Biquad EQ] -> [Volume] -> [Tap] -> [Ctrl] -> speaker
+//	[Gapless] -> [Speed] -> [10x Biquad EQ] -> [Tap] -> [Volume + Mono] -> [Ctrl] -> speaker
 //	     ↑
 //	     ├─ current: [Decode A] → [Resample A]
 //	     └─ next:    [Decode B] → [Resample B]  (preloaded)
+//
+// The tap sits before volume, so the visualizer sees the level before the
+// volume gain and the mono downmix.
+//
+// Lock order: lifecycleMu, then the speaker lock, then mu, then
+// gaplessStreamer.mu. A path can skip a lock, but it must not take them in a
+// different order. The audio goroutine holds the speaker lock while it
+// streams, and the gapless swap callback takes mu on that goroutine. So a
+// path that holds mu must not call speaker.Lock. suspendMu is taken with no
+// lock held or with only lifecycleMu held. navBuffer.mu is a leaf lock.
+// Close pipelines and wait for processes only after these locks are released.
 type Player struct {
 	mu              sync.Mutex
 	lifecycleMu     sync.Mutex // serializes source commits without covering setup or process waits
@@ -64,7 +75,10 @@ type Player struct {
 
 	lastPlayedDuration time.Duration // real duration of the track finished by the last gapless swap
 
-	streamTitle      atomic.Value               // stores string, set by ICY reader callback
+	streamTitle atomic.Value // stores string, set by ICY reader callback
+
+	// The source registries are guarded by mu. Register writes them, and
+	// buildPipeline reads them when a track starts.
 	customFactories  map[string]StreamerFactory // URI scheme prefix -> factory (e.g. "spotify:" -> fn)
 	bufferedURLMatch func(string) bool          // optional: returns true for URLs needing navBuffer pipeline
 	sourceResolvers  map[string]SourceResolver  // URI scheme prefix -> play-time source resolver (e.g. "tidal://")
@@ -176,7 +190,7 @@ func (p *Player) LastPlayedDuration() time.Duration {
 }
 
 // Play opens and starts playing an audio file. On the first call it builds
-// the long-lived EQ → volume → tap → ctrl chain and starts the speaker.
+// the long-lived speed → EQ → tap → volume → ctrl chain and starts the speaker.
 // Subsequent calls swap only the track source via the gapless streamer.
 // knownDuration is the metadata duration (use 0 if unknown); it is used as a
 // fallback when the decoder cannot determine the length (e.g. HTTP streams).
@@ -268,7 +282,7 @@ func (p *Player) playYTDL(pageURL string, knownDuration time.Duration, generatio
 }
 
 // playPipeline wires a ready-to-play trackPipeline into the speaker chain.
-// On the first call it builds the long-lived EQ → volume → tap → ctrl chain.
+// On the first call it builds the long-lived speed → EQ → tap → volume → ctrl chain.
 // Subsequent calls swap only the track source via the gapless streamer.
 func (p *Player) playPipeline(tp *trackPipeline) error {
 	return p.playPipelineForGeneration(tp, 0)
@@ -431,7 +445,9 @@ func (p *Player) preloadPipelineForGeneration(tp *trackPipeline, generation uint
 
 // ClearPreload discards the preloaded next track (e.g., when shuffle/repeat changes).
 // Speaker is locked to ensure no in-flight gapless transition can reference the
-// pipeline we're about to close.
+// pipeline we're about to close. The old pipeline closes asynchronously, as in
+// playPipeline, because ClearPreload runs on the UI goroutine and a close can
+// wait for an ffmpeg or yt-dlp process to exit.
 func (p *Player) ClearPreload() {
 	p.preloadGen.Add(1)
 	speaker.Lock()
@@ -444,7 +460,7 @@ func (p *Player) ClearPreload() {
 	p.mu.Unlock()
 
 	if old != nil {
-		old.close()
+		go old.close()
 	}
 }
 

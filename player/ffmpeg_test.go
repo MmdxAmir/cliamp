@@ -506,7 +506,7 @@ exec sleep 30
 	t.Setenv("FFMPEG_COUNT", countPath)
 
 	nb := newCompletedTestNavBuffer(t, []byte("HEADpayload"))
-	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16, 1000)
+	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16)
 	if err != nil {
 		t.Fatalf("decodeNavFFmpeg() error = %v", err)
 	}
@@ -544,7 +544,7 @@ printf '\000\100\000\300'
 	t.Setenv("FFMPEG_INPUTS", inputsPath)
 
 	nb := newCompletedTestNavBuffer(t, []byte("HEADpayload"))
-	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16, 1000)
+	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16)
 	if err != nil {
 		t.Fatalf("decodeNavFFmpeg() error = %v", err)
 	}
@@ -593,7 +593,7 @@ exec sleep 30
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	nb := newStalledTestNavBuffer(t)
-	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16, 1000)
+	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16)
 	if err != nil {
 		t.Fatalf("decodeNavFFmpeg() error = %v", err)
 	}
@@ -728,6 +728,140 @@ func BenchmarkStreamFromReader(b *testing.B) {
 				src.Reset(pcm)
 				reader.Reset(&src)
 				streamFromReader(reader, samples, &pcmBuf, f32, state)
+			}
+		})
+	}
+}
+
+func TestPCMOutputArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		sr       beep.SampleRate
+		bitDepth int
+		want     string
+	}{
+		{name: "16 bit", sr: 44100, bitDepth: 16, want: "-f s16le -acodec pcm_s16le -ar 44100 -ac 2 -loglevel error pipe:1"},
+		{name: "32 bit", sr: 48000, bitDepth: 32, want: "-f f32le -acodec pcm_f32le -ar 48000 -ac 2 -loglevel error pipe:1"},
+		{name: "unknown depth falls back to 16 bit", sr: 96000, bitDepth: 24, want: "-f s16le -acodec pcm_s16le -ar 96000 -ac 2 -loglevel error pipe:1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := strings.Join(pcmOutputArgs(tt.sr, tt.bitDepth), " "); got != tt.want {
+				t.Fatalf("pcmOutputArgs() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// requireFFmpeg must look up PATH on each call. Tests put a fake ffmpeg on
+// PATH, and a user can install ffmpeg while cliamp runs.
+func TestRequireFFmpegLooksUpPATHOnEachCall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell fixtures")
+	}
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+
+	for _, installed := range []bool{false, true, false} {
+		ffmpeg := filepath.Join(dir, "ffmpeg")
+		if installed {
+			writeExecutable(t, ffmpeg, "#!/bin/sh\n")
+		} else if err := os.Remove(ffmpeg); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		err := requireFFmpeg()
+		if installed && err != nil {
+			t.Fatalf("requireFFmpeg() = %v with ffmpeg on PATH", err)
+		}
+		if !installed && (err == nil || !strings.Contains(err.Error(), "ffmpeg is required: ")) {
+			t.Fatalf("requireFFmpeg() = %v without ffmpeg on PATH, want an install hint", err)
+		}
+		if got := ffmpegAvailable(); got != installed {
+			t.Fatalf("ffmpegAvailable() = %v, want %v", got, installed)
+		}
+	}
+}
+
+// Every ffmpeg decoder reports the same install hint when ffmpeg is missing.
+func TestFFmpegDecodersRequireFFmpeg(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell fixtures")
+	}
+	dir := t.TempDir()
+	writeExecutable(t, filepath.Join(dir, "yt-dlp"), "#!/bin/sh\n")
+	t.Setenv("PATH", dir)
+	want := requireFFmpeg()
+	if want == nil {
+		t.Fatal("requireFFmpeg() = nil without ffmpeg on PATH")
+	}
+
+	tests := []struct {
+		name   string
+		decode func() error
+	}{
+		{name: "url stream", decode: func() error {
+			_, _, err := decodeFFmpegStream("https://example.com/live.m3u8", 44100, 16)
+			return err
+		}},
+		{name: "stdin stream", decode: func() error {
+			_, _, err := decodeFFmpegPipeStream(io.NopCloser(bytes.NewReader(nil)), 44100, 16, true)
+			return err
+		}},
+		{name: "local file", decode: func() error {
+			_, _, err := decodeFFmpegLocal(filepath.Join(dir, "track.m4a"), 44100, 16)
+			return err
+		}},
+		{name: "nav buffer", decode: func() error {
+			_, _, err := decodeNavFFmpeg(newCompletedTestNavBuffer(t, nil), 44100, 16)
+			return err
+		}},
+		{name: "yt-dlp pipe", decode: func() error {
+			_, _, err := decodeYTDLPipe("https://www.youtube.com/watch?v=x", 44100, 16, 0)
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.decode(); err == nil || err.Error() != want.Error() {
+				t.Fatalf("error = %v, want %v", err, want)
+			}
+		})
+	}
+}
+
+func TestProbeFrames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell fixtures")
+	}
+	tests := []struct {
+		name    string
+		script  string
+		timeout time.Duration
+		want    int
+	}{
+		{name: "duration", script: "printf '2.5\\n'", timeout: ffprobeTimeout, want: 250},
+		{name: "no duration", script: "printf 'N/A\\n'", timeout: ffprobeTimeout, want: 0},
+		{name: "probe error", script: "exit 1", timeout: ffprobeTimeout, want: 0},
+		// The child sleep keeps stdout open after the shell is killed.
+		{name: "hung probe", script: "sleep 30\nprintf '2.5\\n'", timeout: 100 * time.Millisecond, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeExecutable(t, filepath.Join(dir, "ffprobe"), "#!/bin/sh\n"+tt.script+"\n")
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+			done := make(chan int, 1)
+			go func() {
+				done <- probeFramesWithin(filepath.Join(dir, "track.m4a"), beep.SampleRate(100), tt.timeout)
+			}()
+			select {
+			case got := <-done:
+				if got != tt.want {
+					t.Fatalf("probeFramesWithin() = %d, want %d", got, tt.want)
+				}
+			case <-time.After(tt.timeout + 5*time.Second):
+				t.Fatal("probeFramesWithin() did not return after its timeout")
 			}
 		})
 	}

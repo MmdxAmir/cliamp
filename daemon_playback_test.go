@@ -58,8 +58,9 @@ func (f *daemonPlaybackFake) Position() time.Duration { return 0 }
 func (f *daemonPlaybackFake) PositionAndDuration() (time.Duration, time.Duration) {
 	return 0, 0
 }
-func (f *daemonPlaybackFake) Volume() float64 { return 0 }
-func (f *daemonPlaybackFake) Seekable() bool  { return false }
+func (f *daemonPlaybackFake) Volume() float64    { return 0 }
+func (f *daemonPlaybackFake) VolumeMin() float64 { return -50 }
+func (f *daemonPlaybackFake) Seekable() bool     { return false }
 
 func TestDaemonResumeRestartsLiveStation(t *testing.T) {
 	fake := &daemonPlaybackFake{playing: true, paused: true, runtimeLive: true}

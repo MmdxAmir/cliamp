@@ -37,11 +37,12 @@ type Track struct {
 }
 
 type State struct {
-	Status   Status
-	Track    Track
-	VolumeDB float64
-	Position time.Duration
-	Seekable bool
+	Status      Status
+	Track       Track
+	VolumeDB    float64
+	VolumeMinDB float64 // engine volume floor in dB
+	Position    time.Duration
+	Seekable    bool
 }
 
 type Notifier interface {

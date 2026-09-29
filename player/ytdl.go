@@ -294,8 +294,8 @@ func decodeYTDLPipe(pageURL string, sr beep.SampleRate, bitDepth, startSec int) 
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return nil, beep.Format{}, fmt.Errorf("yt-dlp is required — install: %s", YtdlpInstallHint())
 	}
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return nil, beep.Format{}, fmt.Errorf("ffmpeg is required — install: %s", ffmpegInstallHint())
+	if err := requireFFmpeg(); err != nil {
+		return nil, beep.Format{}, err
 	}
 
 	// os.Pipe connects yt-dlp stdout → ffmpeg stdin.
@@ -332,20 +332,13 @@ func decodeYTDLPipe(pageURL string, sr beep.SampleRate, bitDepth, startSec int) 
 
 	// Start ffmpeg: read from pipe, output PCM to stdout.
 	// If startSec > 0, use -ss to seek into the input stream.
-	pcmFmt, codec, precision := ffmpegPCMArgs(bitDepth)
+	_, _, precision := ffmpegPCMArgs(bitDepth)
 	var ffmpegArgs []string
 	if startSec > 0 {
 		ffmpegArgs = append(ffmpegArgs, "-ss", strconv.Itoa(startSec))
 	}
-	ffmpegArgs = append(ffmpegArgs,
-		"-i", "pipe:0",
-		"-f", pcmFmt,
-		"-acodec", codec,
-		"-ar", strconv.Itoa(int(sr)),
-		"-ac", "2",
-		"-loglevel", "error",
-		"pipe:1",
-	)
+	ffmpegArgs = append(ffmpegArgs, "-i", "pipe:0")
+	ffmpegArgs = append(ffmpegArgs, pcmOutputArgs(sr, bitDepth)...)
 	ffmpegCmd := exec.Command("ffmpeg", ffmpegArgs...)
 	ffmpegCmd.Stdin = pr
 	var ffmpegStderr limitedBuffer

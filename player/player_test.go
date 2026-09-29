@@ -2,6 +2,7 @@ package player
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -132,6 +133,81 @@ func TestStopDiscardsInFlightPreload(t *testing.T) {
 	}
 	if p.nextPipeline != nil {
 		t.Fatal("preload started before Stop armed the stopped player")
+	}
+}
+
+// blockingCloseDecoder holds Close until the test closes release, as an
+// ffmpeg or yt-dlp process does while it exits.
+type blockingCloseDecoder struct {
+	*playbackTestDecoder
+	release chan struct{}
+}
+
+func (d *blockingCloseDecoder) Close() error {
+	<-d.release
+	return d.playbackTestDecoder.Close()
+}
+
+// ClearPreload runs on the UI goroutine, so it must not wait while the old
+// pipeline closes.
+func TestClearPreloadDoesNotWaitForClose(t *testing.T) {
+	tests := []struct {
+		name    string
+		preload bool
+	}{
+		{name: "no preload"},
+		{name: "preload with a slow close", preload: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestPlayer()
+			p.gapless = &gaplessStreamer{}
+			var decoder *blockingCloseDecoder
+			if tt.preload {
+				decoder = &blockingCloseDecoder{playbackTestDecoder: newPlaybackTestDecoder(), release: make(chan struct{})}
+				if err := p.preloadPipeline(&trackPipeline{decoder: decoder, stream: decoder}); err != nil {
+					t.Fatalf("preloadPipeline: %v", err)
+				}
+			}
+			generation := p.preloadGen.Load()
+
+			done := make(chan struct{})
+			go func() {
+				p.ClearPreload()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				if decoder != nil {
+					close(decoder.release)
+					<-done
+				}
+				t.Fatal("ClearPreload waited for the old pipeline to close")
+			}
+
+			if p.HasPreload() {
+				t.Fatal("ClearPreload kept the preloaded pipeline")
+			}
+			if p.preloadGen.Load() == generation {
+				t.Fatal("ClearPreload did not reject a preload in flight")
+			}
+			p.gapless.mu.Lock()
+			next := p.gapless.next
+			p.gapless.mu.Unlock()
+			if next != nil {
+				t.Fatal("ClearPreload left the gapless next stream armed")
+			}
+			if decoder == nil {
+				return
+			}
+			close(decoder.release)
+			select {
+			case <-decoder.closed:
+			case <-time.After(2 * time.Second):
+				t.Fatal("ClearPreload did not close the old pipeline")
+			}
+		})
 	}
 }
 
@@ -362,6 +438,60 @@ func TestRegisterBufferedURLMatcher(t *testing.T) {
 	}
 }
 
+// The registries are read while a track starts and written by Register
+// calls. Run with -race: the reads must hold the lock that the writes hold.
+func TestRegistryReadsHoldTheLock(t *testing.T) {
+	factory := func(string) (beep.StreamSeekCloser, beep.Format, time.Duration, error) {
+		return nil, beep.Format{}, 0, nil
+	}
+	resolver := func(string) (ResolvedSource, error) { return ResolvedSource{}, nil }
+	tests := []struct {
+		name     string
+		register func(p *Player, i int)
+		match    func(p *Player) bool
+	}{
+		{
+			name:     "streamer factory",
+			register: func(p *Player, i int) { p.RegisterStreamerFactory(fmt.Sprintf("s%d:", i), factory) },
+			match:    func(p *Player) bool { return p.matchCustomURI("s0:track") != nil },
+		},
+		{
+			name:     "source resolver",
+			register: func(p *Player, i int) { p.RegisterSourceResolver(fmt.Sprintf("r%d://", i), resolver) },
+			match:    func(p *Player) bool { return p.matchSourceResolver("r0://track") != nil },
+		},
+		{
+			name:     "buffered url matcher",
+			register: func(p *Player, _ int) { p.RegisterBufferedURLMatcher(func(string) bool { return true }) },
+			match:    func(p *Player) bool { return p.isBufferedURL("https://example.com/stream") },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestPlayer()
+			const writes = 200
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				for i := range writes {
+					tt.register(p, i)
+				}
+			}()
+			for {
+				select {
+				case <-done:
+					if !tt.match(p) {
+						t.Fatal("registered entry does not match after the writes")
+					}
+					return
+				default:
+					tt.match(p)
+				}
+			}
+		})
+	}
+}
+
 func TestConcurrentVolumeSetRead(t *testing.T) {
 	p := newTestPlayer()
 	var wg sync.WaitGroup
@@ -563,7 +693,7 @@ printf '10\n'
 				decoder, _, err = decodeFFmpegLocal(filepath.Join(dir, "track.m4a"), 100, 16)
 			case "nav":
 				nb := newCompletedTestNavBuffer(t, []byte("HEADpayload"))
-				decoder, _, err = decodeNavFFmpeg(nb, 100, 16, 1000)
+				decoder, _, err = decodeNavFFmpeg(nb, 100, 16)
 				waitForFileValue(t, countPath, "1")
 			}
 			if err != nil {

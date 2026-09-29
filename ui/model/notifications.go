@@ -104,9 +104,10 @@ func (m *Model) notifyPlayback() {
 			ArtURL:      track.AlbumArtURL,
 			Duration:    m.player.Duration(),
 		},
-		VolumeDB: m.player.Volume(),
-		Position: m.player.Position(),
-		Seekable: m.player.Seekable(),
+		VolumeDB:    m.player.Volume(),
+		VolumeMinDB: m.player.VolumeMin(),
+		Position:    m.player.Position(),
+		Seekable:    m.player.Seekable(),
 	})
 }
 

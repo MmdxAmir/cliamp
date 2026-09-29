@@ -359,9 +359,10 @@ func (d *daemon) snapshotState() playback.State {
 			URL:         track.Path,
 			Duration:    d.player.Duration(),
 		},
-		VolumeDB: d.player.Volume(),
-		Position: d.player.Position(),
-		Seekable: d.player.Seekable(),
+		VolumeDB:    d.player.Volume(),
+		VolumeMinDB: d.player.VolumeMin(),
+		Position:    d.player.Position(),
+		Seekable:    d.player.Seekable(),
 	}
 }
 
