@@ -60,32 +60,61 @@ func TestRecordOrdering(t *testing.T) {
 	}
 }
 
+// A replay moves the entry to the top with the new time, however long ago
+// the earlier play was. There is no dedup window.
 func TestReplayMovesEntryToTop(t *testing.T) {
 	a := playlist.Track{Path: "/a.mp3", Title: "A"}
 	b := playlist.Track{Path: "/b.mp3", Title: "B"}
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	s := newTestStore(t)
-	mustRecord(t, s, a, base)
-	mustRecord(t, s, b, base.Add(time.Minute))
+	for _, gap := range []time.Duration{2 * time.Minute, time.Hour, 30 * 24 * time.Hour} {
+		t.Run(gap.String(), func(t *testing.T) {
+			s := newTestStore(t)
+			mustRecord(t, s, a, base)
+			mustRecord(t, s, b, base.Add(time.Minute))
 
-	// Re-listen to the older track: no duplicate, entry moves to top with a
-	// fresh timestamp.
-	replay := base.Add(2 * time.Minute)
-	mustRecord(t, s, a, replay)
+			replay := base.Add(gap)
+			mustRecord(t, s, a, replay)
 
-	got, err := s.Recent(0)
-	if err != nil {
-		t.Fatal(err)
+			got, err := s.Recent(0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 2 {
+				t.Fatalf("got %d entries, want 2 (no duplicate for the replay)", len(got))
+			}
+			if got[0].Track.Path != "/a.mp3" || !got[0].PlayedAt.Equal(replay) {
+				t.Fatalf("top = %q at %v, want /a.mp3 at %v", got[0].Track.Path, got[0].PlayedAt, replay)
+			}
+			if got[1].Track.Path != "/b.mp3" {
+				t.Fatalf("second = %q, want /b.mp3", got[1].Track.Path)
+			}
+		})
 	}
-	if len(got) != 2 {
-		t.Fatalf("got %d entries, want 2 (no duplicate for the replay)", len(got))
+}
+
+// Record applies no duration or live-stream check, so a radio station and a
+// track with no known duration enter the list as docs/history.md says.
+func TestRecordKeepsLiveAndUnknownDurationTracks(t *testing.T) {
+	tests := []struct {
+		name  string
+		track playlist.Track
+	}{
+		{name: "radio station", track: playlist.Track{Path: "https://radio.example/live", Title: "Radio", Stream: true, Realtime: true}},
+		{name: "unknown duration", track: playlist.Track{Path: "/a.mp3", Title: "A"}},
 	}
-	if got[0].Track.Path != "/a.mp3" || !got[0].PlayedAt.Equal(replay) {
-		t.Fatalf("top = %q at %v, want /a.mp3 at %v", got[0].Track.Path, got[0].PlayedAt, replay)
-	}
-	if got[1].Track.Path != "/b.mp3" {
-		t.Fatalf("second = %q, want /b.mp3", got[1].Track.Path)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStore(t)
+			mustRecord(t, s, tt.track, time.Now())
+			got, err := s.Tracks(0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || got[0].Path != tt.track.Path || got[0].Realtime != tt.track.Realtime {
+				t.Fatalf("Tracks = %+v, want one entry for %+v", got, tt.track)
+			}
+		})
 	}
 }
 

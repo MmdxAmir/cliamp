@@ -1,7 +1,7 @@
 // Package history persists the user's recently played tracks to a TOML file
-// in the cliamp config directory. Entries are recorded when a track has been
-// played past the scrobble threshold (the same heuristic Last.fm and the
-// Navidrome scrobbler use) so skipped tracks never enter the list.
+// in the cliamp config directory. The TUI records a track when the track
+// starts to play, so skipped tracks and live streams also enter the list. The
+// list holds each path one time only.
 //
 // The store is safe for concurrent callers. Writers also take a file lock, so
 // two cliamp processes cannot overwrite each other's entries. It writes
@@ -34,7 +34,7 @@ const DefaultCap = 200
 // provider. Browsing this name returns history entries newest-first.
 const PlaylistName = "Recently Played"
 
-// Entry pairs a track with the wall-clock time it was played past threshold.
+// Entry pairs a track with the wall-clock time it started to play.
 type Entry struct {
 	Track    playlist.Track
 	PlayedAt time.Time
@@ -67,13 +67,11 @@ func NewAt(path string) *Store {
 // Path returns the on-disk file path.
 func (s *Store) Path() string { return s.path }
 
-// Record appends an entry for track played at playedAt. If the most recent
-// entry has the same path and was logged within dedupWindow, its timestamp is
-// updated in place instead of duplicating the row. Empty paths are ignored.
-// Record appends a play event. There are no duplicate paths: recording a
-// track that is already in the list moves that entry to the top with the new
-// timestamp (merging any richer metadata), so Recently Played reflects
-// distinct tracks in listen order rather than play counts.
+// Record puts track at the top of the list with playedAt as its time. When
+// the path is already in the list, the entry moves to the top, however long
+// ago it played, and keeps its stored metadata where track has none. So
+// Recently Played shows distinct tracks in listen order, not play counts.
+// Record ignores an empty path. It does not check the duration or Realtime.
 func (s *Store) Record(track playlist.Track, playedAt time.Time) error {
 	if s == nil || strings.TrimSpace(track.Path) == "" {
 		return nil
