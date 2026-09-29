@@ -129,10 +129,11 @@ type ytdlBatchMsg struct {
 	err    error
 }
 
-// ytdlSavedMsg signals that an async yt-dlp download-to-disk completed.
-type ytdlSavedMsg struct {
-	path string
-	err  error
+// trackSavedMsg reports the result of an async track save.
+type trackSavedMsg struct {
+	path     string
+	err      error
+	download bool // the save ran yt-dlp and counts as a pending download
 }
 
 // — Navidrome browser message types —
@@ -327,13 +328,6 @@ func preloadYTDLStreamCmd(p player.Engine, pageURL string, knownDuration time.Du
 	return func() tea.Msg {
 		err := p.PreloadYTDLForGeneration(pageURL, knownDuration, preloadGen)
 		return streamPreloadedMsg{path: pageURL, gen: gen, err: err}
-	}
-}
-
-func saveYTDLCmd(pageURL string, saveDir string) tea.Cmd {
-	return func() tea.Msg {
-		path, err := resolve.DownloadYTDL(pageURL, saveDir)
-		return ytdlSavedMsg{path: path, err: err}
 	}
 }
 

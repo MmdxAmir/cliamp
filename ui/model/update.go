@@ -873,12 +873,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case ytdlSavedMsg:
-		m.save.finishDownload()
-		if msg.err != nil {
-			m.status.Errorf(statusTTLMedium, "Download failed: %s", msg.err)
-		} else {
+	case trackSavedMsg:
+		if msg.download {
+			m.save.finishDownload()
+		}
+		switch {
+		case msg.err == nil:
 			m.status.Showf(statusTTLMedium, "Saved to %s", msg.path)
+		case msg.download:
+			m.status.Errorf(statusTTLMedium, "Download failed: %s", msg.err)
+		default:
+			m.status.Errorf(statusTTLShort, "Save failed: %s", msg.err)
 		}
 		return m, nil
 
