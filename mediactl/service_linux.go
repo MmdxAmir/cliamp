@@ -163,13 +163,17 @@ func New(send func(tea.Msg)) (*Service, error) {
 // newService exports the MPRIS objects and properties on conn. It starts
 // the goroutine that forwards the queued messages to send.
 func newService(conn *dbus.Conn, send func(tea.Msg)) (*Service, error) {
+	// lastVol and lastCanSeek are the initial property values, so that
+	// Update publishes the first state that differs from them.
 	svc := &Service{
-		conn:     conn,
-		send:     send,
-		wake:     make(chan struct{}, 1),
-		done:     make(chan struct{}),
-		trackSeq: 1,
-		trackID:  trackPath(1),
+		conn:        conn,
+		send:        send,
+		wake:        make(chan struct{}, 1),
+		done:        make(chan struct{}),
+		lastVol:     1.0,
+		lastCanSeek: true,
+		trackSeq:    1,
+		trackID:     trackPath(1),
 	}
 	path := dbus.ObjectPath("/org/mpris/MediaPlayer2")
 
@@ -198,7 +202,7 @@ func newService(conn *dbus.Conn, send func(tea.Msg)) (*Service, error) {
 		"org.mpris.MediaPlayer2.Player": {
 			"PlaybackStatus": {Value: string(playback.StatusStopped), Writable: false, Emit: prop.EmitTrue},
 			"Metadata":       {Value: makeMetadata(playback.Track{}, svc.trackID), Writable: false, Emit: prop.EmitTrue},
-			"Volume": {Value: 1.0, Writable: true, Emit: prop.EmitTrue, Callback: func(c *prop.Change) *dbus.Error {
+			"Volume": {Value: svc.lastVol, Writable: true, Emit: prop.EmitTrue, Callback: func(c *prop.Change) *dbus.Error {
 				v, ok := c.Value.(float64)
 				if !ok {
 					return nil
@@ -226,7 +230,7 @@ func newService(conn *dbus.Conn, send func(tea.Msg)) (*Service, error) {
 			"CanPause":      {Value: true, Writable: false, Emit: prop.EmitTrue},
 			"CanGoNext":     {Value: true, Writable: false, Emit: prop.EmitTrue},
 			"CanGoPrevious": {Value: true, Writable: false, Emit: prop.EmitTrue},
-			"CanSeek":       {Value: true, Writable: false, Emit: prop.EmitTrue},
+			"CanSeek":       {Value: svc.lastCanSeek, Writable: false, Emit: prop.EmitTrue},
 		},
 	}
 

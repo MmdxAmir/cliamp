@@ -150,3 +150,31 @@ func TestServiceCallbacksDoNotWaitForSend(t *testing.T) {
 		})
 	}
 }
+
+// TestServiceFirstUpdatePublishesState checks that the first Update
+// publishes Volume and CanSeek, also when the new value is the Go zero value.
+func TestServiceFirstUpdatePublishesState(t *testing.T) {
+	const playerName = "org.mpris.MediaPlayer2.Player"
+	tests := []struct {
+		name        string
+		state       playback.State
+		wantVolume  float64
+		wantCanSeek bool
+	}{
+		{name: "muted and not seekable", state: playback.State{VolumeDB: -30}, wantVolume: 0, wantCanSeek: false},
+		{name: "full volume and seekable", state: playback.State{VolumeDB: 6, Seekable: true}, wantVolume: 1, wantCanSeek: true},
+		{name: "0 dB and seekable", state: playback.State{VolumeDB: 0, Seekable: true}, wantVolume: dbToLinear(0), wantCanSeek: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newTestService(t, func(tea.Msg) {})
+			svc.Update(tt.state)
+			if got := svc.props.GetMust(playerName, "Volume"); got != tt.wantVolume {
+				t.Errorf("Volume = %v, want %v", got, tt.wantVolume)
+			}
+			if got := svc.props.GetMust(playerName, "CanSeek"); got != tt.wantCanSeek {
+				t.Errorf("CanSeek = %v, want %v", got, tt.wantCanSeek)
+			}
+		})
+	}
+}
