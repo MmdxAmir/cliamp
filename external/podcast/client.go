@@ -57,9 +57,13 @@ type client struct {
 	chartsURL    string
 }
 
+// defaultHTTPClient is the HTTP client of every new client. Tests replace it
+// to catch network requests.
+var defaultHTTPClient = httpclient.NewAPI(30 * time.Second)
+
 func newClient() *client {
 	return &client{
-		http:         httpclient.NewAPI(30 * time.Second),
+		http:         defaultHTTPClient,
 		directoryURL: "https://itunes.apple.com",
 		chartsURL:    "https://rss.marketingtools.apple.com/api/v2",
 	}
