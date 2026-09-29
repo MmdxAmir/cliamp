@@ -434,7 +434,9 @@ func (p *Player) preloadPipelineForGeneration(tp *trackPipeline, generation uint
 
 // ClearPreload discards the preloaded next track (e.g., when shuffle/repeat changes).
 // Speaker is locked to ensure no in-flight gapless transition can reference the
-// pipeline we're about to close.
+// pipeline we're about to close. The old pipeline closes asynchronously, as in
+// playPipeline, because ClearPreload runs on the UI goroutine and a close can
+// wait for an ffmpeg or yt-dlp process to exit.
 func (p *Player) ClearPreload() {
 	p.preloadGen.Add(1)
 	speaker.Lock()
@@ -447,7 +449,7 @@ func (p *Player) ClearPreload() {
 	p.mu.Unlock()
 
 	if old != nil {
-		old.close()
+		go old.close()
 	}
 }
 

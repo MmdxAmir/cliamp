@@ -136,6 +136,79 @@ func TestStopDiscardsInFlightPreload(t *testing.T) {
 	}
 }
 
+// blockingCloseDecoder holds Close until the test closes release, as an
+// ffmpeg or yt-dlp process does while it exits.
+type blockingCloseDecoder struct {
+	*playbackTestDecoder
+	release chan struct{}
+}
+
+func (d *blockingCloseDecoder) Close() error {
+	<-d.release
+	return d.playbackTestDecoder.Close()
+}
+
+// ClearPreload runs on the UI goroutine, so it must not wait while the old
+// pipeline closes.
+func TestClearPreloadDoesNotWaitForClose(t *testing.T) {
+	tests := []struct {
+		name    string
+		preload bool
+	}{
+		{name: "no preload"},
+		{name: "preload with a slow close", preload: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestPlayer()
+			p.gapless = &gaplessStreamer{}
+			var decoder *blockingCloseDecoder
+			if tt.preload {
+				decoder = &blockingCloseDecoder{playbackTestDecoder: newPlaybackTestDecoder(), release: make(chan struct{})}
+				if err := p.preloadPipeline(&trackPipeline{decoder: decoder, stream: decoder}); err != nil {
+					t.Fatalf("preloadPipeline: %v", err)
+				}
+			}
+			generation := p.preloadGen.Load()
+
+			done := make(chan struct{})
+			go func() {
+				p.ClearPreload()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				close(decoder.release)
+				<-done
+				t.Fatal("ClearPreload waited for the old pipeline to close")
+			}
+
+			if p.HasPreload() {
+				t.Fatal("ClearPreload kept the preloaded pipeline")
+			}
+			if p.preloadGen.Load() == generation {
+				t.Fatal("ClearPreload did not reject a preload in flight")
+			}
+			p.gapless.mu.Lock()
+			next := p.gapless.next
+			p.gapless.mu.Unlock()
+			if next != nil {
+				t.Fatal("ClearPreload left the gapless next stream armed")
+			}
+			if decoder == nil {
+				return
+			}
+			close(decoder.release)
+			select {
+			case <-decoder.closed:
+			case <-time.After(2 * time.Second):
+				t.Fatal("ClearPreload did not close the old pipeline")
+			}
+		})
+	}
+}
+
 func TestSetVolumeMinClamps(t *testing.T) {
 	p := newTestPlayer()
 
