@@ -80,8 +80,8 @@ func jsonScalar(v any) string {
 // --- 2.1 construction -------------------------------------------------------
 
 func TestName(t *testing.T) {
-	if got := New("http://nas:9000", "", "").Name(); got != "lyrion" {
-		t.Errorf("Name() = %q, want lyrion", got)
+	if got := New("http://nas:9000", "", "").Name(); got != "Lyrion" {
+		t.Errorf("Name() = %q, want Lyrion", got)
 	}
 }
 

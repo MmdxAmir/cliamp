@@ -122,7 +122,7 @@ func NewFromEnv() *Client {
 	return c
 }
 
-func (c *Client) Name() string { return "lyrion" }
+func (c *Client) Name() string { return "Lyrion" }
 
 // Ping verifies the server is reachable and speaking JSON-RPC.
 func (c *Client) Ping() error {
