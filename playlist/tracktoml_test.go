@@ -153,6 +153,54 @@ provider_meta.radio.name = "Station"
 	}
 }
 
+// A ProviderMeta key goes into the file raw, so a key that could end the line
+// or the section must not reach the file.
+func TestWriteTrackTOMLDropsUnsafeMetaKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		keep bool
+	}{
+		{name: "provider key", key: "navidrome.id", keep: true},
+		{name: "mixed case", key: "albumID", keep: true},
+		{name: "dash and underscore", key: "x-y_z.1", keep: true},
+		{name: "empty", key: ""},
+		{name: "newline section", key: "x\n[[dir]]\npath"},
+		{name: "carriage return", key: "x\ry"},
+		{name: "equals", key: "a=b"},
+		{name: "space", key: "a b"},
+		{name: "bracket", key: "a]"},
+		{name: "hash", key: "#a"},
+		{name: "quote", key: `a"b`},
+		{name: "non-ASCII", key: "ø.id"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := Track{Path: "/a.mp3", ProviderMeta: map[string]string{tt.key: "v", "ok.id": "1"}}
+			var b strings.Builder
+			b.WriteString("[[entry]]\n")
+			WriteTrackTOML(&b, in)
+			var got []map[string]string
+			tomlutil.ParseNamedSections([]byte(b.String()), []string{"entry", "dir"}, func(s string, f map[string]string) {
+				if s != "entry" {
+					t.Errorf("key %q wrote a [[%s]] section:\n%s", tt.key, s, b.String())
+				}
+				got = append(got, f)
+			})
+			if len(got) != 1 {
+				t.Fatalf("parsed %d sections, want 1:\n%s", len(got), b.String())
+			}
+			want := map[string]string{"ok.id": "1"}
+			if tt.keep {
+				want[tt.key] = "v"
+			}
+			if meta := TrackFromTOML(got[0]).ProviderMeta; !reflect.DeepEqual(meta, want) {
+				t.Errorf("ProviderMeta = %q, want %q:\n%s", meta, want, b.String())
+			}
+		})
+	}
+}
+
 func TestTrackFromTOMLIgnoresUnknownKeysAndBadNumbers(t *testing.T) {
 	got := TrackFromTOML(map[string]string{
 		"path":         "/a.mp3",

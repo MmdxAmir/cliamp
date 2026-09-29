@@ -127,7 +127,7 @@ Each `[[track]]` section supports these keys:
 | `duration_secs` | No | Duration in seconds |
 | `realtime` | No | Treat an HTTP URL as live radio. Reconnect after pause or disconnect. |
 | `feed` | No | Treat the URL as an RSS or podcast feed. cliamp resolves it before playback. |
-| `provider_meta.<key>` | No | Provider data, such as `provider_meta.navidrome.id` or `provider_meta.podcast.guid`. cliamp uses it to scrobble, to sync favorites, and to recognize stations and podcast episodes. |
+| `provider_meta.<key>` | No | Provider data, such as `provider_meta.navidrome.id` or `provider_meta.podcast.guid`. cliamp uses it to scrobble, to sync favorites, and to recognize stations and podcast episodes. The `<key>` holds only letters, digits, `.`, `_` and `-`. cliamp does not save a key with other characters. |
 | `embedded_lyrics` | No | Lyrics from local file tags |
 | `album_art_url` | No | Cached file URL for embedded album art |
 | `bookmark` | No | Legacy bookmark flag. cliamp reads it one time and copies the track into favorites. See [Favorites](#favorites). |

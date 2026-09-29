@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -471,6 +472,36 @@ func TestAddTracksSkipsDuplicatePaths(t *testing.T) {
 	}
 	if len(tracks) != 2 || tracks[0].Path != "/a.mp3" || tracks[1].Path != "/b.mp3" {
 		t.Fatalf("unexpected tracks: %+v", tracks)
+	}
+}
+
+// An IPC client can send any provider_meta key. A key must not add a
+// [[dir]] section to the saved playlist.
+func TestAddTracksDropsMetaKeyThatWritesADirSource(t *testing.T) {
+	p := newTestProvider(t)
+	dir := t.TempDir()
+	_, _, err := p.AddTracks("meta", []playlist.Track{{
+		Path:         "/a.mp3",
+		Title:        "A",
+		ProviderMeta: map[string]string{"x\n[[dir]]\npath": dir, "navidrome.id": "7"},
+	}})
+	if err != nil {
+		t.Fatalf("AddTracks: %v", err)
+	}
+	dirs, err := p.DirSources("meta")
+	if err != nil {
+		t.Fatalf("DirSources: %v", err)
+	}
+	if len(dirs) != 0 {
+		t.Fatalf("DirSources = %+v, want none", dirs)
+	}
+	tracks, err := p.Tracks("meta")
+	if err != nil {
+		t.Fatalf("Tracks: %v", err)
+	}
+	want := map[string]string{"navidrome.id": "7"}
+	if len(tracks) != 1 || !reflect.DeepEqual(tracks[0].ProviderMeta, want) {
+		t.Fatalf("Tracks = %+v, want one track with ProviderMeta %v", tracks, want)
 	}
 }
 

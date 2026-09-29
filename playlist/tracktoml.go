@@ -16,8 +16,9 @@ const tomlMetaPrefix = "provider_meta."
 // WriteTrackTOML writes the persisted fields of t as `key = value` lines. The
 // caller writes the section header and its own keys, such as a timestamp.
 // Empty optional fields are left out, and ProviderMeta keys come in sorted
-// order, so one track always gives the same bytes. TrackFromTOML reads the
-// lines back.
+// order, so one track always gives the same bytes. A ProviderMeta key that
+// validMetaKey rejects is left out, because the key is written raw.
+// TrackFromTOML reads the lines back.
 func WriteTrackTOML(w io.Writer, t Track) {
 	fmt.Fprintf(w, "path = %q\n", t.Path)
 	fmt.Fprintf(w, "title = %q\n", t.Title)
@@ -46,8 +47,30 @@ func WriteTrackTOML(w io.Writer, t Track) {
 		fmt.Fprintln(w, "realtime = true")
 	}
 	for _, k := range slices.Sorted(maps.Keys(t.ProviderMeta)) {
+		if !validMetaKey(k) {
+			continue
+		}
 		fmt.Fprintf(w, "%s%s = %q\n", tomlMetaPrefix, k, t.ProviderMeta[k])
 	}
+}
+
+// validMetaKey reports whether k is not empty and holds only the bytes
+// A-Z, a-z, 0-9, '.', '_' and '-'. Other bytes, such as a newline, '=' or
+// '[', can end the key line or start a new section.
+func validMetaKey(k string) bool {
+	if k == "" {
+		return false
+	}
+	for i := range len(k) {
+		c := k[i]
+		switch {
+		case 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z', '0' <= c && c <= '9',
+			c == '.', c == '_', c == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // TrackFromTOML builds a Track from the unquoted fields of one TOML section,
