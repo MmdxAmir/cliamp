@@ -152,3 +152,68 @@ func TestYTDLSeekEntryPointsRunAsync(t *testing.T) {
 		})
 	}
 }
+
+// TestYTDLRelativeSeeksAccumulate checks that relative seeks sent before an
+// in-flight yt-dlp seek reports back add up to one target.
+func TestYTDLRelativeSeeksAccumulate(t *testing.T) {
+	track := playlist.Track{Title: "Video", Path: "https://www.youtube.com/watch?v=abc", Stream: true, DurationSecs: 3600}
+	seekMsg := func(m *Model) tea.Cmd {
+		updated, cmd := m.Update(playback.SeekMsg{Offset: 30 * time.Second})
+		*m = updated.(Model)
+		return cmd
+	}
+	v2Seek := func(m *Model) tea.Cmd {
+		updated, cmd := m.Update(v2Request(t, "seek", ipc.Request{Value: 30}))
+		*m = updated.(Model)
+		return cmd
+	}
+	keySeek := func(m *Model) tea.Cmd {
+		return m.handleKey(tea.KeyPressMsg{Code: tea.KeyRight})
+	}
+	cases := []struct {
+		name      string
+		seeks     []func(*Model) tea.Cmd
+		wantDelta time.Duration
+	}{
+		{name: "two seek messages", seeks: []func(*Model) tea.Cmd{seekMsg, seekMsg}, wantDelta: 60 * time.Second},
+		{name: "two v2 seeks", seeks: []func(*Model) tea.Cmd{v2Seek, v2Seek}, wantDelta: 60 * time.Second},
+		{name: "seek message extends a debounced key seek", seeks: []func(*Model) tea.Cmd{keySeek, seekMsg}, wantDelta: 35 * time.Second},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			eng := &playbackFakeEngine{
+				playing:  true,
+				ytdlSeek: true,
+				seekable: true,
+				position: 10 * time.Second,
+				duration: time.Hour,
+			}
+			pl := playlist.New()
+			pl.Add(track)
+			pl.SetIndex(0)
+			m := Model{player: eng, playlist: pl, playingTrack: track, playingTrackActive: true}
+
+			var cmd tea.Cmd
+			for _, seek := range tt.seeks {
+				if c := seek(&m); c != nil && cmd == nil {
+					cmd = c
+				}
+			}
+			for i := 0; cmd != nil && i < len(tt.seeks); i++ {
+				updated, next := m.Update(runSeekCmd(t, cmd))
+				m = updated.(Model)
+				if !m.seek.inFlight {
+					break
+				}
+				cmd = next
+			}
+			if m.seek.inFlight || m.seek.pending {
+				t.Fatalf("seek still running: inFlight %v, pending %v", m.seek.inFlight, m.seek.pending)
+			}
+			if n := len(eng.seekYTDLCalls); n == 0 || eng.seekYTDLCalls[n-1] != tt.wantDelta {
+				t.Fatalf("SeekYTDL calls = %v, want the last one to be %v", eng.seekYTDLCalls, tt.wantDelta)
+			}
+		})
+	}
+}

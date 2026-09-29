@@ -57,8 +57,10 @@ func (m *Model) seekRelative(d time.Duration, debounceTicks int) tea.Cmd {
 		return nil
 	}
 
+	// A pending or running seek has not moved Position yet, so build on its
+	// target or back-to-back relative seeks overwrite each other.
 	target := m.player.Position()
-	if m.seek.active && debounceTicks > 0 {
+	if m.seek.active {
 		target = m.seek.targetPos
 	}
 	return m.queueSeekTarget(target+d, debounceTicks)
