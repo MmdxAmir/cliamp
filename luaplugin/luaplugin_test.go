@@ -100,6 +100,39 @@ func TestLoadPluginWithoutRegisterReturnsNil(t *testing.T) {
 	}
 }
 
+func TestRegisterWithoutTypeReportsError(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{"no type", `plugin.register({name = "y"})`},
+		{"empty type", `plugin.register({name = "y", type = ""})`},
+		{"no type with a hook", `
+			local p = plugin.register({name = "y"})
+			p:on("track.change", function() end)
+		`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			path := filepath.Join(t.TempDir(), "y.lua")
+			if err := os.WriteFile(path, []byte(tt.code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			p, err := m.loadPlugin(path, "y", nil)
+			if p != nil {
+				t.Errorf("loadPlugin() plugin = %+v, want nil", p)
+			}
+			if err == nil || !strings.Contains(err.Error(), `needs type = "hook" or "visualizer"`) {
+				t.Errorf("loadPlugin() error = %v, want the missing type", err)
+			}
+			if n := len(m.hooks["track.change"]); n != 0 {
+				t.Errorf("hooks[track.change] = %d, want 0", n)
+			}
+		})
+	}
+}
+
 func TestLoadPluginSyntaxError(t *testing.T) {
 	m := newTestManager()
 	dir := t.TempDir()

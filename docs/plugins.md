@@ -136,12 +136,12 @@ The directory name is the plugin name. cliamp loads only `init.lua` automaticall
 
 ## Registration
 
-Each plugin must call `plugin.register()`. cliamp silently skips files that do not call it.
+Each plugin must call `plugin.register()`. cliamp skips files that do not call it. The `type` field is required. A `plugin.register()` call without `type = "hook"` or `type = "visualizer"` is a load error. cliamp shows the error at startup and does not load the plugin.
 
 ```lua
 local p = plugin.register({
     name        = "myplugin",           -- required
-    type        = "hook",               -- "hook" or "visualizer"
+    type        = "hook",               -- required: "hook" or "visualizer"
     version     = "1.0.0",             -- optional
     description = "What it does",       -- optional
 })

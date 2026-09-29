@@ -383,6 +383,9 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 		if typ := opts.RawGetString("type"); typ != lua.LNil {
 			p.Type = typ.String()
 		}
+		if p.Type == "" {
+			L.RaiseError(`plugin.register() needs type = "hook" or "visualizer"`)
+		}
 		// Parse permissions = {"control", ...}
 		if perms := opts.RawGetString("permissions"); perms != lua.LNil {
 			if tbl, ok := perms.(*lua.LTable); ok {
