@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gopxl/beep/v2"
+	"github.com/gopxl/beep/v2/generators"
 	"github.com/gopxl/beep/v2/wav"
 )
 
@@ -46,7 +47,7 @@ func testWAV(t *testing.T) []byte {
 	}
 	defer f.Close()
 	format := beep.Format{SampleRate: 44100, NumChannels: 2, Precision: 2}
-	if err := wav.Encode(f, beep.Silence(441), format); err != nil {
+	if err := wav.Encode(f, generators.Silence(441), format); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(f.Name())

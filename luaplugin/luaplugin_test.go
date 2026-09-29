@@ -1190,9 +1190,9 @@ func TestEmitDropsWhenQueueFull(t *testing.T) {
 	p.mu.Unlock()
 
 	want := eventQueueSize + 1
-	got := rec.wait(t, want)
+	rec.wait(t, want)
 	time.Sleep(20 * time.Millisecond) // let an extra event arrive if one was kept
-	got = rec.values()
+	got := rec.values()
 	if len(got) != want {
 		t.Fatalf("plugin saw %d events, want %d", len(got), want)
 	}

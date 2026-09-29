@@ -496,9 +496,12 @@ func TestTrustAndRuntimePickSameFile(t *testing.T) {
 		t.Fatalf("Trust: %v", err)
 	}
 	mgr, err := luaplugin.New(nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	defer mgr.Close()
-	if err != nil || mgr.PluginCount() != 1 {
-		t.Fatalf("New() loaded %d plugins, error %v, want 1 plugin and no error", mgr.PluginCount(), err)
+	if mgr.PluginCount() != 1 {
+		t.Fatalf("New() loaded %d plugins, want 1", mgr.PluginCount())
 	}
 	out.Reset()
 	if err := List(); err != nil {
