@@ -184,11 +184,14 @@ func (m *Manager) enqueue(p *Plugin, label string, fn func()) bool {
 }
 
 // runQueue runs the queued calls of p one at a time until Close closes the
-// queue. Thus the events and key presses of one plugin keep their order.
+// queue. Thus the events and key presses of one plugin keep their order. When
+// Close sets dropQueued, it drops the calls that still wait.
 func (m *Manager) runQueue(p *Plugin) {
 	defer m.queues.Done()
 	for fn := range p.queue {
-		fn()
+		if !m.dropQueued.Load() {
+			fn()
+		}
 	}
 }
 

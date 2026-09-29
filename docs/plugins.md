@@ -213,7 +213,7 @@ and the `status` command already exposes playback metadata.
 
 Use `p:on(event, callback)` to subscribe to events. Each plugin gets its events and key presses one at a time, in the order cliamp sent them. Different plugins run in parallel. Each callback times out after 5 seconds.
 
-Up to 256 events and key presses can wait for one plugin. If a plugin falls further behind, cliamp drops its new events and key presses until it catches up, and logs one warning to `plugins.log`. At shutdown, cliamp runs the events that wait, then the `app.quit` handlers one at a time, with the same 5 second limit.
+Up to 256 events and key presses can wait for one plugin. If a plugin falls further behind, cliamp drops its new events and key presses until it catches up, and logs one warning to `plugins.log`. At shutdown, cliamp runs the events that wait for up to 2 seconds and drops the rest. Then it runs the `app.quit` handlers one at a time, with the same 5 second limit. After that, cliamp stops each command, timer callback, and exec callback that still runs.
 
 ### Available events
 

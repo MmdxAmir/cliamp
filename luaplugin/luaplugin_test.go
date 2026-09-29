@@ -1240,6 +1240,52 @@ func TestCloseRunsQueuedEventsBeforeQuit(t *testing.T) {
 	}
 }
 
+// Close stops the run of queued events after closeDrainBudget, so a slow
+// plugin with a full queue cannot hold up quit. app.quit still runs.
+func TestCloseBoundsQueueDrain(t *testing.T) {
+	defer func(d time.Duration) { hookTimeout = d }(hookTimeout)
+	hookTimeout = 200 * time.Millisecond
+	defer func(d time.Duration) { closeDrainBudget = d }(closeDrainBudget)
+	closeDrainBudget = 50 * time.Millisecond
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"sleep", "cliamp.sleep(0.2)"},
+		{"busy loop", "while true do end"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			p := loadTestPlugin(t, m, "slow-events", `
+				local p = plugin.register({name = "slow-events", type = "hook"})
+				p:on("ev", function() record("ev") `+tt.body+` end)
+				p:on("app.quit", function() record("quit") end)
+			`)
+			var rec recorder
+			rec.install(p)
+			const events = 20
+			for range events {
+				m.Emit("ev", nil)
+			}
+
+			start := time.Now()
+			m.Close()
+			if elapsed := time.Since(start); elapsed > time.Second {
+				t.Errorf("Close() took %v, want less than 1s", elapsed)
+			}
+			got := rec.values()
+			if len(got) == 0 || got[len(got)-1] != "quit" {
+				t.Fatalf("plugin saw %v, want app.quit last", got)
+			}
+			if n := len(got) - 1; n >= events {
+				t.Errorf("plugin ran %d of %d queued events, want Close to drop the rest", n, events)
+			}
+		})
+	}
+}
+
 func TestNewTreatsBadTrustManifestAsUntrusted(t *testing.T) {
 	const code = `plugin.register({name = "hello", type = "hook"})`
 	tests := []struct {

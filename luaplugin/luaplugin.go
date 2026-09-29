@@ -163,6 +163,7 @@ type Manager struct {
 	mu           sync.RWMutex
 	closing      bool               // set under mu.Lock during Close; blocks new async dispatch
 	queues       sync.WaitGroup     // tracks the queue worker of each loaded plugin
+	dropQueued   atomic.Bool        // set when closeDrainBudget ends; see runQueue
 	wg           sync.WaitGroup     // tracks in-flight EmitCommand goroutines
 	ctx          context.Context    // parent of each call context; see Close
 	cancel       context.CancelFunc // cancels ctx
@@ -600,6 +601,11 @@ func (m *Manager) SetUIProvider(up UIProvider) {
 	m.ui = up
 }
 
+// closeDrainBudget bounds the run of queued events in Close. After it ends,
+// the queue workers drop the calls that still wait. It is a var so tests can
+// shorten it.
+var closeDrainBudget = 2 * time.Second
+
 // Close fires the "app.quit" event synchronously and shuts down all Lua VMs.
 func (m *Manager) Close() {
 	// Block new async dispatch before tearing anything down.
@@ -609,11 +615,23 @@ func (m *Manager) Close() {
 
 	// Run the events that are already queued, so app.quit is the last event
 	// each plugin sees. Emit and EmitKey send only under m.mu while closing
-	// is false, so no send can reach a closed queue.
+	// is false, so no send can reach a closed queue. After closeDrainBudget,
+	// drop the calls that still wait. The call that runs then stops within
+	// hookTimeout.
 	for _, p := range m.plugins {
 		close(p.queue)
 	}
-	m.queues.Wait()
+	drained := make(chan struct{})
+	go func() {
+		m.queues.Wait()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+	case <-time.After(closeDrainBudget):
+		m.dropQueued.Store(true)
+		<-drained
+	}
 
 	m.EmitSync(EventAppQuit, nil)
 	m.timers.stopAll()
