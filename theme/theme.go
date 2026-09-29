@@ -94,8 +94,7 @@ func Parse(name string, r io.Reader) (Theme, error) {
 			continue
 		}
 		key = strings.TrimSpace(key)
-		val = strings.TrimSpace(val)
-		val = strings.Trim(val, `"'`)
+		val = parseValue(val)
 
 		switch key {
 		case "bg":
@@ -115,6 +114,28 @@ func Parse(name string, r io.Reader) (Theme, error) {
 		}
 	}
 	return t, scanner.Err()
+}
+
+// parseValue returns the value of a key = value line without its quotes and
+// without a trailing # comment. A # outside quotes starts a comment only
+// after white space, so an unquoted #RRGGBB value stays whole.
+func parseValue(val string) string {
+	val = strings.TrimSpace(val)
+	if val != "" && (val[0] == '"' || val[0] == '\'') {
+		if end := strings.IndexByte(val[1:], val[0]); end >= 0 {
+			rest := strings.TrimSpace(val[end+2:])
+			if rest == "" || rest[0] == '#' {
+				return val[1 : end+1]
+			}
+		}
+	}
+	for i := 1; i < len(val); i++ {
+		if val[i] == '#' && (val[i-1] == ' ' || val[i-1] == '\t') {
+			val = strings.TrimSpace(val[:i])
+			break
+		}
+	}
+	return strings.Trim(val, `"'`)
 }
 
 // Find returns the theme called name, matched case-insensitively across the

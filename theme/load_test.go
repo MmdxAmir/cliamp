@@ -255,6 +255,13 @@ red = "#dc322f"
 			want:  map[string]Theme{"solarized": named("Solarized")},
 		},
 		{
+			name: "theme with inline comments",
+			files: fstest.MapFS{"themes/commented.toml": {Data: []byte(
+				"# Solarized with notes\n" + strings.ReplaceAll(good, "\n", " # note\n"),
+			)}},
+			want: map[string]Theme{"commented": named("commented")},
+		},
+		{
 			name:  "broken theme",
 			files: fstest.MapFS{"themes/broken.toml": {Data: []byte(`accent = "blue"`)}},
 			want:  map[string]Theme{},
