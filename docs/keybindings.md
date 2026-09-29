@@ -29,7 +29,7 @@ library commands.
 | `j` `k` / `Up` `Down` | Move playlist cursor (wraps); see focused settings below for control actions |
 | `PageUp` `PageDown` / `Ctrl+U` `Ctrl+D` | Scroll playlist/file browser by page (outside text input) |
 | `Home` `End` / `g` `G` | Go to top/end of playlist/file browser |
-| `Shift+Up` `Shift+Down` | Move track up/down in playlist/queue |
+| `Shift+Up` `Shift+Down` | Move track up/down in playlist/queue. Turn off shuffle to move a playlist track. |
 | `h` `l` | Adjust the focused setting (EQ: select band) |
 | `Enter` | Play selected track |
 | `/` | Search playlist (navigate results with `↑` `↓` / `Ctrl+N` `Ctrl+P`; `Ctrl+U` clears the query; `Tab` toggles the queue for the selected result) |
@@ -141,6 +141,12 @@ preference remains saved for a wider layout. See
 | `p` | Playlist manager |
 | `r` | Cycle repeat mode (Off / All / One) |
 | `z` | Toggle shuffle |
+
+While shuffle is on, the playlist lists tracks in play order. The tracks that
+played before the current track are above it. The tracks that play next are
+below it. Each row keeps its original track number. When you turn off shuffle,
+the playlist returns to the original order and the cursor stays on the same
+track.
 
 ### Inside the subscribed shows overlay
 
