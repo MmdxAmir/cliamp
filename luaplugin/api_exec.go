@@ -142,26 +142,12 @@ func (em *execManager) stopAll() {
 // Without the permission, cliamp.exec is a no-op table that logs once.
 // The output and exit callbacks go through m.call.
 func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) {
-	em, logger := m.execs, m.logger
+	em := m.execs
 	tbl := L.NewTable()
 
-	warned := false
-	guard := func() bool {
-		if p.perms[PermExec] {
-			return true
-		}
-		if !warned {
-			logger.log(p.installName, "warn", "cliamp.exec requires permissions = {\"exec\"} — further warnings suppressed")
-			warned = true
-		}
-		return false
-	}
-
 	L.SetField(tbl, "run", L.NewFunction(func(L *lua.LState) int {
-		if !guard() {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("exec permission required"))
-			return 2
+		if !p.permitted(PermExec, "cliamp.exec.run") {
+			return pushErr(L, "exec permission required")
 		}
 
 		binary := L.CheckString(1)
@@ -169,16 +155,12 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 		optsTbl := L.OptTable(3, nil)
 
 		if !em.isAllowed(binary) {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("binary not in allowlist: " + binary))
-			return 2
+			return pushErr(L, "binary not in allowlist: "+binary)
 		}
 
 		path, err := exec.LookPath(binary)
 		if err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("binary not found on PATH: " + binary))
-			return 2
+			return pushErr(L, "binary not found on PATH: "+binary)
 		}
 
 		// Flatten argv. Every entry must be a string; reject non-strings rather
@@ -196,9 +178,7 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 			argv = append(argv, v.String())
 		})
 		if argErr != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(argErr.Error()))
-			return 2
+			return pushErr(L, argErr.Error())
 		}
 
 		var onStdout, onStderr, onExit *lua.LFunction
@@ -227,15 +207,11 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 		}
 
 		if cwd != "" && !isWriteAllowed(cwd) {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("cwd not in write allowlist"))
-			return 2
+			return pushErr(L, "cwd not in write allowlist")
 		}
 
 		if !em.canStart(p) {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("per-plugin exec concurrency cap reached"))
-			return 2
+			return pushErr(L, "per-plugin exec concurrency cap reached")
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -250,22 +226,16 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			cancel()
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		stderr, err := cmd.StderrPipe()
 		if err != nil {
 			cancel()
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		if err := cmd.Start(); err != nil {
 			cancel()
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 
 		id := em.nextID.Add(1)

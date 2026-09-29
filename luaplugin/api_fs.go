@@ -148,14 +148,10 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 			return 0
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		L.Push(lua.LTrue)
 		return 1
@@ -170,22 +166,16 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 			return 0
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 		if err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		_, err = f.WriteString(content)
 		f.Close()
 		if err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		L.Push(lua.LTrue)
 		return 1
@@ -196,9 +186,7 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 		path := L.CheckString(1)
 		f, err := os.Open(path)
 		if err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		defer f.Close()
 		const maxSize = 1 << 20 // 1MB
@@ -207,14 +195,10 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 		// rather than returning a silently truncated value.
 		data, err := io.ReadAll(io.LimitReader(f, maxSize+1))
 		if err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		if len(data) > maxSize {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("file exceeds 1MB read limit"))
-			return 2
+			return pushErr(L, "file exceeds 1MB read limit")
 		}
 		L.Push(lua.LString(string(data)))
 		return 1
@@ -228,9 +212,7 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 			return 0
 		}
 		if err := os.Remove(path); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		L.Push(lua.LTrue)
 		return 1
@@ -252,9 +234,7 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 			return 0
 		}
 		if err := os.MkdirAll(path, 0o755); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		L.Push(lua.LTrue)
 		return 1
@@ -266,9 +246,7 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 		path := L.CheckString(1)
 		entries, err := os.ReadDir(path)
 		if err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		result := L.NewTable()
 		for i, e := range entries {

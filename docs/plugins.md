@@ -283,6 +283,22 @@ List registered commands with `cliamp plugins commands`. A command can run for u
 
 All APIs are in the global `cliamp` table.
 
+### Errors and permission denials
+
+Each function reports a failure in one fixed way:
+
+- A function that returns a value returns `nil` and an error message. Examples are `cliamp.fs.read`, `cliamp.http.get`, `cliamp.json.decode`, `cliamp.store.set`, `cliamp.exec.run`, `cliamp.queue.add(track)`, and `p:publish`.
+- `p:bind` returns `false` and a reason.
+- The controls in `cliamp.player`, and `cliamp.queue.add(path)`, `jump`, `remove`, and `move`, return nothing.
+- A bad argument raises a Lua error. `cliamp.fs.write`, `append`, `remove`, and `mkdir` also raise a Lua error for a path outside the allowed write directories. Use `pcall` to catch it. `cliamp.exec.run` returns `nil, "cwd not in write allowlist"` for such a `cwd`.
+
+If a plugin calls a function that needs a permission it did not declare, the function does nothing and returns its usual failure result. cliamp logs one warning to `plugins.log` for each missing permission.
+
+```lua
+local ok, err = pcall(cliamp.fs.write, "/etc/motd", "text")
+if not ok then cliamp.log.warn(err) end
+```
+
 ### cliamp.player (read-only)
 
 ```lua

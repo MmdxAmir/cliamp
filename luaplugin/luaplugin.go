@@ -36,6 +36,8 @@ type Plugin struct {
 	mu           sync.Mutex        // serializes all LState access (LState is not thread-safe)
 	closed       bool              // guarded by mu; set when L is closed, so no callback runs after it
 	lastErr      map[string]string // guarded by mu; call label -> last logged error
+	warned       map[string]bool   // guarded by mu; permissions whose denial was logged
+	logger       *pluginLogger     // the Manager's logger; nil in tests
 	config       map[string]string // per-plugin config from config.toml
 	perms        map[string]bool   // declared permissions (e.g. "control")
 	installName  string            // installed name; see the type comment
@@ -295,6 +297,7 @@ func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin,
 		L:           L,
 		config:      cfg,
 		queue:       make(chan func(), eventQueueSize),
+		logger:      m.logger,
 	}
 	m.claimNamespace(p)
 
@@ -496,9 +499,7 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 				}
 			}
 			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString(err.Error()))
-				return 2
+				return pushErr(L, err.Error())
 			}
 			L.Push(lua.LTrue)
 			return 1
@@ -522,7 +523,7 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 // registerCliampAPI sets up the "cliamp" global table with all sub-modules.
 func (m *Manager) registerCliampAPI(L *lua.LState, p *Plugin) {
 	cliamp := L.NewTable()
-	registerLogAPI(L, cliamp, m.logger, p.installName)
+	registerLogAPI(L, cliamp, p)
 	registerJSONAPI(L, cliamp)
 	registerStoreAPI(L, cliamp, p.installName)
 	registerCryptoAPI(L, cliamp)
@@ -531,9 +532,9 @@ func (m *Manager) registerCliampAPI(L *lua.LState, p *Plugin) {
 	registerPlayerAPI(L, cliamp, &m.state)
 	registerTrackAPI(L, cliamp, &m.state)
 	m.registerTimerAPI(L, cliamp, p)
-	registerQueueAPI(L, cliamp, &m.state, &m.control, p, m.logger)
-	registerNotifyAPI(L, cliamp, m.logger, p.installName)
-	registerControlAPI(L, cliamp, &m.control, p, m.logger)
+	registerQueueAPI(L, cliamp, &m.state, &m.control, p)
+	registerNotifyAPI(L, cliamp, p)
+	registerControlAPI(L, cliamp, &m.control, p)
 	registerMessageAPI(L, cliamp, &m.ui)
 	registerSleepAPI(L, cliamp)
 	m.registerExecAPI(L, cliamp, p)

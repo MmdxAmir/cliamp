@@ -125,7 +125,7 @@ func registerStoreAPI(L *lua.LState, cliamp *lua.LTable, pluginName string) {
 		store.data[key] = val
 		err := store.save()
 		store.mu.Unlock()
-		return pushStoreResult(L, err)
+		return pushResult(L, err)
 	}))
 
 	// cliamp.store.delete(key) -> true or (nil, error)
@@ -136,7 +136,7 @@ func registerStoreAPI(L *lua.LState, cliamp *lua.LTable, pluginName string) {
 		delete(store.data, key)
 		err := store.save()
 		store.mu.Unlock()
-		return pushStoreResult(L, err)
+		return pushResult(L, err)
 	}))
 
 	// cliamp.store.keys() -> array of keys (sorted for stable iteration)
@@ -164,20 +164,8 @@ func registerStoreAPI(L *lua.LState, cliamp *lua.LTable, pluginName string) {
 		store.loaded = true
 		err := store.save()
 		store.mu.Unlock()
-		return pushStoreResult(L, err)
+		return pushResult(L, err)
 	}))
 
 	L.SetField(cliamp, "store", tbl)
-}
-
-// pushStoreResult pushes true on success or (nil, error) on failure, matching
-// the convention used by cliamp.fs.
-func pushStoreResult(L *lua.LState, err error) int {
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-	L.Push(lua.LTrue)
-	return 1
 }

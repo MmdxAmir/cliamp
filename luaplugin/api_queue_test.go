@@ -8,14 +8,14 @@ import (
 )
 
 // newQueueState builds an LState with cliamp.queue registered against the given
-// providers and permission set. logger is a discard logger.
+// providers and permission set. The plugin has no logger.
 func newQueueState(t *testing.T, state *StateProvider, ctrl *ControlProvider, perms map[string]bool) *lua.LState {
 	t.Helper()
 	L := lua.NewState()
 	t.Cleanup(L.Close)
 	cliamp := L.NewTable()
 	p := &Plugin{Name: "q", perms: perms}
-	registerQueueAPI(L, cliamp, state, ctrl, p, newPluginLogger(""))
+	registerQueueAPI(L, cliamp, state, ctrl, p)
 	L.SetGlobal("cliamp", cliamp)
 	return L
 }

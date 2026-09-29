@@ -5,24 +5,14 @@ import lua "github.com/yuin/gopher-lua"
 // registerControlAPI adds cliamp.player control methods (next, prev, play_pause,
 // stop, set_volume, set_speed, seek, toggle_mono, set_eq_band) to the cliamp table.
 // These are only functional if the plugin declared permissions = {"control"}.
-func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider, p *Plugin, logger *pluginLogger) {
+func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider, p *Plugin) {
 	playerTbl := L.GetField(cliamp, "player")
 	tbl, ok := playerTbl.(*lua.LTable)
 	if !ok {
 		return
 	}
 
-	warned := false
-	guard := func(name string) bool {
-		if !p.perms[PermControl] {
-			if !warned {
-				logger.log(p.installName, "warn", "%s requires permissions = {\"control\"} — further warnings suppressed", name)
-				warned = true
-			}
-			return false
-		}
-		return true
-	}
+	guard := func(name string) bool { return p.permitted(PermControl, "cliamp.player."+name) }
 
 	L.SetField(tbl, "next", L.NewFunction(func(L *lua.LState) int {
 		if guard("next") {

@@ -15,9 +15,7 @@ func registerJSONAPI(L *lua.LState, cliamp *lua.LTable) {
 		str := L.CheckString(1)
 		var v any
 		if err := json.Unmarshal([]byte(str), &v); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		L.Push(jsonToLua(L, v))
 		return 1
@@ -29,9 +27,7 @@ func registerJSONAPI(L *lua.LState, cliamp *lua.LTable) {
 		goVal := luaToGo(val)
 		data, err := json.Marshal(goVal)
 		if err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
+			return pushErr(L, err.Error())
 		}
 		L.Push(lua.LString(string(data)))
 		return 1

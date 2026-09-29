@@ -75,18 +75,6 @@ func normalizeKey(key string) string {
 // registerKeymapAPI attaches :bind() / :unbind() to the plugin object returned
 // by plugin.register(). Gated on permissions = {"keymap"}.
 func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
-	warned := false
-	guard := func() bool {
-		if p.perms[PermKeymap] {
-			return true
-		}
-		if !warned && m.logger != nil {
-			m.logger.log(p.installName, "warn", "plugin:bind requires permissions = {\"keymap\"} — further warnings suppressed")
-			warned = true
-		}
-		return false
-	}
-
 	// p:bind(key, fn)                     → no entry in Ctrl+K overlay
 	// p:bind(key, description, fn)        → with description (shown in overlay)
 	// Returns true on success; false, reason on failure.
@@ -104,7 +92,7 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 			fn = L.CheckFunction(4)
 		}
 
-		if !guard() {
+		if !p.permitted(PermKeymap, "p:bind") {
 			L.Push(lua.LFalse)
 			L.Push(lua.LString("keymap permission required"))
 			return 2
@@ -118,9 +106,7 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 		m.mu.Lock()
 		if m.reservedKeys[key] {
 			m.mu.Unlock()
-			if m.logger != nil {
-				m.logger.log(p.installName, "warn", "refusing to bind %q: reserved by cliamp core", key)
-			}
+			p.logger.log(p.installName, "warn", "refusing to bind %q: reserved by cliamp core", key)
 			L.Push(lua.LFalse)
 			L.Push(lua.LString("key reserved by cliamp: " + key))
 			return 2
