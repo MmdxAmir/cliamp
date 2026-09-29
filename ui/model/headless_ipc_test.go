@@ -109,8 +109,7 @@ func TestHeadlessVolumeJobCarriesSnapshot(t *testing.T) {
 	m := newHeadlessModel(t, engine, nil, playlist.Track{Path: "/music/one.flac", Title: "One"})
 
 	msg := v2Request(t, "volume", ipc.Request{Value: -18})
-	updated, _ := m.Update(msg)
-	m = updated.(Model)
+	m.Update(msg)
 	job, ok := msg.Jobs.Get(msg.JobID)
 	if !ok || job.State != ipc.JobSucceeded {
 		t.Fatalf("job = %+v, found %v", job, ok)
