@@ -2701,7 +2701,8 @@ func compareUITracks(a, b playlist.Track, mode string) int {
 }
 
 func (m *Model) persistLoadedPlaylistOrder() {
-	if m.loadedPlaylist == "" {
+	name := m.writableLoadedPlaylist()
+	if name == "" {
 		return
 	}
 	saver, ok := m.localProvider.(provider.PlaylistSaver)
@@ -2716,15 +2717,15 @@ func (m *Model) persistLoadedPlaylistOrder() {
 			break
 		}
 	}
-	if err := saver.SavePlaylist(m.loadedPlaylist, tracks); err != nil {
+	if err := saver.SavePlaylist(name, tracks); err != nil {
 		m.status.Errorf(statusTTLDefault, "Save failed: %s", err)
 		return
 	}
 	if hasDirTracks {
-		m.status.Warningf(statusTTLDefault, "Reordered %q (directory-sourced tracks keep scan order)", m.loadedPlaylist)
+		m.status.Warningf(statusTTLDefault, "Reordered %q (directory-sourced tracks keep scan order)", name)
 		return
 	}
-	m.status.Showf(statusTTLDefault, "Reordered %q", m.loadedPlaylist)
+	m.status.Showf(statusTTLDefault, "Reordered %q", name)
 }
 
 func (m *Model) createPlaylistFromManager(name string) bool {

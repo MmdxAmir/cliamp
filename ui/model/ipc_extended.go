@@ -18,10 +18,11 @@ import (
 )
 
 type ipcProviderLoadResult struct {
-	request ipc.LibraryRequestMsg
-	tracks  []playlist.Track
-	loaded  string
-	err     error
+	request  ipc.LibraryRequestMsg
+	tracks   []playlist.Track
+	provider string // Name of the provider that served the tracks
+	loaded   string
+	err      error
 }
 
 type ipcURLLoadResult struct {
@@ -324,9 +325,10 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 			return nil
 		}
 	case "provider.load":
+		name := entry.Provider.Name()
 		return func() tea.Msg {
 			tracks, err := entry.Provider.Tracks(request.Playlist)
-			return ipcProviderLoadResult{request: request, tracks: tracks, loaded: request.Playlist, err: err}
+			return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: request.Playlist, err: err}
 		}
 	case "provider.search":
 		favorite := m.trackFavoriteLookup(false)
@@ -415,10 +417,11 @@ func (m *Model) handleIPCLibrary(request ipc.LibraryRequestMsg) tea.Cmd {
 			return nil
 		}
 		favorite := m.trackFavoriteLookup(false)
+		name := entry.Provider.Name()
 		return func() tea.Msg {
 			tracks, err := loader.AlbumTracks(request.Album)
 			if request.Op == "provider.load_album" {
-				return ipcProviderLoadResult{request: request, tracks: tracks, loaded: "album:" + request.Album, err: err}
+				return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: "album:" + request.Album, err: err}
 			}
 			if err != nil {
 				request.Reply <- ipcResponseError(err)
@@ -522,7 +525,7 @@ func (m *Model) handleIPCProviderLoad(result ipcProviderLoadResult) tea.Cmd {
 	// append onto the list loaded here.
 	m.retireTracksPaging()
 	m.replacePlaylist(result.tracks)
-	m.loadedPlaylist = result.loaded
+	m.setLoadedLocalPlaylist(result.provider, result.loaded)
 	m.setHeaderStateFromTracks(result.tracks)
 	m.playlist.SetIndex(0)
 	m.plCursor = 0

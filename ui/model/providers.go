@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/external/radio"
+	"github.com/bjarneo/cliamp/favorites"
+	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -496,6 +498,29 @@ func (m *Model) SetPendingURLs(urls []string) {
 // playlist, allowing path-based write-backs such as bookmarks and removals.
 func (m *Model) SetLoadedPlaylist(name string) {
 	m.loadedPlaylist = name
+}
+
+// setLoadedLocalPlaylist records the list that a provider load put in the
+// queue. Only a saved list of the local provider counts, so the name is never
+// a remote ID. History is excluded as well. The key path and the IPC
+// provider.load path both use it.
+func (m *Model) setLoadedLocalPlaylist(providerName, id string) {
+	m.loadedPlaylist = ""
+	if m.localProvider != nil && providerName == m.localProvider.Name() && id != history.PlaylistName {
+		m.loadedPlaylist = id
+	}
+}
+
+// writableLoadedPlaylist returns the local playlist file that queue edits and
+// duration backfills write to, or "" when there is none. loadedPlaylist can
+// also name Favorites, which the ♥ rule reads as a saved list. Favorites and
+// History are virtual lists with their own stores, so they are never written.
+func (m Model) writableLoadedPlaylist() string {
+	switch m.loadedPlaylist {
+	case favorites.PlaylistName, history.PlaylistName:
+		return ""
+	}
+	return m.loadedPlaylist
 }
 
 // findBrowseProvider returns the first provider that supports artist, album,

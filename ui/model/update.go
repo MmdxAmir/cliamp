@@ -8,7 +8,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -487,8 +486,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			m.replacePlayerPlaylist(msg.tracks)
-			if msg.playlistExact && m.localProvider != nil && msg.providerName == m.localProvider.Name() && msg.playlistID != history.PlaylistName {
-				m.loadedPlaylist = msg.playlistID
+			if msg.playlistExact {
+				m.setLoadedLocalPlaylist(msg.providerName, msg.playlistID)
 			}
 		}
 		if msg.next > 0 {

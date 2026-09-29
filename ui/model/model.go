@@ -399,7 +399,10 @@ type Model struct {
 
 	lastProgressReport time.Time // last interim provider progress report
 
-	loadedPlaylist string // name of the currently loaded local playlist (for resume)
+	// loadedPlaylist names the saved local list that the queue mirrors, for
+	// resume. When it is set, the ♥ rule treats station rows as tracks.
+	// Write-backs read writableLoadedPlaylist, which excludes Favorites.
+	loadedPlaylist string
 
 	// activeProviderPlaylistID is the ID of the most recently loaded playlist
 	// from a non-local provider (Spotify, Navidrome, …). Used to highlight that

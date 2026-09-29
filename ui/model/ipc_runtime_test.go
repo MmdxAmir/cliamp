@@ -295,10 +295,11 @@ func TestV2LoadReadsLocalPlaylist(t *testing.T) {
 	pl := playlist.New()
 	pl.Add(playlist.Track{Path: "/music/old.mp3", Title: "Old"})
 	m := Model{
-		player:    &playbackFakeEngine{},
-		playlist:  pl,
-		vis:       ui.NewVisualizer(44100),
-		providers: []ProviderEntry{{Key: "local", Name: "Local", Provider: local}},
+		player:        &playbackFakeEngine{},
+		playlist:      pl,
+		vis:           ui.NewVisualizer(44100),
+		localProvider: local,
+		providers:     []ProviderEntry{{Key: "local", Name: "Local", Provider: local}},
 	}
 
 	response := runV2(t, &m, "load", ipc.Request{Playlist: "Mix"})
