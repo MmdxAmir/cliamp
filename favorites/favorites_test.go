@@ -447,3 +447,28 @@ title = "A"
 		t.Fatalf("favorites.toml:\n got:\n%s\nwant:\n%s", data, want)
 	}
 }
+
+// A write must work before the config directory exists, as in the
+// `cliamp playlist` CLI on a new machine. The file lock is taken first, so
+// it must create the directory.
+func TestWritesCreateMissingConfigDir(t *testing.T) {
+	track := playlist.Track{Path: "/a.mp3"}
+	tests := []struct {
+		name string
+		fn   func(s *Store) error
+	}{
+		{"Toggle", func(s *Store) error { _, err := s.Toggle(track); return err }},
+		{"Favorite", func(s *Store) error { _, err := s.Favorite(track); return err }},
+		{"Import", func(s *Store) error { _, err := s.Import([]playlist.Track{track}); return err }},
+		{"Remove", func(s *Store) error { _, err := s.Remove(track.Path); return err }},
+		{"Clear", func(s *Store) error { return s.Clear() }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewAt(filepath.Join(t.TempDir(), "missing", "favorites.toml"))
+			if err := tt.fn(s); err != nil {
+				t.Fatalf("%s: %v", tt.name, err)
+			}
+		})
+	}
+}

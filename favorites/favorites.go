@@ -274,8 +274,13 @@ func (s *Store) Clear() error {
 }
 
 // lockFile serializes writers across cliamp processes: the per-instance
-// mutex alone cannot stop two processes from rewriting the same file.
+// mutex alone cannot stop two processes from rewriting the same file. It
+// creates the config directory first, because a write can run before the
+// directory exists.
 func (s *Store) lockFile() (func() error, error) {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return nil, fmt.Errorf("create favorites dir: %w", err)
+	}
 	return fileutil.LockFile(s.path + ".lock")
 }
 
