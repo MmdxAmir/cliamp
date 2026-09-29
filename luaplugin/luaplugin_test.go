@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
+
+	"github.com/bjarneo/cliamp/internal/plugintrust"
 )
 
 // newTestManager returns a Manager ready for testing (no disk I/O).
@@ -650,5 +653,58 @@ func TestConcurrentEmitSafety(t *testing.T) {
 
 	if count != 20 {
 		t.Fatalf("count after 20 concurrent emits = %v, want 20", count)
+	}
+}
+
+func TestNewTreatsBadTrustManifestAsUntrusted(t *testing.T) {
+	const code = `plugin.register({name = "hello", type = "hook"})`
+	tests := []struct {
+		name     string
+		manifest func(hash string) string
+	}{
+		{"not JSON", func(string) string { return "{" }},
+		{"null plugins map", func(string) string { return `{"version":1,"plugins":null}` }},
+		{"unsupported version with a matching hash", func(hash string) string {
+			return `{"version":2,"plugins":{"hello":"` + hash + `"}}`
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			cfg := filepath.Join(home, ".config", "cliamp")
+			dir := filepath.Join(cfg, "plugins")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "hello.lua")
+			if err := os.WriteFile(path, []byte(code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			hash, err := plugintrust.HashFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, ".trust.json"), []byte(tt.manifest(hash)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			m, err := New(nil, nil)
+			if m == nil {
+				t.Fatal("New returned a nil Manager")
+			}
+			defer m.Close()
+			if got := m.PluginCount(); got != 0 {
+				t.Errorf("PluginCount() = %d, want 0", got)
+			}
+			if err == nil || !strings.Contains(err.Error(), "trust manifest") ||
+				!strings.Contains(err.Error(), "hello: "+plugintrust.ErrUntrusted.Error()) {
+				t.Errorf("New() error = %v, want the manifest error and hello as untrusted", err)
+			}
+			log, _ := os.ReadFile(filepath.Join(cfg, pluginLogName))
+			if !strings.Contains(string(log), "trust manifest") {
+				t.Errorf("plugins.log = %q, want the manifest error", log)
+			}
+		})
 	}
 }

@@ -185,9 +185,15 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 		}
 		return m, fmt.Errorf("read plugin dir: %w", err)
 	}
+	var loadErrs []string
 	trustManifest, err := plugintrust.Load(dir)
 	if err != nil {
-		return m, err
+		// Fail safe: a manifest that does not load approves no plugin.
+		// Continue, so each plugin reports that it needs approval.
+		msg := fmt.Sprintf("%v; all plugins are untrusted", err)
+		m.logger.log("cliamp", "error", "%s", msg)
+		loadErrs = append(loadErrs, msg)
+		trustManifest = plugintrust.Manifest{}
 	}
 
 	// Collect plugin files: *.lua and directories with init.lua.
@@ -223,7 +229,6 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 		}
 	}
 
-	var loadErrs []string
 	for _, f := range files {
 		if disabled[f.name] {
 			continue

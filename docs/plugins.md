@@ -20,7 +20,7 @@ cliamp plugins trust <name>             # approve installed plugin contents
 cliamp plugins remove <name>            # remove a plugin
 ```
 
-The install and trust commands show the source, SHA-256, declared permissions, and implicit file-system and network access before the prompt. In a non-interactive environment, use `--yes` only after you review the same content independently. cliamp stores approvals in `plugins/.trust.json`. Editing a plugin changes its hash and disables it until you approve it again. cliamp rejects unknown permission names.
+The install and trust commands show the source, SHA-256, declared permissions, and implicit file-system and network access before the prompt. In a non-interactive environment, use `--yes` only after you review the same content independently. cliamp stores approvals in `plugins/.trust.json`. Editing a plugin changes its hash and disables it until you approve it again. If `plugins/.trust.json` does not parse, cliamp treats every plugin as untrusted and logs the error to `plugins.log`. To recover, delete the file and approve each plugin again. cliamp rejects unknown permission names.
 
 ### Install sources
 
