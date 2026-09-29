@@ -16,7 +16,7 @@ func (m *Model) addTracksToCurrentPlaylist(tracks []playlist.Track, what string)
 	}
 	wasEmpty = m.playlist.Len() == 0
 	m.playlist.Add(tracks...)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState(tracks)
 	m.status.Showf(statusTTLDefault, "Added %d track(s) from %s", len(tracks), what)
 	return wasEmpty, true

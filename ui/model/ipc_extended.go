@@ -68,6 +68,7 @@ type ipcProviderLoadResult struct {
 	tracks   []playlist.Track
 	provider string // Name of the provider that served the tracks
 	loaded   string
+	source   string // Provider key and ID for the runtime snapshot
 	err      error
 }
 
@@ -113,7 +114,7 @@ func (m *Model) handleIPCURLResult(result ipcURLLoadResult) tea.Cmd {
 	start := m.playlist.Len()
 	wasStopped := !m.player.IsPlaying()
 	m.playlist.Add(result.tracks...)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState(result.tracks)
 	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks, m.trackFavoriteLookup(true)), Total: len(result.tracks)}
 	if result.request.Play {
@@ -381,7 +382,7 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 		name := entry.Provider.Name()
 		return func() tea.Msg {
 			tracks, err := entry.Provider.Tracks(request.Playlist)
-			return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: request.Playlist, err: err}
+			return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: request.Playlist, source: entry.Key + ":" + request.Playlist, err: err}
 		}
 	case "provider.search":
 		favorite := m.trackFavoriteLookup(false)
@@ -474,7 +475,7 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 		return func() tea.Msg {
 			tracks, err := loader.AlbumTracks(request.Album)
 			if request.Op == "provider.load_album" {
-				return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: "album:" + request.Album, err: err}
+				return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: "album:" + request.Album, source: entry.Key + ":album:" + request.Album, err: err}
 			}
 			if err != nil {
 				request.Reply <- ipcResponseError(err)
@@ -579,6 +580,9 @@ func (m *Model) handleIPCProviderLoad(result ipcProviderLoadResult) tea.Cmd {
 	m.retireTracksPaging()
 	m.replacePlaylist(result.tracks)
 	m.setLoadedLocalPlaylist(result.provider, result.loaded)
+	if m.loadedPlaylist == "" {
+		m.playlistSource = result.source
+	}
 	m.setHeaderStateFromTracks(result.tracks)
 	m.playlist.SetIndex(0)
 	m.plCursor = 0

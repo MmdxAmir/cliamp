@@ -407,6 +407,11 @@ type Model struct {
 	// Write-backs read writableLoadedPlaylist, which excludes Favorites.
 	loadedPlaylist string
 
+	// playlistSource names the provider list that an IPC load put in the
+	// queue, as key:id or key:album:id, when loadedPlaylist is empty. Only
+	// the runtime snapshot reads it.
+	playlistSource string
+
 	// activeProviderPlaylistID is the ID of the most recently loaded playlist
 	// from a non-local provider (Spotify, Navidrome, …). Used to highlight that
 	// row in the provider browser. Empty when no provider playlist is active.

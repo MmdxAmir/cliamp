@@ -2160,7 +2160,7 @@ func (m *Model) plMgrLoadAndPlay(startIdx int) tea.Cmd {
 	m.retireTracksPaging()
 	m.replacePlaylist(m.plManager.tracks)
 	m.setHeaderStateFromTracks(m.plManager.tracks)
-	m.loadedPlaylist = m.plManager.selPlaylist
+	m.SetLoadedPlaylist(m.plManager.selPlaylist)
 	if startIdx < 0 || startIdx >= m.playlist.Len() {
 		startIdx = 0
 	}

@@ -193,7 +193,7 @@ func (m *Model) addSubscriptionEpisodes(tracks []playlist.Track, mode subsLoadMo
 	}
 	start := m.playlist.Len()
 	m.playlist.Add(tracks...)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState(tracks)
 
 	switch mode {

@@ -67,7 +67,7 @@ func (m *Model) appendPluginTracks(tracks ...playlist.Track) tea.Cmd {
 		return nil
 	}
 	m.playlist.Add(tracks...)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.notifyPlayback()
 	return m.rearmPreload()
 }

@@ -270,7 +270,7 @@ func (m *Model) ResumePlaylist(name string, tracks []playlist.Track) {
 	m.retireTracksPaging()
 	m.replacePlaylist(tracks)
 	m.setHeaderStateFromTracks(tracks)
-	m.loadedPlaylist = name
+	m.SetLoadedPlaylist(name)
 }
 
 // ResumeState returns the track path, playback position, and playlist name captured at exit.

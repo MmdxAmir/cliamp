@@ -211,7 +211,7 @@ func (m *Model) replacePlayerPlaylist(tracks []playlist.Track) {
 	m.resetYTDLBatch()
 	m.replacePlaylist(tracks)
 	m.setHeaderStateFromTracks(tracks)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.plCursor = 0
 	m.plScroll = 0
 	m.focus = focusPlaylist
@@ -517,6 +517,13 @@ func (m *Model) SetPendingURLs(urls []string) {
 // playlist, allowing path-based write-backs such as bookmarks and removals.
 func (m *Model) SetLoadedPlaylist(name string) {
 	m.loadedPlaylist = name
+	m.playlistSource = ""
+}
+
+// clearLoadedPlaylist records that the queue mirrors no list.
+func (m *Model) clearLoadedPlaylist() {
+	m.loadedPlaylist = ""
+	m.playlistSource = ""
 }
 
 // setLoadedLocalPlaylist records the list that a provider load put in the
@@ -524,7 +531,7 @@ func (m *Model) SetLoadedPlaylist(name string) {
 // a remote ID. History is excluded as well. The key path and the IPC
 // provider.load path both use it.
 func (m *Model) setLoadedLocalPlaylist(providerName, id string) {
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	if m.localProvider != nil && providerName == m.localProvider.Name() && id != history.PlaylistName {
 		m.loadedPlaylist = id
 	}

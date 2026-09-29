@@ -67,8 +67,10 @@ writes, remains asynchronous.
 `state.get` returns a snapshot with the active audio track, logical playlist
 track, playback state, position, duration, seekability, modes, EQ, visualizer,
 theme, stream error, and two revisions. `playlist` names the loaded saved
-playlist. `device` names the output device that the last `device` operation
-reported.
+playlist. After `provider.load` or `provider.load_album` of another list,
+`playlist` holds the provider key and the ID, for example `navidrome:42` or
+`navidrome:album:7`. `device` names the output device that the last `device`
+operation reported.
 
 ```json
 {

@@ -179,7 +179,7 @@ func (m *Model) playTrackImmediate(track playlist.Track) tea.Cmd {
 	m.player.Stop()
 	m.player.ClearPreload()
 	m.playlist.Add(track)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState([]playlist.Track{track})
 	idx := m.playlist.Len() - 1
 	m.playlist.SetIndex(idx)
@@ -195,7 +195,7 @@ func (m *Model) playTrackImmediate(track playlist.Track) tea.Cmd {
 func (m *Model) appendTrack(track playlist.Track) tea.Cmd {
 	wasEmpty := m.playlist.Len() == 0
 	m.playlist.Add(track)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState([]playlist.Track{track})
 	idx := m.playlist.Len() - 1
 	m.status.Showf(statusTTLMedium, "Added: %s", track.DisplayName())
@@ -218,7 +218,7 @@ func (m *Model) playAlbumImmediate(album playlist.Track, tracks []playlist.Track
 	m.player.ClearPreload()
 	idx := m.playlist.Len()
 	m.playlist.Add(tracks...)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState(tracks)
 	m.playlist.SetIndex(idx)
 	m.plCursor = idx
@@ -235,7 +235,7 @@ func (m *Model) appendAlbum(album playlist.Track, tracks []playlist.Track) tea.C
 	wasEmpty := m.playlist.Len() == 0
 	idx := m.playlist.Len()
 	m.playlist.Add(tracks...)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState(tracks)
 	m.status.Showf(statusTTLMedium, "Added album: %s (%d tracks)", album.Title, len(tracks))
 	if wasEmpty || !m.player.IsPlaying() {
@@ -254,7 +254,7 @@ func (m *Model) appendAlbum(album playlist.Track, tracks []playlist.Track) tea.C
 func (m *Model) queueAlbumNext(album playlist.Track, tracks []playlist.Track) tea.Cmd {
 	idx := m.playlist.Len()
 	m.playlist.Add(tracks...)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState(tracks)
 	for i := range tracks {
 		m.playlist.Queue(idx + i)
@@ -310,7 +310,7 @@ func (m *Model) cancelSpotRequest() {
 // queueTrackNext adds a track to the playlist and queues it to play next.
 func (m *Model) queueTrackNext(track playlist.Track) tea.Cmd {
 	m.playlist.Add(track)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState([]playlist.Track{track})
 	idx := m.playlist.Len() - 1
 	m.playlist.Queue(idx)

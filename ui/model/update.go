@@ -658,7 +658,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.playlist.Add(msg.tracks...)
-		m.loadedPlaylist = ""
+		m.clearLoadedPlaylist()
 		m.addToHeaderState(msg.tracks)
 		m.ytdlBatch.offset += len(msg.tracks)
 		if len(msg.tracks) < ytdlBatchSize {
@@ -681,7 +681,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.retireTracksPaging()
 		m.replacePlaylist(msg.tracks)
-		m.loadedPlaylist = ""
+		m.clearLoadedPlaylist()
 		m.setHeaderStateFromTracks(msg.tracks)
 		m.plCursor = 0
 		m.plScroll = 0
@@ -707,7 +707,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if len(msg.tracks) > 0 {
 			m.playlist.Add(msg.tracks...)
-			m.loadedPlaylist = ""
+			m.clearLoadedPlaylist()
 			m.addToHeaderState(msg.tracks)
 			m.status.Showf(statusTTLDefault, "Loaded %d track(s)", len(msg.tracks))
 		} else {
@@ -801,13 +801,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resetYTDLBatch()
 			m.retireTracksPaging()
 			m.replacePlaylist(msg.tracks)
-			m.loadedPlaylist = ""
+			m.clearLoadedPlaylist()
 			m.setHeaderStateFromTracks(msg.tracks)
 			m.plCursor = 0
 			m.plScroll = 0
 		} else {
 			m.playlist.Add(msg.tracks...)
-			m.loadedPlaylist = ""
+			m.clearLoadedPlaylist()
 			m.addToHeaderState(msg.tracks)
 		}
 		m.focus = focusPlaylist

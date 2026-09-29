@@ -169,3 +169,58 @@ func TestStationRowInFavoritesTogglesTrackFavorite(t *testing.T) {
 		t.Fatal("the row still shows a ♥ after f")
 	}
 }
+
+// The runtime snapshot names the loaded local list, or else the provider
+// list of the last IPC load as key:id. cliamp status --json shows it. A
+// queue change that drops the loaded list drops the name too.
+func TestV2SnapshotNamesTheLoadedList(t *testing.T) {
+	type step struct {
+		op     string
+		params ipc.Request
+	}
+	loadRemote := step{"provider.load", ipc.Request{Provider: "navidrome", Playlist: "42"}}
+	loadMix := step{"load", ipc.Request{Playlist: "Mix"}}
+	for _, tc := range []struct {
+		name  string
+		steps []step
+		want  string
+	}{
+		{name: "load", steps: []step{loadMix}, want: "Mix"},
+		{name: "local playlist", steps: []step{{"provider.load", ipc.Request{Provider: "local", Playlist: "Mix"}}}, want: "Mix"},
+		{name: "local history", steps: []step{{"provider.load", ipc.Request{Provider: "local", Playlist: history.PlaylistName}}}, want: "local:" + history.PlaylistName},
+		{name: "remote playlist", steps: []step{loadRemote}, want: "navidrome:42"},
+		{name: "remote album", steps: []step{{"provider.load_album", ipc.Request{Provider: "navidrome", Album: "7"}}}, want: "navidrome:album:7"},
+		{name: "remote then local", steps: []step{loadRemote, loadMix}, want: "Mix"},
+		{name: "local then remote", steps: []step{loadMix, loadRemote}, want: "navidrome:42"},
+		{name: "remote then queue", steps: []step{loadRemote, {"queue", ipc.Request{Path: "/music/c.mp3"}}}},
+		{name: "remote then clear", steps: []step{loadRemote, {"queue.clear", ipc.Request{}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tracks := []playlist.Track{{Path: "/music/a.mp3", Title: "A"}, {Path: "/music/b.mp3", Title: "B"}}
+			local := fixedTracksProvider{commandsTestProvider{name: "Local"}, tracks}
+			navidrome := remoteListProvider{commandsTestProvider{name: "Navidrome"}, tracks}
+			m := Model{
+				player:        &playbackFakeEngine{},
+				playlist:      playlist.New(),
+				vis:           ui.NewVisualizer(44100),
+				localProvider: local,
+				providers: []ProviderEntry{
+					{Key: "local", Name: "Local", Provider: local},
+					{Key: "navidrome", Name: "Navidrome", Provider: navidrome},
+				},
+			}
+
+			for _, s := range tc.steps {
+				if response := runV2(t, &m, s.op, s.params); !response.OK {
+					t.Fatalf("%s response = %+v, want OK", s.op, response)
+				}
+			}
+			if got := m.runtimeSnapshot().Playlist; got != tc.want {
+				t.Fatalf("snapshot playlist = %q, want %q", got, tc.want)
+			}
+			if got := m.runtimeFingerprint().playlist; got != tc.want {
+				t.Fatalf("fingerprint playlist = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

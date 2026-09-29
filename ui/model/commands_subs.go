@@ -208,7 +208,7 @@ func (m *Model) addLatestSweep(msg subsLatestAllMsg) bool {
 		return false
 	}
 	m.playlist.Add(msg.tracks...)
-	m.loadedPlaylist = ""
+	m.clearLoadedPlaylist()
 	m.addToHeaderState(msg.tracks)
 	if len(msg.failed) > 0 {
 		m.subs.err = fmt.Sprintf("%d show(s) failed to load: %s", len(msg.failed), msg.failed[0])

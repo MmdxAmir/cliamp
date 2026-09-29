@@ -234,7 +234,7 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 		}
 		track := playlist.TrackFromPath(request.Path)
 		m.playlist.Add(track)
-		m.loadedPlaylist = ""
+		m.clearLoadedPlaylist()
 		m.addToHeaderState([]playlist.Track{track})
 		m.completeV2Job(jobs, jobID, m.v2PlaylistResponse())
 		return nil
@@ -305,7 +305,7 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 		m.stopPlayback()
 		m.retireTracksPaging()
 		m.replacePlaylist(nil)
-		m.loadedPlaylist = ""
+		m.clearLoadedPlaylist()
 		m.setHeaderStateFromTracks(nil)
 	}
 	m.completeV2Job(jobs, jobID, m.v2PlaylistResponse())
@@ -586,8 +586,17 @@ func (m *Model) replyV2(reply chan V2RequestResult, result ipc.V2Result, err *ip
 	}
 }
 
+// runtimePlaylist names the list in the queue for the runtime snapshot: the
+// loaded local list, or else the provider list of the last IPC load.
+func (m *Model) runtimePlaylist() string {
+	if m.loadedPlaylist != "" {
+		return m.loadedPlaylist
+	}
+	return m.playlistSource
+}
+
 func (m *Model) runtimeSnapshot() ipc.RuntimeSnapshot {
-	snapshot := ipc.RuntimeSnapshot{Playlist: m.loadedPlaylist, Device: m.audioDevice}
+	snapshot := ipc.RuntimeSnapshot{Playlist: m.runtimePlaylist(), Device: m.audioDevice}
 	if m.ipcRuntime != nil {
 		snapshot.Revision = m.ipcRuntime.revision
 	}
@@ -683,7 +692,7 @@ func (m *Model) publishIPCRuntimeState() {
 }
 
 func (m *Model) runtimeFingerprint() ipcRuntimeFingerprint {
-	fingerprint := ipcRuntimeFingerprint{playlist: m.loadedPlaylist, device: m.audioDevice}
+	fingerprint := ipcRuntimeFingerprint{playlist: m.runtimePlaylist(), device: m.audioDevice}
 	fingerprint.playlistRevision = m.playlist.Revision()
 	fingerprint.index = m.playlist.Index()
 	fingerprint.total = m.playlist.Len()
