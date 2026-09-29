@@ -197,6 +197,14 @@ func TestBuildPipelineRoutes(t *testing.T) {
 			wantLength:  -1,
 		},
 		{
+			name: "buffered url matcher names no provider in errors",
+			path: srv.URL + "/missing",
+			register: func(p *Player) {
+				p.RegisterBufferedURLMatcher(func(u string) bool { return strings.HasSuffix(u, "/missing") })
+			},
+			wantErr: "buffer source: nav buffer: http status 404",
+		},
+		{
 			name:        "hls playlist",
 			path:        srv.URL + "/live.m3u8",
 			wantDecoder: "*player.ffmpegPipeStreamer",
