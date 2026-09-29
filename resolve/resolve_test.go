@@ -501,17 +501,20 @@ func TestResolveM3UCapsBody(t *testing.T) {
 	for i := 0; hls.Len() <= maxPlaylistBody; i++ {
 		fmt.Fprintf(&hls, "#EXTINF:6.0,\nsegment_%08d.ts\n", i)
 	}
+	live := hls.String()
 	hls.WriteString("#EXT-X-ENDLIST\n")
 
 	tests := []struct {
-		name       string
-		body       string
-		wantErr    bool
-		wantTracks int
+		name         string
+		body         string
+		wantErr      bool
+		wantTracks   int
+		wantRealtime bool
 	}{
 		{name: "plain under the cap", body: plain(10), wantTracks: 10},
 		{name: "plain over the cap", body: plain(30000), wantErr: true},
-		{name: "hls over the cap", body: hls.String(), wantTracks: 1},
+		{name: "hls vod over the cap", body: hls.String(), wantTracks: 1},
+		{name: "hls live over the cap", body: live, wantTracks: 1, wantRealtime: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -540,6 +543,9 @@ func TestResolveM3UCapsBody(t *testing.T) {
 			for i, tr := range tracks {
 				if !playlist.IsURL(tr.Path) {
 					t.Fatalf("tracks[%d].Path = %q, want a URL", i, tr.Path)
+				}
+				if tr.Realtime != tt.wantRealtime {
+					t.Errorf("tracks[%d].Realtime = %v, want %v", i, tr.Realtime, tt.wantRealtime)
 				}
 			}
 		})

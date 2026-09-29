@@ -459,6 +459,10 @@ func httpGet(ctx context.Context, rawURL string) (*http.Response, error) {
 // generous safety bound.
 const maxPlaylistBody = 1 << 20
 
+// maxHLSScan caps how much of an HLS body past maxPlaylistBody
+// hasHLSEndList reads to find #EXT-X-ENDLIST.
+const maxHLSScan = 16 << 20
+
 // resolveM3U fetches an M3U/M3U8 URL. HLS playlists (master or media) are a
 // single live/VOD stream — not a track list — so the original URL is handed to
 // the player, where ffmpeg resolves the relative chunklist/segment URIs and
@@ -490,7 +494,7 @@ func resolveM3U(ctx context.Context, m3uURL string) ([]playlist.Track, error) {
 		t := playlist.TrackFromPath(m3uURL) // Stream=true; title derived from URL
 		// #EXT-X-ENDLIST only appears in media playlists, so VOD behind a
 		// master playlist is conservatively treated as live.
-		t.Realtime = !bytes.Contains(body, []byte("#EXT-X-ENDLIST"))
+		t.Realtime = !hasHLSEndList(body, resp.Body)
 		return []playlist.Track{t}, nil
 	}
 
@@ -532,6 +536,34 @@ func resolvePLS(ctx context.Context, plsURL string) ([]playlist.Track, error) {
 		return nil, err
 	}
 	return filterRemoteEntries(plsEntriesToTracks(entries)), nil
+}
+
+// hasHLSEndList reports whether an HLS body holds #EXT-X-ENDLIST. head is the
+// part of the body already read, and rest is the unread part. A long VOD
+// media playlist puts the tag past maxPlaylistBody, so the check reads up to
+// maxHLSScan bytes of rest in chunks and does not keep them. A read error
+// ends the scan, and the stream then counts as live.
+func hasHLSEndList(head []byte, rest io.Reader) bool {
+	tag := []byte("#EXT-X-ENDLIST")
+	if bytes.Contains(head, tag) {
+		return true
+	}
+	// buf starts with the last len(tag)-1 bytes read so far, so a tag split
+	// across two reads is found.
+	buf := make([]byte, len(tag)-1+32<<10)
+	carry := copy(buf, head[max(0, len(head)-len(tag)+1):])
+	rest = io.LimitReader(rest, maxHLSScan)
+	for {
+		n, err := rest.Read(buf[carry:])
+		window := buf[:carry+n]
+		if bytes.Contains(window, tag) {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+		carry = copy(buf, window[max(0, len(window)-len(tag)+1):])
+	}
 }
 
 // isHLSPlaylist reports whether an M3U body is an HLS playlist (master or media)
