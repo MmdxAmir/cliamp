@@ -142,6 +142,7 @@ func TestRegisterWithoutTypeReportsError(t *testing.T) {
 // plugin with the same name fails to load. A plugin that registers again under
 // a new name keeps the old name too.
 func TestDuplicateDisplayNameRejected(t *testing.T) {
+	setRenderTimeout(t, time.Second)
 	type file struct{ name, code string }
 	tests := []struct {
 		name     string
@@ -717,6 +718,7 @@ func TestTimerCancel(t *testing.T) {
 }
 
 func TestVisualizerPlugin(t *testing.T) {
+	setRenderTimeout(t, time.Second)
 	m := newTestManager()
 	loadTestPlugin(t, m, "test-vis", `
 		local v = plugin.register({name = "test-vis", type = "visualizer"})
@@ -836,6 +838,7 @@ func TestRenderVisWaitsForInit(t *testing.T) {
 }
 
 func TestRenderVisReusesLastOnError(t *testing.T) {
+	setRenderTimeout(t, time.Second)
 	m := newTestManager()
 	loadTestPlugin(t, m, "err-vis", `
 		local v = plugin.register({name = "err-vis", type = "visualizer"})
@@ -865,6 +868,7 @@ func TestRenderVisReusesLastOnError(t *testing.T) {
 // RenderVis runs on the UI goroutine. When another callback of the plugin
 // holds the lock, it returns the last frame at once instead of waiting.
 func TestRenderVisReturnsLastFrameWhenPluginBusy(t *testing.T) {
+	setRenderTimeout(t, time.Second)
 	m := newTestManager()
 	p := loadTestPlugin(t, m, "busy-vis", `
 		local v = plugin.register({name = "busy-vis", type = "visualizer"})
@@ -915,8 +919,10 @@ func TestRenderVisTimeout(t *testing.T) {
 			`)
 			m.finalizeVisualizers()
 			defer m.Close()
+			setRenderTimeout(t, time.Second)
 			m.RenderVis("slow-vis", [10]float64{}, 8, 40, 1)
 
+			renderTimeout = 20 * time.Millisecond
 			start := time.Now()
 			got := m.RenderVis("slow-vis", [10]float64{}, 8, 40, 2)
 			if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
@@ -1531,6 +1537,7 @@ func TestCallbackErrorsAreLogged(t *testing.T) {
 // A render runs on each frame, so it logs its first error once, even when it
 // fails only on some frames.
 func TestRenderErrorsLogOnceAndSkipStderr(t *testing.T) {
+	setRenderTimeout(t, time.Second)
 	tests := []struct {
 		name   string
 		render string
