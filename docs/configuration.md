@@ -378,7 +378,7 @@ provider = "cliamp"
 
 The default, `cliamp`, opens on the cliamp radio channels. See [radio.md](radio.md#cliamp-radio).
 
-Valid values: `cliamp` (default), `radio`, `podcast`, `navidrome`, `lyrion`, `spotify`, `plex`, `jellyfin`, `emby`, `qobuz`, `tidal`, `soundcloud`, `mixcloud`, `netease`, `audiobookshelf`, `yt`, `youtube`, `ytmusic`.
+Valid values: `cliamp` (default), `radio`, `podcast`, `navidrome`, `lyrion`, `spotify`, `plex`, `jellyfin`, `emby`, `qobuz`, `tidal`, `soundcloud`, `mixcloud`, `netease`, `yandex`, `audiobookshelf`, `yt`, `youtube`, `ytmusic`. The `--provider` flag also accepts `abs` for `audiobookshelf`.
 
 You can also override this setting on the CLI: `cliamp --provider jellyfin`.
 

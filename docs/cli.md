@@ -133,6 +133,8 @@ cliamp track.mp3 --repeat all --mono ~/Music
 | `--simplified` / `--no-simplified` | bool | false | artist/title and time strip; no visualizer or playlist |
 | `--help-bar` / `--no-help-bar` | bool | true | show or hide the key-binding hint bar; `?` still opens the full keymap |
 | `--expanded` / `--no-expanded` | bool | false | start with the playlist expanded (the `Ctrl+X` state) |
+| `--provider` | string | cliamp | provider to open at start: cliamp, radio, podcast, navidrome, lyrion, plex, jellyfin, emby, spotify, qobuz, tidal, soundcloud, mixcloud, netease, yandex, audiobookshelf (or abs), yt, youtube, ytmusic |
+| `--visualizer` | string | Bars | visualizer mode, such as Bars, Wave or None. See [configuration.md](configuration.md#options) for all modes. |
 | `--visualizer-60fps` | bool | false | render a visible visualizer at about 60 FPS |
 | `--start-theme` | string | | theme name |
 | `--eq-preset` | string | | preset name |
@@ -143,6 +145,7 @@ cliamp track.mp3 --repeat all --mono ~/Music
 | `--audio-device` | string | | a device name from `--audio-device list`. `list` prints the devices and exits. |
 | `--playlist` | string | | local TOML playlist name |
 | `--log-level` | string | info | debug, info, warn, error |
+| `--expand-playlist` / `--no-expand-playlist` | bool | true | expand YouTube and YouTube Music `list=` URLs to the full playlist. `--no-expand-playlist` plays only the video. |
 | `--low-power` / `--no-low-power` | bool | false | lower UI cadence; disable visualization |
 | `--daemon` / `-d` | bool | false | run headless; IPC only, no TUI |
 
