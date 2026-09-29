@@ -17,8 +17,9 @@ import (
 // the same Lua<->JSON conversion as cliamp.json, so tables, numbers, strings,
 // and booleans all survive a restart.
 //
-// The store is scoped to one plugin: a plugin can never read another plugin's
-// keys, which preserves the no-inter-plugin-communication invariant.
+// The cliamp.store functions reach only the store of their own plugin, keyed
+// by the installed name. The store is not secret: cliamp.fs can read and write
+// the store file of any plugin.
 type pluginStore struct {
 	mu     sync.Mutex
 	path   string         // store.json path; empty if the data dir is unavailable

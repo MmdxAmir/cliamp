@@ -422,8 +422,10 @@ use the same conversion.
 ### cliamp.store
 
 This is a persistent key/value store for each plugin. Strings, numbers,
-booleans, and tables survive restarts. No permission is required. Each plugin
-can access only its own namespace, so it cannot read another plugin's keys.
+booleans, and tables survive restarts. No permission is required. cliamp keys
+each store by the installed name, and `cliamp.store` reaches only the store of
+the calling plugin. The store is not secret. Another plugin can read or change
+the store file with `cliamp.fs`. Do not keep secrets in it.
 
 ```lua
 cliamp.store.set(key, value)   -- value: string|number|boolean|table
@@ -531,7 +533,7 @@ handle:alive()                            -- --> boolean
 
 - The binary must be in the allowlist. Argv is argv. No shell or expansion is used.
 - `args` must be a flat array of strings. cliamp rejects nested tables and non-strings.
-- The subprocess environment contains only `PATH`, `HOME`, and `LANG`. cliamp does not pass parent-environment secrets.
+- The subprocess environment contains only `PATH`, `HOME`, and `LANG`. cliamp does not pass the other variables of its environment. This does not hide secrets from the plugin, which can read each variable with `os.getenv()`.
 - Output is limited to 4 MiB per process, for stdout and stderr together. cliamp silently drops later lines.
 - A line is limited to 1 MiB. After a longer line, cliamp silently drops the rest of that stream. The process continues to run.
 - Each plugin can run up to 4 processes at one time.

@@ -219,8 +219,11 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 		if cwd != "" {
 			cmd.Dir = cwd
 		}
-		// Empty env by default — plugins should not inherit secrets like
-		// AWS_*, SSH_*, etc. yt-dlp and ffmpeg both run fine with a minimal env.
+		// A minimal env gives each binary the same known environment, so
+		// variables of the user's shell, such as LD_PRELOAD, do not change
+		// how it runs. It does not hide secrets from the plugin, which can
+		// read any variable with os.getenv and pass it in argv. yt-dlp and
+		// ffmpeg both run fine with a minimal env.
 		cmd.Env = minimalExecEnv()
 
 		stdout, err := cmd.StdoutPipe()
