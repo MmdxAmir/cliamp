@@ -4,6 +4,7 @@
 package luaplugin
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -285,8 +286,17 @@ func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin,
 	// Register all cliamp.* API tables.
 	m.registerCliampAPI(L, p)
 
+	// The top-level chunk has a time limit, so a plugin that loops or
+	// sleeps at load cannot hang startup.
+	ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 	p.mu.Lock()
+	L.SetContext(ctx)
 	err := L.DoFile(path)
+	if err != nil && ctx.Err() != nil {
+		err = fmt.Errorf("load did not finish in %v: %w", loadTimeout, err)
+	}
+	L.RemoveContext()
+	cancel()
 	// If plugin.register() was never called, skip this file.
 	failed := err != nil || p.Type == ""
 	if failed {

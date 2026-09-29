@@ -330,6 +330,54 @@ func TestLoadFailureWithPendingExecDoesNotHang(t *testing.T) {
 	}
 }
 
+// The top-level chunk of a plugin has a time limit, so a plugin that loops
+// or sleeps at load cannot hang startup.
+func TestLoadTimesOut(t *testing.T) {
+	defer func(d time.Duration) { loadTimeout = d }(loadTimeout)
+	loadTimeout = 200 * time.Millisecond
+
+	tests := []struct {
+		name    string
+		code    string
+		wantErr bool
+	}{
+		{"busy loop before register", `while true do end`, true},
+		{"busy loop after register", `plugin.register({name = "slow", type = "hook"}) while true do end`, true},
+		{"sleep after register", `plugin.register({name = "slow", type = "hook"}) cliamp.sleep(10)`, true},
+		{"sleep before register", `cliamp.sleep(10) plugin.register({name = "slow", type = "hook"})`, true},
+		{"short sleep within the limit", `cliamp.sleep(0.01) plugin.register({name = "slow", type = "hook"})`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			path := filepath.Join(t.TempDir(), "slow.lua")
+			if err := os.WriteFile(path, []byte(tt.code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() {
+				_, err := m.loadPlugin(path, "slow", nil)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				if tt.wantErr && (err == nil || !strings.Contains(err.Error(), "load did not finish")) {
+					t.Fatalf("loadPlugin() error = %v, want the load time limit", err)
+				}
+				if !tt.wantErr && err != nil {
+					t.Fatalf("loadPlugin() error = %v", err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("loadPlugin did not return after the load time limit")
+			}
+			if !tt.wantErr && m.plugins[0].L.Context() != nil {
+				t.Error("the loaded plugin keeps the load context")
+			}
+			m.Close()
+		})
+	}
+}
+
 func TestLoadPluginErrorRemovesHooks(t *testing.T) {
 	m := newTestManager()
 	loadTestPluginExpectError(t, m, "bad", `

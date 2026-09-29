@@ -13,6 +13,10 @@ import (
 // each visualizer init or destroy call. It is a var so tests can shorten it.
 var hookTimeout = 5 * time.Second
 
+// loadTimeout bounds the top-level chunk of a plugin file at load. It is a
+// var so tests can shorten it.
+var loadTimeout = 5 * time.Second
+
 // errClosed is the error for a call into a plugin whose VM is closed.
 var errClosed = errors.New("plugin is closed")
 

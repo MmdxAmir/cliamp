@@ -138,7 +138,7 @@ The directory name is the plugin name. cliamp loads only `init.lua` automaticall
 
 ## Registration
 
-Each plugin must call `plugin.register()`. cliamp skips files that do not call it. The `type` field is required. A `plugin.register()` call without `type = "hook"` or `type = "visualizer"` is a load error. cliamp shows the error at startup and does not load the plugin.
+Each plugin must call `plugin.register()`. cliamp skips files that do not call it. The `type` field is required. A `plugin.register()` call without `type = "hook"` or `type = "visualizer"` is a load error. cliamp shows the error at startup and does not load the plugin. The top-level code of the plugin file must finish in 5 seconds. A plugin that runs longer at load is a load error.
 
 ```lua
 local p = plugin.register({
@@ -557,7 +557,7 @@ limits durations above 60 seconds.
 cliamp.sleep(2.5)  -- block for 2.5 seconds (max 10)
 ```
 
-This blocks the plugin's Lua VM. Other hooks for the same plugin wait until the sleep ends. Use `cliamp.timer.after()` for a non-blocking delay. The sleep ends early when the time limit of the running callback ends.
+This blocks the plugin's Lua VM. Other hooks for the same plugin wait until the sleep ends. Use `cliamp.timer.after()` for a non-blocking delay. The sleep ends early when the time limit of the running callback or of the plugin load ends.
 
 ### cliamp.timer
 
