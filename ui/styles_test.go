@@ -149,6 +149,21 @@ func TestApplyThemeColors(t *testing.T) {
 					}
 				}
 			}
+			// Red Sector draws its stars in the dim colour and its bars in
+			// the spectrum colours.
+			for tag, c := range map[int]color.Color{
+				1:                p.Dim,
+				redSectorTagLow:  p.SpectrumLow,
+				redSectorTagMid:  p.SpectrumMid,
+				redSectorTagHigh: p.SpectrumHigh,
+			} {
+				var sb, run strings.Builder
+				run.WriteString("x")
+				flushRedSectorRun(&sb, &run, tag)
+				if want := fg(c); sb.String() != want {
+					t.Errorf("flushRedSectorRun(tag %d) = %q, want %q", tag, sb.String(), want)
+				}
+			}
 		})
 	}
 }

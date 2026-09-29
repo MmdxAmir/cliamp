@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"math"
 	"strings"
 	"time"
@@ -218,43 +219,33 @@ func averageSpectrumRangeLinear(magnitudes []float64, loPos, hiPos float64) floa
 	return sum / float64(sampleCount)
 }
 
-// Pre-built styles for spectrum bar colors to avoid per-frame allocation.
-// Built by ApplyThemeColors (styles.go), never here.
-var (
-	specLowStyle  lipgloss.Style
-	specMidStyle  lipgloss.Style
-	specHighStyle lipgloss.Style
-)
+// styleANSI is the raw ANSI that a style writes before and after its text.
+// Caching it once lets every style-run flush skip lipgloss.Render, which
+// allocates a fresh wrapped string per call, and instead stream prefix, body
+// and suffix into an existing builder.
+type styleANSI struct{ prefix, suffix string }
 
-// Raw ANSI wrappers for the spectrum styles. Caching these once lets every
-// style-run flush skip lipgloss.Render (which allocates a fresh wrapped string
-// per call) and instead stream prefix + body + suffix into an existing builder.
-// Rebuilt via refreshSpecANSI on theme changes.
-var (
-	specLowPrefix, specLowSuffix   string
-	specMidPrefix, specMidSuffix   string
-	specHighPrefix, specHighSuffix string
-)
-
-func refreshSpecANSI() {
-	specLowPrefix, specLowSuffix = splitStyleAroundProbe(specLowStyle)
-	specMidPrefix, specMidSuffix = splitStyleAroundProbe(specMidStyle)
-	specHighPrefix, specHighSuffix = splitStyleAroundProbe(specHighStyle)
-	refreshRedSectorANSI()
-}
-
-// splitStyleAroundProbe renders a rare marker through the style and splits the
-// output around it, yielding the ANSI prefix and suffix the style applies.
-// Works for plain Foreground-only styles; adding borders or padding would
-// invalidate the split.
-func splitStyleAroundProbe(s lipgloss.Style) (prefix, suffix string) {
+// foregroundANSI renders a rare marker through a plain foreground style in c
+// and splits the output around it. Borders or padding would invalidate the
+// split, so the style carries the colour only.
+func foregroundANSI(c color.Color) styleANSI {
 	const probe = "\uFFFC"
-	rendered := s.Render(probe)
+	rendered := lipgloss.NewStyle().Foreground(c).Render(probe)
 	idx := strings.Index(rendered, probe)
 	if idx < 0 {
-		return "", ""
+		return styleANSI{}
 	}
-	return rendered[:idx], rendered[idx+len(probe):]
+	return styleANSI{prefix: rendered[:idx], suffix: rendered[idx+len(probe):]}
+}
+
+// specANSI holds the ANSI of the low, mid and high spectrum colours, indexed
+// by specTag. ApplyThemeColors rebuilds it through refreshSpecANSI.
+var specANSI [3]styleANSI
+
+func refreshSpecANSI() {
+	for i, c := range [3]color.Color{SpectrumLow, SpectrumMid, SpectrumHigh} {
+		specANSI[i] = foregroundANSI(c)
+	}
 }
 
 type VisTickContext struct {
@@ -1248,19 +1239,11 @@ func specTag(norm float64) int {
 // the given row-bottom (0-1). One string concatenation instead of the several
 // allocations a per-call lipgloss.Style.Render would perform.
 func specWrap(rowBottom float64, body string) string {
-	var prefix, suffix string
-	switch specTag(rowBottom) {
-	case 2:
-		prefix, suffix = specHighPrefix, specHighSuffix
-	case 1:
-		prefix, suffix = specMidPrefix, specMidSuffix
-	case 0:
-		prefix, suffix = specLowPrefix, specLowSuffix
-	}
-	if prefix == "" {
+	style := specANSI[specTag(rowBottom)]
+	if style.prefix == "" {
 		return body
 	}
-	return prefix + body + suffix
+	return style.prefix + body + style.suffix
 }
 
 // flushStyleRun appends the accumulated run bytes to sb wrapped in the cached
@@ -1268,28 +1251,23 @@ func specWrap(rowBottom float64, body string) string {
 // Streaming via the pre-extracted prefix/suffix strings avoids allocating a
 // fresh lipgloss.Render result on every flush (the hot path for Matrix/Pulse).
 func flushStyleRun(sb *strings.Builder, run *strings.Builder, tag int) {
-	var prefix, suffix string
-	switch tag {
-	case 2:
-		prefix, suffix = specHighPrefix, specHighSuffix
-	case 1:
-		prefix, suffix = specMidPrefix, specMidSuffix
-	case 0:
-		prefix, suffix = specLowPrefix, specLowSuffix
+	var style styleANSI
+	if tag >= 0 && tag < len(specANSI) {
+		style = specANSI[tag]
 	}
-	writeStyledRun(sb, run, prefix, suffix)
+	writeStyledRun(sb, run, style)
 }
 
 // writeStyledRun appends run to sb between the ANSI prefix and suffix of its
 // style, then resets run. An empty run writes nothing.
-func writeStyledRun(sb, run *strings.Builder, prefix, suffix string) {
+func writeStyledRun(sb, run *strings.Builder, style styleANSI) {
 	if run.Len() == 0 {
 		return
 	}
-	sb.WriteString(prefix)
+	sb.WriteString(style.prefix)
 	// run.String() aliases the builder's backing array (no allocation) and we
 	// copy those bytes into sb before run.Reset() releases the slice.
 	sb.WriteString(run.String())
-	sb.WriteString(suffix)
+	sb.WriteString(style.suffix)
 	run.Reset()
 }

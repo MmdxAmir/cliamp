@@ -155,11 +155,8 @@ func ApplyThemeColors(t theme.Theme) {
 	SpectrumMid = p.SpectrumMid
 	SpectrumHigh = p.SpectrumHigh
 
-	// Rebuild visualizer spectrum styles.
-	specLowStyle = lipgloss.NewStyle().Foreground(SpectrumLow)
-	specMidStyle = lipgloss.NewStyle().Foreground(SpectrumMid)
-	specHighStyle = lipgloss.NewStyle().Foreground(SpectrumHigh)
 	refreshSpecANSI()
+	refreshRedSectorANSI()
 }
 
 func contrastingTextColor(hex string) string {

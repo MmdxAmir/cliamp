@@ -376,19 +376,16 @@ func newRedSectorGrid() brailleGrid {
 
 // flushRedSectorRun colours a run by its Red Sector tag. Tag 0 is unstyled.
 func flushRedSectorRun(sb *strings.Builder, run *strings.Builder, tag int) {
-	var prefix, suffix string
+	var style styleANSI
 	if tag >= 1 && tag <= redSectorTagCount {
-		prefix, suffix = redSectorPrefix[tag-1], redSectorSuffix[tag-1]
+		style = redSectorANSI[tag-1]
 	}
-	writeStyledRun(sb, run, prefix, suffix)
+	writeStyledRun(sb, run, style)
 }
 
-// Raw ANSI wrappers for the seven tags, cached the way the spectrum styles are
-// and rebuilt from refreshSpecANSI when the theme changes.
-var (
-	redSectorPrefix [redSectorTagCount]string
-	redSectorSuffix [redSectorTagCount]string
-)
+// redSectorANSI holds the ANSI of the seven tags, cached the way specANSI is.
+// ApplyThemeColors rebuilds it through refreshRedSectorANSI.
+var redSectorANSI [redSectorTagCount]styleANSI
 
 func refreshRedSectorANSI() {
 	// Four star colours below three bar colours: the field carries the quiet
@@ -405,8 +402,7 @@ func refreshRedSectorANSI() {
 		SpectrumHigh,
 	}
 	for i, c := range tags {
-		redSectorPrefix[i], redSectorSuffix[i] = splitStyleAroundProbe(
-			lipgloss.NewStyle().Foreground(c))
+		redSectorANSI[i] = foregroundANSI(c)
 	}
 }
 
