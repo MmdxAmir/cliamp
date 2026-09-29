@@ -29,8 +29,8 @@ const UserAgent = "cliamp/1.0 (https://github.com/bjarneo/cliamp)"
 //
 // Proxy is read from the environment (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY,
 // NO_PROXY) so users behind corporate or local proxies aren't bypassed.
-// NewAPI clients share the same proxy rules. http.DefaultTransport ignores
-// ALL_PROXY and cannot dial a socks5:// proxy.
+// NewAPI clients pick a proxy by the same rules. http.DefaultTransport
+// ignores ALL_PROXY.
 var Streaming = &http.Client{Transport: &socks5RoundTripper{transport: newStreamingTransport()}}
 
 // resolveEnvProxy resolves the proxy that applies to a request for the
@@ -193,11 +193,10 @@ func socks5DialerFor(scheme, addr string) (proxy.Dialer, error) {
 
 // transportProxy delegates to the environment exactly like
 // http.ProxyFromEnvironment, EXCEPT when the resolved proxy is
-// socks5/socks5h: net/http.Transport only understands plain HTTP proxying
-// and HTTP CONNECT tunneling against an http(s):// proxy, nothing else. If
-// HTTPS_PROXY/HTTP_PROXY is set to a socks5:// URL, Transport would dial the
-// proxy's address and write an HTTP request/CONNECT at it; a SOCKS5 server
-// doesn't understand either, so the connection hangs forever with no error.
+// socks5/socks5h. net/http.Transport can dial a SOCKS5 proxy itself, but it
+// then runs the SOCKS5 handshake through the icyConn of the Streaming
+// DialContext and adds TLS without the Streaming DialTLSContext, so icyConn
+// never sees the ICY status line.
 // Returning nil here for that case tells Transport "no proxy, dial the
 // target directly" -- the transport's dial functions then do the actual
 // SOCKS5 dial themselves through dialWithDecision, re-resolving per request
