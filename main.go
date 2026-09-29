@@ -297,7 +297,8 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 
 	var closeYouTube func()
-	ytWanted := cfg.YouTubeMusic.IsSetOrFallback(ytmusic.FallbackCredentials)
+	var ytOAuth *ytmusic.Providers // set when YouTube signs in through OAuth
+	ytWanted := cfg.YouTubeMusic.IsSet()
 	if !ytWanted {
 		switch cfg.Provider {
 		case "yt", "youtube", "ytmusic":
@@ -307,7 +308,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	if !ytWanted {
 		logYouTubeSkipped("not configured")
 	} else {
-		explicitOAuth := strings.TrimSpace(cfg.YouTubeMusic.ClientID) != "" && strings.TrimSpace(cfg.YouTubeMusic.ClientSecret) != ""
+		ytClientID := strings.TrimSpace(cfg.YouTubeMusic.ClientID)
+		ytClientSecret := strings.TrimSpace(cfg.YouTubeMusic.ClientSecret)
+		hasOAuth := ytClientID != "" && ytClientSecret != ""
 		hasCookies := strings.TrimSpace(cfg.YouTubeMusic.CookiesFrom) != ""
 		if hasCookies {
 			for _, host := range []string{"youtube.com", "youtu.be", "music.youtube.com"} {
@@ -315,10 +318,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			}
 		}
 
-		ytClientID, ytClientSecret := cfg.YouTubeMusic.ResolveCredentials(ytmusic.FallbackCredentials)
-		hasFallbackOAuth := !explicitOAuth && ytClientID != "" && ytClientSecret != ""
-
-		if !explicitOAuth && !hasCookies && !hasFallbackOAuth {
+		if !hasOAuth && !hasCookies {
 			fmt.Fprintf(os.Stderr, "YouTube: no credentials available (configure client_id/client_secret or cookies_from in config.toml)\n")
 			logYouTubeSkipped("no credentials available")
 		} else {
@@ -337,18 +337,15 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			}
 			if player.YTDLPAvailable() {
 				var all, video, music playlist.Provider
-				if explicitOAuth {
+				if hasOAuth {
 					oauthProviders := ytmusic.New(nil, ytClientID, ytClientSecret, hasCookies)
 					all, video, music = oauthProviders.All, oauthProviders.Video, oauthProviders.Music
 					closeYouTube = oauthProviders.Music.Close
+					ytOAuth = &oauthProviders
 				} else if hasCookies {
 					cookieProviders := ytmusic.NewCookieProviders(cfg.YouTubeMusic.CookiesFrom)
 					all, video, music = cookieProviders.All, cookieProviders.Video, cookieProviders.Music
 					closeYouTube = cookieProviders.Music.Close
-				} else if hasFallbackOAuth {
-					oauthProviders := ytmusic.New(nil, ytClientID, ytClientSecret, false)
-					all, video, music = oauthProviders.All, oauthProviders.Video, oauthProviders.Music
-					closeYouTube = oauthProviders.Music.Close
 				}
 				if all != nil {
 					providers = append(providers,
@@ -491,6 +488,15 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 				return player.ResolvedSource{}, fmt.Errorf("resolve Yandex source: %w", err)
 			}
 			return player.ResolvedSource{URL: u}, nil
+		})
+	}
+
+	if qobuzProv != nil {
+		// Qobuz tracks carry qobuz:// URIs. The provider resolves them to a
+		// fresh signed URL when playback starts.
+		p.RegisterSourceResolver(qobuz.TrackURIPrefix, func(uri string) (player.ResolvedSource, error) {
+			u, err := qobuzProv.ResolveSource(uri)
+			return player.ResolvedSource{URL: u}, err
 		})
 	}
 
@@ -713,6 +719,17 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			prog.Send(model.ProvAuthURLMsg{ProviderName: tidalProv.Name(), URL: u})
 		})
 		defer tidal.SetAuthURLObserver(nil)
+	}
+	if ytOAuth != nil {
+		// The three YouTube providers share one sign-in. The model shows the
+		// URL only for the provider that is active.
+		ytNames := []string{ytOAuth.All.Name(), ytOAuth.Video.Name(), ytOAuth.Music.Name()}
+		ytmusic.SetAuthURLObserver(func(u string) {
+			for _, name := range ytNames {
+				prog.Send(model.ProvAuthURLMsg{ProviderName: name, URL: u})
+			}
+		})
+		defer ytmusic.SetAuthURLObserver(nil)
 	}
 
 	svc, svcErr := wireMediaCtl(prog)

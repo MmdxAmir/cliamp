@@ -1134,6 +1134,12 @@ func (p *Player) RegisterSourceResolver(scheme string, r SourceResolver) {
 	p.sourceResolvers[scheme] = r
 }
 
+// HasSourceResolver reports whether a registered SourceResolver claims path.
+// Such a path opens over the network when playback starts.
+func (p *Player) HasSourceResolver(path string) bool {
+	return p.matchSourceResolver(path) != nil
+}
+
 // suspendSpeaker suspends the ALSA audio callback goroutine so it blocks
 // on a condition variable instead of busy-looping. Safe to call multiple
 // times; subsequent calls are no-ops.

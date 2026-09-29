@@ -62,7 +62,7 @@ func (m *Model) preloadNext() tea.Cmd {
 		m.preloading, m.preloadFor = true, next.Path
 		return preloadYTDLStreamCmd(m.player, next.Path, nextDur, nextRequest(&m.requests.preload), m.player.BeginPreload())
 	}
-	if next.Stream {
+	if next.Stream || m.hasSourceResolver(next.Path) {
 		// For streams, only arm gapless if we're within the lead-time window.
 		// Without a known boundary, opening the next connection now can leave it
 		// stale for the entire track or pause and turn one EOF into several skips.

@@ -78,7 +78,9 @@ expand_playlist = false
 
 When `expand_playlist` is `true` (default), cliamp expands URLs with a `list=` parameter. This includes auto-generated mixes (RDAMVM, RDMM), album playlists (OLAK), and custom playlists (PL). cliamp loads the first 20 tracks immediately, then gets the remaining tracks in background batches. Set it to `false`, or pass `--no-expand-playlist`, to remove the playlist parameter and resolve only one video.
 
-Run `cliamp`, `cliamp --provider ytmusic`, or `cliamp --provider youtube`. Select a provider and press Enter to sign in. cliamp stores credentials in `~/.config/cliamp/ytmusic_credentials.json`. Later launches refresh them without a message.
+Run `cliamp`, `cliamp --provider ytmusic`, or `cliamp --provider youtube`. Select a provider and press Enter to sign in. cliamp stores credentials in `~/.config/cliamp/ytmusic_credentials.json`. Later launches refresh them without a message. To sign in with a different Google account, run `cliamp ytmusic reset`.
+
+If no browser opens, the provider view shows the sign-in URL. Open it in a browser on the same machine. Google sends the sign-in result to `http://127.0.0.1:19873/callback`.
 
 ## Usage
 
@@ -145,7 +147,8 @@ like. See issue [#541](https://github.com/bjarneo/cliamp/issues/541).
 - **"OAuth failed"**: Ensure that the Google Cloud project has YouTube Data API v3 enabled and uses OAuth client type "Desktop app".
 - **"Access blocked"**: While the app is in "Testing" status, only added test users can sign in. Add the Google account as a test user in OAuth consent screen settings.
 - **Playlist not showing**: The provider lists only library playlists. Save or follow a playlist in YouTube Music for it to appear.
-- **Re-authenticate / Reset Cache**: Delete `~/.config/cliamp/ytmusic_credentials.json` for OAuth. Or press `Ctrl+R` in the TUI or remove `~/.config/cliamp/ytmusic_cache.json`.
+- **Re-authenticate**: Run `cliamp ytmusic reset` to clear stored OAuth credentials. Then restart cliamp, select YouTube Music, and sign in again. This is the same as deleting `~/.config/cliamp/ytmusic_credentials.json`. Cookie mode stores no credentials, so it needs no reset.
+- **Reset Cache**: Press `Ctrl+R` in the TUI, or remove `~/.config/cliamp/ytmusic_cache.json`.
 - **Private/deleted videos**: cliamp automatically skips these when it loads a playlist.
 
 ## Requirements

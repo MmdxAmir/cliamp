@@ -17,6 +17,7 @@ import (
 	"github.com/bjarneo/cliamp/external/qobuz"
 	"github.com/bjarneo/cliamp/external/spotify"
 	"github.com/bjarneo/cliamp/external/tidal"
+	"github.com/bjarneo/cliamp/external/ytmusic"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/pluginmgr"
@@ -78,6 +79,7 @@ func buildApp() *cli.Command {
 			spotifyCommand(),
 			qobuzCommand(),
 			tidalCommand(),
+			ytmusicCommand(),
 			ipcSimpleCommand("play", "resume playback"),
 			ipcSimpleCommand("pause", "pause playback"),
 			ipcSimpleCommand("toggle", "play/pause toggle"),
@@ -448,6 +450,10 @@ func tidalCommand() *cli.Command {
 		},
 	})
 	return cmd
+}
+
+func ytmusicCommand() *cli.Command {
+	return providerCredsCommand("ytmusic", "YouTube Music", ytmusic.CredsPath, ytmusic.DeleteCreds)
 }
 
 // providerCredsCommand builds the `cliamp <provider> reset` subcommand shared

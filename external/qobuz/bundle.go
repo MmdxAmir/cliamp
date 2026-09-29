@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -139,15 +141,9 @@ func (b *bundle) secrets() (map[string]string, error) {
 		return nil, fmt.Errorf("qobuz: no seeds found in bundle")
 	}
 
-	// Replicate the Python OrderedDict + move_to_end ordering used by spoofbuz.
-	tzList := make([]string, 0, len(seeds))
-	for tz := range seeds {
-		tzList = append(tzList, tz)
-	}
-	if len(tzList) >= 2 {
-		tzList[0], tzList[1] = tzList[1], tzList[0]
-	}
-
+	// The order of the names in the alternation does not change which
+	// entries match. validateSecret tries every decoded secret in turn.
+	tzList := slices.Sorted(maps.Keys(seeds))
 	capitalised := make([]string, len(tzList))
 	for i, tz := range tzList {
 		capitalised[i] = capitalizeFirst(tz)

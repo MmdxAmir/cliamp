@@ -4,21 +4,18 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"runtime/debug"
 	"sync"
-	"sync/atomic"
+	"time"
 
 	"github.com/bjarneo/cliamp/applog"
+	"github.com/bjarneo/cliamp/internal/authurl"
 	"github.com/bjarneo/cliamp/internal/browser"
-	"github.com/bjarneo/cliamp/internal/fileutil"
 	"github.com/bjarneo/cliamp/playlist"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -49,27 +46,21 @@ func callbackAddress() string {
 	return net.JoinHostPort(callbackHost, fmt.Sprint(CallbackPort))
 }
 
-// authURLObserver is invoked with the OAuth URL when interactive auth begins.
-// Set via SetAuthURLObserver. Used by the TUI to show the URL when the
-// launched browser doesn't reach the user (containers, headless envs).
-var authURLObserver atomic.Pointer[func(string)]
+// webHTTPClient sends Web API, lyrics and OAuth token requests. The timeout
+// stops a stalled connection from blocking its caller without limit.
+var webHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
+// oauthContext makes oauth2 send its token requests through webHTTPClient.
+func oauthContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, oauth2.HTTPClient, webHTTPClient)
+}
+
+// authURLObserver receives the OAuth URL when interactive auth begins.
+var authURLObserver authurl.Observer
 
 // SetAuthURLObserver registers a callback invoked once with the OAuth URL at
 // the start of an interactive sign-in. Pass nil to remove.
-func SetAuthURLObserver(fn func(string)) {
-	if fn == nil {
-		authURLObserver.Store(nil)
-		return
-	}
-	authURLObserver.Store(&fn)
-}
-
-func notifyAuthURL(u string) {
-	applog.Info("spotify: sign-in URL: %s", u)
-	if p := authURLObserver.Load(); p != nil {
-		(*p)(u)
-	}
-}
+func SetAuthURLObserver(fn func(string)) { authURLObserver.Set(fn) }
 
 // Session manages a go-librespot session and player for Spotify integration.
 type Session struct {
@@ -133,7 +124,7 @@ func awaitSpotifyStream(ctx context.Context, cancel context.CancelFunc, open fun
 // available, otherwise starting an interactive OAuth2 flow.
 // clientID is the Spotify Developer app client ID for Web API access.
 func NewSession(ctx context.Context, clientID string) (*Session, error) {
-	creds, err := loadCreds()
+	creds, err := credsFile.Load()
 	if err == nil && creds.Username != "" && len(creds.Data) > 0 {
 		s, err := newSessionFromStored(ctx, clientID, creds, false)
 		if err == nil {
@@ -147,7 +138,7 @@ func NewSession(ctx context.Context, clientID string) (*Session, error) {
 // NewSessionSilent is like NewSession but only uses stored credentials.
 // Returns an error if interactive auth is required.
 func NewSessionSilent(ctx context.Context, clientID string) (*Session, error) {
-	creds, err := loadCreds()
+	creds, err := credsFile.Load()
 	if err != nil || creds.Username == "" || len(creds.Data) == 0 {
 		return nil, fmt.Errorf("no stored credentials")
 	}
@@ -182,7 +173,7 @@ func newSessionFromStored(ctx context.Context, clientID string, creds *storedCre
 	var oauthToken *oauth2.Token
 	var refreshErr error
 	if creds.RefreshToken != "" {
-		token, err := silentTokenRefresh(clientID, creds.RefreshToken)
+		token, err := silentTokenRefresh(ctx, clientID, creds.RefreshToken)
 		if err == nil {
 			oauthToken = token
 		} else {
@@ -205,7 +196,7 @@ func newSessionFromStored(ctx context.Context, clientID string, creds *storedCre
 			// via spclient; new Web API calls will return ErrNeedsAuth.
 			applog.UserError("spotify: stored auth no longer valid; run 'cliamp spotify reset' or sign in again to fix")
 			s := &Session{sess: sess, devID: devID, clientID: clientID}
-			if err := saveCreds(&storedCreds{
+			if err := credsFile.Save(&storedCreds{
 				Username:     sess.Username(),
 				Data:         sess.StoredCredentials(),
 				DeviceID:     devID,
@@ -234,7 +225,7 @@ func newSessionFromStored(ctx context.Context, clientID string, creds *storedCre
 		DeviceID:     devID,
 		RefreshToken: oauthToken.RefreshToken,
 	}
-	if err := saveCreds(&stored); err != nil {
+	if err := credsFile.Save(&stored); err != nil {
 		applog.UserError("spotify: failed to save credentials: %v", err)
 	}
 
@@ -296,9 +287,9 @@ func spotifyOAuthConfig(clientID string, scopes []string) *oauth2.Config {
 
 // silentTokenRefresh uses a stored refresh token to get a new access token
 // without opening a browser.
-func silentTokenRefresh(clientID, refreshToken string) (*oauth2.Token, error) {
+func silentTokenRefresh(ctx context.Context, clientID, refreshToken string) (*oauth2.Token, error) {
 	conf := spotifyOAuthConfig(clientID, oauthScopes)
-	src := conf.TokenSource(context.Background(), &oauth2.Token{RefreshToken: refreshToken})
+	src := conf.TokenSource(oauthContext(ctx), &oauth2.Token{RefreshToken: refreshToken})
 	return src.Token()
 }
 
@@ -334,13 +325,13 @@ func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
 
 func webAPITokenSource(clientID string, token *oauth2.Token, creds storedCreds) oauth2.TokenSource {
 	conf := spotifyOAuthConfig(clientID, oauthScopes)
-	source := conf.TokenSource(context.Background(), token)
+	source := conf.TokenSource(oauthContext(context.Background()), token)
 	return &persistingTokenSource{
 		source:       source,
 		refreshToken: creds.RefreshToken,
 		persist: func(refreshToken string) error {
 			creds.RefreshToken = refreshToken
-			return saveCreds(&creds)
+			return credsFile.Save(&creds)
 		},
 	}
 }
@@ -479,7 +470,7 @@ func performOAuth2PKCEFlows(ctx context.Context, flows []oauthFlow) ([]*oauth2.T
 		}
 	}()
 
-	notifyAuthURL(pending[0].authURL)
+	authURLObserver.Notify("spotify", pending[0].authURL)
 	_ = browser.Open(pending[0].authURL) // best-effort — user can open the URL manually if this fails
 
 	tokens := make([]*oauth2.Token, len(pending))
@@ -490,7 +481,7 @@ func performOAuth2PKCEFlows(ctx context.Context, flows []oauthFlow) ([]*oauth2.T
 			if result.err != nil {
 				return nil, fmt.Errorf("%s authorization: %w", flow.name, result.err)
 			}
-			token, err := flow.config.Exchange(ctx, result.code, oauth2.VerifierOption(flow.verifier))
+			token, err := flow.config.Exchange(oauthContext(ctx), result.code, oauth2.VerifierOption(flow.verifier))
 			if err != nil {
 				return nil, fmt.Errorf("%s token exchange: %w", flow.name, err)
 			}
@@ -559,7 +550,7 @@ func newInteractiveSession(ctx context.Context, clientID string) (*Session, erro
 		DeviceID:     devID,
 		RefreshToken: webToken.RefreshToken,
 	}
-	if err := saveCreds(&stored); err != nil {
+	if err := credsFile.Save(&stored); err != nil {
 		applog.UserError("spotify: failed to save credentials: %v", err)
 	}
 
@@ -606,7 +597,7 @@ func (s *Session) initPlayer() error {
 // independently of that lifetime.
 //
 // Holds s.mu.RLock() across the librespot network call. Multiple concurrent
-// NewStream / webApi callers can run in parallel (RLock is shared), so rapid
+// NewStream / webAPIOnce callers can run in parallel (RLock is shared), so rapid
 // track skipping does not serialize. reconnect() and Close() take the full
 // Lock and will wait for in-flight callers to finish before tearing down the
 // player — without this, the swap could call oldPlayer.Close() while we are
@@ -626,46 +617,6 @@ func (s *Session) NewStream(ctx context.Context, spotID librespot.SpotifyId, bit
 		}
 		return s.player.NewStream(ctx, client, spotID, bitrate, positionMs)
 	})
-}
-
-// webApiWithBody calls the Spotify Web API using the OAuth2 access token.
-//
-// The spclient/login5 token from librespot is NOT accepted by the Web API
-// for endpoints like /v1/search and /v1/me/playlists — Spotify returns
-// misleading errors ("Invalid limit", 429) instead of a clear auth failure.
-// So if there is no OAuth2 token source, fail loudly with ErrNeedsAuth
-// rather than attempting the call with the wrong token.
-func (s *Session) webApiWithBody(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string) (*http.Response, error) {
-	s.mu.RLock()
-	ts := s.tokenSource
-	s.mu.RUnlock()
-
-	if ts == nil {
-		return nil, fmt.Errorf("spotify: web api token unavailable, sign in again: %w", playlist.ErrNeedsAuth)
-	}
-	tok, err := ts.Token()
-	if err != nil {
-		return nil, fmt.Errorf("refresh access token: %w", err)
-	}
-	token := tok.AccessToken
-
-	u, _ := url.Parse("https://api.spotify.com")
-	u = u.JoinPath(path)
-	if query != nil {
-		u.RawQuery = query.Encode()
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-
-	return http.DefaultClient.Do(req)
 }
 
 // Close releases all session and player resources.
@@ -688,7 +639,7 @@ func (s *Session) Reconnect(ctx context.Context) error {
 
 // ReconnectInteractive forces a fresh browser-based OAuth2 flow.
 // Stored credentials are preserved until the new session succeeds —
-// newInteractiveSession overwrites them via saveCreds on success.
+// newInteractiveSession overwrites them via credsFile.Save on success.
 func (s *Session) ReconnectInteractive(ctx context.Context) error {
 	return s.reconnect(ctx, newInteractiveSession)
 }
@@ -698,7 +649,7 @@ func (s *Session) ReconnectInteractive(ctx context.Context) error {
 // window where s.sess/s.player are nil (which would crash concurrent callers).
 //
 // The swap-and-teardown phase is done under s.mu (full Lock), which waits for
-// any in-flight NewStream / webApi RLockers to drain. This guarantees that
+// any in-flight NewStream / webAPIOnce RLockers to drain. This guarantees that
 // oldPlayer.Close() is never called while a NewStream is still using the
 // old player pointer.
 func (s *Session) reconnect(ctx context.Context, build func(context.Context, string) (*Session, error)) error {
@@ -712,7 +663,7 @@ func (s *Session) reconnect(ctx context.Context, build func(context.Context, str
 	}
 
 	// Swap and tear down the old session under a single write lock so
-	// in-flight NewStream / webApi calls finish before oldPlayer.Close()
+	// in-flight NewStream / webAPIOnce calls finish before oldPlayer.Close()
 	// runs. The expensive build() above happened lock-free.
 	s.mu.Lock()
 	oldPlayer := s.player
@@ -745,32 +696,4 @@ func generateDeviceID() string {
 	b := make([]byte, 20)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
-}
-
-func loadCreds() (*storedCreds, error) {
-	path, err := CredsPath()
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var creds storedCreds
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return nil, err
-	}
-	return &creds, nil
-}
-
-func saveCreds(creds *storedCreds) error {
-	path, err := CredsPath()
-	if err != nil {
-		return err
-	}
-	data, err := json.Marshal(creds)
-	if err != nil {
-		return err
-	}
-	return fileutil.WriteFileAtomic(path, data, 0o600)
 }

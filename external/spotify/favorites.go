@@ -41,7 +41,7 @@ func (p *SpotifyProvider) SetTrackFavorite(ctx context.Context, track playlist.T
 	if !favorite {
 		method = http.MethodDelete
 	}
-	resp, err := p.webAPIWithBody(ctx, method, libraryPath, url.Values{"uris": {track.Path}}, nil, "", http.StatusOK, http.StatusNoContent)
+	resp, err := p.webAPIWithRetry(ctx, method, libraryPath, url.Values{"uris": {track.Path}}, nil, "", http.StatusOK, http.StatusNoContent)
 	if err != nil {
 		return fmt.Errorf("spotify: update liked songs: %w", err)
 	}

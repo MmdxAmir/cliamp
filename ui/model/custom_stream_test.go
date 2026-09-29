@@ -27,6 +27,22 @@ func (customStreamTestProvider) NewStreamer(string) (beep.StreamSeekCloser, beep
 
 func (customStreamTestProvider) Authenticate() error { return nil }
 
+// sourceResolverEngine reports a play-time source resolver for each prefix,
+// as player.Player does after main registers the Qobuz and Tidal resolvers.
+type sourceResolverEngine struct {
+	*playbackFakeEngine
+	prefixes []string
+}
+
+func (e sourceResolverEngine) HasSourceResolver(path string) bool {
+	for _, prefix := range e.prefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func newCustomStreamModel(player *playbackFakeEngine) Model {
 	prov := customStreamTestProvider{commandsTestProvider{name: "Spotify"}}
 	p := playlist.New()
@@ -74,12 +90,16 @@ func TestPlayTrackStartsCustomURIOffUpdate(t *testing.T) {
 		wantAsync bool
 	}{
 		{name: "spotify track", path: "spotify:track:abc", wantAsync: true},
+		// Favorites, history and saved playlists reload a qobuz:// track
+		// with Stream false. The resolver still opens it over the network.
+		{name: "qobuz track from a saved list", path: "qobuz://track/42", wantAsync: true},
 		{name: "local file", path: "local.mp3", wantAsync: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			player := &playbackFakeEngine{}
 			m := newCustomStreamModel(player)
+			m.player = sourceResolverEngine{player, []string{"qobuz://track/"}}
 
 			cmd := m.playTrack(playlist.Track{Title: "Song", Path: tt.path, DurationSecs: 200})
 
@@ -101,6 +121,37 @@ func TestPlayTrackStartsCustomURIOffUpdate(t *testing.T) {
 			m = updated.(Model)
 			if m.buffering || m.err != nil {
 				t.Fatalf("after start: buffering = %v, err = %v", m.buffering, m.err)
+			}
+		})
+	}
+}
+
+func TestPreloadNextWaitsForLeadTimeOnSourceResolverURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		position    time.Duration
+		wantPreload bool
+	}{
+		{name: "early in the track", position: 10 * time.Second, wantPreload: false},
+		{name: "inside the lead time", position: 58 * time.Second, wantPreload: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			player := &playbackFakeEngine{playing: true, duration: time.Minute, position: tt.position}
+			p := playlist.New()
+			p.Replace([]playlist.Track{
+				{Title: "Current", Path: "qobuz://track/1", DurationSecs: 60},
+				{Title: "Next", Path: "qobuz://track/2", DurationSecs: 60},
+			})
+			p.SetIndex(0)
+			m := Model{player: sourceResolverEngine{player, []string{"qobuz://track/"}}, playlist: p}
+
+			cmd := m.preloadNext()
+			if gotPreload := cmd != nil; gotPreload != tt.wantPreload {
+				t.Fatalf("preloadNext() command = %v, want %v", gotPreload, tt.wantPreload)
+			}
+			if len(player.preloadCalls) != 0 {
+				t.Fatalf("preloadCalls inside preloadNext = %v, want none", player.preloadCalls)
 			}
 		})
 	}

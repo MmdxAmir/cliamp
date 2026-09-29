@@ -21,12 +21,8 @@ const maxLyricsBody = 2 << 20
 // TrackIDFromPath extracts the Spotify track ID from a track path of the
 // form "spotify:track:<id>". It returns "" for anything else.
 func TrackIDFromPath(path string) string {
-	const prefix = "spotify:track:"
-	if !strings.HasPrefix(path, prefix) {
-		return ""
-	}
-	id := strings.TrimPrefix(path, prefix)
-	if id == "" {
+	id, ok := strings.CutPrefix(path, trackURIPrefix)
+	if !ok {
 		return ""
 	}
 	return id
@@ -72,7 +68,7 @@ func (s *Session) trackLyrics(ctx context.Context, trackID string) ([]lyrics.Lin
 	req.Header.Set("app-platform", "WebPlayer")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := webHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("spotify lyrics request: %w", err)
 	}

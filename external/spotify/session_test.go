@@ -293,7 +293,7 @@ func TestWebAPITokenSourcePersistsRotatedRefreshToken(t *testing.T) {
 		DeviceID:     "device",
 		RefreshToken: "old",
 	}
-	if err := saveCreds(&stored); err != nil {
+	if err := credsFile.Save(&stored); err != nil {
 		t.Fatal(err)
 	}
 
@@ -306,7 +306,7 @@ func TestWebAPITokenSourcePersistsRotatedRefreshToken(t *testing.T) {
 		t.Fatalf("Token() error = %v", err)
 	}
 
-	got, err := loadCreds()
+	got, err := credsFile.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,5 +379,25 @@ func TestCredsPath(t *testing.T) {
 	want := filepath.Join(home, ".config", "cliamp", "spotify_credentials.json")
 	if got != want {
 		t.Errorf("CredsPath() = %q, want %q", got, want)
+	}
+}
+
+// TestLoadStoredCredsFile checks that credentials an earlier release wrote
+// still load, so an upgrade keeps the user signed in.
+func TestLoadStoredCredsFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLIAMP_CONFIG_DIR", dir)
+	data := `{"username":"user","data":"cGxheQ==","device_id":"device","refresh_token":"refresh"}`
+	if err := os.WriteFile(filepath.Join(dir, "spotify_credentials.json"), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := credsFile.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := storedCreds{Username: "user", Data: []byte("play"), DeviceID: "device", RefreshToken: "refresh"}
+	if got.Username != want.Username || !slices.Equal(got.Data, want.Data) || got.DeviceID != want.DeviceID || got.RefreshToken != want.RefreshToken {
+		t.Errorf("Load() = %+v, want %+v", got, want)
 	}
 }

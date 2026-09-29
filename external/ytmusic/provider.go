@@ -102,7 +102,9 @@ func (b *baseProvider) initSession(interactive bool) error {
 		b.mu.Unlock()
 		cancel()
 	} else {
-		sess, err = NewSessionSilent(context.Background(), clientID, clientSecret)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		sess, err = NewSessionSilent(ctx, clientID, clientSecret)
+		cancel()
 	}
 	if err != nil {
 		if !interactive {
