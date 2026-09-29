@@ -2,6 +2,7 @@ package radio
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -124,5 +125,43 @@ func TestPinsToggleSurvivesMissingConfigDir(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	if pinned, err := pins.Toggle(Place{Code: "NO", Name: "Norway"}); err != nil || !pinned {
 		t.Fatalf("Toggle on zero Pins = (%v, %v)", pinned, err)
+	}
+}
+
+// A failed save must leave the pins in memory as they were, so the pane never
+// shows a pin that is not on disk.
+func TestPinsToggleFailedSaveKeepsMemory(t *testing.T) {
+	norway := Place{Code: "NO", Name: "Norway"}
+	germany := Place{Code: "DE", Name: "Germany"}
+	for _, tc := range []struct {
+		name       string
+		toggle     Place
+		wantPinned bool
+	}{
+		{name: "pin a new place", toggle: Place{Code: "SE", Name: "Sweden"}, wantPinned: false},
+		{name: "unpin the first place", toggle: norway, wantPinned: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pins := &Pins{path: filepath.Join(t.TempDir(), pinsFile)}
+			for _, place := range []Place{norway, germany} {
+				if _, err := pins.Toggle(place); err != nil {
+					t.Fatalf("Toggle(%s): %v", place.ID(), err)
+				}
+			}
+			before := pins.Places()
+
+			// A directory cannot be replaced by the pins file, even as root.
+			pins.path = t.TempDir()
+			pinned, err := pins.Toggle(tc.toggle)
+			if err == nil {
+				t.Fatal("Toggle succeeded, want a save error")
+			}
+			if pinned != tc.wantPinned {
+				t.Errorf("pinned = %v, want the unchanged state %v", pinned, tc.wantPinned)
+			}
+			if got := pins.Places(); !slices.Equal(got, before) {
+				t.Errorf("pins after a failed save = %+v, want %+v", got, before)
+			}
+		})
 	}
 }
