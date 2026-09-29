@@ -582,3 +582,27 @@ expanded. Missing directories are created. Mount external drives first because
 cliamp does not check mount status. This also applies to IPC Save handled by the
 TUI; headless daemon saving is unchanged. Files remain ordinary local audio
 files and are not automatically substituted into online playlists.
+
+## Proxy
+
+cliamp reads the proxy variables `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and
+`NO_PROXY`. The lowercase names also work. Audio streams, provider API and
+sign-in requests, lyrics, radio and podcast directories, feeds, remote
+playlists, plugin installs and `cliamp upgrade` use them.
+
+```sh
+ALL_PROXY=socks5h://127.0.0.1:1080 cliamp
+HTTPS_PROXY=http://proxy.example:3128 cliamp
+```
+
+- `HTTP_PROXY` applies to `http://` requests, and `HTTPS_PROXY` applies to
+  `https://` requests.
+- `ALL_PROXY` applies when the variable for the scheme is not set. Audio
+  streams use `ALL_PROXY` only for a `socks5://` or `socks5h://` proxy.
+- `NO_PROXY` lists the hosts that cliamp connects to directly. cliamp does not
+  send a request for `localhost` or a loopback address through a proxy.
+- API requests accept a user and password in a SOCKS5 proxy URL, such as
+  `socks5h://user:pass@proxy.example:1080`. Audio streams refuse a SOCKS5 proxy
+  URL with a user and password, because SOCKS5 sends them as clear text.
+- yt-dlp and ffmpeg read these variables themselves. The Spotify playback
+  connection and the `cliamp.http` Lua plugin API do not follow these rules.
