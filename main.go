@@ -101,6 +101,26 @@ func restoreJellyfinContext(state resume.State, prov *jellyfin.Provider) ([]play
 	return tracks, index, tracks[index].Path, true
 }
 
+// logProviderRegistered records that a provider joined the active set. It
+// writes to the log file only, so it never disturbs the TUI. See issue #406.
+func logProviderRegistered(name, key string) {
+	applog.Info("provider registered: name=%s key=%s", name, key)
+}
+
+// logProviderSkipped records why a provider did not register. It writes to
+// the log file only, so it never disturbs the TUI. See issue #406.
+func logProviderSkipped(name, key, reason string) {
+	applog.Info("provider skipped: name=%s key=%s reason=%s", name, key, reason)
+}
+
+// logYouTubeSkipped records the skip reason for all three YouTube providers
+// (All, video, music), since they register or skip as one group.
+func logYouTubeSkipped(reason string) {
+	logProviderSkipped("YouTube (All)", "yt", reason)
+	logProviderSkipped("YouTube", "youtube", reason)
+	logProviderSkipped("YouTube Music", "ytmusic", reason)
+}
+
 func run(overrides config.Overrides, positional []string, daemon, visualizer60FPS bool) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -129,14 +149,20 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	var providers []model.ProviderEntry
 	// The cliamp radio channels come first: they are the view cliamp opens on.
 	providers = append(providers, model.ProviderEntry{Key: "cliamp", Name: "cliamp radio", Provider: radio.NewChannels()})
+	logProviderRegistered("cliamp radio", "cliamp")
 	providers = append(providers, model.ProviderEntry{Key: "radio", Name: "Radio", Provider: radioProv})
+	logProviderRegistered("Radio", "radio")
 	if localProv != nil {
 		providers = append(providers, model.ProviderEntry{Key: "local", Name: "Local", Provider: localProv})
+		logProviderRegistered("Local", "local")
+	} else {
+		logProviderSkipped("Local", "local", "config directory unavailable")
 	}
 	podcastProv := podcast.New(cfg.Podcast.Country)
 	// Flush per-episode listening state that the throttled writer still holds.
 	defer podcastProv.Close()
 	providers = append(providers, model.ProviderEntry{Key: "podcast", Name: "Podcasts", Provider: podcastProv})
+	logProviderRegistered("Podcasts", "podcast")
 
 	var navClient *navidrome.NavidromeClient
 	if c := navidrome.NewFromConfig(cfg.Navidrome); c != nil {
@@ -146,6 +172,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 	if navClient != nil {
 		providers = append(providers, model.ProviderEntry{Key: "navidrome", Name: "Navidrome", Provider: navClient})
+		logProviderRegistered("Navidrome", "navidrome")
+	} else {
+		logProviderSkipped("Navidrome", "navidrome", "not configured")
 	}
 
 	var lyrionClient *lyrion.Client
@@ -156,24 +185,39 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 	if lyrionClient != nil {
 		providers = append(providers, model.ProviderEntry{Key: "lyrion", Name: "Lyrion", Provider: lyrionClient})
+		logProviderRegistered("Lyrion", "lyrion")
+	} else {
+		logProviderSkipped("Lyrion", "lyrion", "not configured")
 	}
 
 	if plexProv := plex.NewFromConfig(cfg.Plex); plexProv != nil {
 		providers = append(providers, model.ProviderEntry{Key: "plex", Name: "Plex", Provider: plexProv})
+		logProviderRegistered("Plex", "plex")
+	} else {
+		logProviderSkipped("Plex", "plex", "not configured")
 	}
 
 	var jellyProv *jellyfin.Provider
 	if p := jellyfin.NewFromConfig(cfg.Jellyfin); p != nil {
 		jellyProv = p
 		providers = append(providers, model.ProviderEntry{Key: "jellyfin", Name: "Jellyfin", Provider: jellyProv})
+		logProviderRegistered("Jellyfin", "jellyfin")
+	} else {
+		logProviderSkipped("Jellyfin", "jellyfin", "not configured")
 	}
 
 	if embyProv := emby.NewFromConfig(cfg.Emby); embyProv != nil {
 		providers = append(providers, model.ProviderEntry{Key: "emby", Name: "Emby", Provider: embyProv})
+		logProviderRegistered("Emby", "emby")
+	} else {
+		logProviderSkipped("Emby", "emby", "not configured")
 	}
 
 	if absProv := audiobookshelf.NewFromConfig(cfg.Audiobookshelf); absProv != nil {
 		providers = append(providers, model.ProviderEntry{Key: "audiobookshelf", Name: "Audiobookshelf", Provider: absProv})
+		logProviderRegistered("Audiobookshelf", "audiobookshelf")
+	} else {
+		logProviderSkipped("Audiobookshelf", "audiobookshelf", "not configured")
 	}
 
 	var spotifyProv *spotify.SpotifyProvider
@@ -181,18 +225,27 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		clientID := cfg.Spotify.ResolveClientID(spotify.DefaultClientID)
 		spotifyProv = spotify.New(nil, clientID, cfg.Spotify.Bitrate)
 		providers = append(providers, model.ProviderEntry{Key: "spotify", Name: "Spotify", Provider: spotifyProv})
+		logProviderRegistered("Spotify", "spotify")
+	} else {
+		logProviderSkipped("Spotify", "spotify", "not configured")
 	}
 
 	var qobuzProv *qobuz.QobuzProvider
 	if cfg.Qobuz.IsSet() {
 		qobuzProv = qobuz.New(cfg.Qobuz.Quality)
 		providers = append(providers, model.ProviderEntry{Key: "qobuz", Name: "Qobuz", Provider: qobuzProv})
+		logProviderRegistered("Qobuz", "qobuz")
+	} else {
+		logProviderSkipped("Qobuz", "qobuz", "not configured")
 	}
 
 	var tidalProv *tidal.TidalProvider
 	if cfg.Tidal.IsSet() {
 		tidalProv = tidal.New(cfg.Tidal.Quality, cfg.Tidal.ClientID, cfg.Tidal.ClientSecret)
 		providers = append(providers, model.ProviderEntry{Key: "tidal", Name: "Tidal", Provider: tidalProv})
+		logProviderRegistered("Tidal", "tidal")
+	} else {
+		logProviderSkipped("Tidal", "tidal", "not configured")
 	}
 
 	if scProv := soundcloud.NewFromConfig(soundcloud.Config{
@@ -201,6 +254,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		CookiesFrom: cfg.SoundCloud.CookiesFrom,
 	}); scProv != nil {
 		providers = append(providers, model.ProviderEntry{Key: "soundcloud", Name: "SoundCloud", Provider: scProv})
+		logProviderRegistered("SoundCloud", "soundcloud")
+	} else {
+		logProviderSkipped("SoundCloud", "soundcloud", "not configured")
 	}
 
 	if mcProv := mixcloud.NewFromConfig(mixcloud.Config{
@@ -215,6 +271,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		SaveStyles:     config.SaveMixcloudStyles,
 	}); mcProv != nil {
 		providers = append(providers, model.ProviderEntry{Key: "mixcloud", Name: "Mixcloud", Provider: mcProv})
+		logProviderRegistered("Mixcloud", "mixcloud")
+	} else {
+		logProviderSkipped("Mixcloud", "mixcloud", "not configured")
 	}
 
 	if neProv := netease.NewFromConfig(netease.Config{
@@ -223,6 +282,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		UserID:      cfg.NetEase.UserID,
 	}); neProv != nil {
 		providers = append(providers, model.ProviderEntry{Key: "netease", Name: "NetEase", Provider: neProv})
+		logProviderRegistered("NetEase", "netease")
+	} else {
+		logProviderSkipped("NetEase", "netease", "not configured")
 	}
 
 	yaProv := yandex.NewFromConfig(yandex.Config{
@@ -231,6 +293,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	})
 	if yaProv != nil {
 		providers = append(providers, model.ProviderEntry{Key: "yandex", Name: "Yandex Music", Provider: yaProv})
+		logProviderRegistered("Yandex Music", "yandex")
+	} else {
+		logProviderSkipped("Yandex Music", "yandex", "not configured")
 	}
 
 	var closeYouTube func()
@@ -241,7 +306,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			ytWanted = true
 		}
 	}
-	if ytWanted {
+	if !ytWanted {
+		logYouTubeSkipped("not configured")
+	} else {
 		explicitOAuth := strings.TrimSpace(cfg.YouTubeMusic.ClientID) != "" && strings.TrimSpace(cfg.YouTubeMusic.ClientSecret) != ""
 		hasCookies := strings.TrimSpace(cfg.YouTubeMusic.CookiesFrom) != ""
 		if hasCookies {
@@ -255,6 +322,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 
 		if !explicitOAuth && !hasCookies && !hasFallbackOAuth {
 			fmt.Fprintf(os.Stderr, "YouTube: no credentials available (configure client_id/client_secret or cookies_from in config.toml)\n")
+			logYouTubeSkipped("no credentials available")
 		} else {
 			if !player.YTDLPAvailable() {
 				fmt.Fprintf(os.Stderr, "\nYouTube requires yt-dlp for audio playback.\n")
@@ -290,7 +358,12 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 						model.ProviderEntry{Key: "youtube", Name: "YouTube", Provider: video},
 						model.ProviderEntry{Key: "ytmusic", Name: "YouTube Music", Provider: music},
 					)
+					logProviderRegistered("YouTube (All)", "yt")
+					logProviderRegistered("YouTube", "youtube")
+					logProviderRegistered("YouTube Music", "ytmusic")
 				}
+			} else {
+				logYouTubeSkipped("yt-dlp not available")
 			}
 		}
 	}
