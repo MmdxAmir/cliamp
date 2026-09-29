@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 // hostRewriteTransport redirects outbound requests so live URLs resolve to
@@ -203,5 +205,20 @@ func TestFetchLRCLIBHTTPError(t *testing.T) {
 	_, err := Fetch("a", "b")
 	if err != ErrNotFound {
 		t.Errorf("Fetch after 500 → NetEase empty = %v, want ErrNotFound", err)
+	}
+}
+
+func TestFetchLRCLIBSendsUserAgent(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.UserAgent()
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	installTestClient(t, srv.URL)
+
+	_, _ = fetchLRCLIB("artist title")
+	if got != httpclient.UserAgent {
+		t.Errorf("User-Agent = %q, want %q", got, httpclient.UserAgent)
 	}
 }
