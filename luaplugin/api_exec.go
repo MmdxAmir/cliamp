@@ -252,16 +252,18 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 		var outUsed atomic.Int64
 
 		pipeStream := func(r io.Reader, fn *lua.LFunction, label string) {
+			// Drain what the scan leaves: the rest after the output budget
+			// ends, or after a line longer than the buffer stops the scan.
+			// A pipe that is not drained blocks the process until its
+			// timeout.
+			defer io.Copy(io.Discard, r)
 			scanner := bufio.NewScanner(r)
 			// Allow longer lines than default 64KiB for noisy tools like ffmpeg.
 			scanner.Buffer(make([]byte, 64*1024), 1<<20)
 			for scanner.Scan() {
 				line := scanner.Text()
 				if outUsed.Add(int64(len(line)+1)) > execMaxOutputBytes {
-					// Budget exhausted — drain silently.
-					for scanner.Scan() {
-					}
-					return
+					return // budget exhausted; drop the rest silently
 				}
 				if fn == nil {
 					continue

@@ -533,6 +533,7 @@ handle:alive()                            -- --> boolean
 - `args` must be a flat array of strings. cliamp rejects nested tables and non-strings.
 - The subprocess environment contains only `PATH`, `HOME`, and `LANG`. cliamp does not pass parent-environment secrets.
 - Output is limited to 4 MiB per process, for stdout and stderr together. cliamp silently drops later lines.
+- A line is limited to 1 MiB. After a longer line, cliamp silently drops the rest of that stream. The process continues to run.
 - Each plugin can run up to 4 processes at one time.
 - cliamp kills every plugin-owned process when the plugin unloads and when cliamp exits.
 - Negative `on_exit` codes indicate cancellation or timeout (`-1`), or a start failure (`-2`).

@@ -213,6 +213,51 @@ func TestExecPropagatesExitCode(t *testing.T) {
 	}
 }
 
+// A line longer than the scanner buffer stops the scan. The pipe must still
+// drain, or the process blocks on a full pipe until its timeout.
+func TestExecDrainsOverlongLine(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh")
+	}
+	tests := []struct {
+		name   string
+		script string
+	}{
+		{"stdout", `printf "%2097152s" x`},
+		{"stderr", `printf "%2097152s" x >&2`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L, p, _, cleanup := newExecTestState(t, []string{"exec"})
+			defer cleanup()
+
+			p.mu.Lock()
+			err := L.DoString(fmt.Sprintf(`
+				_G.exit_code = nil
+				cliamp.exec.run("sh", {"-c", %q}, {
+					on_stdout = function() end,
+					on_stderr = function() end,
+					on_exit = function(code) _G.exit_code = code end,
+					timeout = 10,
+				})
+			`, tt.script))
+			p.mu.Unlock()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// The process timeout is 10 s, so an exit before 8 s shows that
+			// the pipe drained.
+			waitExec(t, p, L, "exit_code", 8*time.Second)
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			if code := L.GetGlobal("exit_code").(lua.LNumber); code != 0 {
+				t.Fatalf("exit_code = %v, want 0", code)
+			}
+		})
+	}
+}
+
 func TestExecCancel(t *testing.T) {
 	L, p, _, cleanup := newExecTestState(t, []string{"exec"})
 	defer cleanup()
