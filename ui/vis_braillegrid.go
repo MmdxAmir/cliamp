@@ -2,6 +2,14 @@ package ui
 
 import "strings"
 
+// brailleBit maps (row, col) in a 4×2 Braille dot grid to its bit value.
+var brailleBit = [4][2]rune{
+	{0x01, 0x08}, // row 0
+	{0x02, 0x10}, // row 1
+	{0x04, 0x20}, // row 2
+	{0x40, 0x80}, // row 3
+}
+
 // brailleGrid is a 4×2 dot-per-cell rasteriser shared by visualizers that draw
 // to a fine subgrid (mirror, heartbeat, firefly, geyser, sand, red sector).
 // Each cell stores a tier (0 = empty) and the renderer composes one Braille

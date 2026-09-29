@@ -48,3 +48,15 @@ func (v *Visualizer) renderScatter(bands []float64) string {
 
 	return strings.Join(lines, "\n")
 }
+
+// scatterHash returns a pseudo-random value in [0, 1) for a given dot position
+// and frame. Dots persist for a few frames to create a twinkling effect.
+func scatterHash(band, row, col int, frame uint64) float64 {
+	// Stagger per-dot so they don't all change simultaneously.
+	f := (frame + uint64(row*3+col)) / 3
+	h := uint64(band)*7919 + uint64(row)*6271 + uint64(col)*3037 + f*104729
+	h ^= h >> 16
+	h *= 0x45d9f3b37197344b
+	h ^= h >> 16
+	return float64(h%10000) / 10000.0
+}
