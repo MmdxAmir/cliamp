@@ -51,12 +51,6 @@ func (d *sandDriver) ensure(rows, cols int) {
 	d.dotCols = cols
 }
 
-// rand01 returns a deterministic pseudo-random float in [0,1).
-func (d *sandDriver) rand01() float64 {
-	d.rng = d.rng*6364136223846793005 + 1442695040888963407
-	return float64((d.rng>>33)%1000) / 1000.0
-}
-
 func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	defaultDriverTick(v, ctx, d.AnalysisSpec(v))
 	if ctx.OverlayActive {
@@ -92,7 +86,7 @@ func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
 				continue
 			}
 			// Probability of emitting this frame scales with band level.
-			if d.rand01() > level*0.85 {
+			if rng64(&d.rng) > level*0.85 {
 				continue
 			}
 			centre := (b*2 + 1) * dotCols / (2 * bandCount)
@@ -100,7 +94,7 @@ func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
 			if spread < 1 {
 				spread = 1
 			}
-			x := centre + int(d.rand01()*float64(2*spread)) - spread
+			x := centre + int(rng64(&d.rng)*float64(2*spread)) - spread
 			if x < 0 {
 				x = 0
 			}
@@ -184,11 +178,11 @@ func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
 				if g == 0 {
 					continue
 				}
-				if d.rand01() > liftProb {
+				if rng64(&d.rng) > liftProb {
 					continue
 				}
-				lift := 1 + int(d.rand01()*float64(liftMax))
-				jitter := int(d.rand01()*float64(2*jitterRange+1)) - jitterRange
+				lift := 1 + int(rng64(&d.rng)*float64(liftMax))
+				jitter := int(rng64(&d.rng)*float64(2*jitterRange+1)) - jitterRange
 				ny := y - lift
 				nx := x + jitter
 				if ny < 0 {
@@ -227,11 +221,11 @@ func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
 				if g == 0 {
 					continue
 				}
-				if d.rand01() > prob {
+				if rng64(&d.rng) > prob {
 					continue
 				}
-				lift := 1 + int(d.rand01()*2.0) // 1..2
-				jitter := int(d.rand01()*5) - 2 // -2..+2
+				lift := 1 + int(rng64(&d.rng)*2.0) // 1..2
+				jitter := int(rng64(&d.rng)*5) - 2 // -2..+2
 				ny := y - lift
 				nx := x + jitter
 				if ny < 0 {
@@ -274,7 +268,7 @@ func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
 			}
 			// Diagonal: pick left or right first based on parity for symmetry.
 			diag1, diag2 := -1, 1
-			if d.rand01() < 0.5 {
+			if rng64(&d.rng) < 0.5 {
 				diag1, diag2 = 1, -1
 			}
 			for _, dx := range [2]int{diag1, diag2} {
@@ -295,7 +289,7 @@ func (d *sandDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	// the grid doesn't fill up over time. Without this, a long-running session
 	// gradually packs every cell.
 	for x := 0; x < dotCols; x++ {
-		if d.grid[(dotRows-1)*dotCols+x] != 0 && d.rand01() < 0.04 {
+		if d.grid[(dotRows-1)*dotCols+x] != 0 && rng64(&d.rng) < 0.04 {
 			d.grid[(dotRows-1)*dotCols+x] = 0
 		}
 	}
@@ -337,8 +331,8 @@ func (d *sandDriver) startExplosion() {
 			d.grid[y*dotCols+x] = 0
 			// Vertical: -3..-9 dot/frame upward, biased so bottom grains fly
 			// fastest. Lateral: ±4 dot/frame for a wide spray.
-			vy := -(2.0 + d.rand01()*5.0 + depthFrac*2.0)
-			vx := (d.rand01() - 0.5) * 8.0
+			vy := -(2.0 + rng64(&d.rng)*5.0 + depthFrac*2.0)
+			vx := (rng64(&d.rng) - 0.5) * 8.0
 			d.particles = append(d.particles, sandParticle{
 				x:    float64(x),
 				y:    float64(y),

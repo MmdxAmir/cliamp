@@ -159,8 +159,7 @@ func init() {
 	}
 	s := uint64(0x9E3779B97F4A7C15)
 	for i := range omarchyNoise {
-		s = s*6364136223846793005 + 1442695040888963407
-		omarchyNoise[i] = float64((s>>33)%100000) / 100000.0
+		omarchyNoise[i] = float64(lcgNext(&s)%100000) / 100000.0
 	}
 }
 

@@ -81,8 +81,14 @@ func (g *brailleGrid) render(rows int) string {
 	return strings.Join(lines, "\n")
 }
 
+// lcgNext advances a 64-bit LCG and returns the top 31 bits of the new state.
+// Every visualizer that needs a repeatable random stream draws from it.
+func lcgNext(state *uint64) uint64 {
+	*state = *state*6364136223846793005 + 1442695040888963407
+	return *state >> 33
+}
+
 // rng64 advances a 64-bit LCG and returns a [0,1) double.
 func rng64(state *uint64) float64 {
-	*state = *state*6364136223846793005 + 1442695040888963407
-	return float64((*state>>33)%1000) / 1000.0
+	return float64(lcgNext(state)%1000) / 1000.0
 }

@@ -106,8 +106,7 @@ func (d *mosaicDriver) ensureGrid(rows, tiles, bandCount int) {
 			baseBand = (rows - 1 - r) * (bandCount - 1) / (rows - 1)
 		}
 		for c := 0; c < tiles; c++ {
-			d.rng = d.rng*6364136223846793005 + 1442695040888963407
-			jitter := int((d.rng>>33)%5) - 2 // -2..+2
+			jitter := int(lcgNext(&d.rng)%5) - 2 // -2..+2
 			band := baseBand + jitter
 			if band < 0 {
 				band = 0
@@ -115,8 +114,7 @@ func (d *mosaicDriver) ensureGrid(rows, tiles, bandCount int) {
 			if band >= bandCount {
 				band = bandCount - 1
 			}
-			d.rng = d.rng*6364136223846793005 + 1442695040888963407
-			th := 0.04 + float64((d.rng>>33)%1000)/1000.0*0.74
+			th := 0.04 + float64(lcgNext(&d.rng)%1000)/1000.0*0.74
 			d.cells[r*tiles+c] = mosaicCellState{
 				bandIdx:   band,
 				threshold: th,

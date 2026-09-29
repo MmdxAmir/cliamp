@@ -61,8 +61,7 @@ func (d *flameDriver) Tick(v *Visualizer, ctx VisTickContext) {
 			pos := float64(x) / float64(max(1, dotCols-1)) * last
 			src := sampleBandLinear(bands, pos)
 
-			d.rng = d.rng*6364136223846793005 + 1442695040888963407
-			sparkle := float64((d.rng>>33)%100) / 100.0 * 0.18
+			sparkle := float64(lcgNext(&d.rng)%100) / 100.0 * 0.18
 
 			// Always keep the base mildly lit so a bed of embers is visible.
 			base := 0.30 + 0.70*src + sparkle
@@ -73,8 +72,7 @@ func (d *flameDriver) Tick(v *Visualizer, ctx VisTickContext) {
 		}
 	} else {
 		for x := 0; x < dotCols; x++ {
-			d.rng = d.rng*6364136223846793005 + 1442695040888963407
-			d.heat[x] = 0.30 + float64((d.rng>>33)%100)/100.0*0.20
+			d.heat[x] = 0.30 + float64(lcgNext(&d.rng)%100)/100.0*0.20
 		}
 	}
 
@@ -88,8 +86,7 @@ func (d *flameDriver) Tick(v *Visualizer, ctx VisTickContext) {
 		heightFrac := float64(y) / float64(max(1, dotRows-1))
 		decayBase := 0.010 + 0.028*heightFrac
 		for x := 0; x < dotCols; x++ {
-			d.rng = d.rng*6364136223846793005 + 1442695040888963407
-			r := d.rng >> 33
+			r := lcgNext(&d.rng)
 			offset := int(r%3) - 1 // -1, 0, +1
 			r >>= 2
 			decayJitter := float64(r%100) / 100.0 * 0.018
