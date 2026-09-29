@@ -302,3 +302,24 @@ func TestPlayFailureIsLogged(t *testing.T) {
 		})
 	}
 }
+
+// The feeds and pages on the command line resolve after the start. A failure
+// goes to the log, because a headless Model shows no error.
+func TestURLResolveFailureIsLogged(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "cliamp.log")
+	closeLog, err := applog.Init(logPath, applog.LevelWarn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = closeLog() })
+	m := newHeadlessModel(t, &headlessEngine{}, nil)
+
+	m.Update(feedsLoadedMsg{err: errors.New("feed offline")})
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if log := string(data); !strings.Contains(log, "level=WARN") || !strings.Contains(log, "feed offline") {
+		t.Fatalf("log = %q, want a warning with the error", log)
+	}
+}

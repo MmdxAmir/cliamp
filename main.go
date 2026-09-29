@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -472,18 +474,6 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		}
 	}
 
-	// Daemon mode has no UI loop to drain pending URLs (feeds, M3U, yt-dlp),
-	// so resolve them synchronously here. The TUI path does this in the
-	// background via m.SetPendingURLs.
-	if daemon && len(resolved.Pending) > 0 {
-		fmt.Fprintf(os.Stderr, "cliamp: resolving %d remote URL(s)...\n", len(resolved.Pending))
-		remote, err := resolve.Remote(resolved.Pending)
-		if err != nil {
-			return fmt.Errorf("resolve remote: %w", err)
-		}
-		pl.Add(remote...)
-	}
-
 	if cfg.AudioDevice != "" {
 		cleanup := player.PrepareAudioDevice(cfg.AudioDevice)
 		defer cleanup()
@@ -569,17 +559,6 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	cfg.ApplyPlaylist(pl)
 	ui.SetPadding(cfg.PaddingH, cfg.PaddingV)
 
-	if daemon {
-		if cfg.EQPreset != "" && cfg.EQPreset != "Custom" {
-			if preset, ok := model.EQPresetByName(cfg.EQPreset); ok {
-				for i, gain := range preset.Bands {
-					p.SetEQBand(i, gain)
-				}
-			}
-		}
-		return runDaemon(p, pl, localProv, providers, cfg.AutoPlay, cfg.EQPreset)
-	}
-
 	themes := theme.LoadAll()
 
 	pluginBroker := ipc.NewBroker()
@@ -613,8 +592,6 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	m.SetIPCBroker(pluginBroker)
 	m.SetCustomEQBands(cfg.EQ)
 	m.SetVisVolumeLinked(cfg.VisVolumeLinked)
-	m.SetVisRows(cfg.VisRows)
-	m.SetVisualizer60FPS(visualizer60FPS)
 
 	if luaMgr != nil {
 		luaMgr.SetStateProvider(luaplugin.StateProvider{
@@ -693,29 +670,37 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	if cfg.Theme != "" {
 		m.SetTheme(cfg.Theme)
 	}
-	if cfg.Visualizer != "" {
-		m.SetVisualizer(cfg.Visualizer)
-	}
 	if cfg.AutoPlay && !restoredJellyfinChoice {
 		m.SetAutoPlay(true)
 	}
-	if cfg.LowPower {
-		m.SetLowPower(true)
-	}
-	if cfg.Simplified {
-		m.SetSimplified(true)
-	}
-	if cfg.HideHelpBar {
-		m.SetHideHelpBar(true)
-	}
-	if cfg.HideSettingsPane {
-		m.SetHideSettingsPane(true)
-	}
-	if cfg.ShowMetadata {
-		m.SetShowMetadata(true)
-	}
-	if cfg.Expanded {
-		m.SetExpanded(true)
+	if daemon {
+		// Headless mode has no screen, so the view settings do not apply. The
+		// default visualizer stays, because it serves spectrum.get.
+		m.SetHeadless(true)
+	} else {
+		m.SetVisRows(cfg.VisRows)
+		m.SetVisualizer60FPS(visualizer60FPS)
+		if cfg.Visualizer != "" {
+			m.SetVisualizer(cfg.Visualizer)
+		}
+		if cfg.LowPower {
+			m.SetLowPower(true)
+		}
+		if cfg.Simplified {
+			m.SetSimplified(true)
+		}
+		if cfg.HideHelpBar {
+			m.SetHideHelpBar(true)
+		}
+		if cfg.HideSettingsPane {
+			m.SetHideSettingsPane(true)
+		}
+		if cfg.ShowMetadata {
+			m.SetShowMetadata(true)
+		}
+		if cfg.Expanded {
+			m.SetExpanded(true)
+		}
 	}
 
 	if resumeState.Path != "" && resumeState.PositionSec > 0 {
@@ -731,10 +716,22 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 
 	progOpts := []tea.ProgramOption{tea.WithFPS(defaultUIFPS)}
-	if cfg.LowPower {
+	switch {
+	case daemon:
+		progOpts = headlessProgramOptions()
+	case cfg.LowPower:
 		progOpts[0] = tea.WithFPS(lowPowerUIFPS)
 	}
 	prog := tea.NewProgram(m, progOpts...)
+	if daemon {
+		signals := make(chan os.Signal, 1)
+		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+		defer func() {
+			signal.Stop(signals)
+			close(signals)
+		}()
+		go quitOnSignal(signals, prog.Send)
+	}
 
 	if spotifyProv != nil {
 		spotify.SetAuthURLObserver(func(u string) {
@@ -817,16 +814,20 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 
 	ipcSrv, ipcErr := ipc.NewServerWithBroker(ipc.DefaultSocketPath(), pluginBroker)
 	if ipcErr != nil {
+		if daemon {
+			// Headless mode is controlled only through the socket.
+			return fmt.Errorf("ipc: %w", ipcErr)
+		}
 		fmt.Fprintf(os.Stderr, "ipc: %v\n", ipcErr)
 	} else {
 		defer ipcSrv.Close()
 		ipcSrv.SetV2Dispatcher(newTUIV2Dispatcher(prog, ipcSrv.JobStore(), luaMgr))
-		if luaMgr == nil {
-			operations := ipc.DefaultOperationRegistry()
-			operations.Unregister("plugin.call", "plugin.commands")
-			ipcSrv.SetOperationRegistry(operations)
-		}
+		ipcSrv.SetOperationRegistry(v2Operations(daemon, luaMgr != nil))
 		go publishV2JobEvents(ipcSrv.Done(), ipcSrv.JobStore(), pluginBroker)
+	}
+	if daemon {
+		fmt.Fprintf(os.Stderr, "cliamp: running headless (socket: %s)\n", ipc.DefaultSocketPath())
+		applog.Info("running headless")
 	}
 
 	finalModel, err := mediactl.Run(prog, svc)
@@ -835,11 +836,14 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 
 	if fm, ok := finalModel.(model.Model); ok {
-		themeName := fm.ThemeName()
-		if themeName == theme.DefaultName {
-			themeName = ""
+		// Headless mode has no theme keys, so it keeps the saved theme.
+		if !daemon {
+			themeName := fm.ThemeName()
+			if themeName == theme.DefaultName {
+				themeName = ""
+			}
+			_ = config.Save("theme", fmt.Sprintf("%q", themeName))
 		}
-		_ = config.Save("theme", fmt.Sprintf("%q", themeName))
 
 		if path, secs, playlistName := fm.ResumeState(); path != "" && secs > 0 {
 			if defaultProvider == "jellyfin" && jellyfin.IsStreamURL(path) {
@@ -855,6 +859,45 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 
 	return nil
+}
+
+// headlessProgramOptions build a program with no terminal: no renderer, no
+// input and no output. The frame ticker runs at its lowest rate. run
+// handles the signals itself, see quitOnSignal.
+func headlessProgramOptions() []tea.ProgramOption {
+	return []tea.ProgramOption{
+		tea.WithoutRenderer(),
+		tea.WithInput(nil),
+		tea.WithOutput(io.Discard),
+		tea.WithFPS(1),
+		tea.WithoutSignalHandler(),
+	}
+}
+
+// quitOnSignal asks the Model to quit on the first SIGINT or SIGTERM, so it
+// saves the resume position as the q key does. The signal handler of
+// Bubbletea ends the program with no Update, and on SIGINT it also returns
+// an error. After the first signal the default action is back, so a second
+// signal ends a program that does not quit.
+func quitOnSignal(signals chan os.Signal, send func(tea.Msg)) {
+	if _, ok := <-signals; ok {
+		signal.Stop(signals)
+		send(playback.QuitMsg{})
+	}
+}
+
+// v2Operations returns the V2 operations that this runtime serves. Headless
+// mode has no theme or visualizer to change. The plugin operations need the
+// plugin manager.
+func v2Operations(headless, plugins bool) *ipc.OperationRegistry {
+	operations := ipc.DefaultOperationRegistry()
+	if headless {
+		operations.Unregister("theme", "vis")
+	}
+	if !plugins {
+		operations.Unregister("plugin.call", "plugin.commands")
+	}
+	return operations
 }
 
 func newTUIV2Dispatcher(prog *tea.Program, jobs *ipc.JobStore, plugins *luaplugin.Manager) ipc.V2Dispatcher {

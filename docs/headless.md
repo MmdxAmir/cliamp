@@ -1,9 +1,10 @@
 # Headless Daemon Mode
 
-Run cliamp without a TUI. The daemon listens on the same Unix socket as the
-interactive player. Playback, library, and V2 remote commands work, but cliamp
-does not render a terminal UI. Use this mode to control playback through IPC
-from a status bar, script, hotkey daemon, or cron job.
+Run cliamp without a TUI. Headless mode runs the same player as the TUI, but
+it does not render a terminal UI. It listens on the same Unix socket as the
+interactive player. Playback, library, and V2 remote commands work. Use this
+mode to control playback through IPC from a status bar, script, hotkey daemon,
+or cron job.
 
 ```sh
 cliamp --daemon                              # no TUI, IPC only
@@ -12,7 +13,7 @@ cliamp --daemon --auto-play --playlist Lofi  # start playing on launch
 cliamp --daemon ~/Music --auto-play          # auto-play a directory
 ```
 
-Send `SIGINT` or `SIGTERM` to stop the daemon. cliamp saves the resume position on a graceful shutdown.
+To stop the daemon, press `Ctrl+C` or send `SIGINT` or `SIGTERM`. cliamp saves the resume position, as the `q` key does in the TUI. A second signal stops a daemon that does not exit.
 
 ## What works
 
@@ -24,6 +25,7 @@ The daemon exposes the same runtime, library, job, and event IPC interface as th
 - Library: `load "Name"`, `queue /path/to.mp3`
 - Audio: `eq <preset>`, `eq --band N <dB>`, `device <name|list>`
 - Status: `status`, `status --json`
+- Plugins: `plugins call`, and the hooks of the plugins in `~/.config/cliamp/plugins/`
 
 ## What doesn't
 
@@ -32,7 +34,23 @@ UI-only commands return an error in headless mode:
 - `theme`: no UI is available for themes
 - `vis`: no visualizer is running
 
-The daemon still enables MPRIS on Linux, NowPlaying on macOS, and hardware media key hotkeys on Windows when the platform service is available. You can also bind media keys directly to `cliamp` subcommands. See [Hyprland](#hyprland).
+The daemon enables MPRIS on Linux, NowPlaying on macOS, and hardware media key hotkeys on Windows when the platform service is available. You can also bind media keys directly to `cliamp` subcommands. See [Hyprland](#hyprland).
+
+## Same behavior as the TUI
+
+Headless mode runs the same player as the TUI. These features work the same
+way in both modes:
+
+- Lua plugins load from `~/.config/cliamp/plugins/`. Their hooks see playback events.
+- Navidrome, Jellyfin, Plex, and the other servers get now-playing and scrobble reports.
+- A track enters Recently Played when it starts. See [Recently Played](history.md).
+- `cliamp save` writes to the `[downloads]` directory. See [configuration.md](configuration.md#download-directory).
+- The next track preloads, so playback is gapless.
+- Shuffle, repeat, speed, and EQ changes are saved to `config.toml`.
+
+The view settings in `config.toml`, such as `visualizer`, `simplified`, and
+`expanded`, do not apply. `spectrum.get` and `cliamp visstream` always use the
+default `Bars` analysis.
 
 ## Use cases
 
@@ -180,6 +198,5 @@ cliamp --daemon --auto-play http://radio.cliamp.stream/lofi/stream
 
 ## Notes
 
-- The daemon and TUI share one Unix socket. Only one cliamp instance can run for a user. A second instance cannot bind to the socket.
-- This version of headless mode does not load Lua plugins. They need UI hooks that this mode does not enable.
-- Headless mode does not preload the next track for gapless playback. Small gaps between tracks are expected.
+- The daemon and TUI share one Unix socket. Only one cliamp instance can run for a user. A second instance cannot bind to the socket, and a daemon exits with an error.
+- cliamp resolves feed, M3U, and yt-dlp arguments in the background after start. If a URL fails, the daemon keeps running with the tracks that loaded. Check `cliamp status`, and look in `~/.config/cliamp/cliamp.log` for the error.

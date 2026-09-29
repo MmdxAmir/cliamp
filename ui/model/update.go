@@ -702,6 +702,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.feedLoading = false
 		if msg.err != nil {
 			m.err = msg.err
+			applog.Warn("load URLs: %v", msg.err)
 			return m, nil
 		}
 		if len(msg.tracks) > 0 {

@@ -126,13 +126,13 @@ play-next list. They use separate zero-based indexes.
 accepts that name or `default` to select the terminal colors.
 
 `eq` takes a built-in preset name, such as `Rock`, or a `band` and a `value`.
-The TUI also accepts `Custom` to restore the saved custom curve. An unknown
+It also accepts `Custom` to restore the saved custom curve. An unknown
 preset name fails the job and does not change the EQ.
 
 `playlist.bookmark` keeps its name for existing scripts. It toggles the favorite
 ♥ of `track`, as `f` does in the TUI. It needs a known `provider` key, but it
-does not change the playlist. In the TUI, a radio station toggles its station
-favorite, and its `bookmark` field in provider lists changes too. A station
+does not change the playlist. A radio station toggles its station favorite,
+and its `bookmark` field in provider lists changes too. A station
 that is a row of a loaded saved playlist toggles the favorites store instead.
 The `bookmark` field of that row in `queue.list` changes. cliamp matches the
 row by path.
@@ -194,10 +194,12 @@ value. `seek` is relative to the current position. V2 subscriptions read
 cliamp --daemon --auto-play --playlist Lofi
 ```
 
-The daemon exposes the same playback, queue, provider, saved-playlist, job,
-snapshot, and event APIs. It has no TUI theme or visualizer selection. It does
-not load Lua plugins. Use `capabilities` instead of assuming that each
-interactive-only operation is available.
+Headless mode runs the same player as the TUI with no screen. It exposes the
+same playback, queue, provider, saved-playlist, plugin, job, snapshot, and event
+APIs. It loads Lua plugins, reports plays to the providers, and records Recently
+Played when a track starts. It has no theme or visualizer selection, so `theme`
+and `vis` are not in `capabilities`. Use `capabilities` instead of assuming that
+each interactive-only operation is available.
 
 ## Errors And Limits
 
