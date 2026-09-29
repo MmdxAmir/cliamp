@@ -70,6 +70,11 @@ func TestReadMetadata(t *testing.T) {
 			wantErr: `needs type = "hook" or "visualizer"`,
 		},
 		{
+			name:    "unknown type",
+			source:  `plugin.register({name = "x", type = "visualiser"})`,
+			wantErr: `needs type = "hook" or "visualizer"`,
+		},
+		{
 			name:    "error in a second register call",
 			source:  `plugin.register({name = "x", type = "hook"}); plugin.register({name = "x"})`,
 			wantErr: `needs type = "hook" or "visualizer"`,

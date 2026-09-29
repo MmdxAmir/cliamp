@@ -100,6 +100,8 @@ func TestRegisterWithoutTypeReportsError(t *testing.T) {
 	}{
 		{"no type", `plugin.register({name = "y"})`},
 		{"empty type", `plugin.register({name = "y", type = ""})`},
+		{"unknown type", `plugin.register({name = "y", type = "visualiser"})`},
+		{"number type", `plugin.register({name = "y", type = 1})`},
 		{"no type with a hook", `
 			local p = plugin.register({name = "y"})
 			p:on("track.change", function() end)

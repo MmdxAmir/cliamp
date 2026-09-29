@@ -454,6 +454,7 @@ func TestTrustMatchesRuntime(t *testing.T) {
 		{"unknown permission", `plugin.register({name = "p", type = "hook", permissions = {"root"}})`, false},
 		{"permissions not an array", `plugin.register({name = "p", type = "hook", permissions = "exec"})`, false},
 		{"missing type", `plugin.register({name = "p"})`, false},
+		{"unknown type", `plugin.register({name = "p", type = "visualiser"})`, false},
 		{"syntax error", `plugin.register({`, false},
 	}
 	for _, tt := range tests {

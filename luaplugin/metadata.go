@@ -39,7 +39,7 @@ func parseRegisterOpts(opts *lua.LTable) (Metadata, error) {
 			*f.dst = v.String()
 		}
 	}
-	if md.Type == "" {
+	if md.Type != "hook" && md.Type != "visualizer" {
 		return md, errors.New(`plugin.register() needs type = "hook" or "visualizer"`)
 	}
 	v := opts.RawGetString("permissions")
