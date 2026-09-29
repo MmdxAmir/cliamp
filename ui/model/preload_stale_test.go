@@ -31,8 +31,6 @@ func armedModel() (Model, *playbackFakeEngine) {
 	return m, player
 }
 
-func reply() chan ipc.Response { return make(chan ipc.Response, 1) }
-
 // Every way of changing the next track drops the armed b.mp3, and the next
 // tick arms the new next track instead.
 func TestUpdateDropsStalePreload(t *testing.T) {
@@ -42,7 +40,7 @@ func TestUpdateDropsStalePreload(t *testing.T) {
 		msg      tea.Msg
 		wantNext string
 	}{
-		{name: "IPC repeat one", msg: ipc.RepeatMsg{Name: "one", Reply: reply()}, wantNext: "a.mp3"},
+		{name: "IPC repeat one", msg: v2Request(t, "repeat", ipc.Request{Name: "one"}), wantNext: "a.mp3"},
 		{name: "plugin swap next away", msg: PluginQueueMsg{Op: "move", Index: 1, To: 2}, wantNext: "c.mp3"},
 		{name: "plugin remove next", msg: PluginQueueMsg{Op: "remove", Index: 1}, wantNext: "c.mp3"},
 		{name: "TUI move next down", cursor: 1, msg: tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift}, wantNext: "c.mp3"},
@@ -75,8 +73,10 @@ func TestUpdateDropsStalePreloadOnRepeatAllAppend(t *testing.T) {
 	m.playlist.SetRepeat(playlist.RepeatAll)
 	m.preloadFor = "a.mp3"
 
-	next, _ := m.Update(ipc.QueueMsg{Path: "d.mp3"})
-	next, _ = next.(Model).Update(tickMsg(time.Now()))
+	if response := runV2(t, &m, "queue", ipc.Request{Path: "d.mp3"}); !response.OK {
+		t.Fatalf("queue response = %+v", response)
+	}
+	next, _ := m.Update(tickMsg(time.Now()))
 	if m = next.(Model); player.clearPreloadCalls != 1 || m.preloadFor != "d.mp3" {
 		t.Fatalf("ClearPreload %d, preloading %q; want a.mp3 dropped and d.mp3 armed", player.clearPreloadCalls, m.preloadFor)
 	}

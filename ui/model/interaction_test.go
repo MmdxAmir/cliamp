@@ -943,16 +943,16 @@ func TestIPCQueueMutationNormalizesOverlay(t *testing.T) {
 		queue:     queueOverlay{visible: true, cursor: 2, scroll: 2},
 	}
 
-	reply := make(chan ipc.Response, 1)
-	m.handleIPCQueue(ipc.QueueRequestMsg{Op: "queue.remove", Index: 2, Reply: reply})
-	<-reply
+	if response := runV2(t, &m, "queue.remove", ipc.Request{Index: 2}); !response.OK {
+		t.Fatalf("queue.remove response = %+v", response)
+	}
 	if m.queue.cursor != 1 || m.queue.scroll != 0 {
 		t.Fatalf("queue state after IPC remove = cursor %d, scroll %d; want 1, 0", m.queue.cursor, m.queue.scroll)
 	}
 
-	reply = make(chan ipc.Response, 1)
-	m.handleIPCQueue(ipc.QueueRequestMsg{Op: "queue.clear", Reply: reply})
-	<-reply
+	if response := runV2(t, &m, "queue.clear", ipc.Request{}); !response.OK {
+		t.Fatalf("queue.clear response = %+v", response)
+	}
 	if m.queue.cursor != 0 || m.queue.scroll != 0 {
 		t.Fatalf("queue state after IPC clear = cursor %d, scroll %d; want 0, 0", m.queue.cursor, m.queue.scroll)
 	}
