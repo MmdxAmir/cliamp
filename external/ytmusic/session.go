@@ -2,20 +2,16 @@ package ytmusic
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 
 	"github.com/bjarneo/cliamp/applog"
-	"github.com/bjarneo/cliamp/internal/appdir"
 	"github.com/bjarneo/cliamp/internal/browser"
-	"github.com/bjarneo/cliamp/internal/fileutil"
+	"github.com/bjarneo/cliamp/internal/credstore"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -27,6 +23,9 @@ import (
 type storedCreds struct {
 	RefreshToken string `json:"refresh_token"`
 }
+
+// credsFile holds the stored YouTube Music credentials.
+var credsFile = credstore.File[storedCreds]{Name: "ytmusic_credentials.json"}
 
 // CallbackPort is the fixed port for the OAuth2 callback server.
 // Must match the redirect URI registered in the Google Cloud console.
@@ -85,7 +84,7 @@ func googleOAuthConfig(clientID, clientSecret string) *oauth2.Config {
 // NewSession creates a YouTube API session, using stored credentials if
 // available, otherwise starting an interactive OAuth2 flow.
 func NewSession(ctx context.Context, clientID, clientSecret string) (*Session, error) {
-	creds, err := loadCreds()
+	creds, err := credsFile.Load()
 	if err == nil && creds.RefreshToken != "" {
 		s, err := newSessionFromStored(ctx, clientID, clientSecret, creds)
 		if err == nil {
@@ -99,7 +98,7 @@ func NewSession(ctx context.Context, clientID, clientSecret string) (*Session, e
 // NewSessionSilent is like NewSession but only uses stored credentials.
 // Returns an error if interactive auth is required.
 func NewSessionSilent(ctx context.Context, clientID, clientSecret string) (*Session, error) {
-	creds, err := loadCreds()
+	creds, err := credsFile.Load()
 	if err != nil || creds.RefreshToken == "" {
 		return nil, fmt.Errorf("no stored credentials")
 	}
@@ -125,7 +124,7 @@ func newSessionFromStored(ctx context.Context, clientID, clientSecret string, cr
 	refreshToken := creds.RefreshToken
 	if token.RefreshToken != "" {
 		refreshToken = token.RefreshToken
-		if err := saveCreds(&storedCreds{RefreshToken: refreshToken}); err != nil {
+		if err := credsFile.Save(&storedCreds{RefreshToken: refreshToken}); err != nil {
 			applog.UserError("ytmusic: failed to save credentials: %v", err)
 		}
 	}
@@ -163,7 +162,7 @@ func newInteractiveSession(ctx context.Context, clientID, clientSecret string) (
 	}
 
 	// Persist refresh token for future sessions.
-	if err := saveCreds(&storedCreds{RefreshToken: token.RefreshToken}); err != nil {
+	if err := credsFile.Save(&storedCreds{RefreshToken: token.RefreshToken}); err != nil {
 		applog.UserError("ytmusic: failed to save credentials: %v", err)
 	}
 	cacheIdentity := token.RefreshToken
@@ -266,39 +265,3 @@ func (s *Session) Service() *youtube.Service {
 
 // Close is a no-op for YouTube Music sessions (no persistent connections).
 func (s *Session) Close() {}
-
-func credsPath() (string, error) {
-	dir, err := appdir.Dir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "ytmusic_credentials.json"), nil
-}
-
-func loadCreds() (*storedCreds, error) {
-	path, err := credsPath()
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var creds storedCreds
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return nil, err
-	}
-	return &creds, nil
-}
-
-func saveCreds(creds *storedCreds) error {
-	path, err := credsPath()
-	if err != nil {
-		return err
-	}
-	data, err := json.Marshal(creds)
-	if err != nil {
-		return err
-	}
-	return fileutil.WriteFileAtomic(path, data, 0o600)
-}

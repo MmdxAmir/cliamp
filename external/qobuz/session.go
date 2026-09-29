@@ -46,7 +46,7 @@ type oauthResult struct {
 // newClientSilent builds an authenticated client from stored credentials only.
 // It never opens a browser; if no usable credentials exist it returns an error.
 func newClientSilent(ctx context.Context) (*client, error) {
-	creds, err := loadCreds()
+	creds, err := credsFile.Load()
 	if err != nil {
 		return nil, fmt.Errorf("qobuz: no stored credentials: %w", err)
 	}
@@ -69,7 +69,7 @@ func newClientSilent(ctx context.Context) (*client, error) {
 		}
 	}
 	// Re-persist in case the validated secret or label changed.
-	_ = saveCreds(credsFromClient(c, creds.PrivateKey))
+	_ = credsFile.Save(credsFromClient(c, creds.PrivateKey))
 	return c, nil
 }
 
@@ -98,7 +98,7 @@ func newClientInteractive(ctx context.Context) (*client, error) {
 		return nil, err
 	}
 
-	if err := saveCreds(credsFromClient(c, privateKey)); err != nil {
+	if err := credsFile.Save(credsFromClient(c, privateKey)); err != nil {
 		applog.UserError("qobuz: failed to save credentials: %v", err)
 	}
 	return c, nil

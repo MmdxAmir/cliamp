@@ -2,6 +2,8 @@ package qobuz
 
 import (
 	"os"
+	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 )
@@ -32,15 +34,15 @@ func TestSaveCredsWritesPrivateFile(t *testing.T) {
 			}
 
 			want := storedCreds{AppID: "app", Secrets: []string{"s1"}, UserAuthToken: "token", UserID: "7"}
-			if err := saveCreds(&want); err != nil {
-				t.Fatalf("saveCreds() error = %v", err)
+			if err := credsFile.Save(&want); err != nil {
+				t.Fatalf("credsFile.Save() error = %v", err)
 			}
-			got, err := loadCreds()
+			got, err := credsFile.Load()
 			if err != nil {
-				t.Fatalf("loadCreds() error = %v", err)
+				t.Fatalf("credsFile.Load() error = %v", err)
 			}
 			if got.AppID != want.AppID || got.UserAuthToken != want.UserAuthToken || got.UserID != want.UserID {
-				t.Errorf("loadCreds() = %+v, want %+v", got, want)
+				t.Errorf("credsFile.Load() = %+v, want %+v", got, want)
 			}
 			if runtime.GOOS == "windows" {
 				return // Windows does not report Unix permission bits.
@@ -53,5 +55,26 @@ func TestSaveCredsWritesPrivateFile(t *testing.T) {
 				t.Errorf("credentials mode = %o, want 600", perm)
 			}
 		})
+	}
+}
+
+// TestLoadStoredCredsFile checks that credentials an earlier release wrote
+// still load, so an upgrade keeps the user signed in.
+func TestLoadStoredCredsFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLIAMP_CONFIG_DIR", dir)
+	data := `{"app_id":"app","secrets":["s1","s2"],"secret":"s2","private_key":"key",` +
+		`"user_auth_token":"token","user_id":"7","label":"Studio"}`
+	if err := os.WriteFile(filepath.Join(dir, "qobuz_credentials.json"), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := credsFile.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := storedCreds{AppID: "app", Secrets: []string{"s1", "s2"}, Secret: "s2", PrivateKey: "key", UserAuthToken: "token", UserID: "7", Label: "Studio"}
+	if !reflect.DeepEqual(*got, want) {
+		t.Errorf("Load() = %+v, want %+v", *got, want)
 	}
 }

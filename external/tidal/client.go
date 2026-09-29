@@ -132,7 +132,7 @@ func (c *client) ensureToken(ctx context.Context, staleToken string) error {
 	c.applyTokenLocked(tok)
 	creds := c.credsLocked()
 	c.mu.Unlock()
-	_ = saveCreds(creds)
+	_ = credsFile.Save(creds)
 	return nil
 }
 

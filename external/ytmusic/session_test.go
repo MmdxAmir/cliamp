@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func TestSaveCredsWritesPrivateFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
-			path, err := credsPath()
+			path, err := credsFile.Path()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -34,12 +35,12 @@ func TestSaveCredsWritesPrivateFile(t *testing.T) {
 				}
 			}
 
-			if err := saveCreds(&storedCreds{RefreshToken: "new"}); err != nil {
-				t.Fatalf("saveCreds() error = %v", err)
+			if err := credsFile.Save(&storedCreds{RefreshToken: "new"}); err != nil {
+				t.Fatalf("credsFile.Save() error = %v", err)
 			}
-			got, err := loadCreds()
+			got, err := credsFile.Load()
 			if err != nil {
-				t.Fatalf("loadCreds() error = %v", err)
+				t.Fatalf("credsFile.Load() error = %v", err)
 			}
 			if got.RefreshToken != "new" {
 				t.Errorf("refresh token = %q, want new", got.RefreshToken)
@@ -55,6 +56,24 @@ func TestSaveCredsWritesPrivateFile(t *testing.T) {
 				t.Errorf("credentials mode = %o, want 600", perm)
 			}
 		})
+	}
+}
+
+// TestLoadStoredCredsFile checks that credentials an earlier release wrote
+// still load, so an upgrade keeps the user signed in.
+func TestLoadStoredCredsFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLIAMP_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "ytmusic_credentials.json"), []byte(`{"refresh_token":"refresh"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := credsFile.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.RefreshToken != "refresh" {
+		t.Errorf("refresh token = %q, want refresh", got.RefreshToken)
 	}
 }
 

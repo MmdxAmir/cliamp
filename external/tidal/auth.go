@@ -128,7 +128,7 @@ func requestToken(ctx context.Context, httpc *http.Client, endpoint string, form
 // newClientSilent builds an authenticated client from stored credentials only.
 // It never opens a browser; if no usable credentials exist it returns an error.
 func newClientSilent(ctx context.Context) (*client, error) {
-	creds, err := loadCreds()
+	creds, err := credsFile.Load()
 	if err != nil {
 		return nil, fmt.Errorf("tidal: no stored credentials: %w", err)
 	}
@@ -151,7 +151,7 @@ func newClientSilent(ctx context.Context) (*client, error) {
 	if err := c.loadSession(ctx); err != nil {
 		return nil, fmt.Errorf("tidal: stored token rejected: %w", err)
 	}
-	_ = saveCreds(credsFromClient(c))
+	_ = credsFile.Save(credsFromClient(c))
 	return c, nil
 }
 
@@ -192,7 +192,7 @@ func newClientInteractive(ctx context.Context, clientID, clientSecret string) (*
 	if err := c.loadSession(ctx); err != nil {
 		return nil, fmt.Errorf("tidal: load session: %w", err)
 	}
-	if err := saveCreds(credsFromClient(c)); err != nil {
+	if err := credsFile.Save(credsFromClient(c)); err != nil {
 		applog.UserError("tidal: failed to save credentials: %v", err)
 	}
 	return c, nil

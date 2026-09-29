@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/browser"
-	"github.com/bjarneo/cliamp/internal/fileutil"
 	"github.com/bjarneo/cliamp/playlist"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -143,7 +141,7 @@ func awaitSpotifyStream(ctx context.Context, cancel context.CancelFunc, open fun
 // available, otherwise starting an interactive OAuth2 flow.
 // clientID is the Spotify Developer app client ID for Web API access.
 func NewSession(ctx context.Context, clientID string) (*Session, error) {
-	creds, err := loadCreds()
+	creds, err := credsFile.Load()
 	if err == nil && creds.Username != "" && len(creds.Data) > 0 {
 		s, err := newSessionFromStored(ctx, clientID, creds, false)
 		if err == nil {
@@ -157,7 +155,7 @@ func NewSession(ctx context.Context, clientID string) (*Session, error) {
 // NewSessionSilent is like NewSession but only uses stored credentials.
 // Returns an error if interactive auth is required.
 func NewSessionSilent(ctx context.Context, clientID string) (*Session, error) {
-	creds, err := loadCreds()
+	creds, err := credsFile.Load()
 	if err != nil || creds.Username == "" || len(creds.Data) == 0 {
 		return nil, fmt.Errorf("no stored credentials")
 	}
@@ -215,7 +213,7 @@ func newSessionFromStored(ctx context.Context, clientID string, creds *storedCre
 			// via spclient; new Web API calls will return ErrNeedsAuth.
 			applog.UserError("spotify: stored auth no longer valid; run 'cliamp spotify reset' or sign in again to fix")
 			s := &Session{sess: sess, devID: devID, clientID: clientID}
-			if err := saveCreds(&storedCreds{
+			if err := credsFile.Save(&storedCreds{
 				Username:     sess.Username(),
 				Data:         sess.StoredCredentials(),
 				DeviceID:     devID,
@@ -244,7 +242,7 @@ func newSessionFromStored(ctx context.Context, clientID string, creds *storedCre
 		DeviceID:     devID,
 		RefreshToken: oauthToken.RefreshToken,
 	}
-	if err := saveCreds(&stored); err != nil {
+	if err := credsFile.Save(&stored); err != nil {
 		applog.UserError("spotify: failed to save credentials: %v", err)
 	}
 
@@ -350,7 +348,7 @@ func webAPITokenSource(clientID string, token *oauth2.Token, creds storedCreds) 
 		refreshToken: creds.RefreshToken,
 		persist: func(refreshToken string) error {
 			creds.RefreshToken = refreshToken
-			return saveCreds(&creds)
+			return credsFile.Save(&creds)
 		},
 	}
 }
@@ -569,7 +567,7 @@ func newInteractiveSession(ctx context.Context, clientID string) (*Session, erro
 		DeviceID:     devID,
 		RefreshToken: webToken.RefreshToken,
 	}
-	if err := saveCreds(&stored); err != nil {
+	if err := credsFile.Save(&stored); err != nil {
 		applog.UserError("spotify: failed to save credentials: %v", err)
 	}
 
@@ -698,7 +696,7 @@ func (s *Session) Reconnect(ctx context.Context) error {
 
 // ReconnectInteractive forces a fresh browser-based OAuth2 flow.
 // Stored credentials are preserved until the new session succeeds —
-// newInteractiveSession overwrites them via saveCreds on success.
+// newInteractiveSession overwrites them via credsFile.Save on success.
 func (s *Session) ReconnectInteractive(ctx context.Context) error {
 	return s.reconnect(ctx, newInteractiveSession)
 }
@@ -755,32 +753,4 @@ func generateDeviceID() string {
 	b := make([]byte, 20)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
-}
-
-func loadCreds() (*storedCreds, error) {
-	path, err := CredsPath()
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var creds storedCreds
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return nil, err
-	}
-	return &creds, nil
-}
-
-func saveCreds(creds *storedCreds) error {
-	path, err := CredsPath()
-	if err != nil {
-		return err
-	}
-	data, err := json.Marshal(creds)
-	if err != nil {
-		return err
-	}
-	return fileutil.WriteFileAtomic(path, data, 0o600)
 }
