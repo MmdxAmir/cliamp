@@ -130,11 +130,13 @@ func newSessionFromStored(ctx context.Context, clientID, clientSecret string, cr
 
 // newTokenSession builds a Session around token. ctx bounds only the service
 // setup. oauth2 keeps the context of a token source for every later refresh,
-// so the token source gets a context that does not end.
+// so the token source gets a context that does not end. The Data API client
+// sends its requests through the transport of oauthHTTPClient, so they
+// follow the same proxy rules.
 func newTokenSession(ctx context.Context, clientID, clientSecret string, token *oauth2.Token, cacheIdentity string) (*Session, error) {
 	ts := googleOAuthConfig(clientID, clientSecret).TokenSource(oauthContext(context.Background()), token)
 
-	svc, err := youtube.NewService(ctx, option.WithTokenSource(ts))
+	svc, err := youtube.NewService(ctx, option.WithHTTPClient(oauth2.NewClient(oauthContext(context.Background()), ts)))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic: create service: %w", err)
 	}
