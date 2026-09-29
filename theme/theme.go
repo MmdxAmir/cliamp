@@ -115,11 +115,17 @@ func Parse(name string, r io.Reader) (Theme, error) {
 	return t, scanner.Err()
 }
 
+// IsDefaultName reports whether name selects the ANSI default theme. It
+// accepts an empty name, "default" and DefaultName, in any case.
+func IsDefaultName(name string) bool {
+	return name == "" || strings.EqualFold(name, "default") || strings.EqualFold(name, DefaultName)
+}
+
 // Find returns the theme called name, matched case-insensitively across the
-// built-in and user themes. An empty name, "default", or DefaultName give the
-// ANSI default. ok is false when no theme has that name.
+// built-in and user themes. A name that IsDefaultName accepts gives the ANSI
+// default. ok is false when no theme has that name.
 func Find(name string) (Theme, bool) {
-	if name == "" || strings.EqualFold(name, "default") || strings.EqualFold(name, DefaultName) {
+	if IsDefaultName(name) {
 		return Default(), true
 	}
 	for _, t := range LoadAll() {

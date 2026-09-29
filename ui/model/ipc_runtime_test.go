@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -257,7 +258,10 @@ func TestV2SettingsOperations(t *testing.T) {
 		{name: "eq band out of range", op: "eq", params: ipc.Request{Band: eqBandCount, Value: 4}, want: ipc.Response{Error: ipc.V2ErrorCodeInvalidParams}},
 		{name: "eq preset", op: "eq", params: ipc.Request{Name: "rock"}, want: ipc.Response{OK: true, EQPreset: "Rock"}},
 		{name: "theme", op: "theme", params: ipc.Request{Name: "dracula"}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `"dracula"`}},
-		{name: "theme default", op: "theme", params: ipc.Request{Name: "default"}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `"default"`}},
+		{name: "theme default", op: "theme", params: ipc.Request{Name: "default"}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `""`}},
+		{name: "theme empty", op: "theme", params: ipc.Request{Name: ""}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `""`}},
+		{name: "theme listed default name", op: "theme", params: ipc.Request{Name: theme.DefaultName}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `""`}},
+		{name: "theme default name any case", op: "theme", params: ipc.Request{Name: strings.ToUpper(theme.DefaultName)}, want: ipc.Response{OK: true}, wantSaved: map[string]string{"theme": `""`}},
 		{name: "theme unknown", op: "theme", params: ipc.Request{Name: "no-such-theme"}, want: ipc.Response{Error: ipc.V2ErrorCodeNotFound}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -120,6 +120,9 @@ Run `cliamp remote capabilities` to get the current machine-readable list.
 `queue.*` applies to the live playlist. `playnext.*` applies only to the
 play-next list. They use separate zero-based indexes.
 
+`theme list` returns `Default - Terminal colors` as the first item. `theme`
+accepts that name or `default` to select the terminal colors.
+
 `playlist.bookmark` keeps its name for existing scripts. It toggles the favorite
 ♥ of `track`, as `f` does in the TUI. It needs a known `provider` key, but it
 does not change the playlist.

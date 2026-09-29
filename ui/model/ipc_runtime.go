@@ -350,7 +350,7 @@ func (m *Model) handleV2Theme(jobs *ipc.JobStore, jobID string, request ipc.Requ
 		return nil
 	}
 	themeName := request.Name
-	if strings.EqualFold(themeName, theme.DefaultName) {
+	if theme.IsDefaultName(themeName) {
 		themeName = ""
 	}
 	if err := m.configSaver.Save("theme", fmt.Sprintf("%q", themeName)); err != nil {
