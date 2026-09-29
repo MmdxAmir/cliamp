@@ -1,11 +1,15 @@
 package ytmusic
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -83,13 +87,13 @@ func TestOAuthCallbackHandler(t *testing.T) {
 		name       string
 		queries    []string
 		wantStatus []int
-		wantCode   string // "" means the handler must not pass a code
+		want       oauthResult // the zero value means the handler must not pass a result
 	}{
 		{
 			name:       "valid callback",
 			queries:    []string{"state=expected-state&code=abc"},
 			wantStatus: []int{http.StatusOK},
-			wantCode:   "abc",
+			want:       oauthResult{code: "abc"},
 		},
 		{
 			name:       "wrong state",
@@ -110,13 +114,30 @@ func TestOAuthCallbackHandler(t *testing.T) {
 			name:       "duplicate callback",
 			queries:    []string{"state=expected-state&code=first", "state=expected-state&code=second", "state=expected-state&code=third"},
 			wantStatus: []int{http.StatusOK, http.StatusOK, http.StatusOK},
-			wantCode:   "first",
+			want:       oauthResult{code: "first"},
+		},
+		{
+			name:       "access denied",
+			queries:    []string{"state=expected-state&error=access_denied"},
+			wantStatus: []int{http.StatusOK},
+			want:       oauthResult{errCode: "access_denied"},
+		},
+		{
+			name:       "error with a code",
+			queries:    []string{"state=expected-state&code=abc&error=server_error"},
+			wantStatus: []int{http.StatusOK},
+			want:       oauthResult{errCode: "server_error"},
+		},
+		{
+			name:       "error with wrong state",
+			queries:    []string{"state=other&error=access_denied"},
+			wantStatus: []int{http.StatusBadRequest},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			codeCh := make(chan string, 1)
-			handler := oauthCallbackHandler(state, codeCh)
+			resultCh := make(chan oauthResult, 1)
+			handler := oauthCallbackHandler(state, resultCh)
 			for i, query := range tt.queries {
 				rec := httptest.NewRecorder()
 				done := make(chan struct{})
@@ -134,14 +155,58 @@ func TestOAuthCallbackHandler(t *testing.T) {
 				}
 			}
 
-			var got string
+			var got oauthResult
 			select {
-			case got = <-codeCh:
+			case got = <-resultCh:
 			default:
 			}
-			if got != tt.wantCode {
-				t.Errorf("code = %q, want %q", got, tt.wantCode)
+			if got != tt.want {
+				t.Errorf("result = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestDoOAuthReturnsAuthorizationError checks that a denied sign-in ends the
+// wait at once instead of after the sign-in timeout.
+func TestDoOAuthReturnsAuthorizationError(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // keep browser.Open from starting a real browser
+	urls := make(chan string, 1)
+	SetAuthURLObserver(func(u string) { urls <- u })
+	t.Cleanup(func() { SetAuthURLObserver(nil) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := doOAuth(ctx, "id", "secret")
+		errCh <- err
+	}()
+
+	var authURL string
+	select {
+	case authURL = <-urls:
+	case err := <-errCh:
+		t.Skipf("callback port unavailable: %v", err)
+	}
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callback := fmt.Sprintf("http://127.0.0.1:%d/callback?state=%s&error=access_denied",
+		CallbackPort, url.QueryEscape(parsed.Query().Get("state")))
+	resp, err := http.Get(callback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	select {
+	case err := <-errCh:
+		if err == nil || !strings.Contains(err.Error(), "access_denied") {
+			t.Fatalf("doOAuth() error = %v, want access_denied", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("doOAuth() still waits after the error callback")
 	}
 }

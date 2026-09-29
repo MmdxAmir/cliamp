@@ -182,27 +182,50 @@ const oauthCallbackHTML = `<!DOCTYPE html>
 <script>setTimeout(function(){window.close()},1500)</script>
 </div></body></html>`
 
-// oauthCallbackHandler passes the code of a callback that carries state to
-// codeCh. It rejects other states and callbacks without a code. It drops a
-// code when codeCh is full, so a repeated callback never blocks.
-func oauthCallbackHandler(state string, codeCh chan<- string) http.Handler {
+// oauthCallbackErrorHTML is the response sent to the browser when Google
+// reports an authorization error, for example when the user denies access.
+const oauthCallbackErrorHTML = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>cliamp</title></head>
+<body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0">
+<div style="text-align:center">
+<h2>Sign-in failed</h2>
+<p>Return to cliamp to try again.</p>
+</div></body></html>`
+
+// oauthResult is the outcome of an OAuth callback: an authorization code, or
+// the error code that Google sent in place of it.
+type oauthResult struct {
+	code    string
+	errCode string
+}
+
+// oauthCallbackHandler passes the code or the error of a callback that
+// carries state to resultCh. It rejects other states and callbacks without a
+// code or an error. It drops a result when resultCh is full, so a repeated
+// callback never blocks.
+func oauthCallbackHandler(state string, resultCh chan<- oauthResult) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		if query.Get("state") != state {
 			http.Error(w, "invalid OAuth state", http.StatusBadRequest)
 			return
 		}
-		code := query.Get("code")
-		if code == "" {
+		result := oauthResult{code: query.Get("code"), errCode: query.Get("error")}
+		page := oauthCallbackHTML
+		switch {
+		case result.errCode != "":
+			result.code = ""
+			page = oauthCallbackErrorHTML
+		case result.code == "":
 			http.Error(w, "OAuth callback contains no code", http.StatusBadRequest)
 			return
 		}
 		select {
-		case codeCh <- code:
+		case resultCh <- result:
 		default:
 		}
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(oauthCallbackHTML))
+		_, _ = w.Write([]byte(page))
 	})
 }
 
@@ -223,9 +246,9 @@ func doOAuth(ctx context.Context, clientID, clientSecret string) (*oauth2.Token,
 	state := oauth2.GenerateVerifier()
 	authURL := oauthConf.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.AccessTypeOffline)
 
-	codeCh := make(chan string, 1)
+	resultCh := make(chan oauthResult, 1)
 	go func() {
-		if err := http.Serve(lis, oauthCallbackHandler(state, codeCh)); err != nil && !errors.Is(err, net.ErrClosed) {
+		if err := http.Serve(lis, oauthCallbackHandler(state, resultCh)); err != nil && !errors.Is(err, net.ErrClosed) {
 			applog.UserError("ytmusic: auth callback server error: %v", err)
 		}
 	}()
@@ -233,14 +256,17 @@ func doOAuth(ctx context.Context, clientID, clientSecret string) (*oauth2.Token,
 	authURLObserver.Notify("ytmusic", authURL)
 	_ = browser.Open(authURL) // best-effort — user can open the URL manually if this fails
 
-	var code string
+	var result oauthResult
 	select {
-	case code = <-codeCh:
+	case result = <-resultCh:
 	case <-ctx.Done():
 		return nil, fmt.Errorf("ytmusic: authentication cancelled: %w", ctx.Err())
 	}
+	if result.errCode != "" {
+		return nil, fmt.Errorf("ytmusic: authorization: %s", result.errCode)
+	}
 
-	token, err := oauthConf.Exchange(ctx, code, oauth2.VerifierOption(verifier))
+	token, err := oauthConf.Exchange(ctx, result.code, oauth2.VerifierOption(verifier))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic: token exchange: %w", err)
 	}
