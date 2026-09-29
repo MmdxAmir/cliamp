@@ -27,6 +27,14 @@ type storedCreds struct {
 // credsFile holds the stored YouTube Music credentials.
 var credsFile = credstore.File[storedCreds]{Name: "ytmusic_credentials.json"}
 
+// CredsPath returns the absolute path to the stored YouTube Music credentials
+// file.
+func CredsPath() (string, error) { return credsFile.Path() }
+
+// DeleteCreds removes the stored YouTube Music credentials file. Returns true
+// if a file was removed, false if it did not exist.
+func DeleteCreds() (bool, error) { return credsFile.Delete() }
+
 // CallbackPort is the fixed port for the OAuth2 callback server.
 // Must match the redirect URI registered in the Google Cloud console.
 const CallbackPort = 19873
