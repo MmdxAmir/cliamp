@@ -881,8 +881,12 @@ func (m Model) renderProviderList() string {
 	if m.provSignIn {
 		return dimStyle.Render(fmt.Sprintf("  Sign in to %s. Press Enter to continue.", m.provider.Name()))
 	}
-	if m.provLoading && len(m.providerLists) == 0 && !m.provSearch.active {
-		lines := []string{loadingLine(fmt.Sprintf("Loading %s…", m.provider.Name()))}
+	if m.provLoading && (len(m.providerLists) == 0 || m.provSearch.loading) && !m.provSearch.active {
+		label := fmt.Sprintf("Loading %s…", m.provider.Name())
+		if m.provSearch.loading {
+			label = fmt.Sprintf("Searching %s…", m.provider.Name())
+		}
+		lines := []string{loadingLine(label)}
 		if m.provAuthURL != "" {
 			lines = append(lines,
 				"",

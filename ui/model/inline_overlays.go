@@ -489,7 +489,7 @@ func (m Model) renderLyricsBody() string {
 	var lines []string
 	switch {
 	case m.lyrics.loading:
-		lines = append(lines, dimStyle.Render("  Searching for lyrics..."))
+		lines = append(lines, loadingLine("Searching for lyrics..."))
 	case m.lyrics.err != nil:
 		if errors.Is(m.lyrics.err, lyrics.ErrNotFound) {
 			lines = append(lines, dimStyle.Render("  No lyrics found for this track."))
@@ -586,7 +586,7 @@ func (m Model) renderNetSearchBody() string {
 			lines = append(lines, dimStyle.Render(fmt.Sprintf("  %s has no Ctrl+F search. This searches %s.", m.netSearch.from, m.netSearchSource())))
 		}
 		if m.netSearch.loading {
-			lines = append(lines, dimStyle.Render("  Searching "+m.netSearchSource()+"..."))
+			lines = append(lines, loadingLine("Searching "+m.netSearchSource()+"..."))
 		} else {
 			lines = append(lines, dimStyle.Render("  Type a query and press Enter to search "+m.netSearchSource()+"."))
 		}
@@ -675,7 +675,7 @@ func (m Model) renderSpotSearchBody() string {
 	default:
 		var lines []string
 		if m.spotSearch.loading {
-			lines = append(lines, dimStyle.Render("  Searching..."))
+			lines = append(lines, loadingLine("Searching "+providerName(m.spotSearch.prov)+"..."))
 		} else {
 			lines = append(lines, dimStyle.Render("  Type a query and press Enter to search."))
 		}
