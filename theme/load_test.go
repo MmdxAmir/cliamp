@@ -1,10 +1,12 @@
 package theme
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestLoadAllIncludesBuiltinThemes(t *testing.T) {
@@ -215,5 +217,69 @@ func TestLoadAllMissingUserDir(t *testing.T) {
 	themes := LoadAll()
 	if len(themes) == 0 {
 		t.Error("LoadAll() with missing user dir should still return built-in themes")
+	}
+}
+
+func TestLoadFS(t *testing.T) {
+	const good = `bg = "#002b36"
+accent = "#268bd2"
+bright_fg = "#eee8d5"
+fg = "#839496"
+green = "#859900"
+yellow = "#b58900"
+red = "#dc322f"
+`
+	goodTheme := Theme{
+		BG:       "#002b36",
+		Accent:   "#268bd2",
+		BrightFG: "#eee8d5",
+		FG:       "#839496",
+		Green:    "#859900",
+		Yellow:   "#b58900",
+		Red:      "#dc322f",
+	}
+	named := func(name string) Theme {
+		th := goodTheme
+		th.Name = name
+		return th
+	}
+
+	tests := []struct {
+		name  string
+		files fstest.MapFS
+		want  map[string]Theme
+	}{
+		{
+			name:  "good theme",
+			files: fstest.MapFS{"themes/Solarized.toml": {Data: []byte(good)}},
+			want:  map[string]Theme{"solarized": named("Solarized")},
+		},
+		{
+			name:  "broken theme",
+			files: fstest.MapFS{"themes/broken.toml": {Data: []byte(`accent = "blue"`)}},
+			want:  map[string]Theme{},
+		},
+		{
+			name: "non-toml file and nested dir",
+			files: fstest.MapFS{
+				"themes/notes.txt":         {Data: []byte(good)},
+				"themes/nested/inner.toml": {Data: []byte(good)},
+			},
+			want: map[string]Theme{},
+		},
+		{
+			name:  "missing dir",
+			files: fstest.MapFS{"other/solarized.toml": {Data: []byte(good)}},
+			want:  map[string]Theme{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := make(map[string]Theme)
+			loadFS(tt.files, "themes", got)
+			if !maps.Equal(got, tt.want) {
+				t.Errorf("loadFS() themes = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }

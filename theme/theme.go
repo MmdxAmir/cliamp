@@ -7,7 +7,9 @@ import (
 	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -137,12 +139,12 @@ func LoadAll() []Theme {
 	themes := make(map[string]Theme)
 
 	// Load embedded built-in themes (lower priority).
-	loadBuiltin(themes)
+	loadFS(builtinThemes, "themes", themes)
 
 	// Load user custom themes (override built-in if same name).
 	dir, err := appdir.Dir()
 	if err == nil {
-		loadUserDir(filepath.Join(dir, "themes"), themes)
+		loadFS(os.DirFS(filepath.Join(dir, "themes")), ".", themes)
 	}
 
 	// Sort by name.
@@ -156,9 +158,10 @@ func LoadAll() []Theme {
 	return result
 }
 
-// loadBuiltin parses the embedded theme TOML files.
-func loadBuiltin(themes map[string]Theme) {
-	entries, err := builtinThemes.ReadDir("themes")
+// loadFS parses the .toml files in dir of fsys and stores each valid theme
+// in themes under its lower-case file name.
+func loadFS(fsys fs.FS, dir string, themes map[string]Theme) {
+	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return
 	}
@@ -167,32 +170,7 @@ func loadBuiltin(themes map[string]Theme) {
 			continue
 		}
 		name := strings.TrimSuffix(e.Name(), ".toml")
-		f, err := builtinThemes.Open("themes/" + e.Name())
-		if err != nil {
-			continue
-		}
-		t, err := Parse(name, f)
-		f.Close()
-		if err != nil || t.Validate() != nil {
-			continue
-		}
-		themes[strings.ToLower(name)] = t
-	}
-}
-
-// loadUserDir loads themes from ~/.config/cliamp/themes/*.toml.
-func loadUserDir(dir string, themes map[string]Theme) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".toml") {
-			continue
-		}
-		name := strings.TrimSuffix(e.Name(), ".toml")
-		path := filepath.Join(dir, e.Name())
-		f, err := os.Open(path)
+		f, err := fsys.Open(path.Join(dir, e.Name()))
 		if err != nil {
 			continue
 		}
