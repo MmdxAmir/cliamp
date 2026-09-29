@@ -2,14 +2,19 @@ package model
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/player"
@@ -24,6 +29,14 @@ type headlessEngine struct {
 	volume      float64
 	streamTitle string
 	tone        bool
+	playErr     error
+}
+
+func (e *headlessEngine) PlayAt(path string, dur, offset time.Duration) error {
+	if e.playErr != nil {
+		return e.playErr
+	}
+	return e.playbackFakeEngine.PlayAt(path, dur, offset)
 }
 
 func (e *headlessEngine) SetVolume(db float64)                  { e.volume = db }
@@ -247,6 +260,44 @@ func TestHeadlessTrackStartSkipsProviderPaneRefresh(t *testing.T) {
 			runCmd(m.playCurrentTrack())
 			if got := calls.Load(); got != tc.want {
 				t.Fatalf("provider playlist loads = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// A failed start goes to the log, because a headless Model shows no error.
+func TestPlayFailureIsLogged(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		track playlist.Track
+	}{
+		{name: "local file", track: playlist.Track{Path: "/music/broken.flac", Title: "Broken"}},
+		{name: "stream", track: playlist.Track{Path: "https://radio.example.com/offline", Title: "Offline", Stream: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "cliamp.log")
+			closeLog, err := applog.Init(logPath, applog.LevelWarn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = closeLog() })
+			failure := errors.New("device busy")
+			m := newHeadlessModel(t, &headlessEngine{playErr: failure}, nil, tc.track)
+
+			m.playCurrentTrack()
+			if tc.track.Stream {
+				updated, _ := m.Update(streamPlayedMsg{path: tc.track.Path, gen: m.requests.stream, err: failure})
+				m = updated.(Model)
+			}
+			if !errors.Is(m.err, failure) {
+				t.Fatalf("model error = %v, want %v", m.err, failure)
+			}
+			data, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if log := string(data); !strings.Contains(log, "level=WARN") || !strings.Contains(log, tc.track.Path) || !strings.Contains(log, "device busy") {
+				t.Fatalf("log = %q, want a warning with the path and the error", log)
 			}
 		})
 	}

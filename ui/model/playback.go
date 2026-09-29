@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -470,6 +471,7 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 			m.err = nil
 		} else {
 			m.err = err
+			applog.Warn("play %q: %v", track.Path, err)
 		}
 	} else {
 		m.err = nil
