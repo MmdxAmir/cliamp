@@ -324,14 +324,13 @@ func (v *Visualizer) driverFor(mode VisMode) visModeDriver {
 	return v.drivers[mode]
 }
 
-// columns is the width every mode draws and paces itself at. Cols wins. A
-// visualizer that nobody sized, such as the headless daemon's, falls back to
-// the PanelWidth global.
+// columns is the width every mode draws and paces itself at. A visualizer
+// that nobody sized has no width, so it neither draws nor ticks.
 func (v *Visualizer) columns() int {
-	if v != nil && v.Cols > 0 {
-		return v.Cols
+	if v == nil || v.Cols < 0 {
+		return 0
 	}
-	return PanelWidth
+	return v.Cols
 }
 
 func (v *Visualizer) syncDriverMode() visModeDriver {

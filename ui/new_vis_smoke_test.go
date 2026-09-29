@@ -32,6 +32,7 @@ func TestCharmVisualizersRender(t *testing.T) {
 				t.Fatalf("mode %q not registered in visNameMap", name)
 			}
 			v := NewVisualizer(44100)
+			v.Cols = 74
 			v.Rows = 5
 			v.Mode = mode
 

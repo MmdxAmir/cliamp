@@ -77,10 +77,9 @@ func TestVisualizerWidthComesFromCols(t *testing.T) {
 	}
 }
 
-// TestVisualizerColumnsFallsBackToPanelWidth pins the one place the width can
-// still come from the global: a visualizer that nobody sized, such as the
-// headless daemon's.
-func TestVisualizerColumnsFallsBackToPanelWidth(t *testing.T) {
+// TestVisualizerColumnsComeOnlyFromCols pins that the width never comes from
+// the PanelWidth global. A visualizer that nobody sized has no width.
+func TestVisualizerColumnsComeOnlyFromCols(t *testing.T) {
 	prev := PanelWidth
 	PanelWidth = 57
 	t.Cleanup(func() { PanelWidth = prev })
@@ -91,9 +90,9 @@ func TestVisualizerColumnsFallsBackToPanelWidth(t *testing.T) {
 		want int
 	}{
 		{name: "sized", v: &Visualizer{Cols: 20}, want: 20},
-		{name: "unsized", v: &Visualizer{}, want: 57},
-		{name: "negative", v: &Visualizer{Cols: -1}, want: 57},
-		{name: "nil", v: nil, want: 57},
+		{name: "unsized", v: &Visualizer{}},
+		{name: "negative", v: &Visualizer{Cols: -1}},
+		{name: "nil", v: nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

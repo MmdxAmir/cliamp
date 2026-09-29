@@ -114,6 +114,7 @@ func TestClassicPeakModeLookup(t *testing.T) {
 
 func TestVisualizerFrameAdvancesOnTickNotRender(t *testing.T) {
 	v := NewVisualizer(44100)
+	v.Cols = 74
 
 	v.Analyze(make([]float64, defaultFFTSize), spectrumAnalysisSpec(DefaultSpectrumBands))
 	if v.frame != 0 {
@@ -410,6 +411,7 @@ func TestClassicPeakAnimatingWhenBarsAreSettling(t *testing.T) {
 
 func TestClassicPeakRetainsDetailAtRightEdge(t *testing.T) {
 	v := NewVisualizer(44100)
+	v.Cols = 74
 	activateMode(t, v, VisClassicPeak)
 	driver := classicPeakDriverFor(t, v)
 

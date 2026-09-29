@@ -273,6 +273,7 @@ func TestPausedBarsDecayToRestThenSuspend(t *testing.T) {
 
 func TestPausedRawSampleModeClearsWaveform(t *testing.T) {
 	v := NewVisualizer(44100)
+	v.Cols = 74
 	activateMode(t, v, VisWave)
 	v.waveBuf = []float64{-0.5, 0.5}
 	ctx := VisTickContext{Paused: true}
@@ -350,6 +351,7 @@ func TestPausedSandWaitsForExplosion(t *testing.T) {
 
 func TestDefaultDriverTickGatesAnalyzeAtAnalyzeCadence(t *testing.T) {
 	v := NewVisualizer(44100)
+	v.Cols = 74
 	activateMode(t, v, VisBars)
 
 	calls := 0
@@ -393,6 +395,7 @@ func TestRenderOnlyDriverSkipsAnalyzeUnderOverlay(t *testing.T) {
 
 func TestRenderOnlyDriverRequestsConfiguredBandCount(t *testing.T) {
 	v := NewVisualizer(44100)
+	v.Cols = 74
 	activateMode(t, v, VisBars)
 
 	var requested VisAnalysisSpec
@@ -414,6 +417,7 @@ func TestRenderOnlyDriverRequestsConfiguredBandCount(t *testing.T) {
 
 func TestClassicPeakRequestsHighResBands(t *testing.T) {
 	v := NewVisualizer(44100)
+	v.Cols = 74
 	activateMode(t, v, VisClassicPeak)
 
 	var requested VisAnalysisSpec
@@ -437,6 +441,7 @@ func TestClassicPeakRequestsHighResBands(t *testing.T) {
 
 func TestRawSampleModesRefreshWaveBufAtZeroBandCount(t *testing.T) {
 	v := NewVisualizer(44100)
+	v.Cols = 74
 	activateMode(t, v, VisWave)
 
 	samples := []float64{-0.5, -0.1, 0.25, 0.75}
