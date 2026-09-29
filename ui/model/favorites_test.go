@@ -149,6 +149,18 @@ func TestFavoriteKeyDispatchByContext(t *testing.T) {
 			wantPath: "spotify:track:1",
 			wantHelp: "Favorite track",
 		},
+		{
+			name: "network search results",
+			setup: func(m *Model) {
+				m.netSearch = netSearchState{
+					active: true, screen: netSearchResults,
+					results: []playlist.Track{{Path: "https://youtube.com/watch?v=1", Title: "Video"}},
+				}
+			},
+			key:      "f",
+			wantPath: "https://youtube.com/watch?v=1",
+			wantHelp: "Favorite track",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, store := favoriteKeyTestModel(t)

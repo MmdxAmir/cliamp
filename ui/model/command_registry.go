@@ -226,6 +226,9 @@ var commandRegistry = []commandSpec{
 			m.spotSearch.cursor >= 0 && m.spotSearch.cursor < len(m.spotSearch.results) &&
 			!m.spotSearch.results[m.spotSearch.cursor].IsAlbum()
 	}},
+	{Mode: commandModeNetSearch, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite track", ContextHelp: true, Enabled: func(m Model) bool {
+		return m.favMgr != nil && m.netSearch.screen == netSearchResults && !m.netSearch.loading && len(m.netSearch.results) > 0
+	}},
 	{Mode: commandModeEQ, Keys: []string{"up", "down"}, KeyLabel: "Up Down", Label: "Gain", ContextHelp: true},
 	{Mode: commandModeSpeed, Keys: []string{"left", "right"}, KeyLabel: "Left Right", Label: "Speed", ContextHelp: true},
 	{Mode: commandModeVolume, Keys: []string{"left", "right", "up", "down", "h", "l", "k", "j"}, KeyLabel: "Arrows", Label: "Volume +/-1dB", ContextHelp: true, Primary: true},

@@ -1677,6 +1677,10 @@ func (m *Model) handleNetSearchResultsKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.closeNetSearch()
 			return m.queueTrackNext(track)
 		}
+	case "f":
+		if count > 0 && !m.netSearch.loading {
+			return m.favoriteTrackKey(m.netSearch.results[m.netSearch.cursor])
+		}
 	case "esc", "backspace":
 		m.netSearch.screen = netSearchInput
 		m.netSearch.results = nil
