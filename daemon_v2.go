@@ -64,10 +64,6 @@ func newDaemonV2Dispatcher(d *daemon, jobs *ipc.JobStore) ipc.V2Dispatcher {
 		if d == nil || jobs == nil {
 			return ipc.V2Result{}, daemonV2UnavailableError()
 		}
-		if request.Operation == "runtime.snapshot" || request.Operation == "runtime.status" {
-			request.Method = "state.get"
-			request.Operation = ""
-		}
 		switch strings.ToLower(strings.TrimSpace(request.Method)) {
 		case "state.get", "spectrum.get":
 			return d.dispatchV2Read(ctx, request)

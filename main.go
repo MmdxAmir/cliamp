@@ -808,10 +808,6 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 
 func newTUIV2Dispatcher(prog *tea.Program, jobs *ipc.JobStore, plugins *luaplugin.Manager) ipc.V2Dispatcher {
 	return ipc.V2DispatcherFunc(func(ctx context.Context, request ipc.V2Request) (ipc.V2Result, *ipc.V2Error) {
-		if request.Operation == "runtime.snapshot" || request.Operation == "runtime.status" {
-			request.Method = "state.get"
-			request.Operation = ""
-		}
 		switch request.Method {
 		case "state.get", "spectrum.get":
 			reply := make(chan model.V2RequestResult, 1)
