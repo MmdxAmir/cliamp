@@ -158,11 +158,12 @@ func argsContext(ctx context.Context, args []string) (Result, error) {
 // goes to Feed. Use URL for input that has not been classified yet,
 // such as an address typed interactively.
 func Remote(urls []string) ([]playlist.Track, error) {
-	return remote(context.Background(), urls)
+	return RemoteContext(context.Background(), urls)
 }
 
-// remote is Remote with caller-controlled cancellation.
-func remote(ctx context.Context, urls []string) ([]playlist.Track, error) {
+// RemoteContext is Remote with caller-controlled cancellation. ctx covers
+// each fetch and each yt-dlp run.
+func RemoteContext(ctx context.Context, urls []string) ([]playlist.Track, error) {
 	var tracks []playlist.Track
 	for _, u := range urls {
 		switch classifyRemote(u) {
@@ -268,7 +269,7 @@ func URLContext(ctx context.Context, rawURL string) ([]playlist.Track, error) {
 	}
 	tracks := result.Tracks
 	if len(result.Pending) > 0 {
-		pending, err := remote(ctx, result.Pending)
+		pending, err := RemoteContext(ctx, result.Pending)
 		if err != nil {
 			return nil, err
 		}
@@ -753,6 +754,13 @@ func parseYTDLTracks(r io.Reader) ([]playlist.Track, int, error) {
 // DownloadYTDL downloads a single track via yt-dlp to the given directory
 // and returns the output file path. Uses yt-dlp's default naming template.
 func DownloadYTDL(pageURL, saveDir string) (string, error) {
+	return DownloadYTDLContext(context.Background(), pageURL, saveDir)
+}
+
+// DownloadYTDLContext is DownloadYTDL with caller-controlled cancellation. A
+// cancel stops yt-dlp. It sets no time limit of its own, because a download
+// can take minutes.
+func DownloadYTDLContext(ctx context.Context, pageURL, saveDir string) (string, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return "", fmt.Errorf("yt-dlp not found in PATH")
 	}
@@ -768,11 +776,15 @@ func DownloadYTDL(pageURL, saveDir string) (string, error) {
 		args = append(args, "--cookies-from-browser", browser)
 	}
 	args = append(args, "--", pageURL)
-	cmd := exec.Command("yt-dlp", args...)
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	cmd.WaitDelay = 3 * time.Second
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	stdout, err := cmd.Output()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", fmt.Errorf("yt-dlp: download %s: %w", pageURL, ctxErr)
+		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg != "" {
 			return "", fmt.Errorf("yt-dlp: %s", msg)
