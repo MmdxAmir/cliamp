@@ -327,6 +327,27 @@ func TestTypedSavers(t *testing.T) {
 			got:      func(c Config) any { return c.Volume },
 			want:     -6.0,
 		},
+		{
+			name:     "SaveFunc string",
+			save:     func() error { return SaveFunc{}.SaveString("theme", `a "b" \ c`) },
+			wantLine: `theme = "a \"b\" \\ c"`,
+			got:      func(c Config) any { return c.Theme },
+			want:     `a "b" \ c`,
+		},
+		{
+			name:     "SaveFunc bool",
+			save:     func() error { return SaveFunc{}.SaveBool("mono", true) },
+			wantLine: "mono = true",
+			got:      func(c Config) any { return c.Mono },
+			want:     true,
+		},
+		{
+			name:     "SaveFunc float",
+			save:     func() error { return SaveFunc{}.SaveFloat("speed", 0.75, 2) },
+			wantLine: "speed = 0.75",
+			got:      func(c Config) any { return c.Speed },
+			want:     0.75,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

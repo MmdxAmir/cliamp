@@ -2,13 +2,29 @@ package config
 
 import "strconv"
 
-// SaveFunc wraps the package-level Save function as a method,
-// satisfying the ui/model.ConfigSaver interface.
+// SaveFunc wraps the package-level savers as methods, satisfying the
+// ui/model.ConfigSaver interface. Tests stub that interface, so ui/model
+// calls these methods and not the package functions.
 type SaveFunc struct{}
 
 // Save delegates to the package-level config.Save.
 func (SaveFunc) Save(key, value string) error {
 	return Save(key, value)
+}
+
+// SaveString delegates to the package-level config.SaveString.
+func (SaveFunc) SaveString(key, value string) error {
+	return SaveString(key, value)
+}
+
+// SaveBool delegates to the package-level config.SaveBool.
+func (SaveFunc) SaveBool(key string, value bool) error {
+	return SaveBool(key, value)
+}
+
+// SaveFloat delegates to the package-level config.SaveFloat.
+func (SaveFunc) SaveFloat(key string, value float64, prec int) error {
+	return SaveFloat(key, value, prec)
 }
 
 // SaveString saves a top-level string key. It quotes value with QuoteString,
