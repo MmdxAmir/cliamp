@@ -18,10 +18,12 @@ func TestProviderName(t *testing.T) {
 	}
 }
 
-func TestProviderDefaultBrowseMode(t *testing.T) {
-	p := newProvider(NewClient("https://emby.example.com", "tok", "user-1", "", ""))
-	if got := p.DefaultBrowseMode(); got != provider.BrowseArtistAlbums {
-		t.Fatalf("DefaultBrowseMode() = %d, want BrowseArtistAlbums", got)
+// Emby opens as a flat album list. A default browse mode would open the
+// artist browser on switch and take the N key for the mode chooser.
+func TestProviderHasNoDefaultBrowseMode(t *testing.T) {
+	var p any = newProvider(NewClient("https://emby.example.com", "tok", "user-1", "", ""))
+	if _, ok := p.(provider.DefaultBrowseModeProvider); ok {
+		t.Fatal("Emby implements DefaultBrowseModeProvider, want a flat album list")
 	}
 }
 

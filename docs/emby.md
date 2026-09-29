@@ -1,6 +1,6 @@
 # Emby
 
-Use cliamp to stream music from an Emby server through Emby's authenticated HTTP API. Emby opens in an artists-first hierarchy by default: artist, then album, then songs. This is the same as the Jellyfin provider.
+Use cliamp to stream music from an Emby server through Emby's authenticated HTTP API. The provider pane shows music libraries as a flat album list, like the Plex provider.
 
 > **Quick start:** Run `cliamp setup`. Select API-key or username+password authentication. The TUI validates `/System/Info` and writes the `[emby]` block. Manual steps follow.
 
@@ -48,9 +48,15 @@ Or set the provider in configuration:
 provider = "emby"
 ```
 
-Press `E` to select Emby. Emby opens directly in **By Artist / Album** mode. The artists are in alphabetical order. Select an artist to open the albums of that artist. Select an album to open its songs.
+The provider shows a flat album list:
 
-Press `N` while you browse Emby to switch to **By Album** or **By Artist** for the current session. The next launch returns to **By Artist / Album**.
+```text
+Artist — Album Title (Year)
+```
+
+Select an album to load its tracks. Press `E` to select Emby.
+
+Press `N` in the Emby pane to open the Emby browser. Select **By Album**, **By Artist**, or **By Artist / Album**. In **By Artist / Album**, the artists are in alphabetical order. Select an artist to open the albums of that artist. Select an album to open its songs.
 
 ## How it works
 

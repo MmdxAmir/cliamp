@@ -32,3 +32,8 @@ func NewFromConfig(cfg config.JellyfinConfig) *Provider {
 	}
 	return newProvider(NewClient(cfg.URL, cfg.Token, cfg.UserID, cfg.User, cfg.Password))
 }
+
+// DefaultBrowseMode always opens Jellyfin as artist → album → songs.
+func (p *Provider) DefaultBrowseMode() provider.BrowseMode {
+	return provider.BrowseArtistAlbums
+}
