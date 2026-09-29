@@ -266,9 +266,22 @@ type VisTickContext struct {
 	StereoSamplesInto func([][2]float64) int
 }
 
+// VisTap picks the audio tap that feeds an analysis.
+type VisTap int
+
+const (
+	// VisTapLatest reads the last frames that the decoder handed to the
+	// audio output.
+	VisTapLatest VisTap = iota
+	// VisTapAudible reads the frames that play now, interpolated from the
+	// wall clock, so the window moves on every tick.
+	VisTapAudible
+)
+
 type VisAnalysisSpec struct {
 	BandCount int
 	FFTSize   int
+	Tap       VisTap
 }
 
 func spectrumAnalysisSpec(bandCount int) VisAnalysisSpec {
@@ -278,12 +291,17 @@ func spectrumAnalysisSpec(bandCount int) VisAnalysisSpec {
 	}
 }
 
+// NormalizeAnalysisSpec fills the defaults of spec. A raw-sample spec, with no
+// bands, always reads the audible tap.
 func NormalizeAnalysisSpec(spec VisAnalysisSpec) VisAnalysisSpec {
 	if spec.BandCount < 0 {
 		spec.BandCount = 0
 	}
 	if spec.FFTSize <= 0 {
 		spec.FFTSize = defaultFFTSize
+	}
+	if spec.BandCount == 0 {
+		spec.Tap = VisTapAudible
 	}
 	return spec
 }
@@ -299,6 +317,13 @@ type visModeDriver interface {
 
 type visPauseSettler interface {
 	pauseSettled() bool
+}
+
+// visCadenceOwner marks a driver whose TickInterval the model follows during
+// playback, even when it is faster than TickFast. The model ticks every other
+// driver no faster than TickFast, unless the 60 FPS setting is on.
+type visCadenceOwner interface {
+	ownsCadence()
 }
 
 // visEntry pairs a display name with a factory for that mode's visModeDriver.
@@ -891,6 +916,13 @@ func (v *Visualizer) TickInterval(ctx VisTickContext) time.Duration {
 		return TickSlow
 	}
 	return driver.TickInterval(v, ctx)
+}
+
+// DriverOwnsCadence reports whether the model should tick the active mode at
+// its own TickInterval during playback. See visCadenceOwner.
+func (v *Visualizer) DriverOwnsCadence() bool {
+	_, ok := v.syncDriverMode().(visCadenceOwner)
+	return ok
 }
 
 // UsesRawSamples reports whether the active visualizer draws directly from audio samples.

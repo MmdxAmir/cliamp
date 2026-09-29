@@ -63,10 +63,13 @@ func newClassicPeakDriver() visModeDriver {
 	return &classicPeakDriver{}
 }
 
+// AnalysisSpec reads the audible tap, so the bars and caps line up with the
+// audio that plays now.
 func (*classicPeakDriver) AnalysisSpec(*Visualizer) VisAnalysisSpec {
 	return VisAnalysisSpec{
 		BandCount: classicPeakSpectrumBands,
 		FFTSize:   classicPeakFFTSize,
+		Tap:       VisTapAudible,
 	}
 }
 
@@ -140,6 +143,10 @@ func (d *classicPeakDriver) TickInterval(v *Visualizer, ctx VisTickContext) time
 func (d *classicPeakDriver) OnEnter(*Visualizer) {
 	*d = classicPeakDriver{}
 }
+
+// ownsCadence lets the model redraw ClassicPeak at frameInterval. That rate
+// adapts to the panel height, from 24 to 60 FPS.
+func (*classicPeakDriver) ownsCadence() {}
 
 func (d *classicPeakDriver) OnLeave(*Visualizer) {}
 

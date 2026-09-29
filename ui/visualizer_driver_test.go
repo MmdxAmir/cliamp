@@ -426,7 +426,7 @@ func TestClassicPeakRequestsHighResBands(t *testing.T) {
 		},
 	})
 
-	want := VisAnalysisSpec{BandCount: classicPeakSpectrumBands, FFTSize: classicPeakFFTSize}
+	want := VisAnalysisSpec{BandCount: classicPeakSpectrumBands, FFTSize: classicPeakFFTSize, Tap: VisTapAudible}
 	if requested != want {
 		t.Fatalf("Analyze() requested %+v, want %+v", requested, want)
 	}
@@ -449,7 +449,7 @@ func TestRawSampleModesRefreshWaveBufAtZeroBandCount(t *testing.T) {
 		},
 	})
 
-	want := spectrumAnalysisSpec(0)
+	want := VisAnalysisSpec{FFTSize: defaultFFTSize, Tap: VisTapAudible}
 	if requested != want {
 		t.Fatalf("Analyze() requested %+v, want %+v for raw-sample modes", requested, want)
 	}
@@ -601,6 +601,70 @@ func TestSpectrumDriverBaseDefaults(t *testing.T) {
 				if got, want := driver.TickInterval(v, ctx), defaultDriverTickInterval(ctx); got != want {
 					t.Errorf("TickInterval(%+v) = %v, want %v", ctx, got, want)
 				}
+			}
+		})
+	}
+}
+
+// Each mode declares which audio tap feeds its analysis and whether the model
+// ticks it at its own cadence. The model reads both from the visualizer and
+// no longer checks for a mode by name.
+func TestModesDeclareTapAndCadence(t *testing.T) {
+	audible := map[VisMode]bool{
+		VisClassicPeak: true,
+		VisWave:        true,
+		VisScope:       true,
+		VisHeartbeat:   true,
+	}
+	for mode := range VisCount {
+		t.Run(visModes[mode].name, func(t *testing.T) {
+			v := NewVisualizer(44100)
+			v.Mode = mode
+			v.Cols = 40
+			v.Rows = 5
+			var taps []VisTap
+			v.Tick(VisTickContext{
+				Now:     time.Unix(1, 0),
+				Playing: true,
+				Analyze: func(spec VisAnalysisSpec) []float64 {
+					taps = append(taps, NormalizeAnalysisSpec(spec).Tap)
+					return nil
+				},
+			})
+			if analyzes := mode != VisStereo && mode != VisNone; analyzes && len(taps) == 0 {
+				t.Fatal("Tick did not call Analyze")
+			}
+			want := VisTapLatest
+			if audible[mode] {
+				want = VisTapAudible
+			}
+			for _, tap := range taps {
+				if tap != want {
+					t.Errorf("Analyze tap = %v, want %v", tap, want)
+				}
+			}
+			if got, want := v.DriverOwnsCadence(), mode == VisClassicPeak; got != want {
+				t.Errorf("DriverOwnsCadence() = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func TestNormalizeAnalysisSpecTap(t *testing.T) {
+	tests := []struct {
+		name string
+		spec VisAnalysisSpec
+		want VisTap
+	}{
+		{name: "raw samples read the audible tap", spec: VisAnalysisSpec{}, want: VisTapAudible},
+		{name: "negative band count reads the audible tap", spec: VisAnalysisSpec{BandCount: -1}, want: VisTapAudible},
+		{name: "spectrum keeps the latest tap", spec: VisAnalysisSpec{BandCount: 10}, want: VisTapLatest},
+		{name: "spectrum keeps a declared audible tap", spec: VisAnalysisSpec{BandCount: 64, Tap: VisTapAudible}, want: VisTapAudible},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeAnalysisSpec(tt.spec).Tap; got != tt.want {
+				t.Fatalf("Tap = %v, want %v", got, tt.want)
 			}
 		})
 	}
