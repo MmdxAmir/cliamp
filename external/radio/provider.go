@@ -89,9 +89,10 @@ type Provider struct {
 	searchResults    []CatalogStation // non-nil when API search is active
 	searchGeneration uint64           // invalidates pending searches when search state changes
 	countries        []Country        // cached country index, nil until first browse
-	states           []State          // cached regions of the home country
+	states           []State          // cached regions of the country statesCode names
+	statesCode       string           // country code that states belongs to
 	tags             []Tag            // cached tag index, nil until first browse
-	tagGeneration    uint64           // incremented when Refresh invalidates a tag fetch
+	indexGeneration  uint64           // incremented when Refresh invalidates a country, region or tag fetch
 	// locationSettled is false only until the listener answers the location
 	// question. It gates whether to ask, not whether p.home may be used.
 	locationSettled bool
