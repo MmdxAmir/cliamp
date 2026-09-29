@@ -470,7 +470,7 @@ func TestPlaylistsCountIncludesDirTracks(t *testing.T) {
 	}
 }
 
-func TestSetBookmarkMaterializesDirTrack(t *testing.T) {
+func TestSavePlaylistMaterializesDirTrack(t *testing.T) {
 	p := newTestProvider(t)
 	audio := t.TempDir()
 	writeAudioFile(t, filepath.Join(audio, "a.mp3"))
@@ -478,10 +478,16 @@ func TestSetBookmarkMaterializesDirTrack(t *testing.T) {
 		t.Fatalf("CreateDirPlaylist: %v", err)
 	}
 
-	if err := p.SetBookmark("music", 0); err != nil {
-		t.Fatalf("SetBookmark: %v", err)
-	}
 	tracks, err := p.Tracks("music")
+	if err != nil {
+		t.Fatalf("Tracks: %v", err)
+	}
+	tracks[0].Bookmark = true
+	tracks[0].DirSourced = false
+	if err := p.SavePlaylist("music", tracks); err != nil {
+		t.Fatalf("SavePlaylist: %v", err)
+	}
+	tracks, err = p.Tracks("music")
 	if err != nil {
 		t.Fatalf("Tracks: %v", err)
 	}
@@ -515,8 +521,9 @@ func TestSavePlaylistReadErrorAbortsRewrite(t *testing.T) {
 	}
 	// A failed read must abort the rewrite instead of replacing the playlist
 	// with a copy missing its [[dir]] sections.
-	if err := p.SetBookmark("music", 0); err == nil {
-		t.Fatal("SetBookmark should fail when the playlist cannot be read")
+	track := playlist.Track{Path: filepath.Join(audio, "a.mp3"), Title: "A"}
+	if err := p.SavePlaylist("music", []playlist.Track{track}); err == nil {
+		t.Fatal("SavePlaylist should fail when the playlist cannot be read")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -524,26 +531,6 @@ func TestSavePlaylistReadErrorAbortsRewrite(t *testing.T) {
 	}
 	if !info.IsDir() {
 		t.Fatal("playlist was rewritten despite read failure")
-	}
-}
-
-func TestSetBookmarkByPathMaterializesDirTrack(t *testing.T) {
-	p := newTestProvider(t)
-	audio := t.TempDir()
-	writeAudioFile(t, filepath.Join(audio, "a.mp3"))
-	if err := p.CreateDirPlaylist("music", []string{audio}); err != nil {
-		t.Fatalf("CreateDirPlaylist: %v", err)
-	}
-	trackPath := filepath.Join(audio, "a.mp3")
-	if err := p.SetBookmarkByPath("music", trackPath); err != nil {
-		t.Fatalf("SetBookmarkByPath: %v", err)
-	}
-	tracks, err := p.Tracks("music")
-	if err != nil {
-		t.Fatalf("Tracks: %v", err)
-	}
-	if len(tracks) != 1 || !tracks[0].Bookmark || tracks[0].DirSourced {
-		t.Fatalf("materialized bookmark failed: %+v", tracks)
 	}
 }
 
@@ -761,7 +748,7 @@ func TestSavePlaylistPreservesSectionOrder(t *testing.T) {
 	}
 }
 
-func TestSetBookmarkKeepsDirPosition(t *testing.T) {
+func TestSavePlaylistMaterializedKeepsDirPosition(t *testing.T) {
 	p := newTestProvider(t)
 	dirA := t.TempDir()
 	writeAudioFile(t, filepath.Join(dirA, "a.mp3"))
@@ -774,11 +761,17 @@ func TestSetBookmarkKeepsDirPosition(t *testing.T) {
 	writeAudioFile(t, y)
 	writeInterleavedDoc(t, p, x, dirA, y, dirB)
 
-	// Expanded: x, a, y, b, c. Bookmark b (index 3).
-	if err := p.SetBookmark("mix", 3); err != nil {
-		t.Fatalf("SetBookmark: %v", err)
-	}
+	// Expanded: x, a, y, b, c. Materialize b (index 3) with a flag set.
 	tracks, err := p.Tracks("mix")
+	if err != nil {
+		t.Fatalf("Tracks: %v", err)
+	}
+	tracks[3].Bookmark = true
+	tracks[3].DirSourced = false
+	if err := p.SavePlaylist("mix", tracks); err != nil {
+		t.Fatalf("SavePlaylist: %v", err)
+	}
+	tracks, err = p.Tracks("mix")
 	if err != nil {
 		t.Fatalf("Tracks: %v", err)
 	}

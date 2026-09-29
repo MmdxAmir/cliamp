@@ -34,7 +34,6 @@ var (
 	_ provider.PlaylistSaver            = (*Provider)(nil)
 	_ provider.PlaylistDeleter          = (*Provider)(nil)
 	_ provider.PlaylistRenamer          = (*Provider)(nil)
-	_ provider.BookmarkSetter           = (*Provider)(nil)
 	_ provider.Searcher                 = (*Provider)(nil)
 	_ provider.PlaylistDirSourceManager = (*Provider)(nil)
 	_ provider.FavoritesManager         = (*Provider)(nil)
@@ -856,60 +855,6 @@ func writable(name string) error {
 		return errReservedFavoritesName
 	}
 	return nil
-}
-
-// SetBookmark toggles the bookmark flag on a track and rewrites the playlist.
-// The index refers to the expanded track list (explicit entries plus
-// directory-scanned ones). Bookmarking a directory-scanned track materializes
-// it as an explicit [[track]] entry so the bookmark persists; it then loads
-// after the directory-sourced tracks.
-func (p *Provider) SetBookmark(playlistName string, idx int) error {
-	if err := writable(playlistName); err != nil {
-		return err
-	}
-	unlock, err := p.lock()
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	tracks, err := p.expandedTracks(playlistName)
-	if err != nil {
-		return err
-	}
-	if idx < 0 || idx >= len(tracks) {
-		return fmt.Errorf("index %d out of range (playlist has %d tracks)", idx, len(tracks))
-	}
-	tracks[idx].Bookmark = !tracks[idx].Bookmark
-	tracks[idx].DirSourced = false // materialize so the change persists
-	return p.savePlaylist(playlistName, tracks)
-}
-
-// SetBookmarkByPath toggles the bookmark flag on the first track with path and
-// rewrites the playlist. This avoids corrupting saved playlists when the live
-// queue has been filtered, reordered, or otherwise diverged from file order.
-// Directory-scanned tracks are materialized as explicit entries so the
-// bookmark persists.
-func (p *Provider) SetBookmarkByPath(playlistName string, path string) error {
-	if err := writable(playlistName); err != nil {
-		return err
-	}
-	unlock, err := p.lock()
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	tracks, err := p.expandedTracks(playlistName)
-	if err != nil {
-		return err
-	}
-	for i := range tracks {
-		if tracks[i].Path == path {
-			tracks[i].Bookmark = !tracks[i].Bookmark
-			tracks[i].DirSourced = false // materialize so the change persists
-			return p.savePlaylist(playlistName, tracks)
-		}
-	}
-	return fmt.Errorf("track path %q not found in playlist %q", path, playlistName)
 }
 
 // loadDocByName loads a named playlist's parsed document.

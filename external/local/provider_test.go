@@ -489,65 +489,6 @@ func TestExists(t *testing.T) {
 	}
 }
 
-// --- SetBookmark ---
-
-func TestSetBookmark(t *testing.T) {
-	p := newTestProvider(t)
-	p.AddTrack("marks", playlist.Track{Path: "/a.mp3", Title: "A"})
-
-	if err := p.SetBookmark("marks", 0); err != nil {
-		t.Fatalf("SetBookmark: %v", err)
-	}
-
-	tracks, _ := p.Tracks("marks")
-	if !tracks[0].Bookmark {
-		t.Fatal("track should be bookmarked after toggle")
-	}
-
-	// Toggle off.
-	p.SetBookmark("marks", 0)
-	tracks, _ = p.Tracks("marks")
-	if tracks[0].Bookmark {
-		t.Fatal("track should not be bookmarked after second toggle")
-	}
-}
-
-func TestSetBookmarkOutOfRange(t *testing.T) {
-	p := newTestProvider(t)
-	p.AddTrack("one", playlist.Track{Path: "/a.mp3", Title: "A"})
-
-	if err := p.SetBookmark("one", 5); err == nil {
-		t.Fatal("expected error for out-of-range index")
-	}
-	if err := p.SetBookmark("one", -1); err == nil {
-		t.Fatal("expected error for negative index")
-	}
-}
-
-func TestSetBookmarkByPath(t *testing.T) {
-	p := newTestProvider(t)
-	if _, _, err := p.AddTracks("marks", []playlist.Track{
-		{Path: "/a.mp3", Title: "A"},
-		{Path: "/b.mp3", Title: "B"},
-	}); err != nil {
-		t.Fatalf("AddTracks: %v", err)
-	}
-
-	if err := p.SetBookmarkByPath("marks", "/b.mp3"); err != nil {
-		t.Fatalf("SetBookmarkByPath: %v", err)
-	}
-	tracks, err := p.Tracks("marks")
-	if err != nil {
-		t.Fatalf("Tracks: %v", err)
-	}
-	if tracks[0].Bookmark || !tracks[1].Bookmark {
-		t.Fatalf("wrong bookmark row toggled: %+v", tracks)
-	}
-	if err := p.SetBookmarkByPath("marks", "/missing.mp3"); err == nil {
-		t.Fatal("missing path should return an error")
-	}
-}
-
 // --- RemoveTrack ---
 
 func TestRemoveTrack(t *testing.T) {
@@ -914,8 +855,6 @@ func TestWritesRejectedForVirtualNames(t *testing.T) {
 		{"SavePlaylist", func(p *Provider, name string) error { return p.SavePlaylist(name, []playlist.Track{track}) }},
 		{"DeletePlaylist", func(p *Provider, name string) error { return p.DeletePlaylist(name) }},
 		{"RemoveTrack", func(p *Provider, name string) error { return p.RemoveTrack(name, 0) }},
-		{"SetBookmark", func(p *Provider, name string) error { return p.SetBookmark(name, 0) }},
-		{"SetBookmarkByPath", func(p *Provider, name string) error { return p.SetBookmarkByPath(name, track.Path) }},
 		{"RenamePlaylist from", func(p *Provider, name string) error { return p.RenamePlaylist(name, "NewName") }},
 		{"RenamePlaylist to", func(p *Provider, name string) error { return p.RenamePlaylist("Mix", name) }},
 		{"CreatePlaylist", func(p *Provider, name string) error {
