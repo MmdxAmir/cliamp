@@ -5,7 +5,7 @@ Override a config option for one session without editing `~/.config/cliamp/confi
 ## Playback
 
 ```sh
-cliamp --vol -5 track.mp3             # volume in dB [-30, +6]
+cliamp --vol -5 track.mp3             # startup volume in dB [volume_min, +6]
 cliamp --shuffle ~/Music              # enable shuffle
 cliamp --repeat all ~/Music           # repeat mode: off, all, one
 cliamp --mono track.mp3               # downmix to mono
@@ -21,7 +21,11 @@ cliamp --sample-rate 48000 track.mp3      # output sample rate (22050, 44100, 48
 cliamp --buffer-ms 2000 track.mp3         # speaker buffer in ms (50-5000; useful for unstable radio)
 cliamp --resample-quality 1 track.mp3     # resample quality factor (1–4)
 cliamp --bit-depth 32 track.m4a           # PCM bit depth: 16 (default) or 32 (lossless)
+cliamp --audio-device list                # print the output devices, then exit
+cliamp --audio-device NAME track.mp3      # use one output device for this session
 ```
+
+`--audio-device` overrides `audio_device` in config.toml. See [Audio output device](configuration.md#audio-output-device) for the platform rules.
 
 ## Appearance
 
@@ -113,7 +117,7 @@ Source the generated script directly or install it as your shell documentation d
 Put flags before, after, or between positional arguments:
 
 ```sh
-cliamp --shuffle track.mp3 --volume -5
+cliamp --shuffle track.mp3 --vol -5
 cliamp track.mp3 --repeat all --mono ~/Music
 ```
 
@@ -121,7 +125,7 @@ cliamp track.mp3 --repeat all --mono ~/Music
 
 | Flag | Type | Default | Range / Values |
 |------|------|---------|----------------|
-| `--vol` | float | 0 | -30 to +6 dB |
+| `--vol` | float | 0 | `volume_min` (default -50) to +6 dB |
 | `--shuffle` / `--no-shuffle` | bool | false | |
 | `--repeat` | string | off | off, all, one |
 | `--mono` / `--no-mono` | bool | false | |
@@ -136,6 +140,7 @@ cliamp track.mp3 --repeat all --mono ~/Music
 | `--buffer-ms` | int | 250 | 50-5000 |
 | `--resample-quality` | int | 4 | 1-4 |
 | `--bit-depth` | int | 16 | 16, 32 |
+| `--audio-device` | string | | a device name from `--audio-device list`. `list` prints the devices and exits. |
 | `--playlist` | string | | local TOML playlist name |
 | `--log-level` | string | info | debug, info, warn, error |
 | `--low-power` / `--no-low-power` | bool | false | lower UI cadence; disable visualization |
@@ -145,13 +150,13 @@ CLI flags override config file values for the current session only. Persisted bo
 
 ## Setup wizard
 
-Configure remote providers through a small TUI. Supported providers are Navidrome, Lyrion, Plex, Jellyfin, Emby, Spotify, Qobuz, Tidal, Mixcloud, NetEase, Audiobookshelf, and YouTube Music. Each provider page links to its required credentials. The wizard writes the `[provider]` block to `~/.config/cliamp/config.toml` and leaves the rest of the file unchanged. It validates supported server connections during setup. OAuth providers (Spotify, Qobuz, Tidal) authenticate later in the player. Mixcloud checks optional browser-session or OAuth credentials when you use them.
+Configure remote providers through a small TUI. Supported providers are Navidrome, Lyrion, Plex, Jellyfin, Emby, Spotify, Qobuz, Tidal, Mixcloud, NetEase, Audiobookshelf, and YouTube Music. Each provider page links to its required credentials. The wizard writes the provider keys into the `[provider]` section of `~/.config/cliamp/config.toml` and leaves the rest of the file unchanged. For YouTube Music, it edits an existing `[youtube]` or `[yt]` section. It validates supported server connections during setup. OAuth providers (Spotify, Qobuz, Tidal) authenticate later in the player. Mixcloud checks optional browser-session or OAuth credentials when you use them.
 
 ```sh
 cliamp setup
 ```
 
-Use `↑/↓` to navigate. Use `Enter` to confirm or submit. Use `Esc` to go back. Use `q` in the menu to quit. Passwords and tokens are masked. Running setup again for a configured provider replaces its section.
+Use `↑/↓` to navigate. Use `Enter` to confirm or submit. Use `Esc` to go back. Use `q` in the menu to quit. Passwords and tokens are masked. Running setup again for a configured provider updates the keys that setup manages. It keeps the other keys and comments in the section, such as `browse_sort`. It removes a managed key that the new choice does not use, such as `token` after a switch to password login.
 
 ## Playlist Management
 
@@ -186,6 +191,8 @@ cliamp playlist delete "Name"                   # delete entire playlist
 
 Sort keys: `track`, `title`, `artist`, `album`, `artist+album`, `path`.
 
+`--ssh` takes `host`, `user@host`, or `host:port`. `playlist enrich` connects to the port in each `ssh://` track path.
+
 See [playlists.md](playlists.md) for the TOML format. See [ssh-streaming.md](ssh-streaming.md) for remote playback.
 
 ## Recently Played
@@ -197,9 +204,9 @@ cliamp history --json                         # machine-readable output
 cliamp history clear                          # wipe ~/.config/cliamp/history.toml
 ```
 
-cliamp records a play after you listen to at least 50% of a track. In the TUI,
-the Local Playlists provider shows this data in the virtual "Recently Played"
-entry. See [history.md](history.md).
+cliamp adds a track to the history when the track starts. In the TUI, the Local
+Playlists provider shows this data in the virtual "Recently Played" entry. See
+[history.md](history.md).
 
 ## Spotify
 
@@ -234,7 +241,8 @@ cliamp play / pause / toggle / stop    # playback control
 cliamp next / prev                     # track navigation
 cliamp status                          # current state
 cliamp status --json                   # machine-readable state
-cliamp volume -5                       # adjust volume (dB)
+cliamp volume -5                       # set the volume to -5 dB
+cliamp remote call volume.adjust --params '{"value":3}'    # raise the volume by 3 dB
 cliamp seek 30                         # seek relative to current position (seconds)
 cliamp remote call seek.absolute --params '{"value":90}'   # seek to 90s exactly
 cliamp load "Playlist Name"            # load a playlist
@@ -251,5 +259,7 @@ cliamp remote state                     # v2 GUI-ready runtime snapshot
 cliamp remote capabilities              # v2 operation list
 cliamp remote events runtime.state      # v2 event stream
 ```
+
+`cliamp volume` sets an absolute level. A sign does not make the value relative, so `cliamp volume +3` sets the volume to +3 dB. To step the volume up or down, submit `volume.adjust` with `cliamp remote call`. A negative value lowers the volume. Both forms clamp the result to the range `volume_min` to +6 dB.
 
 See [remote-control.md](remote-control.md) for the protocol specification.

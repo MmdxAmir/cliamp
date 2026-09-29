@@ -6,7 +6,7 @@ Use the interactive wizard to configure remote providers. Supported providers ar
 cliamp setup
 ```
 
-The wizard writes the required TOML block and leaves the rest of your config unchanged. It validates server credentials during setup when the provider supports it: Navidrome, Lyrion, Plex, Jellyfin, and Emby. OAuth providers such as Spotify, Qobuz, and Tidal sign in later in the player. Tidal uses a `link.tidal.com` device code. Mixcloud checks optional browser-session or OAuth credentials when you use them. See [cli.md](cli.md#setup-wizard) for details.
+The wizard writes the provider keys into their section. It keeps your other keys and comments, and it leaves the rest of your config unchanged. It validates server credentials during setup when the provider supports it: Navidrome, Lyrion, Plex, Jellyfin, and Emby. OAuth providers such as Spotify, Qobuz, and Tidal sign in later in the player. Tidal uses a `link.tidal.com` device code. Mixcloud checks optional browser-session or OAuth credentials when you use them. See [cli.md](cli.md#setup-wizard) for details.
 
 ## Config directory
 
@@ -44,6 +44,11 @@ shuffle = false
 
 # Start with mono output (L+R downmix)
 mono = false
+
+# Audio output device name. Empty uses the system default output.
+# Run cliamp --audio-device list and copy a name from the second column.
+# See "Audio output device" below.
+audio_device = ""
 
 # Initial directory for the file browser ('o' key)
 initial_directory = "~/Music"
@@ -105,6 +110,11 @@ hide_settings_pane = false
 # Show highlighted-playlist metadata below Settings (Ctrl+I toggles and saves).
 show_metadata = false
 
+# Empty space around the UI: columns on the left and right (0-10, default 3)
+# and rows above and below (0-5, default 1).
+padding_horizontal = 3
+padding_vertical = 1
+
 # UI theme name (see available themes in ~/.config/cliamp/themes/)
 theme = "Tokyo Night"
 
@@ -126,6 +136,13 @@ cliamp adapts its playback screen to the terminal size:
 | At least `56x16` | Compact controls and five visualizer rows |
 | At least `40x10` | Minimal playback, list, seek bar, and help layout |
 | Smaller than `40x10` | Resize message only |
+
+The tiers use the full terminal size. `padding_horizontal` and
+`padding_vertical` set the empty space between the terminal edge and the UI,
+in columns and rows. The defaults are 3 and 1. cliamp clamps
+`padding_horizontal` to 0-10 and `padding_vertical` to 0-5. On a small
+terminal, cliamp reduces the padding so that the UI keeps at least one column
+and one row.
 
 At the full tier the playback screen splits below the seek bar: the playlist
 fills the left column and a `Settings` pane fills the right one. The pane reads
@@ -229,6 +246,56 @@ or with a sidebar too short for details, `Ctrl+I` opens that full info overlay
 instead. The preference remains saved so the section appears when you return
 to a wide playback layout with enough room and Settings open.
 
+## Audio output device
+
+`audio_device` selects the output device when cliamp starts. Leave it empty to
+use the system default output. To find the device names, run this command:
+
+```sh
+cliamp --audio-device list
+```
+
+The command prints the description and the name of each device, then exits.
+A `*` marks the active device. Put the name in `audio_device`:
+
+```toml
+audio_device = "alsa_output.usb-FiiO_K5_Pro-00.analog-stereo"
+```
+
+- On Linux, cliamp sets `PIPEWIRE_NODE` to the name before it opens the audio
+  output. PipeWire then sends the cliamp stream to that device. Without
+  PipeWire, the key has no effect.
+- On macOS, cliamp makes the device the system default output while it runs.
+  It restores the previous default output when it exits. The value can be the
+  name or the description.
+- On Windows, the key has no effect at startup. The `d` device picker changes
+  the system default output instead.
+
+When you select a device with `d` or `cliamp device <name>`, the TUI saves it to
+`audio_device`. To use a different device for one session, run
+`cliamp --audio-device <name>`.
+
+## Value syntax
+
+cliamp reads a subset of TOML. These rules apply to every key:
+
+- Put a string in double quotes or single quotes. cliamp removes one pair of quotes.
+- Inside double quotes, write `\\` for a backslash and `\"` for a double quote. cliamp keeps every other backslash as you type it, so `"D:\new"` stays a Windows path.
+- Single quotes are literal. cliamp decodes no escapes inside them.
+- An unquoted string also works. cliamp keeps all of its text, including a `#`.
+- A bool is `true` or `false` in any letter case. `1` and `0` also work. cliamp ignores any other value and keeps the default.
+- To add a comment at the end of a line, put whitespace and then `#`. This works after a quoted string, a number, a bool, or a section header such as `[navidrome]`. After an unquoted string, the `#` and the text after it stay part of the value.
+- A comment after a list, such as `eq` or `libraries`, does not work. Put that comment on its own line.
+
+```toml
+volume = -6                       # quieter start
+shuffle = True                    # any letter case
+initial_directory = 'D:\Music'    # single quotes keep backslashes
+
+[navidrome]                       # home server
+password = "back\\slash\"quote"   # reads as back\slash"quote
+```
+
 ## Secrets from Environment Variables
 
 Set a string value in `config.toml` to `$VAR_NAME` or `${VAR_NAME}` to read it from an environment variable. This keeps passwords, tokens, and client secrets out of the file.
@@ -276,7 +343,30 @@ Rules:
 - Interpolation occurs only when the **entire** value is `$NAME` or `${NAME}`. cliamp keeps mixed values such as `"p@$$word"` literally. No escaping is required.
 - Variable names match `[A-Za-z_][A-Za-z0-9_]*`.
 - If the variable is unset, the value is empty (the same as if you had left it blank).
+- cliamp always reads a whole `$NAME` or `${NAME}` value from the environment. A password such as `$Secret1` cannot be stored as literal text.
+- `cliamp setup` accepts a `$NAME` or `${NAME}` value and writes it as you type it. It checks the server with the value of the variable. It rejects a reference to an unset or empty variable.
 - Works for any string field, including plugin config under `[plugins.<name>]`.
+
+## Provider enable rules
+
+Each provider section turns on its provider in one of three ways:
+
+| Rule | Providers | The provider starts when |
+| --- | --- | --- |
+| Credentials | Navidrome, Lyrion, Plex, Jellyfin, Emby, Audiobookshelf | The section holds the required credentials. Lyrion needs only `url`. |
+| Section | Spotify, Qobuz, Tidal, YouTube Music | The section header exists. Set `enabled = false` to turn the provider off. |
+| Opt-in | SoundCloud, Mixcloud, NetEase, Yandex | The section sets `enabled = true`. Yandex also needs `token`. |
+
+Radio and podcasts are always on. Their sections only tune them.
+
+```toml
+# Section rule: the header alone turns on Tidal.
+[tidal]
+
+# Opt-in rule: SoundCloud needs the enabled line.
+[soundcloud]
+enabled = true
+```
 
 ## Default Provider
 
