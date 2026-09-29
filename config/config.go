@@ -36,20 +36,30 @@ func Path() (string, error) {
 // untouched, so literal '$' in passwords is preserved.
 func parseString(s string) string {
 	s = unquote(s)
-	if len(s) < 2 || s[0] != '$' {
-		return s
+	if name, ok := EnvRef(s); ok {
+		return os.Getenv(name)
 	}
-	name := s[1:]
+	return s
+}
+
+// EnvRef reports whether the unquoted value s is exactly $NAME or ${NAME}.
+// Load reads such a value from the environment variable name, so the text
+// itself cannot be stored in config.toml.
+func EnvRef(s string) (name string, ok bool) {
+	if len(s) < 2 || s[0] != '$' {
+		return "", false
+	}
+	name = s[1:]
 	if name[0] == '{' {
 		if name[len(name)-1] != '}' {
-			return s
+			return "", false
 		}
 		name = name[1 : len(name)-1]
 	}
 	if !isEnvName(name) {
-		return s
+		return "", false
 	}
-	return os.Getenv(name)
+	return name, true
 }
 
 // unquote removes one pair of matching quotes from s. Inside double quotes it
@@ -107,7 +117,9 @@ func isComment(rest string) bool {
 var quoteEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
 
 // QuoteString returns s as a double-quoted TOML string that Load reads back
-// unchanged. It escapes only \ and ". s must be a single line.
+// unchanged. It escapes only \ and ". s must be a single line. The one
+// exception is a $NAME or ${NAME} value: Load reads it from the environment.
+// Use EnvRef to find such a value.
 func QuoteString(s string) string {
 	return `"` + quoteEscaper.Replace(s) + `"`
 }

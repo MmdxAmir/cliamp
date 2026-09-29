@@ -19,6 +19,7 @@ func TestSetupBodyRoundTrip(t *testing.T) {
 		mixed     = `p"w\#1 x`
 		nbsp      = "pass\u00a0word"
 	)
+	t.Setenv("CLIAMP_TEST_SETUP_PASS", "from-env")
 	tests := []struct {
 		section string
 		values  map[string]string
@@ -32,6 +33,16 @@ func TestSetupBodyRoundTrip(t *testing.T) {
 				return []string{c.Navidrome.URL, c.Navidrome.User, c.Navidrome.Password}
 			},
 			want: []string{"https://h/" + backslash, single, mixed},
+		},
+		{
+			// Setup writes an environment reference as typed, and Load
+			// reads the variable.
+			section: "navidrome",
+			values:  map[string]string{"url": "https://h", "user": "alice", "password": "${CLIAMP_TEST_SETUP_PASS}"},
+			got: func(c config.Config) []string {
+				return []string{c.Navidrome.Password}
+			},
+			want: []string{"from-env"},
 		},
 		{
 			section: "lyrion",

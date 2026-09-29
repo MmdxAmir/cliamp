@@ -343,6 +343,8 @@ Rules:
 - Interpolation occurs only when the **entire** value is `$NAME` or `${NAME}`. cliamp keeps mixed values such as `"p@$$word"` literally. No escaping is required.
 - Variable names match `[A-Za-z_][A-Za-z0-9_]*`.
 - If the variable is unset, the value is empty (the same as if you had left it blank).
+- cliamp always reads a whole `$NAME` or `${NAME}` value from the environment. A password such as `$Secret1` cannot be stored as literal text.
+- `cliamp setup` accepts a `$NAME` or `${NAME}` value and writes it as you type it. It checks the server with the value of the variable. It rejects a reference to an unset or empty variable.
 - Works for any string field, including plugin config under `[plugins.<name>]`.
 
 ## Provider enable rules

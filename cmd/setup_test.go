@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -179,6 +180,78 @@ func TestRequiredFieldBlocksSubmit(t *testing.T) {
 	}
 	if m.resultErr == nil || !strings.Contains(m.resultErr.Error(), "required") {
 		t.Fatalf("resultErr = %v, want a 'required' error", m.resultErr)
+	}
+}
+
+// TestSubmitFormEnvRef checks that setup rejects a $NAME value that names
+// an unset or empty variable, which config.Load reads as empty. It also
+// checks that the probe gets the value of a set variable and that the form
+// keeps the reference for the save.
+func TestSubmitFormEnvRef(t *testing.T) {
+	t.Setenv("CLIAMP_TEST_SETUP_PASS", "from-env")
+	t.Setenv("CLIAMP_TEST_SETUP_EMPTY", "")
+	t.Setenv("Secret1", "")
+	os.Unsetenv("Secret1")
+
+	tests := []struct {
+		name      string
+		password  string
+		wantErr   bool
+		wantProbe string
+	}{
+		{"unset variable", "$Secret1", true, ""},
+		{"unset variable in braces", "${CLIAMP_TEST_SETUP_UNSET}", true, ""},
+		{"empty variable", "$CLIAMP_TEST_SETUP_EMPTY", true, ""},
+		{"set variable", "${CLIAMP_TEST_SETUP_PASS}", false, "from-env"},
+		{"literal dollar", "p@$$w0rd", false, "p@$$w0rd"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newSetupModel()
+			for i, p := range m.provs {
+				if p.section == "navidrome" {
+					m.menuCursor = i
+					break
+				}
+			}
+			m.handleKey(keyPress(tea.KeyEnter, "")) // open form (no picker)
+			probed := "not probed"
+			m.provs[m.pidx].validate = func(v map[string]string) error {
+				probed = v["password"]
+				return nil
+			}
+			m.values["url"] = "https://music.example.com"
+			m.values["user"] = "alice"
+			m.values["password"] = tt.password
+
+			_, cmd := m.submitForm()
+			if tt.wantErr {
+				if m.stage != stageResult || m.resultErr == nil || !strings.Contains(m.resultErr.Error(), "environment variable") {
+					t.Fatalf("stage = %v, resultErr = %v, want an environment variable error", m.stage, m.resultErr)
+				}
+				if key := m.provs[m.pidx].fields[m.visible[m.fcursor]].key; key != "password" {
+					t.Errorf("cursor on %q, want password", key)
+				}
+				if cmd != nil {
+					t.Error("submitForm started a probe")
+				}
+				return
+			}
+			if m.stage != stageValidating {
+				t.Fatalf("stage = %v, want stageValidating; resultErr = %v", m.stage, m.resultErr)
+			}
+			for _, c := range cmd().(tea.BatchMsg) {
+				if msg, ok := c().(validateDoneMsg); ok && msg.err != nil {
+					t.Fatalf("probe error: %v", msg.err)
+				}
+			}
+			if probed != tt.wantProbe {
+				t.Errorf("probe got password %q, want %q", probed, tt.wantProbe)
+			}
+			if m.values["password"] != tt.password {
+				t.Errorf("form password = %q, want %q for the save", m.values["password"], tt.password)
+			}
+		})
 	}
 }
 

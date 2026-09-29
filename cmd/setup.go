@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -966,12 +967,21 @@ func (m *setupModel) submitForm() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Required-field check (only for visible fields).
+	// Field check (only for visible fields). config.Load reads a $NAME
+	// value from the environment, so a reference to an unset or empty
+	// variable loads as an empty value.
 	for i, idx := range m.visible {
 		f := spec.fields[idx]
-		if f.required && strings.TrimSpace(m.values[f.key]) == "" {
+		v := m.values[f.key]
+		var err error
+		if f.required && strings.TrimSpace(v) == "" {
+			err = fmt.Errorf("%s is required", f.label)
+		} else if name, ok := config.EnvRef(v); ok && os.Getenv(name) == "" {
+			err = fmt.Errorf("%s names an unset or empty environment variable. cliamp reads a $NAME or ${NAME} value from the environment", f.label)
+		}
+		if err != nil {
 			m.fcursor = i
-			m.resultErr = fmt.Errorf("%s is required", f.label)
+			m.resultErr = err
 			m.resultText = ""
 			m.stage = stageResult
 			return m, nil
@@ -1004,7 +1014,21 @@ func (m *setupModel) submitForm() (tea.Model, tea.Cmd) {
 
 	m.stage = stageValidating
 	m.spinFrame = 0
-	return m, tea.Batch(spinTickCmd(), runValidateCmd(spec, m.values))
+	return m, tea.Batch(spinTickCmd(), runValidateCmd(spec, envResolved(m.values)))
+}
+
+// envResolved returns a copy of values in which each $NAME or ${NAME} value
+// holds the value of that environment variable. The probe then checks the
+// value that config.Load reads, and the save keeps the reference.
+func envResolved(values map[string]string) map[string]string {
+	out := make(map[string]string, len(values))
+	for k, v := range values {
+		if name, ok := config.EnvRef(v); ok {
+			v = os.Getenv(name)
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func (m *setupModel) onValidateDone(err error) (tea.Model, tea.Cmd) {

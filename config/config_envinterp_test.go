@@ -63,6 +63,34 @@ func TestParseStringEnvInterpolation(t *testing.T) {
 	}
 }
 
+func TestEnvRef(t *testing.T) {
+	tests := []struct {
+		in       string
+		wantName string
+		wantOK   bool
+	}{
+		{"$Secret1", "Secret1", true},
+		{"${NAVI_PASS}", "NAVI_PASS", true},
+		{"$_x", "_x", true},
+		{"$", "", false},
+		{"${}", "", false},
+		{"${UNCLOSED", "", false},
+		{"$1abc", "", false},
+		{"p@$$w0rd", "", false},
+		{"prefix-$NAME", "", false},
+		{"$NAME suffix", "", false},
+		{"", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			name, ok := EnvRef(tt.in)
+			if name != tt.wantName || ok != tt.wantOK {
+				t.Fatalf("EnvRef(%q) = %q, %v, want %q, %v", tt.in, name, ok, tt.wantName, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestLoadInterpolatesSecretsFromEnv(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("CLIAMP_TEST_NAVI_PASS", "s3cret!")
