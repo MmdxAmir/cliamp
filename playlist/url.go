@@ -36,8 +36,8 @@ func matchSearchPrefix(path, name string) bool {
 	return true
 }
 
-// hostOf parses path as a URL and returns its host in lower case, without a
-// leading "www." or "m.". ok is false when path is not a URL or does not parse.
+// hostOf parses path as a URL and returns its host as NormalizeHost gives it.
+// ok is false when path is not a URL or does not parse.
 func hostOf(path string) (host string, u *url.URL, ok bool) {
 	if !IsURL(path) {
 		return "", nil, false
@@ -46,10 +46,16 @@ func hostOf(path string) (host string, u *url.URL, ok bool) {
 	if err != nil {
 		return "", nil, false
 	}
-	host = strings.ToLower(u.Hostname())
+	return NormalizeHost(u.Hostname()), u, true
+}
+
+// NormalizeHost returns host in lower case, without surrounding whitespace
+// and without a leading "www." or "m.". The URL predicates and the yt-dlp
+// cookie sources compare hosts in this form.
+func NormalizeHost(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
 	host = strings.TrimPrefix(host, "www.")
-	host = strings.TrimPrefix(host, "m.")
-	return host, u, true
+	return strings.TrimPrefix(host, "m.")
 }
 
 // IsM3U reports whether the path points to an M3U playlist file (URL or local).
