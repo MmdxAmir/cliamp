@@ -316,6 +316,65 @@ func TestResolveYTDLBatchCookieSelection(t *testing.T) {
 	}
 }
 
+// TestYTDLRangeFlags pins the yt-dlp range flags that each entry point sends.
+// yt-dlp counts from 1, and count 0 means all remaining entries.
+func TestYTDLRangeFlags(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping Unix shell script test on Windows")
+	}
+	tmpDir := t.TempDir()
+	logFile := filepath.Join(tmpDir, "ytdlp_args.log")
+	script := "#!/bin/sh\necho \"$@\" > \"" + logFile + "\"\n" +
+		"echo '{\"webpage_url\":\"https://example.com/v1\",\"title\":\"One\"}'\n" +
+		"echo '{malformed}'\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "yt-dlp"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", tmpDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	const page = "https://example.com/playlist"
+	tests := []struct {
+		name string
+		run  func() ([]playlist.Track, error)
+		want string
+	}{
+		{"batch all", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 0, 0) }, ""},
+		{"batch first 5", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 0, 5) }, "--playlist-end 5"},
+		{"batch from 20", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 20, 0) }, "--playlist-start 21"},
+		{"batch 20 to 30", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 20, 10) }, "--playlist-start 21 --playlist-end 30"},
+		{"page context", func() ([]playlist.Track, error) {
+			tracks, entries, err := ResolveYTDLBatchPageContext(t.Context(), page, 2, 3)
+			if err == nil && entries != 2 {
+				err = fmt.Errorf("entries = %d, want 2", entries)
+			}
+			return tracks, err
+		}, "--playlist-start 3 --playlist-end 5"},
+		{"remote first items", func() ([]playlist.Track, error) {
+			return resolveYTDL(t.Context(), page, YTDLRadioInitialItems)
+		}, "--playlist-end 20"},
+		{"remote all", func() ([]playlist.Track, error) { return resolveYTDL(t.Context(), page, 0) }, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracks, err := tt.run()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(tracks) != 1 || tracks[0].Path != "https://example.com/v1" {
+				t.Fatalf("tracks = %+v, want the one valid entry", tracks)
+			}
+			logged, err := os.ReadFile(logFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := strings.Join(strings.Fields("--flat-playlist -j --socket-timeout 15 "+tt.want+" -- "+page), " ")
+			if got := strings.Join(strings.Fields(string(logged)), " "); got != want {
+				t.Fatalf("yt-dlp args = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestParseYTDLTracksCountsMalformedEntries(t *testing.T) {
 	input := strings.Join([]string{
 		`{"webpage_url":"https://example.com/one","title":"One"}`,

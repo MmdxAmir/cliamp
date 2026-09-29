@@ -187,23 +187,23 @@ func Remote(urls []string) ([]playlist.Track, error) {
 			target := u
 			if !ExpandYTPlaylist {
 				target = stripPlaylistParam(u)
-				t, err := resolveYTDL(target)
+				t, err := resolveYTDL(context.Background(), target, 0)
 				if err != nil {
 					return nil, fmt.Errorf("resolving youtube music %s: %w", u, err)
 				}
 				tracks = append(tracks, t...)
 			} else if hasListParam(u) {
-				t, err := resolveYTDL(target, YTDLRadioInitialItems)
+				t, err := resolveYTDL(context.Background(), target, YTDLRadioInitialItems)
 				if err != nil {
 					target = stripPlaylistParam(u)
-					t, err = resolveYTDL(target)
+					t, err = resolveYTDL(context.Background(), target, 0)
 				}
 				if err != nil {
 					return nil, fmt.Errorf("resolving youtube music %s: %w", u, err)
 				}
 				tracks = append(tracks, t...)
 			} else {
-				t, err := resolveYTDL(target)
+				t, err := resolveYTDL(context.Background(), target, 0)
 				if err != nil {
 					return nil, fmt.Errorf("resolving youtube music %s: %w", u, err)
 				}
@@ -220,7 +220,7 @@ func Remote(urls []string) ([]playlist.Track, error) {
 			}
 			tracks = append(tracks, t...)
 		case kindYTDL:
-			t, err := resolveYTDL(u)
+			t, err := resolveYTDL(context.Background(), u, 0)
 			if err != nil {
 				return nil, fmt.Errorf("resolving yt-dlp %s: %w", u, err)
 			}
@@ -558,7 +558,7 @@ func resolveYouTube(pageURL string) ([]playlist.Track, error) {
 		listID = u.Query().Get("list")
 	}
 	if isList && strings.HasPrefix(listID, "RD") {
-		if tracks, err := resolveYTDL(pageURL, YTDLRadioInitialItems); err == nil && len(tracks) > 0 {
+		if tracks, err := resolveYTDL(context.Background(), pageURL, YTDLRadioInitialItems); err == nil && len(tracks) > 0 {
 			return tracks, nil
 		}
 	}
@@ -580,7 +580,7 @@ func resolveYouTube(pageURL string) ([]playlist.Track, error) {
 		}
 		// Native library failed (e.g. YouTube Radio/Mix playlists are dynamic
 		// and unsupported). Fall back to yt-dlp which handles them.
-		if tracks, err := resolveYTDL(pageURL); err == nil && len(tracks) > 0 {
+		if tracks, err := resolveYTDL(context.Background(), pageURL, 0); err == nil && len(tracks) > 0 {
 			return tracks, nil
 		}
 	}
@@ -600,69 +600,31 @@ func resolveYouTube(pageURL string) ([]playlist.Track, error) {
 	}}, nil
 }
 
-// ResolveYTDLBatch is like resolveYTDL but fetches a specific range
-// [start, start+count) from the playlist. Exported for UI incremental loading.
-// ResolveYTDLBatch fetches tracks starting at offset `start`.
-// If count > 0, fetches at most `count` items; if count == 0, fetches all remaining.
-// If an optional browser is provided, cookies from that browser are used;
-// otherwise, the cookie source configured for pageURL's host is used.
+// ytdlTimeout bounds one yt-dlp enumeration when the caller sets no limit.
+const ytdlTimeout = 30 * time.Second
+
+// ResolveYTDLBatch is ResolveYTDLBatchContext with a 30 s limit.
 func ResolveYTDLBatch(pageURL string, start, count int, browser ...string) ([]playlist.Track, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), ytdlTimeout)
 	defer cancel()
 	return ResolveYTDLBatchContext(ctx, pageURL, start, count, browser...)
 }
 
-// ResolveYTDLBatchPage returns the valid tracks and number of source entries
-// emitted by yt-dlp for a playlist range.
-func ResolveYTDLBatchPage(pageURL string, start, count int, browser ...string) ([]playlist.Track, int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return ResolveYTDLBatchPageContext(ctx, pageURL, start, count, browser...)
-}
-
-// ResolveYTDLBatchPageContext is ResolveYTDLBatchPage with caller-controlled
-// cancellation and timeout.
-func ResolveYTDLBatchPageContext(ctx context.Context, pageURL string, start, count int, browser ...string) ([]playlist.Track, int, error) {
-	end := 0
-	if count > 0 {
-		end = start + count
-	}
-	return resolveYTDLRangePageContext(ctx, pageURL, start, end, browser...)
-}
-
-// ResolveYTDLBatchContext is ResolveYTDLBatch with caller-controlled
-// cancellation and timeout.
+// ResolveYTDLBatchContext is ResolveYTDLBatchPageContext without the count of
+// source entries.
 func ResolveYTDLBatchContext(ctx context.Context, pageURL string, start, count int, browser ...string) ([]playlist.Track, error) {
-	end := 0
-	if count > 0 {
-		end = start + count
-	}
-	return resolveYTDLRangeContext(ctx, pageURL, start, end, browser...)
-}
-
-// resolveYTDL uses yt-dlp --flat-playlist to quickly enumerate tracks.
-// Tracks are returned with their page URLs as Path (not direct audio URLs).
-// If maxItems > 0, only the first maxItems tracks are fetched.
-func resolveYTDL(pageURL string, maxItems ...int) ([]playlist.Track, error) {
-	end := 0
-	if len(maxItems) > 0 {
-		end = maxItems[0]
-	}
-	return resolveYTDLRange(pageURL, 0, end)
-}
-
-func resolveYTDLRange(pageURL string, start, end int, browser ...string) ([]playlist.Track, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return resolveYTDLRangeContext(ctx, pageURL, start, end, browser...)
-}
-
-func resolveYTDLRangeContext(ctx context.Context, pageURL string, start, end int, browser ...string) ([]playlist.Track, error) {
-	tracks, _, err := resolveYTDLRangePageContext(ctx, pageURL, start, end, browser...)
+	tracks, _, err := ResolveYTDLBatchPageContext(ctx, pageURL, start, count, browser...)
 	return tracks, err
 }
 
-func resolveYTDLRangePageContext(ctx context.Context, pageURL string, start, end int, browser ...string) ([]playlist.Track, int, error) {
+// ResolveYTDLBatchPageContext uses yt-dlp --flat-playlist to list the entries
+// of pageURL from offset start. It fetches at most count entries, or all the
+// remaining entries when count is 0. The tracks keep their page URLs as Path,
+// not direct audio URLs. It also returns the number of source entries that
+// yt-dlp emitted, which includes entries that give no track. A non-empty
+// browser supplies the cookies. Otherwise the cookie source configured for the
+// host of pageURL applies.
+func ResolveYTDLBatchPageContext(ctx context.Context, pageURL string, start, count int, browser ...string) ([]playlist.Track, int, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return nil, 0, fmt.Errorf("yt-dlp not found in PATH — see https://github.com/yt-dlp/yt-dlp#installation")
 	}
@@ -680,6 +642,10 @@ func resolveYTDLRangePageContext(ctx context.Context, pageURL string, start, end
 	}
 	if start > 0 {
 		args = append(args, "--playlist-start", strconv.Itoa(start+1)) // yt-dlp is 1-based
+	}
+	end := 0
+	if count > 0 {
+		end = start + count
 	}
 	if end > 0 {
 		args = append(args, "--playlist-end", strconv.Itoa(end))
@@ -701,6 +667,14 @@ func resolveYTDLRangePageContext(ctx context.Context, pageURL string, start, end
 		return nil, 0, fmt.Errorf("yt-dlp: %w", err)
 	}
 	return parseYTDLTracks(bytes.NewReader(stdout))
+}
+
+// resolveYTDL lists the first maxItems entries of pageURL, or all entries when
+// maxItems is 0. Each call gets its own 30 s limit under ctx.
+func resolveYTDL(ctx context.Context, pageURL string, maxItems int) ([]playlist.Track, error) {
+	ctx, cancel := context.WithTimeout(ctx, ytdlTimeout)
+	defer cancel()
+	return ResolveYTDLBatchContext(ctx, pageURL, 0, maxItems)
 }
 
 func parseYTDLTracks(r io.Reader) ([]playlist.Track, int, error) {
