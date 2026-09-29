@@ -839,7 +839,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		// Headless mode has no theme keys, so it keeps the saved theme.
 		if !daemon {
 			themeName := fm.ThemeName()
-			if themeName == theme.DefaultName {
+			if theme.IsDefaultName(themeName) {
 				themeName = ""
 			}
 			_ = config.Save("theme", fmt.Sprintf("%q", themeName))
