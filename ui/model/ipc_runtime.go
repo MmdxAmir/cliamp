@@ -472,7 +472,7 @@ func (m *Model) handleV2EQ(jobs *ipc.JobStore, jobID string, request ipc.Request
 		m.setCustomEQBand(request.Band, request.Value)
 	} else if request.Name != "" {
 		// Only plugins may name a curve. An IPC name must be a built-in
-		// preset or Custom, as the daemon requires.
+		// preset or Custom.
 		if _, ok := EQPresetByName(request.Name); !ok && !strings.EqualFold(request.Name, "Custom") {
 			m.failV2Job(jobs, jobID, v2NotFoundError())
 			return nil
@@ -792,55 +792,32 @@ func v2OperationRequest(request ipc.V2Request) (ipc.Request, *ipc.V2Error) {
 	return result, nil
 }
 
+// normalizeV2Operation maps the runtime.* aliases of the operation registry
+// to the operations that handleV2Request serves. The server passes on only
+// registered names, in the case of the registry.
 func normalizeV2Operation(operation string) string {
-	operation = strings.ToLower(strings.TrimSpace(operation))
 	switch operation {
-	case "player.play", "runtime.play":
+	case "runtime.play":
 		return "play"
-	case "player.pause", "runtime.pause":
+	case "runtime.pause":
 		return "pause"
-	case "player.toggle", "runtime.toggle":
+	case "runtime.toggle":
 		return "toggle"
-	case "player.stop", "runtime.stop":
+	case "runtime.stop":
 		return "stop"
-	case "player.next", "runtime.next":
+	case "runtime.next":
 		return "next"
-	case "player.prev", "player.previous", "runtime.prev":
+	case "runtime.prev":
 		return "prev"
-	case "player.volume.set", "runtime.volume":
+	case "runtime.volume":
 		return "volume"
-	case "player.volume.adjust":
-		return "volume.adjust"
-	case "player.seek.relative", "runtime.seek":
+	case "runtime.seek":
 		return "seek"
-	case "player.seek.absolute":
-		return "seek.absolute"
-	case "player.speed.set", "runtime.speed":
+	case "runtime.speed":
 		return "speed"
-	case "player.speed.adjust":
-		return "speed.adjust"
-	case "runtime.playlist.get":
-		return "queue.list"
-	case "runtime.playlist.play":
-		return "queue.play"
-	case "runtime.playlist.remove":
-		return "queue.remove"
-	case "runtime.playlist.move":
-		return "queue.move"
-	case "runtime.playlist.clear":
-		return "queue.clear"
-	case "runtime.queue.list":
-		return "queue.list"
-	case "runtime.queue.play":
-		return "queue.play"
-	case "runtime.queue.enqueue":
-		return "queue.enqueue"
-	case "runtime.queue.remove":
-		return "queue.remove"
-	case "runtime.queue.move":
-		return "queue.move"
-	case "runtime.queue.clear":
-		return "queue.clear"
+	case "runtime.queue.list", "runtime.queue.play", "runtime.queue.enqueue",
+		"runtime.queue.remove", "runtime.queue.move", "runtime.queue.clear":
+		return strings.TrimPrefix(operation, "runtime.")
 	case "runtime.library.search":
 		return "provider.search"
 	case "runtime.history":

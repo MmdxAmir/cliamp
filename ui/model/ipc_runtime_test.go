@@ -422,3 +422,39 @@ func TestV2ProviderResponsesNameThePlaylistAndCount(t *testing.T) {
 		t.Fatalf("added = %v, want %v", prov.added, want)
 	}
 }
+
+// Every runtime.* alias of the registry reaches an operation that the Model
+// serves. The server rejects the names that are not registered, so the Model
+// keeps no alias for them.
+func TestNormalizeV2OperationCoversRegistryAliases(t *testing.T) {
+	registry := ipc.DefaultOperationRegistry()
+	for _, operation := range registry.Operations() {
+		name := operation.Name
+		if !strings.HasPrefix(name, "runtime.") || name == "runtime.snapshot" || name == "runtime.status" {
+			continue
+		}
+		canonical := normalizeV2Operation(name)
+		if _, ok := registry.Lookup(canonical); !ok || strings.HasPrefix(canonical, "runtime.") {
+			t.Errorf("%s maps to %q, want a registered operation", name, canonical)
+		}
+	}
+	for _, name := range []string{"player.play", "player.previous", "player.volume.set", "runtime.playlist.get"} {
+		if _, ok := registry.Lookup(name); ok {
+			t.Errorf("%s is registered, want an unknown operation", name)
+		}
+		if got := normalizeV2Operation(name); got != name {
+			t.Errorf("%s maps to %q, want no alias", name, got)
+		}
+	}
+
+	pl := playlist.New()
+	pl.Add(playlist.Track{Path: "/music/one.flac", Title: "One"})
+	engine := &settingsFocusEngine{}
+	m := Model{player: engine, playlist: pl}
+	if response := runV2(t, &m, "runtime.queue.list", ipc.Request{}); !response.OK || response.Total != 1 {
+		t.Fatalf("runtime.queue.list = %+v, want the live playlist", response)
+	}
+	if response := runV2(t, &m, "runtime.volume", ipc.Request{Value: -3}); !response.OK || engine.volume != -3 {
+		t.Fatalf("runtime.volume = %+v, volume %v; want -3", response, engine.volume)
+	}
+}
