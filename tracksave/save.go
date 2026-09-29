@@ -45,7 +45,7 @@ func SaveTo(track playlist.Track, directory string) (string, error) {
 	if err := os.MkdirAll(saveDir, 0o755); err != nil {
 		return "", err
 	}
-	if playlist.IsYouTubeURL(track.Path) || playlist.IsYTDL(track.Path) {
+	if NeedsDownload(track) {
 		return resolve.DownloadYTDL(track.Path, saveDir)
 	}
 	if track.Stream || !insideTempDir(track.Path) {
@@ -69,6 +69,12 @@ func SaveTo(track playlist.Track, directory string) (string, error) {
 		return "", err
 	}
 	return destination, nil
+}
+
+// NeedsDownload reports whether SaveTo downloads track with yt-dlp, which can
+// take minutes. SaveTo copies every other track that it can save.
+func NeedsDownload(track playlist.Track) bool {
+	return playlist.IsYouTubeURL(track.Path) || playlist.IsYTDL(track.Path)
 }
 
 func insideTempDir(path string) bool {

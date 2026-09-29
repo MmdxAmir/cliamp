@@ -74,3 +74,24 @@ func TestDirectoryRejectsRelativePaths(t *testing.T) {
 		})
 	}
 }
+
+func TestNeedsDownload(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"https://www.youtube.com/watch?v=abc", true},
+		{"https://youtu.be/abc", true},
+		{"https://soundcloud.com/artist/track", true},
+		{"ytsearch1:lofi", true},
+		{"https://radio.example/live.mp3", false},
+		{"/tmp/cliamp-download/track.m4a", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := NeedsDownload(playlist.Track{Path: tt.path}); got != tt.want {
+				t.Errorf("NeedsDownload(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
