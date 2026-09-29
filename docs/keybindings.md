@@ -4,6 +4,12 @@ Press `Ctrl+K` in any mode, or `?` in the player, to view keybindings. The
 keymap first shows commands for the active screen. It then shows player and
 library commands.
 
+To run a command, select it and press `Enter`. The command acts as if you
+pressed its key on the screen that opened the keymap. Press `/` to filter the
+list first. The keymap cannot run key pairs such as `Left` `Right`, the `N`
+then `j` seek, or a player command while another screen is open. For these
+entries, a status message tells you which key to press.
+
 ## Playback
 
 | Key | Action |
@@ -355,5 +361,5 @@ query to their search API. Their services control matching rules.
 
 | Key | Action |
 |---|---|
-| `?` / `Ctrl+K` | Show keymap |
+| `?` / `Ctrl+K` | Show keymap. `Enter` runs the selected command. |
 | `q` / `Ctrl+C` | Quit |
