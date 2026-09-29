@@ -8,7 +8,6 @@ import (
 	"io"
 	"math"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -188,9 +187,8 @@ func (p *ffmpegProcess) kill() {
 // incrementally from its stdout pipe without waiting for the entire input.
 // It is suitable for live/infinite streams.
 func decodeFFmpegStream(path string, sr beep.SampleRate, bitDepth int) (*ffmpegPipeStreamer, beep.Format, error) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		ext := filepath.Ext(path)
-		return nil, beep.Format{}, fmt.Errorf("ffmpeg is required to play %s files — install it with your package manager", ext)
+	if err := requireFFmpeg(); err != nil {
+		return nil, beep.Format{}, err
 	}
 	fp, format, err := startFFmpegPipe(path, nil, sr, bitDepth)
 	if err != nil {
@@ -210,16 +208,8 @@ func decodeFFmpegStream(path string, sr beep.SampleRate, bitDepth int) (*ffmpegP
 // wired to the process. Callers add the concrete Seek behavior by embedding the
 // returned ffmpegPipe in a streamer type.
 func startFFmpegPipe(input string, stdin io.ReadCloser, sr beep.SampleRate, bitDepth int) (ffmpegPipe, beep.Format, error) {
-	pcmFmt, codec, precision := ffmpegPCMArgs(bitDepth)
-	cmd := exec.Command("ffmpeg",
-		"-i", input,
-		"-f", pcmFmt,
-		"-acodec", codec,
-		"-ar", strconv.Itoa(int(sr)),
-		"-ac", "2",
-		"-loglevel", "error",
-		"pipe:1",
-	)
+	_, _, precision := ffmpegPCMArgs(bitDepth)
+	cmd := exec.Command("ffmpeg", append([]string{"-i", input}, pcmOutputArgs(sr, bitDepth)...)...)
 	cmd.Stdin = stdin
 	proc := newFFmpegProcess(cmd)
 
@@ -379,8 +369,8 @@ func (f *ffmpegPipeStreamer) Seek(int) error { return nil }
 // radio StreamTitle parsing keeps working for ffmpeg-only codecs (AAC, AAC+,
 // Opus, ...). src is closed when the stream stops; seeking is not supported.
 func decodeFFmpegPipeStream(src io.ReadCloser, sr beep.SampleRate, bitDepth int, live bool) (*ffmpegPipeStreamer, beep.Format, error) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return nil, beep.Format{}, fmt.Errorf("ffmpeg is required to play this stream — install it with your package manager")
+	if err := requireFFmpeg(); err != nil {
+		return nil, beep.Format{}, err
 	}
 	fp, format, err := startFFmpegPipe("pipe:0", src, sr, bitDepth)
 	if err != nil {
@@ -395,9 +385,8 @@ func decodeFFmpegPipeStream(src io.ReadCloser, sr beep.SampleRate, bitDepth int,
 // Seeking is supported by killing and restarting ffmpeg with a -ss offset.
 // Duration is probed via ffprobe so the seek bar works.
 func decodeFFmpegLocal(path string, sr beep.SampleRate, bitDepth int) (*localFFmpegStreamer, beep.Format, error) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		ext := filepath.Ext(path)
-		return nil, beep.Format{}, fmt.Errorf("ffmpeg is required to play %s files — install it with your package manager", ext)
+	if err := requireFFmpeg(); err != nil {
+		return nil, beep.Format{}, err
 	}
 
 	_, _, precision := ffmpegPCMArgs(bitDepth)
@@ -433,16 +422,8 @@ func (s *localFFmpegStreamer) startPipe(seekPos int) (ffmpegPipe, error) {
 		secs := float64(seekPos) / float64(s.sr)
 		args = append(args, "-ss", strconv.FormatFloat(secs, 'f', 3, 64))
 	}
-	pcmFmt, codec, _ := ffmpegPCMArgs(s.bitDepth())
-	args = append(args,
-		"-i", s.path,
-		"-f", pcmFmt,
-		"-acodec", codec,
-		"-ar", strconv.Itoa(int(s.sr)),
-		"-ac", "2",
-		"-loglevel", "error",
-		"pipe:1",
-	)
+	args = append(args, "-i", s.path)
+	args = append(args, pcmOutputArgs(s.sr, s.bitDepth())...)
 
 	cmd := exec.Command("ffmpeg", args...)
 	proc := newFFmpegProcess(cmd)
@@ -531,21 +512,31 @@ func (s *localFFmpegStreamer) prepareSeek(pos int) (*preparedFFmpegSeek, error) 
 	return &preparedFFmpegSeek{expected: s.state, replacement: replacement}, nil
 }
 
+// ffmpegAvailable reports whether ffmpeg is on PATH. The buffered pipeline
+// decodes through it, so a source can only be routed there when it is
+// installed. It looks up PATH on each call, so an ffmpeg installed while
+// cliamp runs is found.
+func ffmpegAvailable() bool {
+	_, err := exec.LookPath("ffmpeg")
+	return err == nil
+}
+
+// requireFFmpeg returns an error with a platform install hint when ffmpeg is
+// not on PATH. Every ffmpeg decoder calls it first.
+func requireFFmpeg() error {
+	if !ffmpegAvailable() {
+		return fmt.Errorf("ffmpeg is required: %s", ffmpegInstallHint())
+	}
+	return nil
+}
+
 // decodeNavFFmpeg starts ffmpeg from a per-process navBuffer reader, returning a
 // navFFmpegStreamer that begins producing PCM immediately as bytes arrive.
 // Seeking kills ffmpeg and restarts decoding from byte zero with an FFmpeg time
 // offset, so no HTTP reconnect is required.
-// ffmpegAvailable reports whether ffmpeg is on PATH, caching the lookup. The
-// buffered pipeline decodes through it, so a source can only be routed there
-// when it is installed.
-var ffmpegAvailable = sync.OnceValue(func() bool {
-	_, err := exec.LookPath("ffmpeg")
-	return err == nil
-})
-
 func decodeNavFFmpeg(nb *navBuffer, sr beep.SampleRate, bitDepth int) (*navFFmpegStreamer, beep.Format, error) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return nil, beep.Format{}, fmt.Errorf("ffmpeg is required to decode this format — install it with your package manager")
+	if err := requireFFmpeg(); err != nil {
+		return nil, beep.Format{}, err
 	}
 	_, _, precision := ffmpegPCMArgs(bitDepth)
 	s := &navFFmpegStreamer{ffmpegPipe: ffmpegPipe{f32: bitDepth == 32}, nb: nb, sr: sr}
@@ -632,7 +623,6 @@ func (in *navFFmpegInput) Close() error {
 }
 
 func (s *navFFmpegStreamer) startPipe(seekPos int, validate bool) (ffmpegPipe, error) {
-	pcmFmt, codec, _ := ffmpegPCMArgs(s.bitDepth())
 	args := []string{"-i", "pipe:0"}
 	if seekPos > 0 {
 		secs := float64(seekPos) / float64(s.sr)
@@ -640,14 +630,7 @@ func (s *navFFmpegStreamer) startPipe(seekPos int, validate bool) (ffmpegPipe, e
 		// preserving container headers and giving sample-accurate VBR seeks.
 		args = append(args, "-ss", strconv.FormatFloat(secs, 'f', 3, 64))
 	}
-	args = append(args,
-		"-f", pcmFmt,
-		"-acodec", codec,
-		"-ar", strconv.Itoa(int(s.sr)),
-		"-ac", "2",
-		"-loglevel", "error",
-		"pipe:1",
-	)
+	args = append(args, pcmOutputArgs(s.sr, s.bitDepth())...)
 	cmd := exec.Command("ffmpeg", args...)
 	proc := newFFmpegProcess(cmd)
 
@@ -734,6 +717,21 @@ func ffmpegPCMArgs(bitDepth int) (format, codec string, precision int) {
 		return "f32le", "pcm_f32le", 4
 	}
 	return "s16le", "pcm_s16le", 2
+}
+
+// pcmOutputArgs returns the ffmpeg output arguments that write stereo PCM at
+// sr to stdout, in the sample format for bitDepth. Every ffmpeg decoder uses
+// them after its input arguments.
+func pcmOutputArgs(sr beep.SampleRate, bitDepth int) []string {
+	pcmFmt, codec, _ := ffmpegPCMArgs(bitDepth)
+	return []string{
+		"-f", pcmFmt,
+		"-acodec", codec,
+		"-ar", strconv.Itoa(int(sr)),
+		"-ac", "2",
+		"-loglevel", "error",
+		"pipe:1",
+	}
 }
 
 // probeFrames uses ffprobe to quickly read file duration from metadata and
