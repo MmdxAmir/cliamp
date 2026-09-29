@@ -1,13 +1,12 @@
 // Package embyapi implements the shared Emby/Jellyfin HTTP client. The two
 // servers speak nearly the same API; the few differences (auth header scheme,
-// ping endpoint, user-id discovery, error prefix, metadata key) are isolated
+// ping check, user-id discovery, error prefix, metadata key) are isolated
 // in a dialect so emby and jellyfin can be thin wrappers over one client.
 package embyapi
 
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -105,9 +104,6 @@ func (c *Client) ClearCache() {
 	c.mu.Unlock()
 }
 
-// MetaKey returns the playlist.Track ProviderMeta key for this server's item IDs.
-func (c *Client) MetaKey() string { return c.dialect.metaKey() }
-
 // Library represents a music library view.
 type Library struct {
 	ID   string
@@ -202,22 +198,7 @@ type playbackStopInfo struct {
 
 // Ping checks that the server is reachable and the token is accepted.
 func (c *Client) Ping() error {
-	var raw json.RawMessage
-	if err := c.get(c.dialect.pingPath(), nil, &raw); err == nil {
-		return nil
-	} else if c.dialect.name() == "jellyfin" && c.password == "" && c.token != "" {
-		var httpErr *httpError
-		if errors.As(err, &httpErr) && httpErr.statusCode == http.StatusBadRequest {
-			// API keys aren't owned by a user, so /Users/Me returns a 400
-			// (documented as "Token is not owned by a user.", sent without a
-			// body), even when a username is configured alongside the key.
-			// Fall back to listing /Users to prove the key is valid.
-			return c.get("/Users", nil, &raw)
-		}
-		return err
-	} else {
-		return err
-	}
+	return c.dialect.ping(c)
 }
 
 // UserID returns the active user id, discovering it lazily when needed.

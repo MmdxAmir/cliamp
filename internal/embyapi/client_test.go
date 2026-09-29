@@ -895,3 +895,55 @@ func TestAlbumsByLibraryStopsWhenServerIgnoresLimit(t *testing.T) {
 		t.Fatalf("got %d albums in %d requests, want %d albums in 1 request", len(albums), requests, albumPageSize+1)
 	}
 }
+
+// TestUserIDFromUsersList verifies how both dialects pick a user from the
+// /Users listing after /Users/Me rejects a server-level API key.
+func TestUserIDFromUsersList(t *testing.T) {
+	tests := []struct {
+		name    string
+		user    string
+		users   string
+		status  int
+		want    string
+		wantErr string
+	}{
+		{name: "configured user", user: "BOB", users: `[{"Id":"user-1","Name":"Alice"},{"Id":"user-2","Name":"Bob"}]`, want: "user-2"},
+		{name: "first user without a configured name", users: `[{"Id":"user-1","Name":"Alice"},{"Id":"user-2","Name":"Bob"}]`, want: "user-1"},
+		{name: "configured user missing", user: "carol", users: `[{"Id":"user-1","Name":"Alice"}]`, wantErr: `user "carol" not found`},
+		{name: "empty listing", users: `[]`, wantErr: "could not discover user id"},
+		{name: "listing rejected", status: http.StatusUnauthorized, wantErr: "could not discover user id (set user_id in config)"},
+	}
+	for _, d := range providerDialects {
+		for _, tt := range tests {
+			t.Run(d.name+"/"+tt.name, func(t *testing.T) {
+				c := mock(d.newClient("https://media.example.com", "tok", "", tt.user, ""), func(req *http.Request) (*http.Response, error) {
+					switch req.URL.Path {
+					case "/Users/Me":
+						return &http.Response{StatusCode: 400, Status: "400 Bad Request", Body: io.NopCloser(bytes.NewBuffer(nil))}, nil
+					case "/Users":
+						if tt.status != 0 {
+							return &http.Response{StatusCode: tt.status, Status: http.StatusText(tt.status), Body: io.NopCloser(bytes.NewBuffer(nil))}, nil
+						}
+						return jsonResponse(tt.users), nil
+					default:
+						t.Fatalf("unexpected path %s", req.URL.Path)
+						return nil, nil
+					}
+				})
+				got, err := c.UserID()
+				if tt.wantErr != "" {
+					if err == nil || !strings.Contains(err.Error(), tt.wantErr) || !strings.HasPrefix(err.Error(), d.name+": ") {
+						t.Fatalf("UserID() = (%q, %v), want an error with prefix %q that contains %q", got, err, d.name+": ", tt.wantErr)
+					}
+					return
+				}
+				if err != nil || got != tt.want {
+					t.Fatalf("UserID() = (%q, %v), want %q", got, err, tt.want)
+				}
+				if again, _ := c.UserID(); again != tt.want {
+					t.Fatalf("second UserID() = %q, want the stored id %q", again, tt.want)
+				}
+			})
+		}
+	}
+}
