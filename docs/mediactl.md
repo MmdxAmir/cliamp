@@ -40,6 +40,9 @@ The `org.mpris.MediaPlayer2.Player` interface supports all standard transport co
 | `playerctl next` | Skip to the next track |
 | `playerctl previous` | Go to the previous track (or restart if more than 3 seconds in) |
 
+A client can also call the MPRIS `Quit` method. cliamp then exits and saves the
+resume position, as the `q` key does.
+
 ### Seeking
 
 You can seek by an absolute or relative value:

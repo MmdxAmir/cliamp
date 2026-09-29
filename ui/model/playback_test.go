@@ -339,6 +339,28 @@ func TestQuitCapturesMixcloudResumePosition(t *testing.T) {
 	}
 }
 
+// The quit message of media controls and headless signals keeps the resume
+// position, as the q key does.
+func TestQuitMsgCapturesResumePosition(t *testing.T) {
+	track := playlist.Track{Title: "Song", Path: "/music/song.flac", DurationSecs: 240}
+	pl := playlist.New()
+	pl.Add(track)
+	player := &playbackFakeEngine{playing: true, position: 42 * time.Second}
+	m := Model{player: player, playlist: pl}
+
+	updated, cmd := m.Update(playback.QuitMsg{})
+	m = updated.(Model)
+	if path, secs, _ := m.ResumeState(); path != track.Path || secs != 42 {
+		t.Fatalf("resume state = (%q, %d), want (%q, 42)", path, secs, track.Path)
+	}
+	if cmd == nil {
+		t.Fatal("QuitMsg returned no command, want tea.Quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok || !m.quitting {
+		t.Fatalf("quitting = %v, want a quit", m.quitting)
+	}
+}
+
 func TestNavTrackPlaybackKeepsCompleteAlbumContext(t *testing.T) {
 	player := &playbackFakeEngine{}
 	p := playlist.New()

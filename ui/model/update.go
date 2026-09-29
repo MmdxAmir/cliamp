@@ -1094,12 +1094,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case playback.QuitMsg:
-		m.flushPendingSpeedSave()
-		m.flushPendingEQSave()
-		m.player.Close()
-		m.clearPlaybackTrack()
-		m.quitting = true
-		return m, tea.Quit
+		// Media controls and the signals of headless mode quit like the q
+		// key, so the resume position is kept too.
+		return m, m.quit()
 
 	case SetEQPresetMsg:
 		m.SetEQPreset(msg.Name, msg.Bands)
