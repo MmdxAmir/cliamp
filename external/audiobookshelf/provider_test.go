@@ -1085,17 +1085,22 @@ func TestCachesReturnCopies(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			first, err := tt.call()
+			// Change the result of the fetch, then the result of a cache hit.
+			// Each later call must still return the value of the first call.
+			got, err := tt.call()
 			if err != nil {
 				t.Fatalf("first call error: %v", err)
 			}
-			*first = "changed"
-			second, err := tt.call()
-			if err != nil {
-				t.Fatalf("cached call error: %v", err)
-			}
-			if *second == "changed" {
-				t.Fatal("a change to the returned slice changed the cache")
+			want := *got
+			for _, source := range []string{"fetched", "cached"} {
+				*got = "changed"
+				got, err = tt.call()
+				if err != nil {
+					t.Fatalf("call after a change to the %s slice: %v", source, err)
+				}
+				if *got != want {
+					t.Fatalf("a change to the %s slice changed the cache: got %q, want %q", source, *got, want)
+				}
 			}
 		})
 	}

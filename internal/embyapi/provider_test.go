@@ -263,57 +263,42 @@ func TestProviderCachesReturnCopies(t *testing.T) {
 	})
 	p := NewProvider(c, "Jellyfin")
 	tests := []struct {
-		name   string
-		mutate func() error
-		read   func() (string, error)
+		name string
+		call func() (*string, error)
 	}{
-		{
-			name: "playlists",
-			mutate: func() error {
-				lists, err := p.Playlists()
-				if err == nil {
-					lists[0].Name = "changed"
-				}
-				return err
-			},
-			read: func() (string, error) {
-				lists, err := p.Playlists()
-				if err != nil {
-					return "", err
-				}
-				return lists[0].Name, nil
-			},
-		},
-		{
-			name: "tracks",
-			mutate: func() error {
-				tracks, err := p.Tracks("album-1")
-				if err == nil {
-					tracks[0].Title = "changed"
-				}
-				return err
-			},
-			read: func() (string, error) {
-				tracks, err := p.Tracks("album-1")
-				if err != nil {
-					return "", err
-				}
-				return tracks[0].Title, nil
-			},
-		},
+		{"playlists", func() (*string, error) {
+			lists, err := p.Playlists()
+			if err != nil {
+				return nil, err
+			}
+			return &lists[0].Name, nil
+		}},
+		{"tracks", func() (*string, error) {
+			tracks, err := p.Tracks("album-1")
+			if err != nil {
+				return nil, err
+			}
+			return &tracks[0].Title, nil
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.mutate(); err != nil {
+			// Change the result of the fetch, then the result of a cache hit.
+			// Each later call must still return the value of the first call.
+			got, err := tt.call()
+			if err != nil {
 				t.Fatalf("first call error: %v", err)
 			}
-			// The second read comes from the cache.
-			got, err := tt.read()
-			if err != nil {
-				t.Fatalf("second call error: %v", err)
-			}
-			if got == "changed" {
-				t.Fatal("a change to the returned slice changed the cache")
+			want := *got
+			for _, source := range []string{"fetched", "cached"} {
+				*got = "changed"
+				got, err = tt.call()
+				if err != nil {
+					t.Fatalf("call after a change to the %s slice: %v", source, err)
+				}
+				if *got != want {
+					t.Fatalf("a change to the %s slice changed the cache: got %q, want %q", source, *got, want)
+				}
 			}
 		})
 	}
