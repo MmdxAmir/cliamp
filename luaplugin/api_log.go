@@ -9,6 +9,9 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+// pluginLogName is the plugin log file in the config dir.
+const pluginLogName = "plugins.log"
+
 // pluginLogger writes plugin log messages to ~/.config/cliamp/plugins.log.
 type pluginLogger struct {
 	mu   sync.Mutex

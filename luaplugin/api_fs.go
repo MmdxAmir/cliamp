@@ -11,40 +11,53 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/bjarneo/cliamp/internal/appdir"
+	"github.com/bjarneo/cliamp/ipc"
 )
 
-var (
-	allowDirsOnce sync.Once
-	allowDirs     []string
-)
+// cachedWriteRules holds the write rules for this process. The paths they
+// name never change at runtime.
+var cachedWriteRules = sync.OnceValue(loadWriteRules)
 
-// writeAllowDirs returns the directories where plugins can write files, with
-// symlinks resolved so the prefix check in isWriteAllowed cannot be bypassed
-// by a symlinked allow dir (e.g. /tmp -> /private/tmp on macOS). Entries are
-// normalized via normalizeWritePath so isWriteAllowed can compare directly.
-// The result is cached since these paths never change at runtime.
-func writeAllowDirs() []string {
-	allowDirsOnce.Do(func() {
-		raw := []string{"/tmp", os.TempDir()}
-		if configDir, err := appdir.Dir(); err == nil {
-			raw = append(raw, configDir)
+// writeRules bounds the paths that plugins can write. Every entry is
+// canonicalized like the paths that isWriteAllowed checks, so a symlinked
+// dir (e.g. /tmp -> /private/tmp on macOS) cannot bypass the prefix checks.
+type writeRules struct {
+	allow []string // directories that plugins can write inside
+	deny  []string // paths inside allow that plugins cannot write, with their subtrees
+}
+
+// loadWriteRules builds the write rules from the current environment.
+func loadWriteRules() writeRules {
+	var r writeRules
+	add := func(list *[]string, path string) {
+		if abs, ok := canonicalExistingPath(path); ok {
+			*list = append(*list, normalizeWritePath(abs))
 		}
-		if home, err := os.UserHomeDir(); err == nil {
-			raw = append(raw, filepath.Join(home, ".local", "share", "cliamp"))
-			raw = append(raw, filepath.Join(home, "Music", "cliamp"))
-		}
-		for _, d := range raw {
-			abs, err := filepath.Abs(d)
-			if err != nil {
-				continue
-			}
-			if resolved, err := filepath.EvalSymlinks(abs); err == nil {
-				abs = resolved
-			}
-			allowDirs = append(allowDirs, normalizeWritePath(abs))
-		}
-	})
-	return allowDirs
+	}
+	add(&r.allow, "/tmp")
+	add(&r.allow, os.TempDir())
+	configDir, configErr := appdir.Dir()
+	if configErr == nil {
+		add(&r.allow, configDir)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		add(&r.allow, filepath.Join(home, ".local", "share", "cliamp"))
+		add(&r.allow, filepath.Join(home, "Music", "cliamp"))
+	}
+
+	// A plugin that writes these could approve its own code in
+	// plugins/.trust.json, add a binary to the exec allowlist in config.toml,
+	// change the stations in radios.toml, break IPC, or erase what it logged.
+	if pluginDir, err := appdir.PluginDir(); err == nil {
+		add(&r.deny, pluginDir)
+	}
+	if configErr == nil {
+		add(&r.deny, filepath.Join(configDir, "config.toml"))
+		add(&r.deny, filepath.Join(configDir, "radios.toml"))
+		add(&r.deny, filepath.Join(configDir, pluginLogName))
+	}
+	add(&r.deny, ipc.DefaultSocketPath())
+	return r
 }
 
 // canonicalExistingPath resolves symlinks on the deepest existing ancestor of
@@ -75,26 +88,48 @@ func canonicalExistingPath(path string) (string, bool) {
 }
 
 // isWriteAllowed checks if a path is within one of the allowed write
-// directories, resolving symlinks on both sides first.
+// directories and outside every denied path, resolving symlinks on both
+// sides first.
 func isWriteAllowed(path string) bool {
+	return cachedWriteRules().allows(path)
+}
+
+// allows reports whether r permits a write to path.
+func (r writeRules) allows(path string) bool {
 	abs, ok := canonicalExistingPath(path)
 	if !ok {
 		return false
 	}
+	// An NTFS stream name such as config.toml::$DATA writes to config.toml.
+	if runtime.GOOS == "windows" && strings.Contains(abs[len(filepath.VolumeName(abs)):], ":") {
+		return false
+	}
 	abs = normalizeWritePath(abs)
-	for _, dir := range writeAllowDirs() {
-		if abs == dir || strings.HasPrefix(abs, dir+string(os.PathSeparator)) {
+	for _, dir := range r.deny {
+		if isWithin(abs, dir) {
+			return false
+		}
+	}
+	for _, dir := range r.allow {
+		if isWithin(abs, dir) {
 			return true
 		}
 	}
 	return false
 }
 
+// isWithin reports whether path is dir or lies under dir. Both paths must be
+// canonical and normalized.
+func isWithin(path, dir string) bool {
+	return path == dir || strings.HasPrefix(path, dir+string(os.PathSeparator))
+}
+
 // normalizeWritePath canonicalizes an absolute path for prefix comparison:
-// cleaned and, on Windows, case-folded (Windows paths are case-insensitive).
+// cleaned and, on Windows and macOS, case-folded. The default file systems on
+// both are case-insensitive, so plugins/ and Plugins/ name the same dir.
 func normalizeWritePath(path string) string {
 	path = filepath.Clean(path)
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		path = strings.ToLower(path)
 	}
 	return path

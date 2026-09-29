@@ -134,19 +134,131 @@ func TestFSRemove(t *testing.T) {
 	}
 }
 
-func TestIsWriteAllowed(t *testing.T) {
-	tests := []struct {
-		path string
-		want bool
-	}{
-		{fsAllowedPath("test.txt"), true},
-		{fsDisallowedPath(), false},
+// testHomeOutsideTemp sets HOME to a new dir outside the temp roots, so that
+// only the cliamp roots can make a path under it writable.
+func testHomeOutsideTemp(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Skipf("get working dir: %v", err)
 	}
-
-	for _, tt := range tests {
-		if got := isWriteAllowed(tt.path); got != tt.want {
-			t.Errorf("isWriteAllowed(%q) = %v, want %v", tt.path, got, tt.want)
+	home, err := os.MkdirTemp(wd, ".testhome-")
+	if err != nil {
+		t.Skipf("create home outside the temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	canonHome, _ := canonicalExistingPath(home)
+	for _, tmp := range []string{"/tmp", os.TempDir()} {
+		canonTmp, _ := canonicalExistingPath(tmp)
+		if isWithin(normalizeWritePath(canonHome), normalizeWritePath(canonTmp)) {
+			t.Skipf("working dir %s is inside the temp dir %s", wd, tmp)
 		}
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads it on Windows
+	return home
+}
+
+func TestIsWriteAllowed(t *testing.T) {
+	caseFolded := runtime.GOOS == "windows" || runtime.GOOS == "darwin"
+	layouts := []struct {
+		name       string
+		linkConfig bool // ~/.config/cliamp is a symlink to a dotfiles dir
+	}{
+		{name: "real config dir"},
+		{name: "symlinked config dir", linkConfig: true},
+	}
+	for _, layout := range layouts {
+		t.Run(layout.name, func(t *testing.T) {
+			home := testHomeOutsideTemp(t)
+			cfg := filepath.Join(home, ".config", "cliamp")
+			if layout.linkConfig {
+				target := filepath.Join(home, "dotfiles", "cliamp")
+				mustMkdirAll(t, target)
+				mustMkdirAll(t, filepath.Dir(cfg))
+				if err := os.Symlink(target, cfg); err != nil {
+					t.Skipf("symlink: %v", err)
+				}
+			}
+			plugins := filepath.Join(cfg, "plugins")
+			data := filepath.Join(home, ".local", "share", "cliamp")
+			mustMkdirAll(t, filepath.Join(plugins, "pkg"))
+			mustMkdirAll(t, data)
+			for _, f := range []string{
+				filepath.Join(plugins, ".trust.json"),
+				filepath.Join(plugins, "hello.lua"),
+				filepath.Join(plugins, "pkg", "init.lua"),
+				filepath.Join(cfg, "config.toml"),
+				filepath.Join(cfg, "radios.toml"),
+				filepath.Join(cfg, "plugins.log"),
+			} {
+				if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// Symlinks inside an allowed dir that point at denied paths.
+			linked := true
+			for name, target := range map[string]string{
+				"to-plugins":     plugins,
+				"to-config.toml": filepath.Join(cfg, "config.toml"),
+				"to-etc":         filepath.Dir(fsDisallowedPath()),
+			} {
+				if err := os.Symlink(target, filepath.Join(data, name)); err != nil {
+					linked = false
+				}
+			}
+
+			rules := loadWriteRules()
+			tests := []struct {
+				name string
+				path string
+				want bool
+				link bool // the path goes through a symlink in data
+			}{
+				{name: "temp dir", path: fsAllowedPath("test.txt"), want: true},
+				{name: "system file", path: fsDisallowedPath()},
+				{name: "home dotfile", path: filepath.Join(home, ".bashrc")},
+				{name: "config dir", path: cfg, want: true},
+				{name: "new file in config dir", path: filepath.Join(cfg, "notes.txt"), want: true},
+				{name: "theme file", path: filepath.Join(cfg, "themes", "mine.toml"), want: true},
+				{name: "own data dir", path: filepath.Join(data, "plugins", "hello", "store.json"), want: true},
+				{name: "music dir", path: filepath.Join(home, "Music", "cliamp", "album", "01.mp3"), want: true},
+				{name: "plugins dir", path: plugins},
+				{name: "trust manifest", path: filepath.Join(plugins, ".trust.json")},
+				{name: "existing plugin", path: filepath.Join(plugins, "hello.lua")},
+				{name: "new plugin", path: filepath.Join(plugins, "evil.lua")},
+				{name: "dir plugin", path: filepath.Join(plugins, "pkg", "init.lua")},
+				{name: "new dir plugin", path: filepath.Join(plugins, "evil", "init.lua")},
+				{name: "config.toml", path: filepath.Join(cfg, "config.toml")},
+				{name: "config.toml through traversal", path: filepath.Join(cfg, "themes", "..", "config.toml")},
+				{name: "radios.toml", path: filepath.Join(cfg, "radios.toml")},
+				{name: "IPC socket", path: filepath.Join(cfg, "cliamp.sock")},
+				{name: "plugin log", path: filepath.Join(cfg, "plugins.log")},
+				{name: "plugins dir with other case", path: filepath.Join(cfg, "PLUGINS", "evil.lua"), want: !caseFolded},
+				{name: "config.toml with other case", path: filepath.Join(cfg, "Config.toml"), want: !caseFolded},
+				{name: "config.toml stream", path: filepath.Join(cfg, "config.toml::$DATA"), want: runtime.GOOS != "windows"},
+				{name: "symlink to plugins dir", path: filepath.Join(data, "to-plugins", "evil.lua"), link: true},
+				{name: "symlink to config.toml", path: filepath.Join(data, "to-config.toml"), link: true},
+				{name: "symlink out of allowed dir", path: filepath.Join(data, "to-etc", "new.txt"), link: true},
+			}
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					if tt.link && !linked {
+						t.Skip("symlinks are not available")
+					}
+					if got := rules.allows(tt.path); got != tt.want {
+						t.Errorf("allows(%q) = %v, want %v", tt.path, got, tt.want)
+					}
+				})
+			}
+		})
+	}
+}
+
+func mustMkdirAll(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -194,14 +306,5 @@ func TestFSMkdirRejectsOutsideAllowlist(t *testing.T) {
 	err := L.DoString(fmt.Sprintf("cliamp.fs.mkdir(%q)", fsDisallowedPath()))
 	if err == nil {
 		t.Fatal("expected error for path outside allowlist")
-	}
-}
-
-func TestMusicDirIsAllowed(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	path := filepath.Join(home, "Music", "cliamp", "album", "01.mp3")
-	if !isWriteAllowed(path) {
-		t.Errorf("~/Music/cliamp/... should be writable")
 	}
 }

@@ -176,7 +176,7 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Man
 
 	// Initialize plugin logger.
 	logDir, _ := appdir.Dir()
-	m.logger = newPluginLogger(filepath.Join(logDir, "plugins.log"))
+	m.logger = newPluginLogger(filepath.Join(logDir, pluginLogName))
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {

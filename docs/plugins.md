@@ -384,7 +384,7 @@ cliamp.fs.mkdir(path)             -- create directory (recursive)
 cliamp.fs.listdir(path)           --> {names}, err
 ```
 
-You can write only to the system temp directory (`/tmp/` on Unix), `~/.config/cliamp/`, `~/.local/share/cliamp/`, and `~/Music/cliamp/`. You can read from any path. On Windows, when `HOME` is unset, the config directory resolves to `%APPDATA%\cliamp`.
+You can write only to the system temp directory (`/tmp/` on Unix), `~/.config/cliamp/`, `~/.local/share/cliamp/`, and `~/Music/cliamp/`. In `~/.config/cliamp/`, you cannot write to the `plugins/` directory, `config.toml`, `radios.toml`, `cliamp.sock`, or `plugins.log`. You can read from any path. On Windows, when `HOME` is unset, the config directory resolves to `%APPDATA%\cliamp`.
 
 ### cliamp.json
 
@@ -663,7 +663,15 @@ You can use `os.time()`, `os.date()`, `os.clock()`, and `os.getenv()`.
 - `~/.local/share/cliamp/`
 - `~/Music/cliamp/`
 
-Writing outside these directories raises a Lua error. cliamp blocks directory traversal (`..`).
+These paths in `~/.config/cliamp/` stay read-only, so a plugin cannot approve plugins, change the exec allowlist, or hide its log:
+
+- `plugins/`, which contains the plugin files and `plugins/.trust.json`
+- `config.toml`
+- `radios.toml`
+- `cliamp.sock`
+- `plugins.log`
+
+Writing outside these directories, or to a read-only path, raises a Lua error. cliamp resolves symlinks and blocks directory traversal (`..`) before it checks the path. The `cwd` of `cliamp.exec` follows the same rules.
 
 ### Isolation
 
