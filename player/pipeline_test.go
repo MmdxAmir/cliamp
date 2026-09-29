@@ -77,6 +77,10 @@ func routeServer(t *testing.T, wavData []byte) *httptest.Server {
 			w.(http.Flusher).Flush()
 			<-r.Context().Done()
 		}
+		if strings.HasPrefix(r.URL.Path, "/ffmpeg/") {
+			chunked(garbage)
+			return
+		}
 		switch r.URL.Path {
 		case "/finite.wav":
 			finite(wavData)
@@ -324,5 +328,58 @@ func TestBuildPipelineRoutes(t *testing.T) {
 				t.Error("pipeline has no format")
 			}
 		})
+	}
+}
+
+// TestBuildPipelineSendsFFmpegFormatsPastNativeDecoders checks that every
+// extension that needs ffmpeg takes an ffmpeg route before the native
+// decoders, for local, HTTP and SSH sources.
+func TestBuildPipelineSendsFFmpegFormatsPastNativeDecoders(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell fixtures")
+	}
+	fixtures := installPipelineRouteFixtures(t)
+	srv := routeServer(t, nil)
+
+	for ext := range SupportedExts {
+		if !needsFFmpeg(ext) {
+			continue
+		}
+		local := filepath.Join(fixtures, "track"+ext)
+		if err := os.WriteFile(local, []byte("container bytes"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		tests := []struct {
+			name        string
+			path        string
+			wantDecoder string
+			wantErr     string
+		}{
+			{name: "local", path: local, wantDecoder: "*player.localFFmpegStreamer"},
+			{name: "http", path: srv.URL + "/ffmpeg/track" + ext, wantDecoder: "*player.ffmpegPipeStreamer"},
+			{name: "ssh", path: "ssh://host/music/track" + ext, wantErr: "SSH streaming does not support " + ext},
+		}
+		for _, tt := range tests {
+			t.Run(ext+"/"+tt.name, func(t *testing.T) {
+				p := &Player{sr: beep.SampleRate(44100), bitDepth: 16, resampleQuality: 1}
+				tp, err := p.buildPipeline(tt.path)
+				if tt.wantErr != "" {
+					if tp != nil {
+						tp.close()
+					}
+					if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+						t.Fatalf("buildPipeline() error = %v, want containing %q", err, tt.wantErr)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("buildPipeline() error = %v", err)
+				}
+				defer tp.close()
+				if got := fmt.Sprintf("%T", tp.decoder); got != tt.wantDecoder {
+					t.Fatalf("decoder = %s, want %s", got, tt.wantDecoder)
+				}
+			})
+		}
 	}
 }

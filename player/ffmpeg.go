@@ -543,12 +543,12 @@ var ffmpegAvailable = sync.OnceValue(func() bool {
 	return err == nil
 })
 
-func decodeNavFFmpeg(nb *navBuffer, sr beep.SampleRate, bitDepth int, totalFrames int) (*navFFmpegStreamer, beep.Format, error) {
+func decodeNavFFmpeg(nb *navBuffer, sr beep.SampleRate, bitDepth int) (*navFFmpegStreamer, beep.Format, error) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		return nil, beep.Format{}, fmt.Errorf("ffmpeg is required to decode this format — install it with your package manager")
 	}
 	_, _, precision := ffmpegPCMArgs(bitDepth)
-	s := &navFFmpegStreamer{ffmpegPipe: ffmpegPipe{total: totalFrames, f32: bitDepth == 32}, nb: nb, sr: sr}
+	s := &navFFmpegStreamer{ffmpegPipe: ffmpegPipe{f32: bitDepth == 32}, nb: nb, sr: sr}
 	fp, err := s.startPipe(0, false)
 	if err != nil {
 		return nil, beep.Format{}, err

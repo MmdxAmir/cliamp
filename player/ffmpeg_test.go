@@ -506,7 +506,7 @@ exec sleep 30
 	t.Setenv("FFMPEG_COUNT", countPath)
 
 	nb := newCompletedTestNavBuffer(t, []byte("HEADpayload"))
-	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16, 1000)
+	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16)
 	if err != nil {
 		t.Fatalf("decodeNavFFmpeg() error = %v", err)
 	}
@@ -544,7 +544,7 @@ printf '\000\100\000\300'
 	t.Setenv("FFMPEG_INPUTS", inputsPath)
 
 	nb := newCompletedTestNavBuffer(t, []byte("HEADpayload"))
-	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16, 1000)
+	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16)
 	if err != nil {
 		t.Fatalf("decodeNavFFmpeg() error = %v", err)
 	}
@@ -593,7 +593,7 @@ exec sleep 30
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	nb := newStalledTestNavBuffer(t)
-	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16, 1000)
+	decoder, _, err := decodeNavFFmpeg(nb, beep.SampleRate(100), 16)
 	if err != nil {
 		t.Fatalf("decodeNavFFmpeg() error = %v", err)
 	}

@@ -319,11 +319,9 @@ func (p *Player) isBufferedURL(path string) bool {
 	return p.bufferedURLMatch(path)
 }
 
-// decodeWithExt selects the decoder using an explicit extension.
-func decodeWithExt(rc io.ReadCloser, ext, path string, sr beep.SampleRate, bitDepth int) (beep.StreamSeekCloser, beep.Format, error) {
-	if needsFFmpeg(ext) {
-		return decodeFFmpegLocal(path, sr, bitDepth)
-	}
+// decodeWithExt selects the native decoder using an explicit extension.
+// Extensions that need ffmpeg never reach it.
+func decodeWithExt(rc io.ReadCloser, ext string) (beep.StreamSeekCloser, beep.Format, error) {
 	switch ext {
 	case ".wav":
 		return wav.Decode(rc)

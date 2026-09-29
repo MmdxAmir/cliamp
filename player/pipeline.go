@@ -170,7 +170,7 @@ func (p *Player) buildPipeline(path string) (*trackPipeline, error) {
 			if err != nil {
 				return nil, fmt.Errorf("segment buffer: %w", err)
 			}
-			decoder, format, err := decodeNavFFmpeg(nb, p.sr, p.bitDepth, 0)
+			decoder, format, err := decodeNavFFmpeg(nb, p.sr, p.bitDepth)
 			if err != nil {
 				nb.Close()
 				return nil, fmt.Errorf("decode segments: %w", err)
@@ -209,7 +209,7 @@ func (p *Player) buildPipeline(path string) (*trackPipeline, error) {
 			return nil, fmt.Errorf("navidrome buffer: %w", err)
 		}
 
-		decoder, format, err := decodeNavFFmpeg(nb, p.sr, p.bitDepth, 0)
+		decoder, format, err := decodeNavFFmpeg(nb, p.sr, p.bitDepth)
 		if err != nil {
 			nb.Close()
 			return nil, fmt.Errorf("decode navidrome: %w", err)
@@ -263,7 +263,7 @@ func (p *Player) buildPipeline(path string) (*trackPipeline, error) {
 		if err != nil {
 			return nil, fmt.Errorf("buffer source: %w", err)
 		}
-		decoder, format, err := decodeNavFFmpeg(nb, p.sr, p.bitDepth, 0)
+		decoder, format, err := decodeNavFFmpeg(nb, p.sr, p.bitDepth)
 		if err != nil {
 			nb.Close()
 			return nil, fmt.Errorf("decode source: %w", err)
@@ -372,14 +372,9 @@ func (p *Player) buildPipeline(path string) (*trackPipeline, error) {
 		}, nil
 	}
 
-	decoder, format, err := decodeWithExt(rc, ext, path, p.sr, p.bitDepth)
+	decoder, format, err := decodeWithExt(rc, ext)
 	if err != nil {
 		rc.Close()
-		// If the format already required ffmpeg (e.g., .m4a), decodeWithExt already
-		// tried it — don't invoke ffmpeg a second time.
-		if needsFFmpeg(ext) {
-			return nil, fmt.Errorf("decode: %w", err)
-		}
 		if isURL(path) {
 			decoder, format, err := p.decodeFFmpegURLStream(path)
 			if err != nil {

@@ -543,7 +543,7 @@ printf '10\n'
 				decoder, _, err = decodeFFmpegLocal(filepath.Join(dir, "track.m4a"), 100, 16)
 			case "nav":
 				nb := newCompletedTestNavBuffer(t, []byte("HEADpayload"))
-				decoder, _, err = decodeNavFFmpeg(nb, 100, 16, 1000)
+				decoder, _, err = decodeNavFFmpeg(nb, 100, 16)
 				waitForFileValue(t, countPath, "1")
 			}
 			if err != nil {
