@@ -28,6 +28,7 @@ import (
 var (
 	_ provider.PlaylistWriter           = (*Provider)(nil)
 	_ provider.PlaylistBatchWriter      = (*Provider)(nil)
+	_ provider.PlaylistTargetFilter     = (*Provider)(nil)
 	_ provider.PlaylistPrepender        = (*Provider)(nil)
 	_ provider.PlaylistCreator          = (*Provider)(nil)
 	_ provider.PlaylistSaver            = (*Provider)(nil)
@@ -938,6 +939,13 @@ func (p *Provider) AddTrackToPlaylist(_ context.Context, playlistID string, trac
 // Implements provider.PlaylistBatchWriter.
 func (p *Provider) AddTracksToPlaylist(_ context.Context, playlistID string, tracks []playlist.Track) (int, int, error) {
 	return p.AddTracks(playlistID, tracks)
+}
+
+// CanAddToPlaylist reports whether tracks can be added to pl. Recently
+// Played and Favorites are virtual and reject every add.
+// Implements provider.PlaylistTargetFilter.
+func (p *Provider) CanAddToPlaylist(pl playlist.PlaylistInfo) bool {
+	return writable(pl.ID) == nil
 }
 
 // SearchTracks does a case-insensitive fuzzy search across every saved playlist

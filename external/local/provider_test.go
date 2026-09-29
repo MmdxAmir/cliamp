@@ -967,6 +967,48 @@ func TestWritesRejectedForVirtualNames(t *testing.T) {
 	}
 }
 
+// The add-to-playlist pickers list only the entries that CanAddToPlaylist
+// accepts, so its answer must match what AddTracks does with each entry.
+func TestCanAddToPlaylistMatchesAddTracks(t *testing.T) {
+	dir := t.TempDir()
+	p := &Provider{
+		dir:       filepath.Join(dir, "playlists"),
+		history:   history.NewAt(filepath.Join(dir, "history.toml")),
+		favorites: favorites.NewAt(filepath.Join(dir, "favorites.toml")),
+	}
+	track := playlist.Track{Path: "/a.mp3"}
+	if err := p.history.Record(track, time.Now()); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if err := p.SavePlaylist("Mix", nil); err != nil {
+		t.Fatalf("SavePlaylist: %v", err)
+	}
+	lists, err := p.Playlists()
+	if err != nil {
+		t.Fatalf("Playlists: %v", err)
+	}
+
+	want := map[string]bool{
+		favorites.PlaylistName: false,
+		history.PlaylistName:   false,
+		"Mix":                  true,
+	}
+	if len(lists) != len(want) {
+		t.Fatalf("Playlists = %+v, want %d entries", lists, len(want))
+	}
+	for _, pl := range lists {
+		t.Run(pl.ID, func(t *testing.T) {
+			if got := p.CanAddToPlaylist(pl); got != want[pl.ID] {
+				t.Errorf("CanAddToPlaylist(%q) = %v, want %v", pl.ID, got, want[pl.ID])
+			}
+			_, _, err := p.AddTracks(pl.ID, []playlist.Track{{Path: "/b.mp3"}})
+			if (err == nil) != want[pl.ID] {
+				t.Errorf("AddTracks(%q) error = %v, want error: %v", pl.ID, err, !want[pl.ID])
+			}
+		})
+	}
+}
+
 func TestFavoritesManagerInterface(t *testing.T) {
 	p := newTestProviderWithFavorites(t)
 	fm, ok := any(p).(provider.FavoritesManager)
