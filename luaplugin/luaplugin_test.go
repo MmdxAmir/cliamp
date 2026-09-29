@@ -174,6 +174,52 @@ func TestLoadPluginCleanupStopsPendingTimers(t *testing.T) {
 	}
 }
 
+// A plugin that fails to load after it started a process must not deadlock
+// startup. Cleanup waits for the process, and its callbacks need the lock.
+func TestLoadFailureWithPendingExecDoesNotHang(t *testing.T) {
+	sleepBin, sleepArgs := execSleepCommand(10)
+	echoBin, echoArgs, _ := execOutputCommand()
+	tests := []struct {
+		name string
+		code string
+	}{
+		{"on_exit of a process that cleanup stops", fmt.Sprintf(`
+			cliamp.exec.run(%q, {%s}, {on_exit = function() end})
+			error("boom")
+		`, sleepBin, luaStringList(sleepArgs))},
+		{"on_stdout line that waits for the lock", fmt.Sprintf(`
+			cliamp.exec.run(%q, {%s}, {on_stdout = function() end, on_exit = function() end})
+			cliamp.sleep(0.2)
+			error("boom")
+		`, echoBin, luaStringList(echoArgs))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			m.execs = newExecManager(execTestAllowedBinaries())
+			path := filepath.Join(t.TempDir(), "failing.lua")
+			code := `plugin.register({name = "failing", type = "hook", permissions = {"exec"}})` + tt.code
+			if err := os.WriteFile(path, []byte(code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			done := make(chan error, 1)
+			go func() {
+				_, err := m.loadPlugin(path, "failing", nil)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				if err == nil || !strings.Contains(err.Error(), "boom") {
+					t.Fatalf("loadPlugin() error = %v, want boom", err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("loadPlugin did not return after a load error with a pending exec callback")
+			}
+		})
+	}
+}
+
 func TestLoadPluginErrorRemovesHooks(t *testing.T) {
 	m := newTestManager()
 	loadTestPluginExpectError(t, m, "bad", `

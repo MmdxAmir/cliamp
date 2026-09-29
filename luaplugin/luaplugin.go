@@ -291,23 +291,25 @@ func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin,
 
 	p.mu.Lock()
 	err := L.DoFile(path)
-	if err != nil {
-		m.cleanupPlugin(p)
-		p.mu.Unlock()
-		L.Close()
-		return nil, err
-	}
-
 	// If plugin.register() was never called, skip this file.
-	if p.Type == "" {
-		m.cleanupPlugin(p)
-		p.mu.Unlock()
-		L.Close()
-		return nil, nil
+	failed := err != nil || p.Type == ""
+	if failed {
+		// Set closed before the lock is released, so a timer or exec
+		// callback that waits for the lock returns without running.
+		p.closed = true
 	}
 	p.mu.Unlock()
+	if !failed {
+		return p, nil
+	}
 
-	return p, nil
+	// cleanupPlugin waits for the plugin's processes, and their callbacks
+	// take p.mu, so it must run without the lock.
+	m.cleanupPlugin(p)
+	p.mu.Lock()
+	L.Close()
+	p.mu.Unlock()
+	return nil, err
 }
 
 func (m *Manager) cleanupPlugin(p *Plugin) {
