@@ -52,7 +52,7 @@ Press `t` to show the theme in the list immediately.
 All values are six-digit hex strings, for example `"#ff5733"`. Help-key pill
 text switches between black and white for readable contrast.
 
-Important UI states also use stable text markers: `>`, `Q`, `★`, `!`, `WARN:`,
+Important UI states also use stable text markers: `>`, `Q`, `♥`, `!`, `WARN:`,
 and `ERR:`. These markers keep state and feedback distinct in monochrome
 terminals.
 

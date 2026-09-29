@@ -128,7 +128,7 @@ Each `[[track]]` section supports these keys:
 | `realtime` | No | Treat an HTTP URL as live radio. Reconnect after pause or disconnect. |
 | `embedded_lyrics` | No | Lyrics from local file tags |
 | `album_art_url` | No | Cached file URL for embedded album art |
-| `bookmark` | No | Bookmark flag |
+| `bookmark` | No | Legacy bookmark flag. cliamp reads it one time and copies the track into favorites. See [Favorites](#favorites). |
 
 cliamp treats HTTP/HTTPS paths as streams. Set `realtime = true` for live radio.
 cliamp keeps this flag when it saves the playlist.
@@ -159,10 +159,9 @@ Each `[[dir]]` section supports these keys:
 
 cliamp returns directory tracks in document order and sorts each directory by
 path. An explicit `[[track]]` with the same path overrides a directory scan. Use
-this to save a bookmark or custom metadata for a file. When you bookmark a
-directory track with TUI `f` or `cliamp playlist bookmark`, cliamp writes an
-explicit `[[track]]` entry so the bookmark remains. Unreadable or missing
-directories add no tracks.
+this to save custom metadata for a file. A favorite needs no explicit entry,
+because favorites.toml stores it. Unreadable or missing directories add no
+tracks.
 
 Use `--dir` to create or extend these playlists on the CLI:
 
@@ -354,8 +353,8 @@ cliamp playlist export "Name" --format m3u -o mix.m3u
 cliamp playlist import mix.pls --name "Imported"
 cliamp playlist show "Name" --json
 cliamp playlist remove "Name" --index 3
-cliamp playlist bookmark "Name" --index 3       # toggle bookmark flag
-cliamp playlist bookmarks                        # list all bookmarked tracks
+cliamp playlist favorite "Name" --index 3       # toggle the favorite of a track
+cliamp playlist favorites                        # list all favorite tracks
 cliamp playlist enrich "Name"                    # backfill duration/album metadata
 cliamp playlist delete "Name"
 ```
@@ -440,17 +439,48 @@ list screen. cliamp skips and reports directories that are already referenced.
 
 ## Favorites
 
-Press `n` on a track in the track list to toggle its favorite state. cliamp
-collects favorited tracks in the virtual **"Favorites"** playlist. This playlist
-always appears at the top of the playlist list, even when empty and regardless
-of the source playlist.
+Press `f` on a track to toggle its favorite state. The key works in the
+playback playlist, the playlist manager, a provider browser track list, and
+search results. cliamp collects favorite tracks in the virtual **"Favorites"**
+playlist. This playlist always appears at the top of the playlist list, even
+when empty and regardless of the source playlist.
 
 Favorites apply across playlists. A track that you favorite in "gym" appears in
 "Favorites", and the reverse is also true. `~/.config/cliamp/favorites.toml`
 stores the "Favorites" playlist. Like "Recently Played", it is a virtual
 playlist that you cannot rename, delete, or change in the playlist manager. Use
-`n` again to remove a favorite.
+`f` again to remove a favorite.
 
-Favorited tracks show a small red `♥` marker in the track list. The bookmark
-system is separate: it uses the `f` key and `★` marker. Bookmarks apply to one
-playlist. Favorites apply to all playlists.
+Favorite tracks show a small red `♥` marker in the track list. The marker
+column is always reserved, so a toggle does not move the titles.
+
+When the track comes from Spotify or Navidrome, cliamp also saves the favorite
+on that service. Spotify adds the track to Liked Songs. Navidrome stars the
+song. The local file stays the source of truth. If the service call fails, the
+local favorite stays and the status bar shows a warning with the provider
+name. See [spotify.md](spotify.md) and [navidrome.md](navidrome.md).
+
+On a radio station, `f` toggles the station favorite. On a podcast show, `f`
+subscribes or unsubscribes. In the country browser, `f` pins a country.
+
+### Bookmarks became favorites
+
+Older versions had a separate per-playlist bookmark on `f` with a `★` marker,
+and the favorite was on `n`. Now `f` is the only favorite key, and `n` has no
+action.
+
+The first time cliamp starts after the update, it copies each bookmarked track
+into favorites. It does this one time. It writes the favorites first, then
+creates `~/.config/cliamp/bookmarks_migrated`. Delete that file to copy the
+bookmarks again. cliamp does not rewrite your playlist files. Files that
+contain `bookmark = true` still load.
+
+`cliamp playlist bookmark` and `cliamp playlist bookmarks` still work. They
+are aliases of `cliamp playlist favorite` and `cliamp playlist favorites`.
+These CLI commands change only the local favorites. They do not call Spotify
+or Navidrome:
+
+```sh
+cliamp playlist favorite "gym" --index 3
+cliamp playlist bookmarks
+```

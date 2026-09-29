@@ -107,7 +107,7 @@ dates, falling back to feed order.
 Press `f` on a show in the provider list, category show list, or `Ctrl+F` results
 to subscribe or unsubscribe. Subscribed shows appear under **Subscriptions**
 and are marked `[subscribed]` in the provider list. On an episode in the main
-playlist, `f` still toggles a bookmark, not a subscription.
+playlist, `f` toggles the favorite ♥ of the episode, not a subscription.
 
 Subscriptions are saved atomically in `podcast_subscriptions.json` in the
 [config directory](configuration.md#config-directory), normally

@@ -54,7 +54,8 @@ are in `provider/interfaces.go`.
 | `PlaylistCreator` | Create new playlist | `CreatePlaylist(ctx, name)` |
 | `PlaylistDeleter` | Remove playlists/tracks | `DeletePlaylist(name)`, `RemoveTrack(name, index)` |
 | `CustomStreamer` | Custom URI decode pipeline | `URISchemes()`, `NewStreamer(uri)` |
-| `FavoriteToggler` | Favorite toggling | `ToggleFavorite(id)` |
+| `FavoriteToggler` | Favorite toggling for provider list items, such as stations and shows | `ToggleFavorite(id)` |
+| `TrackFavoriter` | Copy a track's ♥ favorite to the service, such as liked or starred songs. The UI calls it in a `tea.Cmd` and keeps the local favorite when it fails. | `CanFavoriteTrack(track)`, `SetTrackFavorite(ctx, track, favorite) error` |
 | `Closer` | Cleanup on shutdown | `Close()` |
 | `Authenticator` | Interactive sign-in flow | `Authenticate() error` (in `playlist` package) |
 | `ResumeTarget` | Server-side resume position | `ResumeTarget(playlistID, tracks)` |

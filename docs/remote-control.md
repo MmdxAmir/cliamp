@@ -92,8 +92,8 @@ changes when the live playlist or play-next list changes. Position-only playback
 ticks do not create events. Send `if_revision` with destructive live-playlist or
 play-next operations to reject stale GUI actions with the `conflict` error code.
 
-`track` keeps `provider_meta`, embedded playback flags, bookmark state, and
-directory-source state. A GUI can send a provider result through `track.play`,
+`track` keeps `provider_meta`, embedded playback flags, the legacy bookmark
+flag, and directory-source state. A GUI can send a provider result through `track.play`,
 `track.queue`, `playlist.add`, `playlist.add_many`, or `playlist.replace`
 without losing provider identity.
 
@@ -114,6 +114,10 @@ Run `cliamp remote capabilities` to get the current machine-readable list.
 
 `queue.*` applies to the live playlist. `playnext.*` applies only to the
 play-next list. They use separate zero-based indexes.
+
+`playlist.bookmark` keeps its name for existing scripts. It toggles the favorite
+♥ of `track`, as `f` does in the TUI. It needs a known `provider` key, but it
+does not change the playlist.
 
 Use IDs returned by `provider.playlists` for subsequent provider operations.
 Radio favorite IDs are stable `f:<station URL>` values, not positional

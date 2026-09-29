@@ -177,8 +177,8 @@ cliamp playlist doctor "Name" --fix            # prune missing local files
 cliamp playlist export "Name" -o mix.m3u       # export as M3U
 cliamp playlist export "Name" --format pls     # export as PLS to stdout
 cliamp playlist import mix.m3u --name "Name"   # import local M3U/M3U8/PLS
-cliamp playlist bookmark "Name" --index 3      # toggle bookmark flag
-cliamp playlist bookmarks                       # list bookmarked tracks
+cliamp playlist favorite "Name" --index 3      # toggle the favorite of a track
+cliamp playlist favorites                       # list favorite tracks
 cliamp playlist enrich "Name"                   # probe duration/album 
 cliamp playlist enrich "Name" --source metadata   # probe duration/album (forces to use the file's metadata as source)
 cliamp playlist delete "Name"                   # delete entire playlist
