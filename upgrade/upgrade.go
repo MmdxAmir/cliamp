@@ -15,11 +15,13 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 const repo = "bjarneo/cliamp"
 
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+var httpClient = httpclient.NewAPI(30 * time.Second)
 
 type release struct {
 	TagName    string `json:"tag_name"`

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 func testHash(data []byte) string {
@@ -40,10 +42,12 @@ func installTestClient(t *testing.T, serverURL string) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
+	// The rewriter sits in front of the production transport, so the
+	// tests see the headers that the real client sends.
 	old := httpClient
 	httpClient = &http.Client{
 		Timeout:   10 * time.Second,
-		Transport: rewriter{target: u, rt: http.DefaultTransport},
+		Transport: rewriter{target: u, rt: old.Transport},
 	}
 	t.Cleanup(func() { httpClient = old })
 }
@@ -52,6 +56,9 @@ func TestLatestVersionSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/repos/") || !strings.HasSuffix(r.URL.Path, "/releases/latest") {
 			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		if ua := r.UserAgent(); ua != httpclient.UserAgent {
+			t.Errorf("User-Agent = %q, want %q", ua, httpclient.UserAgent)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"tag_name":"v1.2.3"}`))
