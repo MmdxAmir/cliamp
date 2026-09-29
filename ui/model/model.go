@@ -373,6 +373,8 @@ type Model struct {
 	pendingURLs []string
 	feedLoading bool
 
+	spinnerTicking bool // a spinnerTickMsg is pending
+
 	visVolumeLinked bool // when true, visualizer samples are scaled by volume gain
 	visRows         int  // configured visualizer height at the full tier; 0 uses ui.DefaultVisRows
 

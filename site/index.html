@@ -447,7 +447,7 @@ footer a{color:var(--fg-2)}
       </div>
       <div class="feat">
         <div class="feat-k">PLAYLISTS &amp; QUEUE</div>
-        <p>TOML playlists with live <b>[[dir]]</b> folder sources, M3U/M3U8/PLS import and export, cross-playlist favorites, a play-next queue that reads like the playlist and toggles in place with <kbd>A</kbd>, saved playlists you can append to what is playing or put the current track at the front of, and undo.</p>
+        <p>TOML playlists with live <b>[[dir]]</b> folder sources, M3U/M3U8/PLS import and export, cross-playlist favorites, a play-next queue that reads like the playlist and toggles in place with <kbd>A</kbd>, a shuffle view that lists tracks in the order they play, saved playlists you can append to what is playing or put the current track at the front of, and undo.</p>
       </div>
       <div class="feat">
         <div class="feat-k">REMOTE CONTROL</div>
@@ -515,7 +515,7 @@ footer a{color:var(--fg-2)}
   <section id="keys" class="keys">
     <div>
       <h2>Keyboard first</h2>
-      <p class="sub">Everything is one keystroke away — no mouse, no menus. Vim-style <code>j</code>/<code>k</code> movement, <kbd>Tab</kbd> cycles the controls, and <kbd>?</kbd> or <kbd>Ctrl+K</kbd> shows the full keymap for the screen you are on. <a href="https://docs.cliamp.stream/docs/cliamp/keybindings">All keybindings ↗</a></p>
+      <p class="sub">Everything is one keystroke away — no mouse, no menus. Vim-style <code>j</code>/<code>k</code> movement, <kbd>Tab</kbd> cycles the controls, and <kbd>?</kbd> or <kbd>Ctrl+K</kbd> shows the full keymap for the screen you are on. Select a command and press <kbd>Enter</kbd> to run it. <a href="https://docs.cliamp.stream/docs/cliamp/keybindings">All keybindings ↗</a></p>
     </div>
     <div id="keys-grid" class="keys-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-content:start"></div>
   </section>
@@ -667,8 +667,8 @@ var KIND={streaming:"var(--accent)","self-hosted":"var(--warm)",local:"var(--blu
 var KEYS=[
   ["Space","play / pause"],["> / <","next / prev"],["+ / -","volume"],["← / →","seek 5s"],
   ["e","EQ preset"],["v / V","visualizer / full screen"],["t","theme, or hide the title in full screen"],["y","lyrics"],
-  ["/","search playlist"],["Ctrl+F","search provider"],["z / r","shuffle / repeat"],["a","queue next"],
-  ["o","file browser"],["R / O","radio / podcasts"],["?","all keybindings"]
+  ["/","filter playlist"],["Ctrl+F","search provider or YouTube"],["z / r","shuffle / repeat"],["a","queue next"],
+  ["o","file browser"],["R / O","radio / podcasts"],["? / Ctrl+K","find and run commands"]
 ];
 
 var COMMUNITY=[
