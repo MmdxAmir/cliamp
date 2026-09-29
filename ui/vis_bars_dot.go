@@ -18,7 +18,7 @@ func (v *Visualizer) renderBarsDot(bands []float64) string {
 
 		for b := range bandCount {
 			charsPerBand := visBandWidth(bandCount, b)
-			for c := range charsPerBand {
+			for range charsPerBand {
 				var braille rune = '\u2800'
 
 				for dr := range 4 {
@@ -39,9 +39,6 @@ func (v *Visualizer) renderBarsDot(bands []float64) string {
 					curTag = tag
 				}
 				run.WriteRune(braille)
-
-				// Add gap between characters within the same band.
-				_ = c
 			}
 
 			if b < bandCount-1 {

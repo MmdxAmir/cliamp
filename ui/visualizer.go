@@ -408,7 +408,7 @@ type Visualizer struct {
 	sr              float64
 	Mode            VisMode
 	Cols            int       // display width in terminal cells
-	Rows            int       // display height in terminal rows (default 5)
+	Rows            int       // display height in terminal rows (default DefaultVisRows)
 	waveBuf         []float64 // raw samples for wave mode
 	waveYBuf        []int     // reusable y-position buffer for wave rendering
 	frame           uint64    // elapsed-time animation clock
@@ -806,9 +806,6 @@ func (v *Visualizer) ConsumeRefresh() bool {
 
 // SampleBuf returns the internal sample buffer (for slicing after SamplesInto).
 func (v *Visualizer) SampleBuf() []float64 { return v.sampleBuf }
-
-// Bands returns the current spectrum band values.
-func (v *Visualizer) Bands() []float64 { return v.bands }
 
 // SmoothedBands returns the eased per-frame band values used by spectrum
 // renderers. Falls back to the raw bands until smoothing has run at least

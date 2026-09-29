@@ -58,7 +58,7 @@ func (d *geyserDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	// most heavily so a heavy bassline alone keeps the column flowing.
 	steady := bass*0.85 + mid*0.25 + high*0.08
 	for i := 0; i < int(steady*6); i++ {
-		d.spawn(jetX, dotRows-1, jetSpread, 1.5+steady*4.5, &bass, &mid, &high)
+		d.spawn(jetX, dotRows-1, jetSpread, 1.5+steady*4.5, bass, mid)
 	}
 
 	// Transient kick: shoot a thick burst. Triggers on smaller deltas now so
@@ -66,7 +66,7 @@ func (d *geyserDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	if delta > 0.06 && bass > 0.15 {
 		burst := 40 + int(delta*180)
 		for i := 0; i < burst; i++ {
-			d.spawn(jetX, dotRows-1, jetSpread*2, 4.5+delta*10.0+bass*4.0, &bass, &mid, &high)
+			d.spawn(jetX, dotRows-1, jetSpread*2, 4.5+delta*10.0+bass*4.0, bass, mid)
 		}
 	}
 
@@ -93,19 +93,19 @@ func (d *geyserDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	d.particles = live
 }
 
-func (d *geyserDriver) spawn(x, y, spread int, vy float64, bass, mid, high *float64) {
+// spawn launches one particle. Its tier is drawn from the bass and mid shares,
+// and the rest of the draws stay on the low tier.
+func (d *geyserDriver) spawn(x, y, spread int, vy, bass, mid float64) {
 	jx := x + int(rng64(&d.rng)*float64(2*spread+1)) - spread
 	vyJitter := vy * (0.6 + rng64(&d.rng)*0.5)
 	vxJitter := (rng64(&d.rng) - 0.5) * (1.0 + vy*0.4)
 	r := rng64(&d.rng)
 	var tier int8 = 1
 	switch {
-	case r < *bass:
+	case r < bass:
 		tier = 3
-	case r < *bass+*mid:
+	case r < bass+mid:
 		tier = 2
-	default:
-		_ = high
 	}
 	d.particles = append(d.particles, geyserParticle{
 		x: float64(jx), y: float64(y),
