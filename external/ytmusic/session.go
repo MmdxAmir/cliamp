@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/authurl"
@@ -38,6 +39,15 @@ func DeleteCreds() (bool, error) { return credsFile.Delete() }
 // CallbackPort is the fixed port for the OAuth2 callback server.
 // Must match the redirect URI registered in the Google Cloud console.
 const CallbackPort = 19873
+
+// oauthHTTPClient sends OAuth token requests. The timeout stops a stalled
+// token endpoint from blocking a provider call without limit.
+var oauthHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
+// oauthContext makes oauth2 send its token requests through oauthHTTPClient.
+func oauthContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, oauth2.HTTPClient, oauthHTTPClient)
+}
 
 // authURLObserver receives the OAuth URL when interactive auth begins.
 var authURLObserver authurl.Observer
@@ -100,17 +110,9 @@ func NewSessionSilent(ctx context.Context, clientID, clientSecret string) (*Sess
 
 // newSessionFromStored creates a session from stored credentials via silent refresh.
 func newSessionFromStored(ctx context.Context, clientID, clientSecret string, creds *storedCreds) (*Session, error) {
-	token, err := silentTokenRefresh(clientID, clientSecret, creds.RefreshToken)
+	token, err := silentTokenRefresh(ctx, clientID, clientSecret, creds.RefreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic: silent refresh: %w", err)
-	}
-
-	conf := googleOAuthConfig(clientID, clientSecret)
-	ts := conf.TokenSource(ctx, token)
-
-	svc, err := youtube.NewService(ctx, option.WithTokenSource(ts))
-	if err != nil {
-		return nil, fmt.Errorf("ytmusic: create service: %w", err)
 	}
 
 	// Re-save credentials (refresh token may have been rotated).
@@ -122,20 +124,34 @@ func newSessionFromStored(ctx context.Context, clientID, clientSecret string, cr
 		}
 	}
 
+	return newTokenSession(ctx, clientID, clientSecret, token, refreshToken)
+}
+
+// newTokenSession builds a Session around token. ctx bounds only the service
+// setup. oauth2 keeps the context of a token source for every later refresh,
+// so the token source gets a context that does not end.
+func newTokenSession(ctx context.Context, clientID, clientSecret string, token *oauth2.Token, cacheIdentity string) (*Session, error) {
+	ts := googleOAuthConfig(clientID, clientSecret).TokenSource(oauthContext(context.Background()), token)
+
+	svc, err := youtube.NewService(ctx, option.WithTokenSource(ts))
+	if err != nil {
+		return nil, fmt.Errorf("ytmusic: create service: %w", err)
+	}
+
 	return &Session{
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		service:      svc,
 		tokenSource:  ts,
-		cacheScope:   oauthCacheScope(clientID, refreshToken),
+		cacheScope:   oauthCacheScope(clientID, cacheIdentity),
 	}, nil
 }
 
 // silentTokenRefresh uses a stored refresh token to get a new access token
 // without opening a browser.
-func silentTokenRefresh(clientID, clientSecret, refreshToken string) (*oauth2.Token, error) {
+func silentTokenRefresh(ctx context.Context, clientID, clientSecret, refreshToken string) (*oauth2.Token, error) {
 	conf := googleOAuthConfig(clientID, clientSecret)
-	src := conf.TokenSource(context.Background(), &oauth2.Token{RefreshToken: refreshToken})
+	src := conf.TokenSource(oauthContext(ctx), &oauth2.Token{RefreshToken: refreshToken})
 	return src.Token()
 }
 
