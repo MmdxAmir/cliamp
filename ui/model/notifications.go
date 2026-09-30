@@ -27,7 +27,7 @@ func (m *Model) attachNotifier(notifier playback.Notifier) {
 
 // notifyPlugins emits a playback state event to Lua plugins.
 func (m *Model) notifyPlugins() {
-	if m.luaMgr == nil || !m.luaMgr.HasHooks() {
+	if m.luaMgr == nil || !m.luaMgr.HasHook(luaplugin.EventPlaybackState) {
 		return
 	}
 	track, _ := m.currentPlaybackTrack()
@@ -133,7 +133,7 @@ func (m *Model) stopByUser() {
 // nowPlaying fires a now-playing notification for the given track if configured.
 func (m *Model) nowPlaying(track playlist.Track) {
 	m.playingTrackStarted = true
-	if m.luaMgr != nil && m.luaMgr.HasHooks() {
+	if m.luaMgr != nil && m.luaMgr.HasHook(luaplugin.EventTrackChange) {
 		m.luaMgr.Emit(luaplugin.EventTrackChange, trackToMap(track))
 	}
 
@@ -188,7 +188,7 @@ func (m *Model) maybeScrobble(track playlist.Track, elapsed, duration time.Durat
 	var refresh tea.Cmd
 
 	// Emit scrobble event to Lua plugins for all tracks (not just Navidrome).
-	if m.luaMgr != nil && m.luaMgr.HasHooks() && pastThreshold {
+	if m.luaMgr != nil && pastThreshold && m.luaMgr.HasHook(luaplugin.EventTrackScrobble) {
 		data := trackToMap(track)
 		data["played_secs"] = elapsed.Seconds()
 		m.luaMgr.Emit(luaplugin.EventTrackScrobble, data)

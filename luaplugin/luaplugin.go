@@ -687,18 +687,6 @@ func (m *Manager) PluginCount() int {
 	return len(m.plugins)
 }
 
-// HasHooks reports whether any plugins have registered hooks.
-func (m *Manager) HasHooks() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, hooks := range m.hooks {
-		if len(hooks) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 // HasHook reports whether any plugin registered for a specific event. Callers
 // use this to skip building event payloads (and any locks they require) when no
 // plugin is listening for that particular event.

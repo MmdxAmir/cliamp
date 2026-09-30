@@ -518,14 +518,14 @@ func TestEmitMultipleHooks(t *testing.T) {
 	}
 }
 
-func TestPluginCountAndHasHooks(t *testing.T) {
+func TestPluginCountAndHasHook(t *testing.T) {
 	m := newTestManager()
 
 	if m.PluginCount() != 0 {
 		t.Fatalf("PluginCount() = %d, want 0", m.PluginCount())
 	}
-	if m.HasHooks() {
-		t.Fatal("HasHooks() = true, want false")
+	if m.HasHook(EventAppStart) {
+		t.Fatal("HasHook(app.start) = true, want false")
 	}
 
 	loadTestPlugin(t, m, "counter", `
@@ -536,8 +536,11 @@ func TestPluginCountAndHasHooks(t *testing.T) {
 	if m.PluginCount() != 1 {
 		t.Fatalf("PluginCount() = %d, want 1", m.PluginCount())
 	}
-	if !m.HasHooks() {
-		t.Fatal("HasHooks() = false, want true")
+	if !m.HasHook(EventAppStart) {
+		t.Fatal("HasHook(app.start) = false, want true")
+	}
+	if m.HasHook(EventTrackChange) {
+		t.Fatal("HasHook(track.change) = true, want false")
 	}
 }
 
