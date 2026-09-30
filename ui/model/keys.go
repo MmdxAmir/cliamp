@@ -656,16 +656,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return refresh
 
 	case ">", ".":
-		refresh := m.scrobbleCurrent()
-		cmd := m.nextTrack()
-		m.notifyPlayback()
-		return tea.Batch(refresh, cmd)
+		return m.skipNext()
 
 	case "<", ",":
-		refresh := m.scrobbleCurrent()
-		cmd := m.prevTrack()
-		m.notifyPlayback()
-		return tea.Batch(refresh, cmd)
+		return m.skipPrev()
 
 	case "left":
 		if m.focus == focusEQ {
@@ -772,24 +766,17 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 
 	case "+", "=":
-		m.player.SetVolume(m.player.Volume() + 1)
-		m.notifyPlayback()
+		m.adjustVolume(1)
 
 	case "-":
-		m.player.SetVolume(m.player.Volume() - 1)
-		m.notifyPlayback()
+		m.adjustVolume(-1)
 
 	case "r":
 		const repeatModes = playlist.RepeatOne + 1
-		m.playlist.SetRepeat((m.playlist.Repeat() + repeatStep + repeatModes) % repeatModes)
-		_ = m.saveConfigString("repeat", m.playlist.Repeat().String())
-		return m.rearmPreload()
+		return m.setRepeat((m.playlist.Repeat() + repeatStep + repeatModes) % repeatModes)
 
 	case "z":
-		m.playlist.ToggleShuffle()
-		m.adjustScroll()
-		_ = m.saveConfigBool("shuffle", m.playlist.Shuffled())
-		return m.rearmPreload()
+		return m.setShuffle(!m.playlist.Shuffled())
 
 	case "tab":
 		m.focus = m.nextMainFocus(m.focus)
@@ -942,12 +929,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.simplified {
 			break
 		}
-		m.vis.CycleMode()
-		m.vis.RequestRefresh()
-		m.refreshChrome()
-		m.applyHeightMode()
-		m.adjustScroll()
-		_ = m.saveConfigString("visualizer", m.vis.ModeName())
+		_ = m.cycleVisualizer()
 
 	case "ctrl+v":
 		if m.simplified {
@@ -1015,15 +997,9 @@ func (m *Model) handleFullVisualizerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.notifyPlayback()
 		return cmd
 	case ">", ".":
-		refresh := m.scrobbleCurrent()
-		cmd := m.nextTrack()
-		m.notifyPlayback()
-		return tea.Batch(refresh, cmd)
+		return m.skipNext()
 	case "<", ",":
-		refresh := m.scrobbleCurrent()
-		cmd := m.prevTrack()
-		m.notifyPlayback()
-		return tea.Batch(refresh, cmd)
+		return m.skipPrev()
 	case "left":
 		return m.doSeek(-5 * time.Second)
 	case "shift+left":
@@ -1033,15 +1009,11 @@ func (m *Model) handleFullVisualizerKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "shift+right":
 		return m.doSeek(m.seekStepLarge)
 	case "+", "=":
-		m.player.SetVolume(m.player.Volume() + 1)
-		m.notifyPlayback()
+		m.adjustVolume(1)
 	case "-":
-		m.player.SetVolume(m.player.Volume() - 1)
-		m.notifyPlayback()
+		m.adjustVolume(-1)
 	case "v":
-		m.vis.CycleMode()
-		m.vis.RequestRefresh()
-		m.refreshChrome()
+		_ = m.cycleVisualizer()
 	case "t":
 		// Hide the episode name so the full-screen visualizer can be put on a
 		// shared screen without naming what is playing.

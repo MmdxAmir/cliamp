@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 )
 
 // armedModel plays a.mp3 one second before its end, with b.mp3 next and
@@ -163,4 +165,164 @@ func TestV2ModeChangeRearmsPreloadAndReportsSaveError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// verbReporter records the tracks that a verb scrobbles.
+type verbReporter struct {
+	plainProv
+	scrobbles chan string
+}
+
+func (r *verbReporter) CanReportPlayback(playlist.Track) bool { return true }
+
+func (r *verbReporter) ReportNowPlaying(playlist.Track, time.Duration, bool) error { return nil }
+
+func (r *verbReporter) ReportScrobble(track playlist.Track, _, _ time.Duration, _ bool) error {
+	r.scrobbles <- track.Path
+	return nil
+}
+
+// verbState is the part of the Model that an action verb changes.
+type verbState struct {
+	index, cursor int
+	volume        float64
+	shuffle       bool
+	repeat        playlist.RepeatMode
+	vis           string
+	saved         string
+	preload       string
+	clears        int
+	notified      bool
+	scrobbled     string
+	pluginState   bool
+}
+
+// Each action verb reaches the same end state from each entry point: the
+// main keys, the full-screen visualizer keys, a playback message from media
+// controls or Lua, and a V2 request.
+func TestVerbEntryPointsReachTheSameState(t *testing.T) {
+	key := func(text string) tea.Msg { return tea.KeyPressMsg{Text: text} }
+	fullVis := func(text string) tea.Msg { return fullVisKey{tea.KeyPressMsg{Text: text}} }
+	for _, verb := range []struct {
+		name string
+		// skips is true for a verb that leaves the track, so it scrobbles.
+		// notifies is true when the verb tells the media controls and the
+		// playback.state plugin hook.
+		skips, notifies bool
+		entries         map[string]tea.Msg
+		// done reports whether the key state shows the verb.
+		done func(verbState) bool
+	}{
+		{name: "skipNext", skips: true, notifies: true, entries: map[string]tea.Msg{
+			"key": key(">"), "full-screen key": fullVis(">"),
+		}, done: func(s verbState) bool { return s.index == 1 && s.cursor == 1 && s.scrobbled == "a.mp3" }},
+		{name: "skipPrev", skips: true, notifies: true, entries: map[string]tea.Msg{
+			"key": key("<"), "full-screen key": fullVis("<"),
+		}, done: func(s verbState) bool { return s.index == 0 && s.scrobbled == "a.mp3" }},
+		{name: "setShuffle", entries: map[string]tea.Msg{
+			"key": key("z"),
+		}, done: func(s verbState) bool { return s.shuffle && s.saved == "map[shuffle:true]" && s.clears == 1 }},
+		{name: "setRepeat", entries: map[string]tea.Msg{
+			"key": key("r"),
+		}, done: func(s verbState) bool {
+			return s.repeat == playlist.RepeatAll && s.saved == `map[repeat:"All"]` && s.clears == 1
+		}},
+		{name: "cycleVisualizer", entries: map[string]tea.Msg{
+			"key": key("v"), "full-screen key": fullVis("v"),
+		}, done: func(s verbState) bool { return s.vis == "BarsDot" && s.saved == `map[visualizer:"BarsDot"]` }},
+		{name: "adjustVolume", notifies: true, entries: map[string]tea.Msg{
+			"key": key("+"), "full-screen key": fullVis("+"),
+		}, done: func(s verbState) bool { return s.volume == 1 }},
+	} {
+		t.Run(verb.name, func(t *testing.T) {
+			states := map[string]verbState{}
+			for entry, msg := range verb.entries {
+				states[entry] = runVerbEntry(t, msg, verb.skips, verb.notifies)
+			}
+			want := states["key"]
+			if !verb.done(want) {
+				t.Fatalf("key state = %+v, want the verb done", want)
+			}
+			if verb.notifies && (!want.notified || !want.pluginState) {
+				t.Fatalf("key state = %+v, want the media controls and the playback.state hook told", want)
+			}
+			for entry, got := range states {
+				if got != want {
+					t.Errorf("%s: state = %+v, want the key state %+v", entry, got, want)
+				}
+			}
+		})
+	}
+}
+
+// fullVisKey is a key press that runVerbEntry sends while the full-screen
+// visualizer is open.
+type fullVisKey struct{ tea.KeyPressMsg }
+
+// runVerbEntry sends msg to a Model that plays a.mp3 near its end, with
+// b.mp3 armed next, and returns the state that msg leaves.
+func runVerbEntry(t *testing.T, msg tea.Msg, skips, notifies bool) verbState {
+	t.Helper()
+	mgr, messages, _ := newReportTestPlugin(t, "playback.state", `ev.status`)
+	engine := &settingsFocusEngine{playbackFakeEngine: playbackFakeEngine{playing: true, duration: 180 * time.Second, position: 179 * time.Second, hasPreload: true}}
+	reporter := &verbReporter{scrobbles: make(chan string, 4)}
+	notifier := &fakeNotifier{}
+	saver := &recordingSaver{}
+	m := newColumnTestModel(100, 30)
+	m.playlist.Replace([]playlist.Track{
+		{Title: "A", Path: "a.mp3", DurationSecs: 180},
+		{Title: "B", Path: "b.mp3", DurationSecs: 180},
+		{Title: "C", Path: "c.mp3", DurationSecs: 180},
+	})
+	m.playlist.SetIndex(0)
+	m.player, m.notifier, m.configSaver, m.luaMgr = engine, notifier, saver, mgr
+	m.providers = []provider.Entry{{Key: "p", Name: "P", Provider: reporter}}
+	m.playingTrack, m.playingTrackActive, m.playingTrackStarted = playlist.Track{Title: "A", Path: "a.mp3", DurationSecs: 180}, true, true
+	m.preloadFor = "b.mp3"
+
+	switch msg := msg.(type) {
+	case fullVisKey:
+		m.fullVis = true
+		m.recomputeLayout()
+		next, _ := m.Update(msg.KeyPressMsg)
+		m = next.(Model)
+	case V2RequestMsg:
+		next, _ := m.Update(msg)
+		m = next.(Model)
+		if job, _ := msg.Jobs.Get(msg.JobID); job.State != ipc.JobSucceeded {
+			t.Fatalf("V2 job = %+v, want success", job)
+		}
+	default:
+		next, _ := m.Update(msg)
+		m = next.(Model)
+	}
+
+	state := verbState{
+		index:    m.playlist.Index(),
+		cursor:   m.plCursor,
+		volume:   engine.volume,
+		shuffle:  m.playlist.Shuffled(),
+		repeat:   m.playlist.Repeat(),
+		vis:      m.vis.ModeName(),
+		saved:    fmt.Sprint(saver.saved),
+		clears:   engine.clearPreloadCalls,
+		notified: len(notifier.updates) > 0,
+	}
+	if m.preloading || engine.hasPreload {
+		state.preload = m.preloadFor
+	}
+	if skips {
+		select {
+		case state.scrobbled = <-reporter.scrobbles:
+		case <-time.After(2 * time.Second):
+		}
+	}
+	if notifies {
+		select {
+		case <-messages:
+			state.pluginState = true
+		case <-time.After(2 * time.Second):
+		}
+	}
+	return state
 }
