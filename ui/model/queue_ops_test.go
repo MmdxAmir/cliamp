@@ -103,6 +103,24 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 			},
 		},
 		{
+			// After an append the queue mirrors no playlist, so no file
+			// keeps the track and the row goes.
+			name:   "remove a track of a directory source from an unsaved queue",
+			cursor: 1,
+			setup: func(m *Model) {
+				track, _ := m.playlist.Track(1)
+				track.DirSourced = true
+				m.playlist.SetTrack(1, track)
+				m.appendTracks(d)
+			},
+			key:  func(*Model) tea.Msg { return tea.KeyPressMsg{Text: "x"} },
+			v2Op: "queue.remove", v2: ipc.Request{Index: 1},
+			plugin: PluginQueueMsg{Op: "remove", Index: 1},
+			want: func(s queueOpState) bool {
+				return s.queue == "a c d" && s.saved == "a b c" && s.cursor == 1 && s.loaded == "" && s.undo && s.undoHint && s.preload
+			},
+		},
+		{
 			// Favorites is not a playlist file, so only the queue changes.
 			name:   "remove from a loaded Favorites",
 			loaded: favorites.PlaylistName,

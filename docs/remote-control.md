@@ -136,7 +136,8 @@ follow the same rules:
   list changes only the live playlist.
 - `queue.remove` records no undo, so it keeps the `Ctrl+Z` undo of the last
   TUI edit.
-- `queue.remove` fails with `conflict` for a track that a directory source
+- While the live playlist mirrors a saved local playlist, `queue.remove`
+  fails with `conflict` for a track that a directory source of that playlist
   supplies. A removal of the playing track stops playback.
 - `queue` appends a track. The live playlist then mirrors no saved playlist.
 - When an edit changes the next track, cliamp re-arms the gapless preload.
