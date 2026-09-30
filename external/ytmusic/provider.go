@@ -10,8 +10,15 @@ import (
 	"time"
 
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 
 	"google.golang.org/api/youtube/v3"
+)
+
+var (
+	_ provider.Closer = (*YouTubeMusicProvider)(nil)
+	_ provider.Closer = (*YouTubeProvider)(nil)
+	_ provider.Closer = (*YouTubeAllProvider)(nil)
 )
 
 // itemInfo holds metadata for a single video in a playlist.
@@ -147,6 +154,9 @@ func (b *baseProvider) refresh() {
 	saveSnapshot(snap)
 }
 
+// close ends a sign-in in progress and drops the session. The three
+// providers share one base, and the Close of each one calls close, so close
+// must be safe to call more than once.
 func (b *baseProvider) close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -506,7 +516,7 @@ type YouTubeProvider struct {
 
 func (p *YouTubeProvider) Name() string        { return "YouTube" }
 func (p *YouTubeProvider) Authenticate() error { return p.base.authenticate() }
-func (p *YouTubeProvider) Close()              { /* shared base; closed via music provider */ }
+func (p *YouTubeProvider) Close()              { p.base.close() }
 func (p *YouTubeProvider) Refresh()            { p.base.refresh() }
 func (p *YouTubeProvider) Tracks(id string) ([]playlist.Track, error) {
 	return p.base.tracks(id)
@@ -536,7 +546,7 @@ type YouTubeAllProvider struct {
 
 func (p *YouTubeAllProvider) Name() string        { return "YouTube (All)" }
 func (p *YouTubeAllProvider) Authenticate() error { return p.base.authenticate() }
-func (p *YouTubeAllProvider) Close()              { /* shared base; closed via music provider */ }
+func (p *YouTubeAllProvider) Close()              { p.base.close() }
 func (p *YouTubeAllProvider) Refresh()            { p.base.refresh() }
 func (p *YouTubeAllProvider) Tracks(id string) ([]playlist.Track, error) {
 	return p.base.tracks(id)

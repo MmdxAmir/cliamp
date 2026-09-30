@@ -61,3 +61,39 @@ func TestRefreshInvalidatesAllCaches(t *testing.T) {
 		t.Errorf("reloaded disk Tracks not cleared: %d entries", len(reloaded.Tracks))
 	}
 }
+
+// The three OAuth providers share one base. The Close of each one ends the
+// sign-in in progress and drops the session, and every later Close on any of
+// the three does nothing more. So a shutdown that closes all three is safe.
+func TestProvidersCloseSharedBase(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	for _, tt := range []struct {
+		name  string
+		close func(Providers)
+	}{
+		{name: "music", close: func(p Providers) { p.Music.Close() }},
+		{name: "video", close: func(p Providers) { p.Video.Close() }},
+		{name: "all", close: func(p Providers) { p.All.Close() }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			provs := New(&Session{}, "client-id", "client-secret", false)
+			cancels := 0
+			provs.Music.base.authCancel = func() { cancels++ }
+
+			tt.close(provs)
+			if cancels != 1 {
+				t.Fatalf("sign-in cancels = %d, want 1", cancels)
+			}
+			if provs.Music.base.session != nil {
+				t.Fatal("session still set after Close")
+			}
+
+			provs.Music.Close()
+			provs.Video.Close()
+			provs.All.Close()
+			if cancels != 1 {
+				t.Fatalf("sign-in cancels after a second Close = %d, want 1", cancels)
+			}
+		})
+	}
+}

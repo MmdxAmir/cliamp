@@ -146,6 +146,9 @@ func (b *cookieBase) refresh() {
 	b.mu.Unlock()
 }
 
+// close cancels the playlist loads in progress. The three cookie providers
+// share one base, and the Close of each one calls close, so close must be
+// safe to call more than once.
 func (b *cookieBase) close() {
 	b.mu.Lock()
 	b.generation++
