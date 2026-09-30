@@ -106,6 +106,7 @@ func TestLookup(t *testing.T) {
 		want          []Line
 		wantNotFound  bool // the error is ErrNotFound
 		wantErr       bool // the error is some other error
+		wantErrIs     error
 		noRequests    bool // no request may reach the APIs
 		wantPaths     []string
 		wantQuery     string
@@ -186,6 +187,16 @@ func TestLookup(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:   "an oversized LRCLIB answer is an error",
+			artist: "Artist", title: "Song",
+			api: lyricsAPI{
+				lrclib: reply(`[{"plainLyrics":"` + strings.Repeat("x", maxResponseBody) + `"}]`),
+				search: reply(`{"result":{"songs":[]}}`),
+			},
+			wantErr:   true,
+			wantErrIs: httpclient.ErrTooLarge,
+		},
+		{
 			name:   "unreachable APIs return the network error",
 			artist: "Artist", title: "Song",
 			down:    true,
@@ -216,6 +227,9 @@ func TestLookup(t *testing.T) {
 			case tt.wantErr:
 				if err == nil || errors.Is(err, ErrNotFound) {
 					t.Fatalf("err = %v, want an error that is not ErrNotFound", err)
+				}
+				if tt.wantErrIs != nil && !errors.Is(err, tt.wantErrIs) {
+					t.Fatalf("err = %v, want %v", err, tt.wantErrIs)
 				}
 			case err != nil:
 				t.Fatalf("err = %v, want nil", err)

@@ -2,10 +2,8 @@ package lyrics
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -186,7 +184,7 @@ func fetchLRCLIB(ctx context.Context, query string) ([]Line, error) {
 	}
 
 	var results []lrcResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBody)).Decode(&results); err != nil {
+	if err := httpclient.ReadJSON(resp.Body, maxResponseBody, &results); err != nil {
 		return nil, err
 	}
 
@@ -237,7 +235,7 @@ func fetchNetEase(ctx context.Context, query string) ([]Line, error) {
 	}
 
 	var searchRes ncmSearchResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBody)).Decode(&searchRes); err != nil {
+	if err := httpclient.ReadJSON(resp.Body, maxResponseBody, &searchRes); err != nil {
 		return nil, err
 	}
 
@@ -263,7 +261,7 @@ func fetchNetEase(ctx context.Context, query string) ([]Line, error) {
 	}
 
 	var lyricRes ncmLyricResponse
-	if err := json.NewDecoder(io.LimitReader(lresp.Body, maxResponseBody)).Decode(&lyricRes); err != nil {
+	if err := httpclient.ReadJSON(lresp.Body, maxResponseBody, &lyricRes); err != nil {
 		return nil, err
 	}
 
