@@ -270,6 +270,7 @@ cliamp eq Rock                         # set EQ preset by name
 cliamp eq --band 0 6.0                 # set EQ band 0 to +6 dB
 cliamp device list                     # list audio output devices
 cliamp device "My DAC"                 # switch audio output device
+cliamp theme list                      # list the themes, terminal colors first
 cliamp remote state                     # v2 GUI-ready runtime snapshot
 cliamp remote capabilities              # v2 operation list
 cliamp remote events runtime.state      # v2 event stream
@@ -278,5 +279,7 @@ cliamp remote events runtime.state      # v2 event stream
 `cliamp volume` sets an absolute level. A sign does not make the value relative, so `cliamp volume +3` sets the volume to +3 dB. To step the volume up or down, submit `volume.adjust` with `cliamp remote call`. A negative value lowers the volume. Both forms clamp the result to the range `volume_min` to +6 dB.
 
 Each command waits up to 30 seconds for its result. `cliamp load` waits up to 5 minutes and `cliamp plugins call` up to 6 minutes. After that time the command fails with an error, and cliamp continues the operation. `cliamp remote call --wait` waits until the job ends.
+
+`cliamp theme list` reads the theme files itself, so it works when cliamp is not running. It prints each theme file that it skips on stderr.
 
 See [remote-control.md](remote-control.md) for the protocol specification.

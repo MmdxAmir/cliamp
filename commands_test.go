@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +15,7 @@ import (
 
 	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/ipc"
+	"github.com/bjarneo/cliamp/theme"
 )
 
 func TestInverseBoolFlags(t *testing.T) {
@@ -177,5 +181,62 @@ func TestUserIPCErrorRendersNotRunning(t *testing.T) {
 	other := errors.New("connect: permission denied")
 	if got := userIPCError(other); got != other {
 		t.Errorf("unrelated error rewritten to %v", got)
+	}
+}
+
+// captureOutput runs fn with stdout and stderr sent to pipes and returns
+// what fn wrote to each.
+func captureOutput(t *testing.T, fn func()) (stdout, stderr string) {
+	t.Helper()
+	read := func(f **os.File) func() string {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		orig := *f
+		*f = w
+		done := make(chan string)
+		go func() {
+			data, _ := io.ReadAll(r)
+			done <- string(data)
+		}()
+		return func() string {
+			*f = orig
+			_ = w.Close()
+			return <-done
+		}
+	}
+	stopOut := read(&os.Stdout)
+	stopErr := read(&os.Stderr)
+	fn()
+	return stopOut(), stopErr()
+}
+
+// cliamp theme list works with no running cliamp. It lists the terminal
+// colors first, as the IPC theme list does, and names each theme file that
+// it skips on stderr.
+func TestThemeListCommand(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLIAMP_CONFIG_DIR", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "themes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "themes", "broken.toml"), []byte(`accent = "blue"`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var runErr error
+	stdout, stderr := captureOutput(t, func() {
+		runErr = buildApp().Run(t.Context(), []string{"cliamp", "theme", "list"})
+	})
+	if runErr != nil {
+		t.Fatal(runErr)
+	}
+	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+	if len(lines) < 2 || lines[0] != "  "+theme.DefaultName {
+		t.Fatalf("theme list = %q, want %q first", lines, theme.DefaultName)
+	}
+	if !strings.Contains(stderr, "skip broken.toml") {
+		t.Errorf("stderr = %q, want the skipped broken.toml", stderr)
 	}
 }

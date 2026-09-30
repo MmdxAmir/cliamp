@@ -881,7 +881,15 @@ func themeCommand() *cli.Command {
 				return fmt.Errorf("usage: cliamp theme <name|list>")
 			}
 			if strings.EqualFold(c.Args().First(), "list") {
-				themes := theme.LoadAll()
+				// The list is read here, so it works when cliamp is not
+				// running. It starts with the terminal colors, as the IPC
+				// theme list does. No log file is open yet, so the skipped
+				// theme files go to stderr.
+				themes, errs := theme.LoadAllWithErrors()
+				for _, err := range errs {
+					fmt.Fprintln(os.Stderr, err)
+				}
+				fmt.Printf("  %s\n", theme.DefaultName)
 				for _, t := range themes {
 					fmt.Printf("  %s\n", t.Name)
 				}

@@ -170,7 +170,7 @@ var loggedSkips sync.Map
 // themes with the same name. Returns a sorted list. It logs each
 // theme file that it skips, with the reason, once per process.
 func LoadAll() []Theme {
-	themes, errs := loadAll()
+	themes, errs := LoadAllWithErrors()
 	for _, err := range errs {
 		if _, seen := loggedSkips.LoadOrStore(err.Error(), true); !seen {
 			applog.Warn("theme: %v", err)
@@ -179,9 +179,10 @@ func LoadAll() []Theme {
 	return themes
 }
 
-// loadAll returns the sorted themes and one error for each theme file
-// that it skips.
-func loadAll() ([]Theme, []error) {
+// LoadAllWithErrors returns the sorted themes and one error for each theme
+// file that it skips. It logs nothing, so a caller with no log file can
+// print the errors.
+func LoadAllWithErrors() ([]Theme, []error) {
 	themes := make(map[string]Theme)
 
 	// Load embedded built-in themes (lower priority).

@@ -158,18 +158,18 @@ func TestLoadAllIgnoresInvalidUserTheme(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	themes, errs := loadAll()
+	themes, errs := LoadAllWithErrors()
 	for _, th := range themes {
 		if th.Name == "broken" {
 			t.Fatal("invalid custom theme was loaded")
 		}
 	}
 	if len(errs) != 1 {
-		t.Fatalf("loadAll() errors = %v, want 1 error for broken.toml", errs)
+		t.Fatalf("LoadAllWithErrors() errors = %v, want 1 error for broken.toml", errs)
 	}
 	want := `skip broken.toml in ` + userDir + `: theme "broken": accent must be #RRGGBB`
 	if got := errs[0].Error(); got != want {
-		t.Errorf("loadAll() error = %q, want %q", got, want)
+		t.Errorf("LoadAllWithErrors() error = %q, want %q", got, want)
 	}
 }
 
@@ -212,8 +212,8 @@ func TestLoadAllLogsSkippedTheme(t *testing.T) {
 
 func TestLoadAllBuiltinThemesHaveNoErrors(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if _, errs := loadAll(); len(errs) != 0 {
-		t.Errorf("loadAll() errors = %v, want none for the built-in themes", errs)
+	if _, errs := LoadAllWithErrors(); len(errs) != 0 {
+		t.Errorf("LoadAllWithErrors() errors = %v, want none for the built-in themes", errs)
 	}
 }
 

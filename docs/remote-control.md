@@ -124,8 +124,9 @@ Run `cliamp remote capabilities` to get the current machine-readable list.
 `queue.*` applies to the live playlist. `playnext.*` applies only to the
 play-next list. They use separate zero-based indexes.
 
-`theme list` returns `Default - Terminal colors` as the first item. `theme`
-accepts that name or `default` to select the terminal colors.
+`theme list` and `cliamp theme list` return `Default - Terminal colors` as
+the first item. `theme` accepts that name or `default` to select the terminal
+colors.
 
 `eq` takes a built-in preset name, such as `Rock`, or a `band` and a `value`.
 It also accepts `Custom` to restore the saved custom curve. An unknown
