@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/godbus/dbus/v5"
+	"github.com/godbus/dbus/v5/prop"
 
 	"github.com/bjarneo/cliamp/internal/playback"
 )
@@ -57,14 +58,17 @@ func returnsWithin(t *testing.T, what string, fn func()) {
 func TestServiceCallbacksDoNotWaitForSend(t *testing.T) {
 	const playerName = "org.mpris.MediaPlayer2.Player"
 	type call struct {
-		name string
-		do   func(*Service) *dbus.Error
+		name    string
+		do      func(*Service) *dbus.Error
+		wantErr *dbus.Error
 	}
 	setVolume := func(v float64) call {
 		return call{name: "Set Volume", do: func(s *Service) *dbus.Error {
 			return s.props.Set(playerName, "Volume", dbus.MakeVariant(v))
 		}}
 	}
+	setNaNVolume := setVolume(math.NaN())
+	setNaNVolume.wantErr = prop.ErrInvalidArg
 	next := call{name: "Next", do: func(s *Service) *dbus.Error { return playerIface{s}.Next() }}
 	playPause := call{name: "PlayPause", do: func(s *Service) *dbus.Error { return playerIface{s}.PlayPause() }}
 	seek := call{name: "Seek", do: func(s *Service) *dbus.Error { return playerIface{s}.DoSeek(5_000_000) }}
@@ -98,6 +102,14 @@ func TestServiceCallbacksDoNotWaitForSend(t *testing.T) {
 			},
 		},
 		{
+			name:  "NaN volume sends nothing",
+			calls: []call{setVolume(0.3), setNaNVolume, setVolume(0.6)},
+			want: []tea.Msg{
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.3, initialVolumeFloor)},
+				playback.SetVolumeMsg{VolumeDB: linearToDb(0.6, initialVolumeFloor)},
+			},
+		},
+		{
 			name:  "methods and volume keep order",
 			calls: []call{next, setVolume(0.3), playPause, seek, setVolume(0.6)},
 			want: []tea.Msg{
@@ -121,8 +133,8 @@ func TestServiceCallbacksDoNotWaitForSend(t *testing.T) {
 
 			for _, c := range tt.calls {
 				returnsWithin(t, c.name, func() {
-					if err := c.do(svc); err != nil {
-						t.Errorf("%s error = %v", c.name, err)
+					if err := c.do(svc); err != c.wantErr {
+						t.Errorf("%s error = %v, want %v", c.name, err, c.wantErr)
 					}
 				})
 			}

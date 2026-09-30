@@ -221,6 +221,12 @@ func newService(conn *dbus.Conn, send func(tea.Msg)) (*Service, error) {
 				if !ok {
 					return nil
 				}
+				// The range checks below do not catch NaN, and
+				// linearToDb returns NaN for it. The error keeps the
+				// published value.
+				if math.IsNaN(v) {
+					return prop.ErrInvalidArg
+				}
 				if v < 0 {
 					v = 0
 				}
