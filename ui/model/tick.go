@@ -47,12 +47,12 @@ func (m Model) visualizerVisible() bool {
 
 func (m *Model) visualizerPlaying() bool {
 	return m.player != nil && m.visualizerVisible() &&
-		!m.isOverlayActive() && m.player.IsPlaying() && !m.player.IsPaused()
+		m.player.IsPlaying() && !m.player.IsPaused()
 }
 
 func (m *Model) visualizerPaused() bool {
 	return m.player != nil && m.visualizerVisible() &&
-		!m.isOverlayActive() && m.player.IsPlaying() && m.player.IsPaused()
+		m.player.IsPlaying() && m.player.IsPaused()
 }
 
 // visualizerSettlingPaused reports whether playback is paused and the
@@ -60,7 +60,7 @@ func (m *Model) visualizerPaused() bool {
 // stays above the idle cadence so the bars fall; once settled the model can
 // return to the fully-idle cadence.
 func (m *Model) visualizerSettlingPaused() bool {
-	if m.player == nil || !m.player.IsPaused() || m.isOverlayActive() {
+	if m.player == nil || !m.player.IsPaused() {
 		return false
 	}
 	if !m.visualizerVisible() {
@@ -76,10 +76,9 @@ func (m *Model) visualizerTickContext(now time.Time) ui.VisTickContext {
 	cache := map[ui.VisAnalysisSpec][]float64{}
 
 	return ui.VisTickContext{
-		Now:           now,
-		Playing:       m.visualizerPlaying(),
-		Paused:        m.visualizerPaused(),
-		OverlayActive: m.isOverlayActive(),
+		Now:     now,
+		Playing: m.visualizerPlaying(),
+		Paused:  m.visualizerPaused(),
 		StereoSamplesInto: func(dst [][2]float64) int {
 			if m.player == nil || m.vis == nil || m.vis.Mode == ui.VisNone {
 				return 0
@@ -192,9 +191,9 @@ func (m *Model) tickInterval() time.Duration {
 	}
 	// Keep the seek bar / time counter smooth while audio is playing, even
 	// when the visualizer driver wants a slow cadence (VisNone, classic peak
-	// idle, etc.). Overlays, paused, and stopped playback keep the slower
-	// cadence to save CPU.
-	if !m.isOverlayActive() && !m.buffering && m.player != nil &&
+	// idle, etc.). Paused and stopped playback keep the slower cadence to
+	// save CPU.
+	if !m.buffering && m.player != nil &&
 		m.player.IsPlaying() && !m.player.IsPaused() {
 		if m.lowPower {
 			return ui.TickLowPowerPlaying
@@ -232,7 +231,7 @@ func (m *Model) isFullyIdle() bool {
 	if m.visualizerSettlingPaused() {
 		return false
 	}
-	if m.isOverlayActive() || m.buffering || m.termTitle.introActive || m.spinnerVisible() {
+	if m.buffering || m.termTitle.introActive || m.spinnerVisible() {
 		return false
 	}
 	if !m.status.expiresAt.IsZero() || len(m.logLines) > 0 {

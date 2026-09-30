@@ -568,13 +568,6 @@ func (m Model) activeScreen() topLevelScreen {
 	return screenMain
 }
 
-// isOverlayActive reports whether an overlay suppresses the live main view.
-// Overlays now render inline, so this is always false; it is kept as the single
-// seam the tick loop gates on.
-func (m Model) isOverlayActive() bool {
-	return false
-}
-
 // usesContentFirstLayout gives list-heavy tasks more room while preserving a
 // compact now-playing summary. The top overlay decides, as it decides the
 // keys and the render. With no overlay, the provider pane is content-first.

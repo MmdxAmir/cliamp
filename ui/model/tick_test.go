@@ -283,7 +283,7 @@ func chargedPausedModel(t *testing.T) (Model, *samplingFakeEngine) {
 func TestTickIntervalPausedSettlingVisualizerUsesFast(t *testing.T) {
 	m, _ := chargedPausedModel(t)
 
-	if !m.isOverlayActive() && !m.visualizerSettlingPaused() {
+	if !m.visualizerSettlingPaused() {
 		t.Fatal("visualizerSettlingPaused() = false with charged paused bars, want true")
 	}
 	if m.isFullyIdle() {
@@ -483,11 +483,8 @@ func TestLyricsScreenKeepsVisualizerLive(t *testing.T) {
 	if got := m.activeScreen(); got != screenLyrics {
 		t.Fatalf("activeScreen() = %v, want %v", got, screenLyrics)
 	}
-	// Overlays now render inline over the live main view, so the visualizer is
+	// Overlays render inline over the live main view, so the visualizer is
 	// never treated as hidden.
-	if m.isOverlayActive() {
-		t.Fatal("isOverlayActive() = true, want false: overlays render inline")
-	}
 	if m.visualizerTickContext(time.Now()).OverlayActive {
 		t.Fatal("visualizerTickContext(...).OverlayActive = true, want false for inline lyrics")
 	}
