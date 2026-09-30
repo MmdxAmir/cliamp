@@ -234,6 +234,9 @@ func mergeTrackMeta(prev, cur playlist.Track) playlist.Track {
 	if cur.DurationSecs == 0 {
 		cur.DurationSecs = prev.DurationSecs
 	}
+	if cur.AlbumArtURL == "" {
+		cur.AlbumArtURL = prev.AlbumArtURL
+	}
 	cur.Feed = cur.Feed || prev.Feed
 	cur.Realtime = cur.Realtime || prev.Realtime
 	if len(cur.ProviderMeta) == 0 {

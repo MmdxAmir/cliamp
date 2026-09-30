@@ -150,9 +150,9 @@ path = "https://cdn.example.com/ep1.mp3"
 title = "Episode"
 album = "Show"
 duration_secs = 3768
+album_art_url = "https://cdn.example.com/cover.jpg"
 provider_meta.podcast.feed = "https://rss.example.com/show"
 provider_meta.podcast.guid = "guid-1"
-album_art_url = "https://cdn.example.com/cover.jpg"
 bookmark = true
 `
 	var buf bytes.Buffer

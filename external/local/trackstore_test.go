@@ -60,11 +60,11 @@ func TestTrackSurvivesEveryStore(t *testing.T) {
 		Realtime:     true,
 		Feed:         true,
 		DurationSecs: full.DurationSecs,
+		AlbumArtURL:  full.AlbumArtURL,
 		ProviderMeta: full.ProviderMeta,
 	}
 	saved := shared
 	saved.EmbeddedLyrics = full.EmbeddedLyrics
-	saved.AlbumArtURL = full.AlbumArtURL
 	saved.Bookmark = true
 
 	tests := []struct {

@@ -46,6 +46,9 @@ func WriteTrackTOML(w io.Writer, t Track) {
 	if t.Realtime {
 		fmt.Fprintln(w, "realtime = true")
 	}
+	if t.AlbumArtURL != "" {
+		fmt.Fprintf(w, "album_art_url = %q\n", t.AlbumArtURL)
+	}
 	for _, k := range slices.Sorted(maps.Keys(t.ProviderMeta)) {
 		if !validMetaKey(k) {
 			continue
@@ -79,13 +82,14 @@ func validMetaKey(k string) bool {
 // path. ProviderMeta stays nil when the section has no provider_meta keys.
 func TrackFromTOML(f map[string]string) Track {
 	t := Track{
-		Path:     f["path"],
-		Title:    f["title"],
-		Artist:   f["artist"],
-		Album:    f["album"],
-		Genre:    f["genre"],
-		Feed:     f["feed"] == "true",
-		Realtime: f["realtime"] == "true",
+		Path:        f["path"],
+		Title:       f["title"],
+		Artist:      f["artist"],
+		Album:       f["album"],
+		Genre:       f["genre"],
+		Feed:        f["feed"] == "true",
+		Realtime:    f["realtime"] == "true",
+		AlbumArtURL: f["album_art_url"],
 	}
 	t.Stream = IsURL(t.Path)
 	if n, err := strconv.Atoi(f["year"]); err == nil {

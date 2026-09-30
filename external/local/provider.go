@@ -1165,9 +1165,6 @@ func writeTrack(w io.Writer, t playlist.Track) {
 	if t.EmbeddedLyrics != "" {
 		fmt.Fprintf(w, "embedded_lyrics = %q\n", t.EmbeddedLyrics)
 	}
-	if t.AlbumArtURL != "" {
-		fmt.Fprintf(w, "album_art_url = %q\n", t.AlbumArtURL)
-	}
 	if t.Bookmark {
 		fmt.Fprintln(w, "bookmark = true")
 	}
@@ -1177,7 +1174,6 @@ func writeTrack(w io.Writer, t playlist.Track) {
 func parseTrackFields(f map[string]string) playlist.Track {
 	t := playlist.TrackFromTOML(f)
 	t.EmbeddedLyrics = f["embedded_lyrics"]
-	t.AlbumArtURL = f["album_art_url"]
 	// "favorite" is the pre-rename alias for "bookmark"; prefer bookmark.
 	bookmark, ok := f["bookmark"]
 	if !ok {

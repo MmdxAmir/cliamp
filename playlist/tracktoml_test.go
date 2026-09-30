@@ -85,6 +85,7 @@ func TestTrackTOMLRoundTrip(t *testing.T) {
 				Realtime:     true,
 				Feed:         true,
 				DurationSecs: full.DurationSecs,
+				AlbumArtURL:  full.AlbumArtURL,
 				ProviderMeta: full.ProviderMeta,
 			},
 		},
@@ -139,6 +140,7 @@ track_number = 3
 duration_secs = 208
 feed = true
 realtime = true
+album_art_url = "file:///tmp/cover.jpg"
 provider_meta.navidrome.id = "42"
 provider_meta.podcast.feed = "https://feed.example.com/rss"
 provider_meta.radio.name = "Station"
