@@ -37,9 +37,9 @@ var loadingSpinnerCases = []struct {
 		name: "provider search",
 		setup: func(m *Model) {
 			m.openProviderSearchWith(&catalogTestProvider{commandsTestProvider: commandsTestProvider{name: "Spotify"}})
-			m.spotSearch.loading = true
+			m.searchOverlay.loading = true
 		},
-		body: (*Model).renderSpotSearchBody,
+		body: (*Model).renderSearchOverlayBody,
 		want: "Searching Spotify...",
 	},
 	{

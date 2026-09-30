@@ -105,12 +105,12 @@ func bodyMessage(msg string, budget int) string {
 	return bodyLines([]string{dimStyle.Render("  " + msg)}, budget)
 }
 
-// renderSpotSearchResults renders the search results grouped into labeled
+// renderSearchOverlayResults renders the search results grouped into labeled
 // sections, so albums are visibly a different kind of result than the tracks
 // below them rather than one long undifferentiated list.
-func (m Model) renderSpotSearchResults(budget int) string {
+func (m Model) renderSearchOverlayResults(budget int) string {
 	lines := make([]string, 0, budget)
-	for row := range spotSearchRows(m.spotSearch.results, m.spotSearch.scroll) {
+	for row := range searchOverlayRows(m.searchOverlay.results, m.searchOverlay.scroll) {
 		if len(lines) >= budget {
 			break
 		}
@@ -122,7 +122,7 @@ func (m Model) renderSpotSearchResults(budget int) string {
 			continue
 		}
 		label := truncate(trackViewName(row.Track), m.layout.panelWidth-8)
-		lines = append(lines, cursorLine(label, row.Index == m.spotSearch.cursor))
+		lines = append(lines, cursorLine(label, row.Index == m.searchOverlay.cursor))
 	}
 	return strings.Join(padLines(lines, budget, len(lines)), "\n")
 }
@@ -552,68 +552,68 @@ func (m Model) renderNetSearchBody() string {
 
 // — provider (Spotify) search —
 
-func (m Model) spotSearchHeaderLine() string {
-	switch m.spotSearch.screen {
-	case spotSearchResults:
-		return sepHeaderN("Results", m.spotSearch.cursor+1, len(m.spotSearch.results), m.layout.panelWidth)
-	case spotSearchPlaylist:
-		return sepHeaderN("Add to Playlist", m.spotSearch.cursor+1, len(m.spotSearch.playlists)+1, m.layout.panelWidth)
-	case spotSearchNewName:
-		return m.promptHeader("spot-playlist-name", "New Playlist", m.spotSearch.newName)
+func (m Model) searchOverlayHeaderLine() string {
+	switch m.searchOverlay.screen {
+	case searchOverlayResults:
+		return sepHeaderN("Results", m.searchOverlay.cursor+1, len(m.searchOverlay.results), m.layout.panelWidth)
+	case searchOverlayPlaylist:
+		return sepHeaderN("Add to Playlist", m.searchOverlay.cursor+1, len(m.searchOverlay.playlists)+1, m.layout.panelWidth)
+	case searchOverlayNewName:
+		return m.promptHeader("search-overlay-playlist-name", "New Playlist", m.searchOverlay.newName)
 	default:
-		return m.filterHeader("Search: "+providerName(m.spotSearch.prov), "spot-search", m.spotSearch.query, "")
+		return m.filterHeader("Search: "+providerName(m.searchOverlay.prov), "search-overlay", m.searchOverlay.query, "")
 	}
 }
 
-func (m Model) renderSpotSearchBody() string {
+func (m Model) renderSearchOverlayBody() string {
 	budget := m.effectivePlaylistVisible()
-	showError := m.spotSearch.err != ""
+	showError := m.searchOverlay.err != ""
 	bodyBudget := budget
 	if showError {
 		bodyBudget = max(0, bodyBudget-1)
 	}
 	var body string
-	switch m.spotSearch.screen {
-	case spotSearchResults:
+	switch m.searchOverlay.screen {
+	case searchOverlayResults:
 		switch {
-		case m.spotSearch.albumLoading:
+		case m.searchOverlay.albumLoading:
 			body = bodyLines([]string{loadingLine("Loading album…")}, bodyBudget)
-		case len(m.spotSearch.results) == 0:
+		case len(m.searchOverlay.results) == 0:
 			body = bodyMessage("No results", bodyBudget)
 		default:
-			body = m.renderSpotSearchResults(bodyBudget)
+			body = m.renderSearchOverlayResults(bodyBudget)
 		}
-	case spotSearchPlaylist:
-		if m.spotSearch.loading {
+	case searchOverlayPlaylist:
+		if m.searchOverlay.loading {
 			body = bodyLines([]string{loadingLine("Loading playlists…")}, bodyBudget)
 			break
 		}
-		track := m.spotSearch.selTrack
+		track := m.searchOverlay.selTrack
 		head := dimStyle.Render("  " + truncate(fmt.Sprintf("%s - %s", track.Artist, track.Title), m.layout.panelWidth-2))
-		count := len(m.spotSearch.playlists) + 1
+		count := len(m.searchOverlay.playlists) + 1
 		items := make([]string, count)
 		for i := range count {
-			if i < len(m.spotSearch.playlists) {
-				items[i] = m.spotSearch.playlists[i].Name
+			if i < len(m.searchOverlay.playlists) {
+				items[i] = m.searchOverlay.playlists[i].Name
 			} else {
 				items[i] = "+ New Playlist..."
 			}
 		}
-		list := windowList(items, m.spotSearch.cursor, m.spotSearch.scroll, max(0, bodyBudget-1))
+		list := windowList(items, m.searchOverlay.cursor, m.searchOverlay.scroll, max(0, bodyBudget-1))
 		body = strings.Join([]string{head, list}, "\n")
-	case spotSearchNewName:
+	case searchOverlayNewName:
 		body = bodyMessage("Enter a name for the new playlist above.", bodyBudget)
 	default:
 		var lines []string
-		if m.spotSearch.loading {
-			lines = append(lines, loadingLine("Searching "+providerName(m.spotSearch.prov)+"..."))
+		if m.searchOverlay.loading {
+			lines = append(lines, loadingLine("Searching "+providerName(m.searchOverlay.prov)+"..."))
 		} else {
 			lines = append(lines, dimStyle.Render("  Type a query and press Enter to search."))
 		}
 		body = bodyLines(lines, bodyBudget)
 	}
 	if showError {
-		errLine := errorStyle.Render("  " + m.spotSearch.err)
+		errLine := errorStyle.Render("  " + m.searchOverlay.err)
 		if body == "" {
 			return errLine
 		}

@@ -280,24 +280,24 @@ func (m Model) isCurrentNavRequest(gen uint64) bool {
 	return m.navBrowser.visible && gen == m.requests.nav
 }
 
-func (m Model) isCurrentSpotProvider(providerName string) bool {
-	return m.spotSearch.visible &&
-		m.spotSearch.prov != nil &&
-		m.spotSearch.prov.Name() == providerName
+func (m Model) isCurrentSearchOverlayProvider(providerName string) bool {
+	return m.searchOverlay.visible &&
+		m.searchOverlay.prov != nil &&
+		m.searchOverlay.prov.Name() == providerName
 }
 
-func (m Model) isCurrentSpotRequest(gen uint64, providerName string) bool {
-	return m.isCurrentSpotProvider(providerName) && gen == m.requests.spotSearch
+func (m Model) isCurrentSearchOverlayRequest(gen uint64, providerName string) bool {
+	return m.isCurrentSearchOverlayProvider(providerName) && gen == m.requests.searchOverlay
 }
 
-func (m Model) isCurrentSpotListRequest(gen uint64, providerName string) bool {
-	return m.spotSearch.screen == spotSearchResults &&
-		m.isCurrentSpotProvider(providerName) &&
-		gen == m.requests.spotLists
+func (m Model) isCurrentSearchOverlayListRequest(gen uint64, providerName string) bool {
+	return m.searchOverlay.screen == searchOverlayResults &&
+		m.isCurrentSearchOverlayProvider(providerName) &&
+		gen == m.requests.searchOverlayLists
 }
 
-func (m Model) isCurrentSpotMutation(gen uint64, providerName string) bool {
-	return m.isCurrentSpotProvider(providerName) && gen == m.requests.spotMutation
+func (m Model) isCurrentSearchOverlayMutation(gen uint64, providerName string) bool {
+	return m.isCurrentSearchOverlayProvider(providerName) && gen == m.requests.searchOverlayMutation
 }
 
 func (m *Model) fetchCatalogBatch(loader provider.CatalogLoader) tea.Cmd {

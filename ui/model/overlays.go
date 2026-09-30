@@ -187,9 +187,9 @@ func (m *Model) closeSearchLayout() {
 	m.adjustScroll()
 }
 
-func (m *Model) spotSearchResultsVisible() int {
+func (m *Model) searchOverlayResultsVisible() int {
 	visible := m.effectivePlaylistVisible()
-	if m.spotSearch.err != "" {
+	if m.searchOverlay.err != "" {
 		visible--
 	}
 	return max(0, visible)

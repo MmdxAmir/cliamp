@@ -15,9 +15,9 @@ import (
 
 func TestProviderSearchTakesPrecedenceOverNavigationBrowser(t *testing.T) {
 	m := Model{
-		spotSearch: spotSearchState{
+		searchOverlay: searchOverlayState{
 			visible: true,
-			screen:  spotSearchInput,
+			screen:  searchOverlayInput,
 		},
 		navBrowser: navBrowserState{
 			visible:   true,
@@ -25,7 +25,7 @@ func TestProviderSearchTakesPrecedenceOverNavigationBrowser(t *testing.T) {
 		},
 	}
 
-	if screen := m.activeScreen(); screen != screenSpotSearch {
+	if screen := m.activeScreen(); screen != screenSearchOverlay {
 		t.Fatalf("activeScreen() = %v, want provider search", screen)
 	}
 	if _, ok := m.activeOverlay(); !ok {
@@ -33,21 +33,21 @@ func TestProviderSearchTakesPrecedenceOverNavigationBrowser(t *testing.T) {
 	}
 
 	m.handleKey(tea.KeyPressMsg{Text: "x"})
-	if m.spotSearch.query != "x" {
-		t.Fatalf("provider search query = %q, want x", m.spotSearch.query)
+	if m.searchOverlay.query != "x" {
+		t.Fatalf("provider search query = %q, want x", m.searchOverlay.query)
 	}
 	if m.navBrowser.search != "" {
 		t.Fatalf("navigation filter = %q, want empty", m.navBrowser.search)
 	}
 
 	m.handlePaste("y")
-	if m.spotSearch.query != "xy" {
-		t.Fatalf("provider search query after paste = %q, want xy", m.spotSearch.query)
+	if m.searchOverlay.query != "xy" {
+		t.Fatalf("provider search query after paste = %q, want xy", m.searchOverlay.query)
 	}
 
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.spotSearch.visible || !m.navBrowser.visible || m.activeScreen() != screenNavBrowser {
-		t.Fatalf("nested close state = spot:%t nav:%t screen:%v, want navigation browser", m.spotSearch.visible, m.navBrowser.visible, m.activeScreen())
+	if m.searchOverlay.visible || !m.navBrowser.visible || m.activeScreen() != screenNavBrowser {
+		t.Fatalf("nested close state = search:%t nav:%t screen:%v, want navigation browser", m.searchOverlay.visible, m.navBrowser.visible, m.activeScreen())
 	}
 }
 
@@ -78,12 +78,12 @@ func TestFullVisualizerBlocksHiddenPlaylistMutations(t *testing.T) {
 
 func TestClosingProviderSearchCancelsItsRequest(t *testing.T) {
 	canceled := false
-	m := Model{spotSearch: spotSearchState{
+	m := Model{searchOverlay: searchOverlayState{
 		visible: true,
 		cancel:  func() { canceled = true },
 	}}
 
-	m.closeSpotSearch()
+	m.closeSearchOverlay()
 	if !canceled {
 		t.Fatal("provider search request was not canceled")
 	}

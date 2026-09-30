@@ -18,11 +18,11 @@ func albumResult(name string) playlist.Track {
 	}
 }
 
-func TestSpotSearchResultVisibleWithOneBodyRow(t *testing.T) {
+func TestSearchOverlayResultVisibleWithOneBodyRow(t *testing.T) {
 	m := newLayoutTestModel(40, 10)
-	m.spotSearch = spotSearchState{
+	m.searchOverlay = searchOverlayState{
 		visible: true,
-		screen:  spotSearchResults,
+		screen:  searchOverlayResults,
 		results: []playlist.Track{albumResult("Selected Album")},
 	}
 	m.recomputeLayout()
@@ -30,24 +30,24 @@ func TestSpotSearchResultVisibleWithOneBodyRow(t *testing.T) {
 		t.Fatalf("body rows = %d, want 1", got)
 	}
 
-	body := stripAnsi(m.renderSpotSearchBody())
+	body := stripAnsi(m.renderSearchOverlayBody())
 	if !strings.Contains(body, "Selected Album") {
 		t.Fatalf("body = %q, want selected result", body)
 	}
 }
 
-func TestSpotSearchErrorFitsBodyBudget(t *testing.T) {
+func TestSearchOverlayErrorFitsBodyBudget(t *testing.T) {
 	m := newLayoutTestModel(80, 24)
-	m.spotSearch = spotSearchState{
+	m.searchOverlay = searchOverlayState{
 		visible: true,
-		screen:  spotSearchResults,
+		screen:  searchOverlayResults,
 		results: []playlist.Track{albumResult("Album")},
 		err:     "Album cannot be added to a playlist",
 	}
 	m.recomputeLayout()
 
-	body := stripAnsi(m.renderSpotSearchBody())
-	if !strings.Contains(body, m.spotSearch.err) {
+	body := stripAnsi(m.renderSearchOverlayBody())
+	if !strings.Contains(body, m.searchOverlay.err) {
 		t.Fatalf("body = %q, want visible error", body)
 	}
 	if got, want := len(strings.Split(body, "\n")), m.effectivePlaylistVisible(); got != want {
@@ -55,31 +55,31 @@ func TestSpotSearchErrorFitsBodyBudget(t *testing.T) {
 	}
 }
 
-func TestSpotSearchErrorKeepsCursorVisible(t *testing.T) {
+func TestSearchOverlayErrorKeepsCursorVisible(t *testing.T) {
 	m := newLayoutTestModel(80, 18)
-	m.spotSearch.visible = true
-	m.spotSearch.screen = spotSearchResults
+	m.searchOverlay.visible = true
+	m.searchOverlay.screen = searchOverlayResults
 	m.recomputeLayout()
 	visible := m.effectivePlaylistVisible()
 	if visible < 3 {
 		t.Fatalf("body rows = %d, want at least 3", visible)
 	}
 	for i := range visible - 1 {
-		m.spotSearch.results = append(m.spotSearch.results, trackResult(fmt.Sprintf("Track %d", i)))
+		m.searchOverlay.results = append(m.searchOverlay.results, trackResult(fmt.Sprintf("Track %d", i)))
 	}
-	m.spotSearch.cursor = len(m.spotSearch.results) - 1
+	m.searchOverlay.cursor = len(m.searchOverlay.results) - 1
 
-	m.setSpotSearchError("Search failed")
+	m.setSearchOverlayError("Search failed")
 
-	resultRows := m.spotSearchResultsVisible()
+	resultRows := m.searchOverlayResultsVisible()
 	if resultRows != visible-1 {
 		t.Fatalf("result rows = %d, want %d", resultRows, visible-1)
 	}
-	if rows := spotSearchRowsToCursor(m.spotSearch.results, m.spotSearch.scroll, m.spotSearch.cursor); rows > resultRows {
-		t.Fatalf("cursor sits %d rows below scroll %d, result window is %d", rows, m.spotSearch.scroll, resultRows)
+	if rows := searchOverlayRowsToCursor(m.searchOverlay.results, m.searchOverlay.scroll, m.searchOverlay.cursor); rows > resultRows {
+		t.Fatalf("cursor sits %d rows below scroll %d, result window is %d", rows, m.searchOverlay.scroll, resultRows)
 	}
-	selected := m.spotSearch.results[m.spotSearch.cursor].Title
-	if body := stripAnsi(m.renderSpotSearchBody()); !strings.Contains(body, selected) {
+	selected := m.searchOverlay.results[m.searchOverlay.cursor].Title
+	if body := stripAnsi(m.renderSearchOverlayBody()); !strings.Contains(body, selected) {
 		t.Fatalf("body = %q, want selected result %q", body, selected)
 	}
 }
@@ -88,7 +88,7 @@ func trackResult(name string) playlist.Track {
 	return playlist.Track{Title: name, Artist: "NOFX"}
 }
 
-func TestSpotSearchRowsSections(t *testing.T) {
+func TestSearchOverlayRowsSections(t *testing.T) {
 	results := []playlist.Track{
 		albumResult("Punk In Drublic"),
 		albumResult("The Decline"),
@@ -127,7 +127,7 @@ func TestSpotSearchRowsSections(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var got []string
-			for row := range spotSearchRows(results, tt.scroll) {
+			for row := range searchOverlayRows(results, tt.scroll) {
 				if row.Index < 0 {
 					got = append(got, "="+row.Section)
 					continue
@@ -146,7 +146,7 @@ func TestSpotSearchRowsSections(t *testing.T) {
 	}
 }
 
-func TestSpotSearchRowsToCursorCountsSeparators(t *testing.T) {
+func TestSearchOverlayRowsToCursorCountsSeparators(t *testing.T) {
 	results := []playlist.Track{
 		albumResult("Punk In Drublic"),
 		albumResult("The Decline"),
@@ -166,43 +166,43 @@ func TestSpotSearchRowsToCursorCountsSeparators(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := spotSearchRowsToCursor(results, tt.scroll, tt.cursor); got != tt.want {
-				t.Errorf("spotSearchRowsToCursor(%d, %d) = %d, want %d", tt.scroll, tt.cursor, got, tt.want)
+			if got := searchOverlayRowsToCursor(results, tt.scroll, tt.cursor); got != tt.want {
+				t.Errorf("searchOverlayRowsToCursor(%d, %d) = %d, want %d", tt.scroll, tt.cursor, got, tt.want)
 			}
 		})
 	}
 }
 
 // The separators must not push the selected result out of the window.
-func TestSpotSearchResultsScrollKeepsCursorVisible(t *testing.T) {
+func TestSearchOverlayResultsScrollKeepsCursorVisible(t *testing.T) {
 	m := &Model{}
 	for i := range 6 {
-		m.spotSearch.results = append(m.spotSearch.results, albumResult("Album "+string(rune('A'+i))))
+		m.searchOverlay.results = append(m.searchOverlay.results, albumResult("Album "+string(rune('A'+i))))
 	}
-	m.spotSearch.results = append(m.spotSearch.results, trackResult("Linoleum"))
-	m.spotSearch.cursor = 6
+	m.searchOverlay.results = append(m.searchOverlay.results, trackResult("Linoleum"))
+	m.searchOverlay.cursor = 6
 
 	const visible = 5
-	m.spotSearchResultsMaybeAdjustScroll(visible)
+	m.searchOverlayResultsMaybeAdjustScroll(visible)
 
-	if rows := spotSearchRowsToCursor(m.spotSearch.results, m.spotSearch.scroll, m.spotSearch.cursor); rows > visible {
-		t.Errorf("cursor sits %d rows below scroll %d, window is %d", rows, m.spotSearch.scroll, visible)
+	if rows := searchOverlayRowsToCursor(m.searchOverlay.results, m.searchOverlay.scroll, m.searchOverlay.cursor); rows > visible {
+		t.Errorf("cursor sits %d rows below scroll %d, window is %d", rows, m.searchOverlay.scroll, visible)
 	}
 }
 
-func TestSpotSearchPickerShowsAddError(t *testing.T) {
+func TestSearchOverlayPickerShowsAddError(t *testing.T) {
 	m := newLayoutTestModel(80, 24)
-	m.spotSearch = spotSearchState{
+	m.searchOverlay = searchOverlayState{
 		visible:   true,
-		screen:    spotSearchPlaylist,
+		screen:    searchOverlayPlaylist,
 		selTrack:  playlist.Track{Artist: "NOFX", Title: "Linoleum"},
 		playlists: []playlist.PlaylistInfo{{ID: "mine", Name: "Mine"}},
 		err:       "Add failed: http status 403: Forbidden",
 	}
 	m.recomputeLayout()
 
-	body := stripAnsi(m.renderSpotSearchBody())
-	if !strings.Contains(body, m.spotSearch.err) {
+	body := stripAnsi(m.renderSearchOverlayBody())
+	if !strings.Contains(body, m.searchOverlay.err) {
 		t.Fatalf("body = %q, want visible add error", body)
 	}
 	if got, want := len(strings.Split(body, "\n")), m.effectivePlaylistVisible(); got > want {

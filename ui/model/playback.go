@@ -279,34 +279,34 @@ func (m *Model) closeNetSearch() {
 	m.focus = m.prevFocus
 }
 
-// closeSpotSearch fully resets the Spotify search overlay, dropping cached
+// closeSearchOverlay fully resets the provider search overlay, dropping cached
 // results, playlists, and the selected track.
-func (m *Model) closeSpotSearch() {
-	m.cancelSpotRequest()
-	nextRequest(&m.requests.spotSearch)
-	m.invalidateSpotAlbumRequest()
-	nextRequest(&m.requests.spotLists)
-	nextRequest(&m.requests.spotMutation)
-	m.spotSearch = spotSearchState{}
+func (m *Model) closeSearchOverlay() {
+	m.cancelSearchOverlayRequest()
+	nextRequest(&m.requests.searchOverlay)
+	m.invalidateSearchOverlayAlbumRequest()
+	nextRequest(&m.requests.searchOverlayLists)
+	nextRequest(&m.requests.searchOverlayMutation)
+	m.searchOverlay = searchOverlayState{}
 }
 
-func (m *Model) invalidateSpotAlbumRequest() {
-	m.cancelSpotRequest()
-	nextRequest(&m.requests.spotAlbum)
-	m.spotSearch.albumLoading = false
+func (m *Model) invalidateSearchOverlayAlbumRequest() {
+	m.cancelSearchOverlayRequest()
+	nextRequest(&m.requests.searchOverlayAlbum)
+	m.searchOverlay.albumLoading = false
 }
 
-func (m *Model) newSpotRequestContext(timeout time.Duration) context.Context {
-	m.cancelSpotRequest()
+func (m *Model) newSearchOverlayRequestContext(timeout time.Duration) context.Context {
+	m.cancelSearchOverlayRequest()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	m.spotSearch.cancel = cancel
+	m.searchOverlay.cancel = cancel
 	return ctx
 }
 
-func (m *Model) cancelSpotRequest() {
-	if m.spotSearch.cancel != nil {
-		m.spotSearch.cancel()
-		m.spotSearch.cancel = nil
+func (m *Model) cancelSearchOverlayRequest() {
+	if m.searchOverlay.cancel != nil {
+		m.searchOverlay.cancel()
+		m.searchOverlay.cancel = nil
 	}
 }
 

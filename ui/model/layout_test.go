@@ -527,7 +527,7 @@ func TestInlineOverlaysFitResponsiveTerminal(t *testing.T) {
 		{name: "device", set: func(m *Model) { m.devicePicker.visible = true }},
 		{name: "playlist picker", set: func(m *Model) { m.plPicker.visible = true }},
 		{name: "file browser", set: func(m *Model) { m.fileBrowser.visible = true }},
-		{name: "provider search", set: func(m *Model) { m.spotSearch.visible = true }},
+		{name: "provider search", set: func(m *Model) { m.searchOverlay.visible = true }},
 		{name: "navigation", set: func(m *Model) { m.navBrowser.visible = true }},
 		{name: "playlist manager", set: func(m *Model) { m.plManager.visible = true }},
 		{name: "queue", set: func(m *Model) { m.queue.visible = true }},

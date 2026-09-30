@@ -82,7 +82,7 @@ func TestPlaylistPickersOfferOnlyAddTargets(t *testing.T) {
 			{name: "local", prov: local, want: []string{"mix"}},
 			{name: "no filter", prov: commandsTestProvider{name: "Local", lists: lists}, want: ids(lists)},
 		} {
-			msg := fetchSpotPlaylistsCmd(tc.prov, 1)().(spotPlaylistsMsg)
+			msg := fetchSearchOverlayPlaylistsCmd(tc.prov, 1)().(searchOverlayPlaylistsMsg)
 			if got := ids(msg.playlists); !slices.Equal(got, tc.want) {
 				t.Errorf("%s: targets = %v, want %v", tc.name, got, tc.want)
 			}
@@ -223,7 +223,7 @@ func (p targetFilterTestProvider) CanAddToPlaylist(pl playlist.PlaylistInfo) boo
 	return p.writable[pl.ID]
 }
 
-func TestFetchSpotPlaylistsOffersOnlyWritableTargets(t *testing.T) {
+func TestFetchSearchOverlayPlaylistsOffersOnlyWritableTargets(t *testing.T) {
 	lists := []playlist.PlaylistInfo{
 		{ID: "YOUR MUSIC", Name: "Your Music"},
 		{ID: "mine", Name: "Mine"},
@@ -248,7 +248,7 @@ func TestFetchSpotPlaylistsOffersOnlyWritableTargets(t *testing.T) {
 				writable:             map[string]bool{"mine": true},
 				err:                  tt.err,
 			}
-			msg := fetchSpotPlaylistsCmd(prov, 1)().(spotPlaylistsMsg)
+			msg := fetchSearchOverlayPlaylistsCmd(prov, 1)().(searchOverlayPlaylistsMsg)
 			if (msg.err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, want error %v", msg.err, tt.wantErr)
 			}

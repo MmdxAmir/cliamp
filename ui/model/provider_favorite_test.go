@@ -55,7 +55,7 @@ func favoriteAlbumTestModel(view string) (Model, *favoriteAlbumTestProvider) {
 	show.Feed = true
 	show.Path = "https://example.com/feed"
 	show.ProviderMeta[playlist.MetaAlbumID] = "target"
-	m.spotSearch = spotSearchState{prov: p, visible: view == "results", screen: spotSearchResults,
+	m.searchOverlay = searchOverlayState{prov: p, visible: view == "results", screen: searchOverlayResults,
 		results: []playlist.Track{trackResult("Episode"), show}, cursor: 1}
 	return m, p
 }
@@ -124,7 +124,7 @@ func TestFavoriteFromProviderAlbumsAndSearch(t *testing.T) {
 				if wantRefresh && m.provCursor >= len(m.providerLists) {
 					t.Fatalf("provider cursor = %d after refresh of %d rows", m.provCursor, len(m.providerLists))
 				}
-				if !slices.Equal(m.navBrowser.albums, albums) || m.spotSearch.results[1].Title != "Target Show" {
+				if !slices.Equal(m.navBrowser.albums, albums) || m.searchOverlay.results[1].Title != "Target Show" {
 					t.Fatal("favorite decorated album metadata")
 				}
 			})
@@ -148,12 +148,12 @@ func TestFavoriteActionAndHelpGuardSelection(t *testing.T) {
 		{"empty filter", "category", func(m *Model) { m.navBrowser.searchIdx = nil }},
 		{"typing filter", "category", func(m *Model) { m.navBrowser.searching = true }},
 		{"category read-only", "category", func(m *Model) { m.navBrowser.prov = commandsTestProvider{} }},
-		{"results loading", "results", func(m *Model) { m.spotSearch.loading = true }},
-		{"show expanding", "results", func(m *Model) { m.spotSearch.albumLoading = true }},
-		{"result episode", "results", func(m *Model) { m.spotSearch.cursor = 0 }},
-		{"missing album ID", "results", func(m *Model) { delete(m.spotSearch.results[1].ProviderMeta, playlist.MetaAlbumID) }},
-		{"results read-only", "results", func(m *Model) { m.spotSearch.prov = commandsTestProvider{} }},
-		{"typing query", "results", func(m *Model) { m.spotSearch.screen = spotSearchInput }},
+		{"results loading", "results", func(m *Model) { m.searchOverlay.loading = true }},
+		{"show expanding", "results", func(m *Model) { m.searchOverlay.albumLoading = true }},
+		{"result episode", "results", func(m *Model) { m.searchOverlay.cursor = 0 }},
+		{"missing album ID", "results", func(m *Model) { delete(m.searchOverlay.results[1].ProviderMeta, playlist.MetaAlbumID) }},
+		{"results read-only", "results", func(m *Model) { m.searchOverlay.prov = commandsTestProvider{} }},
+		{"typing query", "results", func(m *Model) { m.searchOverlay.screen = searchOverlayInput }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m, p := favoriteAlbumTestModel(tt.view)

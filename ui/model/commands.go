@@ -486,9 +486,9 @@ func fetchCatalogBatchCmd(loader provider.CatalogLoader, offset, limit int, prov
 	}
 }
 
-// — Spotify search + add-to-playlist messages —
+// — provider search overlay + add-to-playlist messages —
 
-type spotSearchResultsMsg struct {
+type searchOverlayResultsMsg struct {
 	tracks       []playlist.Track
 	err          error
 	providerName string
@@ -496,27 +496,27 @@ type spotSearchResultsMsg struct {
 	gen          uint64
 }
 
-// spotAlbumAction is what to do with an album's tracks once they arrive.
-type spotAlbumAction int
+// searchOverlayAlbumAction is what to do with an album's tracks once they arrive.
+type searchOverlayAlbumAction int
 
 const (
-	spotAlbumPlay      spotAlbumAction = iota // start the album now
-	spotAlbumAppend                           // add to the end of the queue
-	spotAlbumQueueNext                        // play right after the current track
+	searchOverlayAlbumPlay      searchOverlayAlbumAction = iota // start the album now
+	searchOverlayAlbumAppend                                    // add to the end of the queue
+	searchOverlayAlbumQueueNext                                 // play right after the current track
 )
 
-type spotAlbumTracksMsg struct {
+type searchOverlayAlbumTracksMsg struct {
 	tracks []playlist.Track
 	album  playlist.Track
-	action spotAlbumAction
+	action searchOverlayAlbumAction
 	err    error
 	gen    uint64
 }
 
-// fetchSpotAlbumTracksCmd expands an album placeholder from the search results
+// fetchSearchOverlayAlbumTracksCmd expands an album placeholder from the search results
 // into its tracks. Album entries carry no streamable path of their own, so this
 // runs before the album can reach the player.
-func fetchSpotAlbumTracksCmd(ctx context.Context, loader provider.AlbumTrackLoader, album playlist.Track, action spotAlbumAction, gen uint64) tea.Cmd {
+func fetchSearchOverlayAlbumTracksCmd(ctx context.Context, loader provider.AlbumTrackLoader, album playlist.Track, action searchOverlayAlbumAction, gen uint64) tea.Cmd {
 	return func() tea.Msg {
 		var tracks []playlist.Track
 		var err error
@@ -527,39 +527,39 @@ func fetchSpotAlbumTracksCmd(ctx context.Context, loader provider.AlbumTrackLoad
 		} else {
 			tracks, err = loader.AlbumTracks(album.AlbumID())
 		}
-		return spotAlbumTracksMsg{tracks: tracks, album: album, action: action, err: err, gen: gen}
+		return searchOverlayAlbumTracksMsg{tracks: tracks, album: album, action: action, err: err, gen: gen}
 	}
 }
 
-type spotPlaylistsMsg struct {
+type searchOverlayPlaylistsMsg struct {
 	playlists    []playlist.PlaylistInfo
 	err          error
 	providerName string
 	gen          uint64
 }
 
-type spotAddedMsg struct {
+type searchOverlayAddedMsg struct {
 	name         string
 	err          error
 	providerName string
 	gen          uint64
 }
 
-type spotCreatedMsg struct {
+type searchOverlayCreatedMsg struct {
 	name         string
 	err          error
 	providerName string
 	gen          uint64
 }
 
-func fetchSpotSearchCmd(ctx context.Context, s provider.Searcher, providerName, query string, gen uint64) tea.Cmd {
+func fetchSearchOverlayCmd(ctx context.Context, s provider.Searcher, providerName, query string, gen uint64) tea.Cmd {
 	return func() tea.Msg {
 		tracks, err := s.SearchTracks(ctx, query, 20)
-		return spotSearchResultsMsg{tracks: tracks, err: err, providerName: providerName, query: query, gen: gen}
+		return searchOverlayResultsMsg{tracks: tracks, err: err, providerName: providerName, query: query, gen: gen}
 	}
 }
 
-func fetchSpotPlaylistsCmd(prov playlist.Provider, gen uint64) tea.Cmd {
+func fetchSearchOverlayPlaylistsCmd(prov playlist.Provider, gen uint64) tea.Cmd {
 	return func() tea.Msg {
 		playlists, err := prov.Playlists()
 		if err != nil && len(playlists) > 0 {
@@ -570,24 +570,24 @@ func fetchSpotPlaylistsCmd(prov playlist.Provider, gen uint64) tea.Cmd {
 		if err == nil {
 			playlists = playlistTargets(prov, playlists)
 		}
-		return spotPlaylistsMsg{playlists: playlists, err: err, providerName: prov.Name(), gen: gen}
+		return searchOverlayPlaylistsMsg{playlists: playlists, err: err, providerName: prov.Name(), gen: gen}
 	}
 }
 
-func addToSpotPlaylistCmd(ctx context.Context, w provider.PlaylistWriter, playlistID string, track playlist.Track, providerName, name string, gen uint64) tea.Cmd {
+func addToSearchOverlayPlaylistCmd(ctx context.Context, w provider.PlaylistWriter, playlistID string, track playlist.Track, providerName, name string, gen uint64) tea.Cmd {
 	return func() tea.Msg {
 		err := w.AddTrackToPlaylist(ctx, playlistID, track)
-		return spotAddedMsg{name: name, err: err, providerName: providerName, gen: gen}
+		return searchOverlayAddedMsg{name: name, err: err, providerName: providerName, gen: gen}
 	}
 }
 
-func createSpotPlaylistCmd(ctx context.Context, c provider.PlaylistCreator, w provider.PlaylistWriter, providerName, name string, track playlist.Track, gen uint64) tea.Cmd {
+func createSearchOverlayPlaylistCmd(ctx context.Context, c provider.PlaylistCreator, w provider.PlaylistWriter, providerName, name string, track playlist.Track, gen uint64) tea.Cmd {
 	return func() tea.Msg {
 		id, err := c.CreatePlaylist(ctx, name)
 		if err != nil {
-			return spotCreatedMsg{name: name, err: err, providerName: providerName, gen: gen}
+			return searchOverlayCreatedMsg{name: name, err: err, providerName: providerName, gen: gen}
 		}
 		err = w.AddTrackToPlaylist(ctx, id, track)
-		return spotCreatedMsg{name: name, err: err, providerName: providerName, gen: gen}
+		return searchOverlayCreatedMsg{name: name, err: err, providerName: providerName, gen: gen}
 	}
 }

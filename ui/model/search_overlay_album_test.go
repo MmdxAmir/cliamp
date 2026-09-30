@@ -10,7 +10,7 @@ import (
 	"github.com/bjarneo/cliamp/playlist"
 )
 
-func TestCanceledSpotAlbumResponseIsIgnored(t *testing.T) {
+func TestCanceledSearchOverlayAlbumResponseIsIgnored(t *testing.T) {
 	tests := []struct {
 		name   string
 		cancel func(*Model)
@@ -18,13 +18,13 @@ func TestCanceledSpotAlbumResponseIsIgnored(t *testing.T) {
 		{
 			name: "close overlay",
 			cancel: func(m *Model) {
-				m.closeSpotSearch()
+				m.closeSearchOverlay()
 			},
 		},
 		{
 			name: "back to input",
 			cancel: func(m *Model) {
-				m.handleSpotSearchResultsKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+				m.handleSearchOverlayResultsKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 			},
 		},
 	}
@@ -34,15 +34,15 @@ func TestCanceledSpotAlbumResponseIsIgnored(t *testing.T) {
 			canceled := make(chan struct{})
 			m := Model{
 				playlist: playlist.New(),
-				spotSearch: spotSearchState{
+				searchOverlay: searchOverlayState{
 					visible:      true,
-					screen:       spotSearchResults,
+					screen:       searchOverlayResults,
 					albumLoading: true,
 					cancel:       func() { close(canceled) },
 				},
 			}
 			const gen = 7
-			m.requests.spotAlbum = gen
+			m.requests.searchOverlayAlbum = gen
 
 			tt.cancel(&m)
 			select {
@@ -50,13 +50,13 @@ func TestCanceledSpotAlbumResponseIsIgnored(t *testing.T) {
 			default:
 				t.Fatal("album request context was not canceled")
 			}
-			if m.requests.spotAlbum == gen {
+			if m.requests.searchOverlayAlbum == gen {
 				t.Fatal("album request generation was not invalidated")
 			}
 
-			updated, cmd := m.Update(spotAlbumTracksMsg{
+			updated, cmd := m.Update(searchOverlayAlbumTracksMsg{
 				gen:    gen,
-				action: spotAlbumPlay,
+				action: searchOverlayAlbumPlay,
 				album:  albumResult("Late Album"),
 				tracks: []playlist.Track{{Title: "Late Track"}},
 			})
@@ -82,44 +82,44 @@ func (contextAlbumLoader) AlbumTracksContext(ctx context.Context, _ string) ([]p
 	return nil, ctx.Err()
 }
 
-func TestFetchSpotAlbumTracksCmdUsesContextLoader(t *testing.T) {
+func TestFetchSearchOverlayAlbumTracksCmdUsesContextLoader(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	msg := fetchSpotAlbumTracksCmd(ctx, contextAlbumLoader{}, albumResult("Album"), spotAlbumPlay, 1)().(spotAlbumTracksMsg)
+	msg := fetchSearchOverlayAlbumTracksCmd(ctx, contextAlbumLoader{}, albumResult("Album"), searchOverlayAlbumPlay, 1)().(searchOverlayAlbumTracksMsg)
 	if !errors.Is(msg.err, context.Canceled) {
 		t.Fatalf("album load error = %v, want context.Canceled", msg.err)
 	}
 }
 
-func TestLeavingSpotResultsCancelsPlaylistLookup(t *testing.T) {
+func TestLeavingSearchOverlayResultsCancelsPlaylistLookup(t *testing.T) {
 	canceled := make(chan struct{})
 	m := Model{
-		spotSearch: spotSearchState{
+		searchOverlay: searchOverlayState{
 			visible: true,
-			screen:  spotSearchResults,
+			screen:  searchOverlayResults,
 			loading: true,
 			prov:    commandsTestProvider{name: "Spotify"},
 			cancel:  func() { close(canceled) },
 		},
 	}
 	const gen = 7
-	m.requests.spotLists = gen
+	m.requests.searchOverlayLists = gen
 
-	m.handleSpotSearchResultsKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m.handleSearchOverlayResultsKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	select {
 	case <-canceled:
 	default:
 		t.Fatal("playlist lookup context was not canceled")
 	}
-	if m.requests.spotLists == gen {
+	if m.requests.searchOverlayLists == gen {
 		t.Fatal("playlist request generation was not invalidated")
 	}
-	if m.spotSearch.loading {
+	if m.searchOverlay.loading {
 		t.Fatal("playlist lookup remained loading")
 	}
 
-	updated, cmd := m.Update(spotPlaylistsMsg{
+	updated, cmd := m.Update(searchOverlayPlaylistsMsg{
 		gen:          gen,
 		providerName: "Spotify",
 		playlists:    []playlist.PlaylistInfo{{ID: "late", Name: "Late"}},
@@ -128,7 +128,7 @@ func TestLeavingSpotResultsCancelsPlaylistLookup(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("stale playlist response returned a command")
 	}
-	if m.spotSearch.screen != spotSearchInput || m.spotSearch.playlists != nil {
-		t.Fatalf("stale playlist response changed search state: %+v", m.spotSearch)
+	if m.searchOverlay.screen != searchOverlayInput || m.searchOverlay.playlists != nil {
+		t.Fatalf("stale playlist response changed search state: %+v", m.searchOverlay)
 	}
 }

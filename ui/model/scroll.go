@@ -175,11 +175,11 @@ func (m *Model) clampActiveScrollState() {
 		} else if m.plManager.screen == plMgrScreenDirs {
 			m.plMgrDirsMaybeAdjustScroll(m.effectivePlaylistVisible())
 		}
-	case screenSpotSearch:
-		if m.spotSearch.screen == spotSearchResults {
-			m.spotSearchResultsMaybeAdjustScroll(m.spotSearchResultsVisible())
-		} else if m.spotSearch.screen == spotSearchPlaylist {
-			m.spotSearchPlaylistMaybeAdjustScroll(m.effectivePlaylistVisible())
+	case screenSearchOverlay:
+		if m.searchOverlay.screen == searchOverlayResults {
+			m.searchOverlayResultsMaybeAdjustScroll(m.searchOverlayResultsVisible())
+		} else if m.searchOverlay.screen == searchOverlayPlaylist {
+			m.searchOverlayPlaylistMaybeAdjustScroll(m.effectivePlaylistVisible())
 		}
 	case screenQueue:
 		m.normalizeQueueOverlay()

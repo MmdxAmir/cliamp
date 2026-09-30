@@ -103,18 +103,18 @@ func init() {
 			view: overlayView{(*Model).fbHeaderLine, (*Model).renderFileBrowserBody},
 		},
 		{
-			screen: screenSpotSearch,
-			key:    (*Model).handleSpotSearchKey,
+			screen: screenSearchOverlay,
+			key:    (*Model).handleSearchOverlayKey,
 			paste: func(m *Model, s string) {
-				switch m.spotSearch.screen {
-				case spotSearchInput:
-					m.insertText("spot-search", &m.spotSearch.query, s)
-				case spotSearchNewName:
-					m.insertText("spot-playlist-name", &m.spotSearch.newName, s)
+				switch m.searchOverlay.screen {
+				case searchOverlayInput:
+					m.insertText("search-overlay", &m.searchOverlay.query, s)
+				case searchOverlayNewName:
+					m.insertText("search-overlay-playlist-name", &m.searchOverlay.newName, s)
 				}
 			},
-			context: fixedContext(commandModeSpotSearch, "Provider Search"),
-			view:    overlayView{(*Model).spotSearchHeaderLine, (*Model).renderSpotSearchBody},
+			context: fixedContext(commandModeSearchOverlay, "Provider Search"),
+			view:    overlayView{(*Model).searchOverlayHeaderLine, (*Model).renderSearchOverlayBody},
 		},
 		{
 			screen: screenNetSearch,
@@ -297,8 +297,8 @@ func (m *Model) overlayOpen(screen topLevelScreen) bool {
 		return m.plPicker.visible
 	case screenFileBrowser:
 		return m.fileBrowser.visible
-	case screenSpotSearch:
-		return m.spotSearch.visible
+	case screenSearchOverlay:
+		return m.searchOverlay.visible
 	case screenNavBrowser:
 		return m.navBrowser.visible
 	case screenThemePicker:

@@ -80,28 +80,28 @@ func TestHandlePasteRoutesToActiveInput(t *testing.T) {
 			},
 		},
 		{
-			name: "spotify search input",
-			model: Model{spotSearch: spotSearchState{
+			name: "provider search input",
+			model: Model{searchOverlay: searchOverlayState{
 				visible: true,
-				screen:  spotSearchInput,
+				screen:  searchOverlayInput,
 			}},
 			content: "arctic monkeys",
 			check: func(t *testing.T, m *Model) {
-				if m.spotSearch.query != "arctic monkeys" {
-					t.Fatalf("spotSearch.query = %q, want %q", m.spotSearch.query, "arctic monkeys")
+				if m.searchOverlay.query != "arctic monkeys" {
+					t.Fatalf("searchOverlay.query = %q, want %q", m.searchOverlay.query, "arctic monkeys")
 				}
 			},
 		},
 		{
 			name: "spotify new name",
-			model: Model{spotSearch: spotSearchState{
+			model: Model{searchOverlay: searchOverlayState{
 				visible: true,
-				screen:  spotSearchNewName,
+				screen:  searchOverlayNewName,
 			}},
 			content: "New Playlist",
 			check: func(t *testing.T, m *Model) {
-				if m.spotSearch.newName != "New Playlist" {
-					t.Fatalf("spotSearch.newName = %q, want %q", m.spotSearch.newName, "New Playlist")
+				if m.searchOverlay.newName != "New Playlist" {
+					t.Fatalf("searchOverlay.newName = %q, want %q", m.searchOverlay.newName, "New Playlist")
 				}
 			},
 		},

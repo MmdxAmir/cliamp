@@ -43,7 +43,7 @@ func TestSearchInputsShowModeAndExitKey(t *testing.T) {
 		{
 			name:   "Ctrl+F provider search",
 			setup:  func(m *Model) { m.openProviderSearchWith(searcher) },
-			header: (*Model).spotSearchHeaderLine,
+			header: (*Model).searchOverlayHeaderLine,
 			want:   "[Search: Spotify] _",
 		},
 		{

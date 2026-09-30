@@ -250,7 +250,7 @@ func (m *Model) spinnerVisible() bool {
 	return m.provLoading || m.provSearch.loading || m.catalogBatch.loading || m.feedLoading ||
 		(m.lyrics.visible && m.lyrics.loading) ||
 		(m.netSearch.active && m.netSearch.loading) ||
-		(m.spotSearch.visible && (m.spotSearch.loading || m.spotSearch.albumLoading)) ||
+		(m.searchOverlay.visible && (m.searchOverlay.loading || m.searchOverlay.albumLoading)) ||
 		(m.navBrowser.visible && (m.navBrowser.loading || m.navBrowser.albumLoading)) ||
 		(m.devicePicker.visible && m.devicePicker.loading) ||
 		(m.subs.visible && m.subs.loading)

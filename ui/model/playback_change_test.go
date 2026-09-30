@@ -164,9 +164,9 @@ func TestPlaybackChangesNotifyAndScrobbleOnce(t *testing.T) {
 		{name: "V2 track.play", msg: func(t *testing.T) tea.Msg {
 			return v2Request(t, "track.play", ipc.Request{Track: &ipc.TrackInfo{Path: "d.mp3"}})
 		}, notify: true, scrobble: true},
-		{name: "album play now", setup: func(c *playbackChange) { c.m.requests.spotAlbum = 1 },
+		{name: "album play now", setup: func(c *playbackChange) { c.m.requests.searchOverlayAlbum = 1 },
 			msg: func(*testing.T) tea.Msg {
-				return spotAlbumTracksMsg{gen: 1, action: spotAlbumPlay, album: playlist.Track{Title: "Album"},
+				return searchOverlayAlbumTracksMsg{gen: 1, action: searchOverlayAlbumPlay, album: playlist.Track{Title: "Album"},
 					tracks: []playlist.Track{{Title: "D", Path: "d.mp3"}}}
 			}, notify: true, scrobble: true},
 		{name: "enter on a browser track", setup: func(c *playbackChange) { c.m.navBrowser = playbackChangeNav(false) },

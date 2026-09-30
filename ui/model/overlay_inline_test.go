@@ -65,7 +65,7 @@ func TestInlineOverlaysFitTerminal(t *testing.T) {
 		{"urlInput", func(m *Model) { m.urlInputting = true }},
 		{"lyrics", func(m *Model) { m.lyrics.visible = true }},
 		{"jump", func(m *Model) { m.jumping = true }},
-		{"spotSearch", func(m *Model) { m.spotSearch.visible = true }},
+		{"searchOverlay", func(m *Model) { m.searchOverlay.visible = true }},
 		{"navBrowser", func(m *Model) { m.navBrowser.visible = true; m.navBrowser.mode = navBrowseModeMenu }},
 		{"playlistManager", func(m *Model) { m.plManager.visible = true; m.plManager.screen = plMgrScreenList }},
 		{"fileBrowser", func(m *Model) { m.fileBrowser.visible = true }},

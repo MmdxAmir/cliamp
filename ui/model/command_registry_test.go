@@ -38,7 +38,7 @@ func TestCommandHelpKeepsEssentialHintsAtMinimumWidth(t *testing.T) {
 		{name: "queue", mode: commandModeQueue, keys: []string{"Esc", "d", "Ctrl+K"}},
 		{name: "text input", mode: commandModeSearch, keys: []string{"Esc", "Enter", "Ctrl+K"}},
 		{name: "network search", mode: commandModeNetSearch, keys: []string{"Esc", "Enter", "Ctrl+K"}},
-		{name: "provider search", mode: commandModeSpotSearch, keys: []string{"Esc", "Enter", "Ctrl+K"}},
+		{name: "provider search", mode: commandModeSearchOverlay, keys: []string{"Esc", "Enter", "Ctrl+K"}},
 		{name: "jump", mode: commandModeJump, keys: []string{"Esc", "Enter", "Ctrl+K"}},
 		{name: "URL", mode: commandModeURL, keys: []string{"Esc", "Enter", "Ctrl+K"}},
 		{name: "lyrics", mode: commandModeLyrics, keys: []string{"Esc", "r", "Ctrl+K"}},

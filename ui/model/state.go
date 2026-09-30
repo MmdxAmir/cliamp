@@ -257,19 +257,19 @@ type navBrowserState struct {
 // domain. Completion messages must match their generation before they can
 // change the current screen.
 type requestState struct {
-	provider     uint64
-	tracks       uint64
-	nav          uint64
-	lyrics       uint64
-	netSearch    uint64
-	spotSearch   uint64
-	spotAlbum    uint64
-	spotLists    uint64
-	spotMutation uint64
-	auth         uint64
-	catalog      uint64
-	stream       uint64
-	preload      uint64
+	provider              uint64
+	tracks                uint64
+	nav                   uint64
+	lyrics                uint64
+	netSearch             uint64
+	searchOverlay         uint64
+	searchOverlayAlbum    uint64
+	searchOverlayLists    uint64
+	searchOverlayMutation uint64
+	auth                  uint64
+	catalog               uint64
+	stream                uint64
+	preload               uint64
 }
 
 func nextRequest(gen *uint64) uint64 {
@@ -277,21 +277,21 @@ func nextRequest(gen *uint64) uint64 {
 	return *gen
 }
 
-// spotSearchScreenType identifies which screen of the Spotify search overlay is active.
-type spotSearchScreenType int
+// searchOverlayScreenType identifies which screen of the provider search overlay is active.
+type searchOverlayScreenType int
 
 const (
-	spotSearchInput    spotSearchScreenType = iota // typing search query
-	spotSearchResults                              // browsing search results
-	spotSearchPlaylist                             // picking a playlist to add to
-	spotSearchNewName                              // typing new playlist name
+	searchOverlayInput    searchOverlayScreenType = iota // typing search query
+	searchOverlayResults                                 // browsing search results
+	searchOverlayPlaylist                                // picking a playlist to add to
+	searchOverlayNewName                                 // typing new playlist name
 )
 
-// spotSearchState holds state for the provider search + add-to-playlist overlay.
-type spotSearchState struct {
+// searchOverlayState holds state for the provider search + add-to-playlist overlay.
+type searchOverlayState struct {
 	prov    playlist.Provider // the provider being searched (may differ from active provider)
 	visible bool
-	screen  spotSearchScreenType
+	screen  searchOverlayScreenType
 	query   string
 	results []playlist.Track
 	cursor  int

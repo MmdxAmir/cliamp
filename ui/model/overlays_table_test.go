@@ -17,7 +17,7 @@ var overlayOpeners = map[topLevelScreen]func(*Model){
 	screenDevicePicker:    func(m *Model) { m.devicePicker.visible = true },
 	screenPlaylistPicker:  func(m *Model) { m.plPicker.visible = true },
 	screenFileBrowser:     func(m *Model) { m.fileBrowser.visible = true },
-	screenSpotSearch:      func(m *Model) { m.spotSearch.visible = true },
+	screenSearchOverlay:   func(m *Model) { m.searchOverlay.visible = true },
 	screenNavBrowser:      func(m *Model) { m.navBrowser.visible = true },
 	screenThemePicker:     func(m *Model) { m.themePicker.visible = true },
 	screenVisPicker:       func(m *Model) { m.visPicker.visible = true },
@@ -190,7 +190,7 @@ func TestOverlayStackOrder(t *testing.T) {
 		{"playlist picker over playlist manager", screenPlaylistPicker, screenPlaylistManager},
 		{"playlist picker over file browser", screenPlaylistPicker, screenFileBrowser},
 		{"file browser over playlist manager", screenFileBrowser, screenPlaylistManager},
-		{"provider search over nav browser", screenSpotSearch, screenNavBrowser},
+		{"provider search over nav browser", screenSearchOverlay, screenNavBrowser},
 		{"YouTube search over nav browser", screenNetSearch, screenNavBrowser},
 		{"queue over subscriptions", screenQueue, screenSubs},
 	}

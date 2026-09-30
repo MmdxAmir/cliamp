@@ -208,7 +208,7 @@ const (
 	screenFileBrowser
 	screenNavBrowser
 	screenPlaylistManager
-	screenSpotSearch
+	screenSearchOverlay
 	screenQueue
 	screenSubs
 	screenInfo
@@ -240,7 +240,7 @@ func (s topLevelScreen) label() string {
 		return "Browse"
 	case screenPlaylistManager:
 		return "Playlists"
-	case screenSpotSearch, screenNetSearch:
+	case screenSearchOverlay, screenNetSearch:
 		return "Search"
 	case screenQueue:
 		return "Queue"
@@ -375,7 +375,7 @@ type Model struct {
 	subs           subsOverlay
 	plManager      plManagerState
 	plPicker       playlistPickerState
-	spotSearch     spotSearchState
+	searchOverlay  searchOverlayState
 	fileBrowser    fileBrowserState
 	navBrowser     navBrowserState
 	catalogBatch   catalogBatchState
@@ -607,7 +607,7 @@ func (m Model) usesContentFirstLayout() bool {
 	if m.plPicker.visible && m.plPicker.screen == plPickerChoose {
 		return true
 	}
-	if m.spotSearch.visible && (m.spotSearch.screen == spotSearchResults || m.spotSearch.screen == spotSearchPlaylist) {
+	if m.searchOverlay.visible && (m.searchOverlay.screen == searchOverlayResults || m.searchOverlay.screen == searchOverlayPlaylist) {
 		return true
 	}
 	if m.plManager.visible && (m.plManager.screen == plMgrScreenList || m.plManager.screen == plMgrScreenTracks) {

@@ -20,14 +20,14 @@ func (m *Model) openProviderSearch() {
 // Falls back to YouTube net search when prov doesn't implement Searcher.
 func (m *Model) openProviderSearchWith(prov playlist.Provider) {
 	if _, ok := prov.(provider.Searcher); ok {
-		m.cancelSpotRequest()
-		nextRequest(&m.requests.spotSearch)
-		nextRequest(&m.requests.spotLists)
-		nextRequest(&m.requests.spotMutation)
-		m.spotSearch = spotSearchState{
+		m.cancelSearchOverlayRequest()
+		nextRequest(&m.requests.searchOverlay)
+		nextRequest(&m.requests.searchOverlayLists)
+		nextRequest(&m.requests.searchOverlayMutation)
+		m.searchOverlay = searchOverlayState{
 			prov:    prov,
 			visible: true,
-			screen:  spotSearchInput,
+			screen:  searchOverlayInput,
 		}
 		return
 	}

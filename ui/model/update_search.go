@@ -24,103 +24,103 @@ func (m *Model) handleNetSearchResults(msg netSearchResultsMsg) {
 	m.clampActiveScrollState()
 }
 
-// handleSpotSearchResults shows the track results of a provider search.
-func (m *Model) handleSpotSearchResults(msg spotSearchResultsMsg) {
-	if !m.isCurrentSpotRequest(msg.gen, msg.providerName) || m.spotSearch.query != msg.query {
+// handleSearchOverlayResults shows the track results of a provider search.
+func (m *Model) handleSearchOverlayResults(msg searchOverlayResultsMsg) {
+	if !m.isCurrentSearchOverlayRequest(msg.gen, msg.providerName) || m.searchOverlay.query != msg.query {
 		return
 	}
-	m.cancelSpotRequest()
-	m.spotSearch.loading = false
-	m.spotSearch.cursor = 0
-	m.spotSearch.scroll = 0
+	m.cancelSearchOverlayRequest()
+	m.searchOverlay.loading = false
+	m.searchOverlay.cursor = 0
+	m.searchOverlay.scroll = 0
 	if msg.err != nil {
-		m.setSpotSearchError(msg.err.Error())
+		m.setSearchOverlayError(msg.err.Error())
 		return
 	}
-	m.spotSearch.results = msg.tracks
-	m.spotSearch.cursor = 0
-	m.spotSearch.screen = spotSearchResults
+	m.searchOverlay.results = msg.tracks
+	m.searchOverlay.cursor = 0
+	m.searchOverlay.screen = searchOverlayResults
 	m.applyHeightMode()
 	m.clampActiveScrollState()
 }
 
-// handleSpotAlbumTracks plays, appends or queues the tracks of an album
+// handleSearchOverlayAlbumTracks plays, appends or queues the tracks of an album
 // that the provider search expanded.
-func (m *Model) handleSpotAlbumTracks(msg spotAlbumTracksMsg) tea.Cmd {
-	if msg.gen != m.requests.spotAlbum {
+func (m *Model) handleSearchOverlayAlbumTracks(msg searchOverlayAlbumTracksMsg) tea.Cmd {
+	if msg.gen != m.requests.searchOverlayAlbum {
 		return nil
 	}
-	m.cancelSpotRequest()
-	m.spotSearch.albumLoading = false
+	m.cancelSearchOverlayRequest()
+	m.searchOverlay.albumLoading = false
 	if msg.err != nil {
-		m.setSpotSearchError(msg.err.Error())
+		m.setSearchOverlayError(msg.err.Error())
 		return nil
 	}
 	if len(msg.tracks) == 0 {
-		m.setSpotSearchError("That album has no tracks available here.")
+		m.setSearchOverlayError("That album has no tracks available here.")
 		return nil
 	}
 	album := msg.album
 	tracks := msg.tracks
-	m.closeSpotSearch()
+	m.closeSearchOverlay()
 	switch msg.action {
-	case spotAlbumAppend:
+	case searchOverlayAlbumAppend:
 		return m.appendAlbum(album, tracks)
-	case spotAlbumQueueNext:
+	case searchOverlayAlbumQueueNext:
 		return m.queueAlbumNext(album, tracks)
 	default:
 		return m.playAlbumImmediate(album, tracks)
 	}
 }
 
-// handleSpotPlaylists shows the playlists that can take a provider search
+// handleSearchOverlayPlaylists shows the playlists that can take a provider search
 // result.
-func (m *Model) handleSpotPlaylists(msg spotPlaylistsMsg) {
-	if !m.isCurrentSpotListRequest(msg.gen, msg.providerName) {
+func (m *Model) handleSearchOverlayPlaylists(msg searchOverlayPlaylistsMsg) {
+	if !m.isCurrentSearchOverlayListRequest(msg.gen, msg.providerName) {
 		return
 	}
-	m.spotSearch.loading = false
-	m.spotSearch.cursor = 0
-	m.spotSearch.scroll = 0
+	m.searchOverlay.loading = false
+	m.searchOverlay.cursor = 0
+	m.searchOverlay.scroll = 0
 	if msg.err != nil {
-		m.setSpotSearchError(msg.err.Error())
+		m.setSearchOverlayError(msg.err.Error())
 		return
 	}
-	m.spotSearch.playlists = msg.playlists
-	m.spotSearch.cursor = 0
-	m.spotSearch.screen = spotSearchPlaylist
+	m.searchOverlay.playlists = msg.playlists
+	m.searchOverlay.cursor = 0
+	m.searchOverlay.screen = searchOverlayPlaylist
 	m.applyHeightMode()
 	m.clampActiveScrollState()
 }
 
-// handleSpotAdded reports the add of a provider search result to a
+// handleSearchOverlayAdded reports the add of a provider search result to a
 // playlist.
-func (m *Model) handleSpotAdded(msg spotAddedMsg) {
-	if !m.isCurrentSpotMutation(msg.gen, msg.providerName) {
+func (m *Model) handleSearchOverlayAdded(msg searchOverlayAddedMsg) {
+	if !m.isCurrentSearchOverlayMutation(msg.gen, msg.providerName) {
 		return
 	}
-	m.cancelSpotRequest()
-	m.spotSearch.loading = false
+	m.cancelSearchOverlayRequest()
+	m.searchOverlay.loading = false
 	if msg.err != nil {
-		m.setSpotSearchError("Add failed: " + msg.err.Error())
+		m.setSearchOverlayError("Add failed: " + msg.err.Error())
 		return
 	}
 	m.status.Showf(statusTTLDefault, "Added to %q", msg.name)
-	m.closeSpotSearch()
+	m.closeSearchOverlay()
 }
 
-// handleSpotCreated reports a playlist that the provider search created for
+// handleSearchOverlayCreated reports a playlist that the provider search created for
 // a track.
-func (m *Model) handleSpotCreated(msg spotCreatedMsg) {
-	if !m.isCurrentSpotMutation(msg.gen, msg.providerName) {
+func (m *Model) handleSearchOverlayCreated(msg searchOverlayCreatedMsg) {
+	if !m.isCurrentSearchOverlayMutation(msg.gen, msg.providerName) {
 		return
 	}
-	m.cancelSpotRequest()
-	m.spotSearch.loading = false
+	m.cancelSearchOverlayRequest()
+	m.searchOverlay.loading = false
 	if msg.err != nil {
-		m.setSpotSearchError("Create failed: " + msg.err.Error())
+		m.setSearchOverlayError("Create failed: " + msg.err.Error())
 		return
 	}
 	m.status.Showf(statusTTLDefault, "Created %q & added track", msg.name)
-	m.closeSpotSearch()
+	m.closeSearchOverlay()
 }

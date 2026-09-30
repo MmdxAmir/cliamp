@@ -142,8 +142,8 @@ func TestFavoriteKeyDispatchByContext(t *testing.T) {
 		{
 			name: "search results track",
 			setup: func(m *Model) {
-				m.spotSearch = spotSearchState{
-					prov: commandsTestProvider{name: "Spotify"}, visible: true, screen: spotSearchResults,
+				m.searchOverlay = searchOverlayState{
+					prov: commandsTestProvider{name: "Spotify"}, visible: true, screen: searchOverlayResults,
 					results: []playlist.Track{albumResult("Album"), {Path: "spotify:track:1", Title: "Song"}}, cursor: 1,
 				}
 			},

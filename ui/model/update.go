@@ -205,24 +205,24 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleTrackSaved(msg)
 		return m, nil
 
-	case spotSearchResultsMsg:
-		m.handleSpotSearchResults(msg)
+	case searchOverlayResultsMsg:
+		m.handleSearchOverlayResults(msg)
 		return m, nil
 
-	case spotAlbumTracksMsg:
-		cmd := m.handleSpotAlbumTracks(msg)
+	case searchOverlayAlbumTracksMsg:
+		cmd := m.handleSearchOverlayAlbumTracks(msg)
 		return m, cmd
 
-	case spotPlaylistsMsg:
-		m.handleSpotPlaylists(msg)
+	case searchOverlayPlaylistsMsg:
+		m.handleSearchOverlayPlaylists(msg)
 		return m, nil
 
-	case spotAddedMsg:
-		m.handleSpotAdded(msg)
+	case searchOverlayAddedMsg:
+		m.handleSearchOverlayAdded(msg)
 		return m, nil
 
-	case spotCreatedMsg:
-		m.handleSpotCreated(msg)
+	case searchOverlayCreatedMsg:
+		m.handleSearchOverlayCreated(msg)
 		return m, nil
 
 	case provAuthDoneMsg:
