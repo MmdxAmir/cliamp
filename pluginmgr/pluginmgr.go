@@ -131,6 +131,10 @@ func Install(source string, assumeYes ...bool) error {
 	if info, err := os.Stat(filepath.Join(dir, name)); err == nil && info.IsDir() {
 		return fmt.Errorf("plugin %q already exists as directory (remove it first with: cliamp plugins remove %s)", name, name)
 	}
+	// Approve needs the manifest. Check it before the download and the prompt.
+	if _, err := plugintrust.Load(dir); err != nil {
+		return manifestError(dir, err)
+	}
 
 	// Try each candidate URL.
 	var body []byte
@@ -247,6 +251,10 @@ func Remove(name string) error {
 	dir, err := appdir.PluginDir()
 	if err != nil {
 		return err
+	}
+	// Revoke needs the manifest. Check it before the plugin is gone.
+	if _, err := plugintrust.Load(dir); err != nil {
+		return manifestError(dir, err)
 	}
 
 	// Try single file first, then directory.

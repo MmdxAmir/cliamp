@@ -513,9 +513,10 @@ func TestTrustAndRuntimePickSameFile(t *testing.T) {
 	}
 }
 
-// cliamp plugins list and trust explain a trust manifest that does not
-// load. list still shows each plugin, as untrusted like the player treats
-// it. trust fails before it asks, and it leaves the file as it is.
+// cliamp plugins list, trust, install and remove explain a trust manifest
+// that does not load. list still shows each plugin, as untrusted like the
+// player treats it. trust, install and remove fail before they download, ask
+// or delete, and they leave the files as they are.
 func TestBadTrustManifest(t *testing.T) {
 	manifests := []struct {
 		name    string
@@ -526,9 +527,46 @@ func TestBadTrustManifest(t *testing.T) {
 			return `{"version":2,"plugins":{"hello":"` + hash + `"}}`
 		}},
 	}
+	cmds := []struct {
+		name string
+		run  func(t *testing.T, pluginDir string, out *bytes.Buffer) error
+	}{
+		{"list", func(t *testing.T, _ string, out *bytes.Buffer) error {
+			err := List()
+			if !strings.Contains(out.String(), " untrusted ") {
+				t.Errorf("List output = %q, want hello as untrusted", out.String())
+			}
+			return err
+		}},
+		{"trust", func(*testing.T, string, *bytes.Buffer) error { return Trust("hello", false) }},
+		{"install", func(t *testing.T, pluginDir string, _ *bytes.Buffer) error {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Errorf("Install downloaded %s", r.URL.Path)
+				_, _ = w.Write([]byte(`plugin.register({name = "fresh", type = "hook"})`))
+			}))
+			t.Cleanup(srv.Close)
+			installTestClient(t, srv.URL)
+			oldInput := input
+			input = strings.NewReader("y\n")
+			t.Cleanup(func() { input = oldInput })
+
+			err := Install(srv.URL+"/fresh.lua", false)
+			if _, statErr := os.Stat(filepath.Join(pluginDir, "fresh.lua")); !os.IsNotExist(statErr) {
+				t.Errorf("Install wrote fresh.lua, stat err = %v", statErr)
+			}
+			return err
+		}},
+		{"remove", func(t *testing.T, pluginDir string, _ *bytes.Buffer) error {
+			err := Remove("hello")
+			if _, statErr := os.Stat(filepath.Join(pluginDir, "hello.lua")); statErr != nil {
+				t.Errorf("Remove deleted hello.lua, stat err = %v", statErr)
+			}
+			return err
+		}},
+	}
 	for _, mf := range manifests {
-		for _, cmd := range []string{"list", "trust"} {
-			t.Run(mf.name+"/"+cmd, func(t *testing.T) {
+		for _, cmd := range cmds {
+			t.Run(mf.name+"/"+cmd.name, func(t *testing.T) {
 				pluginDir, path := installForTest(t, "hello", `plugin.register({name = "hello", type = "hook"})`)
 				hash, err := plugintrust.HashFile(path)
 				if err != nil {
@@ -540,20 +578,13 @@ func TestBadTrustManifest(t *testing.T) {
 					t.Fatal(err)
 				}
 				out := silenceOutput(t)
-				if cmd == "list" {
-					err = List()
-					if !strings.Contains(out.String(), " untrusted ") {
-						t.Errorf("List output = %q, want hello as untrusted", out.String())
-					}
-				} else {
-					err = Trust("hello", false)
-					if strings.Contains(out.String(), "[y/N]") {
-						t.Errorf("Trust asked for approval: %q", out.String())
-					}
+				err = cmd.run(t, pluginDir, out)
+				if strings.Contains(out.String(), "[y/N]") {
+					t.Errorf("%s asked for approval: %q", cmd.name, out.String())
 				}
 				hint := "delete " + manifest + ", then run `cliamp plugins trust <name>` for each plugin"
 				if err == nil || !strings.Contains(err.Error(), hint) {
-					t.Fatalf("%s error = %v, want the hint %q", cmd, err, hint)
+					t.Fatalf("%s error = %v, want the hint %q", cmd.name, err, hint)
 				}
 				if data, _ := os.ReadFile(manifest); string(data) != content {
 					t.Errorf("manifest = %q, want it unchanged", data)
