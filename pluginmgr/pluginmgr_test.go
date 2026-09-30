@@ -519,24 +519,30 @@ func TestTrustAndRuntimePickSameFile(t *testing.T) {
 func TestBadTrustManifest(t *testing.T) {
 	manifests := []struct {
 		name    string
-		content string
+		content func(hash string) string
 	}{
-		{"not JSON", "{"},
-		{"unsupported version", `{"version":2,"plugins":{}}`},
+		{"not JSON", func(string) string { return "{" }},
+		{"unsupported version with a matching hash", func(hash string) string {
+			return `{"version":2,"plugins":{"hello":"` + hash + `"}}`
+		}},
 	}
 	for _, mf := range manifests {
 		for _, cmd := range []string{"list", "trust"} {
 			t.Run(mf.name+"/"+cmd, func(t *testing.T) {
-				pluginDir, _ := installForTest(t, "hello", `plugin.register({name = "hello", type = "hook"})`)
+				pluginDir, path := installForTest(t, "hello", `plugin.register({name = "hello", type = "hook"})`)
+				hash, err := plugintrust.HashFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				content := mf.content(hash)
 				manifest := filepath.Join(pluginDir, ".trust.json")
-				if err := os.WriteFile(manifest, []byte(mf.content), 0o600); err != nil {
+				if err := os.WriteFile(manifest, []byte(content), 0o600); err != nil {
 					t.Fatal(err)
 				}
 				out := silenceOutput(t)
-				var err error
 				if cmd == "list" {
 					err = List()
-					if !strings.Contains(out.String(), "untrusted") {
+					if !strings.Contains(out.String(), " untrusted ") {
 						t.Errorf("List output = %q, want hello as untrusted", out.String())
 					}
 				} else {
@@ -549,7 +555,7 @@ func TestBadTrustManifest(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), hint) {
 					t.Fatalf("%s error = %v, want the hint %q", cmd, err, hint)
 				}
-				if data, _ := os.ReadFile(manifest); string(data) != mf.content {
+				if data, _ := os.ReadFile(manifest); string(data) != content {
 					t.Errorf("manifest = %q, want it unchanged", data)
 				}
 			})

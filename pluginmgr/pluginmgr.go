@@ -57,6 +57,9 @@ func List() error {
 	// Like the player, treat every plugin as untrusted when the manifest
 	// does not load, and return the error after the list.
 	manifest, trustErr := plugintrust.Load(dir)
+	if trustErr != nil {
+		manifest = plugintrust.Manifest{}
+	}
 	for i := range plugins {
 		switch err := plugintrust.Verify(manifest, plugins[i].id, plugins[i].path); {
 		case err == nil:
