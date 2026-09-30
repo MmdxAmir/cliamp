@@ -1,6 +1,7 @@
 package model
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -190,11 +192,13 @@ type verbState struct {
 	repeat        playlist.RepeatMode
 	vis           string
 	saved         string
-	preload       string
-	clears        int
-	notified      bool
-	scrobbled     string
-	pluginState   bool
+	// preload is true when an armed or loading preload holds the track
+	// that plays next. Shuffle picks that track at random.
+	preload     bool
+	clears      int
+	notified    bool
+	scrobbled   string
+	pluginState bool
 }
 
 // Each action verb reaches the same end state from each entry point: the
@@ -203,52 +207,64 @@ type verbState struct {
 func TestVerbEntryPointsReachTheSameState(t *testing.T) {
 	key := func(text string) tea.Msg { return tea.KeyPressMsg{Text: text} }
 	fullVis := func(text string) tea.Msg { return fullVisKey{tea.KeyPressMsg{Text: text}} }
+	v2 := func(op string, params ipc.Request) tea.Msg { return v2Request(t, op, params) }
 	for _, verb := range []struct {
 		name string
+		// ref names the entry that the others must match. It is "key" when
+		// empty.
+		ref string
 		// skips is true for a verb that leaves the track, so it scrobbles.
 		// notifies is true when the verb tells the media controls and the
 		// playback.state plugin hook.
 		skips, notifies bool
 		entries         map[string]tea.Msg
-		// done reports whether the key state shows the verb.
+		// done reports whether the ref state shows the verb.
 		done func(verbState) bool
 	}{
 		{name: "skipNext", skips: true, notifies: true, entries: map[string]tea.Msg{
 			"key": key(">"), "full-screen key": fullVis(">"),
+			"playback message": playback.NextMsg{}, "V2": v2("next", ipc.Request{}),
 		}, done: func(s verbState) bool { return s.index == 1 && s.cursor == 1 && s.scrobbled == "a.mp3" }},
 		{name: "skipPrev", skips: true, notifies: true, entries: map[string]tea.Msg{
 			"key": key("<"), "full-screen key": fullVis("<"),
+			"playback message": playback.PrevMsg{}, "V2": v2("prev", ipc.Request{}),
 		}, done: func(s verbState) bool { return s.index == 0 && s.scrobbled == "a.mp3" }},
 		{name: "setShuffle", entries: map[string]tea.Msg{
-			"key": key("z"),
-		}, done: func(s verbState) bool { return s.shuffle && s.saved == "map[shuffle:true]" && s.clears == 1 }},
-		{name: "setRepeat", entries: map[string]tea.Msg{
-			"key": key("r"),
+			"key": key("z"), "V2": v2("shuffle", ipc.Request{Name: "on"}), "V2 toggle": v2("shuffle", ipc.Request{}),
 		}, done: func(s verbState) bool {
-			return s.repeat == playlist.RepeatAll && s.saved == `map[repeat:"All"]` && s.clears == 1
+			return s.shuffle && s.saved == "map[shuffle:true]" && s.clears == 1 && s.preload
+		}},
+		{name: "setRepeat", entries: map[string]tea.Msg{
+			"key": key("r"), "V2": v2("repeat", ipc.Request{Name: "all"}), "V2 cycle": v2("repeat", ipc.Request{}),
+		}, done: func(s verbState) bool {
+			return s.repeat == playlist.RepeatAll && s.saved == `map[repeat:"All"]` && s.clears == 1 && s.preload
 		}},
 		{name: "cycleVisualizer", entries: map[string]tea.Msg{
-			"key": key("v"), "full-screen key": fullVis("v"),
+			"key": key("v"), "full-screen key": fullVis("v"), "V2": v2("vis", ipc.Request{Name: "next"}),
 		}, done: func(s verbState) bool { return s.vis == "BarsDot" && s.saved == `map[visualizer:"BarsDot"]` }},
 		{name: "adjustVolume", notifies: true, entries: map[string]tea.Msg{
-			"key": key("+"), "full-screen key": fullVis("+"),
+			"key": key("+"), "full-screen key": fullVis("+"), "V2": v2("volume.adjust", ipc.Request{Value: 1}),
 		}, done: func(s verbState) bool { return s.volume == 1 }},
+		{name: "setVolume", ref: "V2", notifies: true, entries: map[string]tea.Msg{
+			"V2": v2("volume", ipc.Request{Value: -6}), "playback message": playback.SetVolumeMsg{VolumeDB: -6},
+		}, done: func(s verbState) bool { return s.volume == -6 }},
 	} {
 		t.Run(verb.name, func(t *testing.T) {
 			states := map[string]verbState{}
 			for entry, msg := range verb.entries {
 				states[entry] = runVerbEntry(t, msg, verb.skips, verb.notifies)
 			}
-			want := states["key"]
+			ref := cmp.Or(verb.ref, "key")
+			want := states[ref]
 			if !verb.done(want) {
-				t.Fatalf("key state = %+v, want the verb done", want)
+				t.Fatalf("%s state = %+v, want the verb done", ref, want)
 			}
 			if verb.notifies && (!want.notified || !want.pluginState) {
-				t.Fatalf("key state = %+v, want the media controls and the playback.state hook told", want)
+				t.Fatalf("%s state = %+v, want the media controls and the playback.state hook told", ref, want)
 			}
 			for entry, got := range states {
 				if got != want {
-					t.Errorf("%s: state = %+v, want the key state %+v", entry, got, want)
+					t.Errorf("%s: state = %+v, want the %s state %+v", entry, got, ref, want)
 				}
 			}
 		})
@@ -308,8 +324,8 @@ func runVerbEntry(t *testing.T, msg tea.Msg, skips, notifies bool) verbState {
 		clears:   engine.clearPreloadCalls,
 		notified: len(notifier.updates) > 0,
 	}
-	if m.preloading || engine.hasPreload {
-		state.preload = m.preloadFor
+	if next, ok := m.preloadTarget(); ok && (m.preloading || engine.hasPreload) {
+		state.preload = m.preloadFor == next.Path
 	}
 	if skips {
 		select {

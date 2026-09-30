@@ -1071,16 +1071,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case playback.NextMsg:
-		refresh := m.scrobbleCurrent()
-		cmd := m.nextTrack()
-		m.notifyAll()
-		return m, tea.Batch(refresh, cmd)
+		cmd := m.skipNext()
+		return m, cmd
 
 	case playback.PrevMsg:
-		refresh := m.scrobbleCurrent()
-		cmd := m.prevTrack()
-		m.notifyAll()
-		return m, tea.Batch(refresh, cmd)
+		cmd := m.skipPrev()
+		return m, cmd
 
 	case playback.SeekMsg:
 		cmd := m.seekRelative(msg.Offset, 0)
@@ -1091,8 +1087,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case playback.SetVolumeMsg:
-		m.player.SetVolume(msg.VolumeDB)
-		m.notifyAll()
+		m.setVolume(msg.VolumeDB)
 		return m, nil
 
 	case playback.SetSpeedMsg:

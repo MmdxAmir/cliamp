@@ -152,25 +152,19 @@ func (m *Model) handleV2Request(msg V2RequestMsg) tea.Cmd {
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
 		return nil
 	case "next":
-		m.scrobbleCurrent()
-		cmd := m.nextTrack()
-		m.notifyAll()
+		cmd := m.skipNext()
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
 		return cmd
 	case "prev":
-		m.scrobbleCurrent()
-		cmd := m.prevTrack()
-		m.notifyAll()
+		cmd := m.skipPrev()
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
 		return cmd
 	case "volume":
-		m.player.SetVolume(request.Value)
-		m.notifyAll()
+		m.setVolume(request.Value)
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true, Volume: m.player.Volume()})
 		return nil
 	case "volume.adjust":
-		m.player.SetVolume(m.player.Volume() + request.Value)
-		m.notifyAll()
+		m.adjustVolume(request.Value)
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true, Volume: m.player.Volume()})
 		return nil
 	case "seek":
@@ -380,10 +374,7 @@ func (m *Model) handleV2Visualizer(jobs *ipc.JobStore, jobID string, request ipc
 		return nil
 	}
 	if strings.EqualFold(request.Name, "next") {
-		m.vis.CycleMode()
-		m.vis.RequestRefresh()
-		m.refreshChrome()
-		if err := m.saveVisualizerChoice(); err != nil {
+		if err := m.cycleVisualizer(); err != nil {
 			m.failV2Job(jobs, jobID, v2InternalError())
 			return nil
 		}
@@ -492,27 +483,28 @@ func (m *Model) handleV2Mode(jobs *ipc.JobStore, jobID string, request ipc.Reque
 	name := strings.ToLower(request.Name)
 	switch request.Cmd {
 	case "shuffle":
-		if (name == "on" && !m.playlist.Shuffled()) || (name == "off" && m.playlist.Shuffled()) || (name != "on" && name != "off") {
-			m.playlist.ToggleShuffle()
+		on := !m.playlist.Shuffled()
+		switch name {
+		case "on":
+			on = true
+		case "off":
+			on = false
 		}
+		cmd := m.setShuffle(on)
 		value := m.playlist.Shuffled()
-		_ = m.saveConfigBool("shuffle", value)
-		cmd := m.rearmPreload()
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Shuffle: &value})
 		return cmd
 	case "repeat":
+		mode := (m.playlist.Repeat() + 1) % (playlist.RepeatOne + 1)
 		switch name {
 		case "off":
-			m.playlist.SetRepeat(playlist.RepeatOff)
+			mode = playlist.RepeatOff
 		case "all":
-			m.playlist.SetRepeat(playlist.RepeatAll)
+			mode = playlist.RepeatAll
 		case "one":
-			m.playlist.SetRepeat(playlist.RepeatOne)
-		default:
-			m.playlist.CycleRepeat()
+			mode = playlist.RepeatOne
 		}
-		_ = m.saveConfigString("repeat", m.playlist.Repeat().String())
-		cmd := m.rearmPreload()
+		cmd := m.setRepeat(mode)
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Repeat: m.playlist.Repeat().String()})
 		return cmd
 	case "mono":
