@@ -691,7 +691,7 @@ For security, plugins have restricted access. The sandbox removes unsafe standar
 
 ### Kept functions
 
-You can use `os.time()`, `os.date()`, `os.clock()`, and `os.getenv()`.
+You can use `os.time()`, `os.date()`, `os.clock()`, and `os.getenv()`. `os.getenv()` reads each variable of the cliamp environment, including tokens and passwords.
 
 ### File system restrictions
 
@@ -718,7 +718,8 @@ Writing outside these directories, or to a read-only path, raises a Lua error. c
 
 ### Isolation
 
-- Each plugin has its own Lua VM. A plugin cannot access another plugin's state or variables.
+- Each plugin has its own Lua VM. A plugin cannot reach the Lua variables of another plugin.
+- The sandbox does not keep secrets from a plugin. `cliamp.fs` reads each file that you can read. Examples are `config.toml`, with the `[plugins.<name>]` keys of every plugin, and the `cliamp.store` file of another plugin. `os.getenv()` reads the environment. Install only plugins that you trust with these values.
 - A plugin crash does not affect other plugins or the player.
 - Use `cliamp.http` for public network access. Raw socket access is not available. cliamp blocks private, loopback, link-local, multicast, and unspecified destinations after DNS resolution and through redirects.
 - `os.execute` is not available. Permission-gated `cliamp.exec` can start only configured allowed binaries.

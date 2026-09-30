@@ -2,8 +2,9 @@ package luaplugin
 
 import lua "github.com/yuin/gopher-lua"
 
-// sandbox removes dangerous Lua standard library functions from the VM,
-// leaving only safe operations available to plugins. It also adds
+// sandbox removes the Lua standard library functions that load code, run
+// programs or change files outside cliamp.fs. It does not hide data: a
+// plugin can still read files and the environment. It also adds
 // compatibility helpers missing from Lua 5.1 (e.g. utf8.char).
 func sandbox(L *lua.LState) {
 	// Remove top-level functions that can load/execute arbitrary code.
@@ -16,7 +17,8 @@ func sandbox(L *lua.LState) {
 	// Remove the io module entirely (replaced by cliamp.fs).
 	L.SetGlobal("io", lua.LNil)
 
-	// Restrict the os module to a safe subset: time, date, clock, getenv.
+	// Keep time, date, clock and getenv from the os module. getenv reads
+	// every variable of the cliamp environment, so it hides no secret.
 	if os := L.GetGlobal("os"); os != lua.LNil {
 		if tbl, ok := os.(*lua.LTable); ok {
 			for _, fn := range []string{"execute", "remove", "rename", "exit", "setlocale", "tmpname"} {
