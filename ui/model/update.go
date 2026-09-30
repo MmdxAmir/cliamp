@@ -693,10 +693,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, playCmd
 
 	case subsEpisodesMsg:
-		return m, m.handleSubsEpisodes(msg)
+		cmd := m.handleSubsEpisodes(msg)
+		return m, cmd
 
 	case subsLatestAllMsg:
-		return m, m.handleSubsLatestAll(msg)
+		cmd := m.handleSubsLatestAll(msg)
+		return m, cmd
 
 	case feedsLoadedMsg:
 		m.feedLoading = false
@@ -1100,7 +1102,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case playback.QuitMsg:
 		// Media controls and the signals of headless mode quit like the q
 		// key, so the resume position is kept too.
-		return m, m.quit()
+		cmd := m.quit()
+		return m, cmd
 
 	case SetEQPresetMsg:
 		m.SetEQPreset(msg.Name, msg.Bands)
@@ -1116,7 +1119,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case pluginQueueAddedMsg:
-		return m, m.appendPluginTracks(msg.tracks...)
+		cmd := m.appendPluginTracks(msg.tracks...)
+		return m, cmd
 
 	case trackFavoriteSyncedMsg:
 		m.handleTrackFavoriteSynced(msg)
