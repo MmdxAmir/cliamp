@@ -32,10 +32,11 @@ func fixedContext(mode commandMode, name string) func(*Model) (commandMode, stri
 // playlist picker and the file browser open over the playlist manager, and
 // the playlist picker also opens over the file browser. Provider search opens
 // over the nav browser, and so does the YouTube search when the provider has
-// no search. The other overlays open only from the main keys, so they cannot
-// stack. Their order only has to be the same on every route. The queue sits
-// above the subscriptions overlay because the render order already put it
-// there.
+// no search. The other overlays open from the main keys, so a key press does
+// not stack them. A message, such as the default provider browser at startup,
+// can still open one over another, so the order must be the same on every
+// route. The queue sits above the subscriptions overlay because the render
+// order already put it there.
 var overlayStack []overlaySpec
 
 // init fills overlayStack. The key handlers reach overlayStack again through
