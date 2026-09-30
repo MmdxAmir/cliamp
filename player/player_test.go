@@ -39,7 +39,8 @@ func TestSetVolumeClamps(t *testing.T) {
 		{-50, -50},
 		{0, 0},
 		{6, 6},
-		{12, 6}, // above max
+		{12, 6},         // above max
+		{math.NaN(), 6}, // NaN keeps the current volume
 	}
 	for _, tt := range tests {
 		p.SetVolume(tt.in)
@@ -283,7 +284,8 @@ func TestSetVolumeMinClamps(t *testing.T) {
 		{-90, -90},
 		{-50, -50},
 		{0, 0},
-		{5, 0}, // above max (must be ≤ 0)
+		{5, 0},          // above max (must be ≤ 0)
+		{math.NaN(), 0}, // NaN keeps the current floor
 	}
 	for _, tt := range tests {
 		p.SetVolumeMin(tt.in)
@@ -338,6 +340,7 @@ func TestSetSpeedClamps(t *testing.T) {
 		{1.0, 1.0},
 		{2.0, 2.0},
 		{3.0, 2.0},
+		{math.NaN(), 2.0}, // NaN keeps the current speed
 	}
 	for _, tt := range tests {
 		p.SetSpeed(tt.in)
@@ -375,6 +378,7 @@ func TestSetEQBandClamps(t *testing.T) {
 		{0, -20.0, -12.0},
 		{5, 6.5, 6.5},
 		{9, 0.0, 0.0},
+		{5, math.NaN(), 6.5}, // NaN keeps the current gain
 	}
 	for _, tt := range tests {
 		p.SetEQBand(tt.band, tt.in)

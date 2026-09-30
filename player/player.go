@@ -731,7 +731,11 @@ func (p *Player) positionAndDurationLocked() (time.Duration, time.Duration) {
 
 // SetVolumeMin sets the minimum volume floor in dB, clamped to [-90, 0].
 // If the current volume is below the new floor it is immediately raised to match.
+// A NaN floor is ignored.
 func (p *Player) SetVolumeMin(db float64) {
+	if math.IsNaN(db) {
+		return
+	}
 	newMin := max(min(db, 0), -90)
 	p.volMin.Store(math.Float64bits(newMin))
 	for {
@@ -752,7 +756,11 @@ func (p *Player) VolumeMin() float64 {
 }
 
 // SetVolume sets the volume in dB, clamped to [VolumeMin, +6].
+// A NaN volume is ignored.
 func (p *Player) SetVolume(db float64) {
+	if math.IsNaN(db) {
+		return
+	}
 	p.volume.Store(math.Float64bits(max(min(db, 6), p.VolumeMin())))
 }
 
@@ -762,8 +770,11 @@ func (p *Player) Volume() float64 {
 }
 
 // SetSpeed sets the playback speed ratio, clamped to [0.25, 2.0].
-// 1.0 is normal speed, 2.0 is double speed, etc.
+// 1.0 is normal speed, 2.0 is double speed, etc. A NaN ratio is ignored.
 func (p *Player) SetSpeed(ratio float64) {
+	if math.IsNaN(ratio) {
+		return
+	}
 	p.speed.Store(math.Float64bits(max(min(ratio, 2.0), 0.25)))
 }
 
@@ -783,8 +794,9 @@ func (p *Player) Mono() bool {
 }
 
 // SetEQBand sets a single EQ band's gain in dB, clamped to [-12, +12].
+// A NaN gain is ignored.
 func (p *Player) SetEQBand(band int, dB float64) {
-	if band < 0 || band >= 10 {
+	if band < 0 || band >= 10 || math.IsNaN(dB) {
 		return
 	}
 	p.eqBands[band].Store(math.Float64bits(max(min(dB, 12), -12)))
