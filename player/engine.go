@@ -34,6 +34,7 @@ type Engine interface {
 	HasPreload() bool
 	Seekable() bool
 	IsYTDLSeek() bool
+	IsLiveStream() bool
 	GaplessAdvanced() bool
 	LastPlayedDuration() time.Duration
 
