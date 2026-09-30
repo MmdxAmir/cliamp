@@ -72,6 +72,12 @@ Setting volume through `playerctl` updates the player immediately. When you
 change volume with the TUI `+` and `-` keys, D-Bus clients receive the new value
 on the next tick.
 
+cliamp clamps a value below 0.0 or above 1.0 to that range. A value whose
+decibel level is below `volume_min` sets the volume to `volume_min`. In each
+case, Volume then reports the clamped value. A NaN value returns the D-Bus
+error `org.freedesktop.DBus.Properties.Error.InvalidArg` and does not change
+the volume.
+
 ### Metadata
 
 cliamp publishes track metadata with standard MPRIS keys:
