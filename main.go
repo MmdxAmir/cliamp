@@ -61,22 +61,13 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	providers := buildProviders(cfg, !daemon && isCharDevice(os.Stdin))
 	defer providers.Close()
 
-	if len(positional) > 0 && (positional[0] == "search" || positional[0] == "search-sc") {
-		if len(positional) == 1 {
-			return fmt.Errorf("search requires a query string (e.g. cliamp search \"never gonna give you up\")")
-		}
-		prefix := "ytsearch1:"
-		if positional[0] == "search-sc" {
-			prefix = "scsearch1:"
-		}
-		query := strings.Join(positional[1:], " ")
-		positional = []string{prefix + query}
+	positional, err = searchArgs(positional)
+	if err != nil {
+		return err
 	}
-
 	if cfg.YouTubeMusic.ExpandPlaylist != nil {
 		resolve.ExpandYTPlaylist = *cfg.YouTubeMusic.ExpandPlaylist
 	}
-
 	resolved, err := resolve.Args(positional)
 	if err != nil {
 		return err
@@ -125,38 +116,15 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		}
 	}
 
-	if cfg.AudioDevice != "" {
-		cleanup := player.PrepareAudioDevice(cfg.AudioDevice)
-		defer cleanup()
-	}
-
-	sampleRate := cfg.SampleRate
-	if sampleRate == 0 {
-		if detected := player.DeviceSampleRate(); detected > 0 {
-			sampleRate = detected
-		} else {
-			sampleRate = 44100
-		}
-	}
-
-	p, err := player.New(player.Quality{
-		SampleRate:      sampleRate,
-		BufferMs:        cfg.BufferMs,
-		ResampleQuality: cfg.ResampleQuality,
-		BitDepth:        cfg.BitDepth,
-	})
+	p, closePlayer, err := newPlayer(cfg)
 	if err != nil {
-		return fmt.Errorf("player: %w", err)
+		return err
 	}
-	defer p.Close()
-
+	defer closePlayer()
 	providers.registerPlayerHooks(p)
-
 	cfg.ApplyPlayer(p)
 	cfg.ApplyPlaylist(pl)
 	ui.SetPadding(cfg.PaddingH, cfg.PaddingV)
-
-	themes := theme.LoadAll()
 
 	pluginBroker := ipc.NewBroker()
 	defer pluginBroker.Close()
@@ -170,90 +138,21 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		defer luaMgr.Close()
 	}
 
-	m := model.New(p, pl, providers.entries, defaultProvider, providers.localPlaylists(), themes, luaMgr, config.SaveFunc{})
+	m := model.New(p, pl, providers.entries, defaultProvider, providers.localPlaylists(), theme.LoadAll(), luaMgr, config.SaveFunc{})
 	m.SetRadioFavorites(providers.radioFavorites)
 	if resumeServer != nil {
-		m.SetResumeSaver(func(track playlist.Track, positionSec int, context []playlist.Track, contextIndex int) {
-			if _, ok := resumeServer.RestoreTrack(track); !ok {
-				return
-			}
-			resume.SaveState(resume.State{
-				Path: track.Path, PositionSec: positionSec,
-				Context: context, ContextIndex: contextIndex,
-			})
-		})
+		m.SetResumeSaver(serverResumeSaver(resumeServer))
 	}
 	if restoredContext {
 		m.SetInitialTrack(restoredIndex)
 	}
 	m.SetIPCBroker(pluginBroker)
-	m.SetCustomEQBands(cfg.EQ)
-	m.SetVisVolumeLinked(cfg.VisVolumeLinked)
-
 	if luaMgr != nil {
-		luaMgr.SetStateProvider(luaplugin.StateProvider{
-			PlayerState: func() string {
-				if !p.IsPlaying() {
-					return "stopped"
-				}
-				if p.IsPaused() {
-					return "paused"
-				}
-				return "playing"
-			},
-			Position:      func() float64 { return p.Position().Seconds() },
-			Duration:      func() float64 { return p.Duration().Seconds() },
-			Volume:        func() float64 { return p.Volume() },
-			Speed:         func() float64 { return p.Speed() },
-			Mono:          func() bool { return p.Mono() },
-			RepeatMode:    func() string { return pl.Repeat().String() },
-			Shuffle:       func() bool { return pl.Shuffled() },
-			EQBands:       func() [10]float64 { return p.EQBands() },
-			TrackTitle:    func() string { t, _ := pl.Current(); return t.Title },
-			TrackArtist:   func() string { t, _ := pl.Current(); return t.Artist },
-			TrackAlbum:    func() string { t, _ := pl.Current(); return t.Album },
-			TrackGenre:    func() string { t, _ := pl.Current(); return t.Genre },
-			TrackYear:     func() int { t, _ := pl.Current(); return t.Year },
-			TrackNumber:   func() int { t, _ := pl.Current(); return t.TrackNumber },
-			TrackPath:     func() string { t, _ := pl.Current(); return t.Path },
-			TrackIsStream: func() bool { t, _ := pl.Current(); return t.Stream },
-			TrackIsLive:   func() bool { t, _ := pl.Current(); return model.PlaysLive(t, p) },
-			TrackDuration: func() int { t, _ := pl.Current(); return t.DurationSecs },
-			PlaylistCount: func() int { return pl.Len() },
-			CurrentIndex:  func() int { return pl.Index() },
-			HasNext:       pl.HasNext,
-			QueueList: func() []luaplugin.QueueEntry {
-				tracks := pl.Tracks()
-				out := make([]luaplugin.QueueEntry, len(tracks))
-				for i, t := range tracks {
-					out[i] = luaplugin.QueueEntry{
-						Title:    t.Title,
-						Artist:   t.Artist,
-						Album:    t.Album,
-						Genre:    t.Genre,
-						Year:     t.Year,
-						Path:     t.Path,
-						Duration: t.DurationSecs,
-						Stream:   t.Stream,
-						Index:    i,
-						Queued:   pl.QueuePosition(i) > 0, // 1-based; 0 means not queued
-					}
-				}
-				return out
-			},
-		})
-	}
-
-	if luaMgr != nil {
+		luaMgr.SetStateProvider(luaStateProvider(p, pl))
 		if names := luaMgr.Visualizers(); len(names) > 0 {
 			m.RegisterLuaVisualizers(names, luaMgr.RenderVis)
 		}
 	}
-
-	m.SetSeekStepLarge(cfg.SeekStepLargeDuration())
-	m.SetLyricsOffset(cfg.LyricsOffsetMs)
-	m.SetInitialDirectory(cfg.InitialDirectory)
-	m.SetDownloadsDirectory(cfg.Downloads.Directory)
 	m.SetPendingURLs(resolved.Pending)
 	if cfg.Playlist != "" && len(resolved.Tracks) == 0 && len(resolved.Pending) == 0 {
 		m.SetLoadedPlaylist(cfg.Playlist)
@@ -261,44 +160,10 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	if !daemon && len(resolved.Tracks) == 0 && len(resolved.Pending) == 0 && pl.Len() == 0 {
 		m.StartInProvider()
 	}
-	if cfg.EQPreset != "" && cfg.EQPreset != "Custom" {
-		m.SetEQPreset(cfg.EQPreset, nil)
-	}
-	if cfg.Theme != "" {
-		m.SetTheme(cfg.Theme)
-	}
 	if cfg.AutoPlay && !restoredContext {
 		m.SetAutoPlay(true)
 	}
-	if daemon {
-		// Headless mode has no screen, so the view settings do not apply. The
-		// default visualizer stays, because it serves spectrum.get.
-		m.SetHeadless(true)
-	} else {
-		m.SetVisRows(cfg.VisRows)
-		m.SetVisualizer60FPS(visualizer60FPS)
-		if cfg.Visualizer != "" {
-			m.SetVisualizer(cfg.Visualizer)
-		}
-		if cfg.LowPower {
-			m.SetLowPower(true)
-		}
-		if cfg.Simplified {
-			m.SetSimplified(true)
-		}
-		if cfg.HideHelpBar {
-			m.SetHideHelpBar(true)
-		}
-		if cfg.HideSettingsPane {
-			m.SetHideSettingsPane(true)
-		}
-		if cfg.ShowMetadata {
-			m.SetShowMetadata(true)
-		}
-		if cfg.Expanded {
-			m.SetExpanded(true)
-		}
-	}
+	configureModel(&m, cfg, daemon, visualizer60FPS)
 
 	if resumeState.Path != "" && resumeState.PositionSec > 0 {
 		// Jellyfin and Emby resume the restored context above. Mixcloud is also commonly
@@ -312,19 +177,11 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		}
 	}
 
-	progOpts := []tea.ProgramOption{tea.WithFPS(defaultUIFPS)}
-	switch {
-	case daemon:
-		progOpts = headlessProgramOptions()
-	case cfg.LowPower:
-		progOpts[0] = tea.WithFPS(lowPowerUIFPS)
-	}
-	prog := tea.NewProgram(m, progOpts...)
+	prog := tea.NewProgram(m, programOptions(daemon, cfg.LowPower)...)
 	if daemon {
 		stopSignals := quitOnSignals(prog.Send)
 		defer stopSignals()
 	}
-
 	defer providers.observeAuthURLs(prog.Send)()
 
 	svc, svcErr := wireMediaCtl(prog)
@@ -335,60 +192,15 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 
 	if luaMgr != nil {
-		luaMgr.SetControlProvider(luaplugin.ControlProvider{
-			SetVolume:   func(db float64) { p.SetVolume(db) },
-			SetSpeed:    func(ratio float64) { p.SetSpeed(ratio) },
-			SetEQBand:   func(band int, db float64) { prog.Send(model.SetEQBandMsg{Band: band, Gain: db}) },
-			ToggleMono:  func() { p.ToggleMono() },
-			TogglePause: func() { prog.Send(playback.PlayPauseMsg{}) },
-			Stop:        func() { prog.Send(playback.StopMsg{}) },
-			Seek: func(secs float64) {
-				prog.Send(playback.SeekMsg{Offset: time.Duration(secs * float64(time.Second))})
-			},
-			SetEQPreset: func(name string, bands *[10]float64) {
-				prog.Send(model.SetEQPresetMsg{Name: name, Bands: bands})
-			},
-			Next: func() { prog.Send(playback.NextMsg{}) },
-			Prev: func() { prog.Send(playback.PrevMsg{}) },
-			QueueAdd: func(path string) {
-				prog.Send(model.PluginQueueMsg{Op: "add", Path: path})
-			},
-			QueueAddTrack: func(t luaplugin.QueueTrack) {
-				prog.Send(model.PluginQueueMsg{Op: "add_track", Track: playlist.Track{
-					Path: t.Path, Title: t.Title, Artist: t.Artist, Album: t.Album,
-					Genre: t.Genre, Year: t.Year, DurationSecs: t.Duration, Stream: t.Stream,
-				}})
-			},
-			QueueJump: func(index int) {
-				prog.Send(model.PluginQueueMsg{Op: "jump", Index: index})
-			},
-			QueueRemove: func(index int) {
-				prog.Send(model.PluginQueueMsg{Op: "remove", Index: index})
-			},
-			QueueMove: func(from, to int) {
-				prog.Send(model.PluginQueueMsg{Op: "move", Index: from, To: to})
-			},
-		})
-		luaMgr.SetUIProvider(luaplugin.UIProvider{
-			ShowMessage: func(text string, duration time.Duration) {
-				prog.Send(model.ShowStatusMsg{Text: text, Duration: duration})
-			},
-		})
+		luaMgr.SetControlProvider(luaControlProvider(p, prog.Send))
+		luaMgr.SetUIProvider(luaUIProvider(prog.Send))
 	}
 
-	ipcSrv, ipcErr := ipc.NewServerWithBroker(ipc.DefaultSocketPath(), pluginBroker)
-	if ipcErr != nil {
-		if daemon {
-			// Headless mode is controlled only through the socket.
-			return fmt.Errorf("ipc: %w", ipcErr)
-		}
-		fmt.Fprintf(os.Stderr, "ipc: %v\n", ipcErr)
-	} else {
-		defer ipcSrv.Close()
-		ipcSrv.SetV2Dispatcher(newTUIV2Dispatcher(prog, ipcSrv.JobStore(), luaMgr))
-		ipcSrv.SetOperationRegistry(v2Operations(daemon, luaMgr != nil))
-		go publishV2JobEvents(ipcSrv.Done(), ipcSrv.JobStore(), pluginBroker)
+	stopIPC, err := startIPC(prog, pluginBroker, luaMgr, daemon)
+	if err != nil {
+		return err
 	}
+	defer stopIPC()
 	if daemon {
 		fmt.Fprintf(os.Stderr, "cliamp: running headless (socket: %s)\n", ipc.DefaultSocketPath())
 		applog.Info("running headless")
@@ -398,31 +210,165 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	if err != nil {
 		return err
 	}
+	saveOnExit(finalModel, daemon, resumeServer)
+	return nil
+}
 
-	if fm, ok := finalModel.(model.Model); ok {
-		// Headless mode has no theme keys, so it keeps the saved theme.
-		if !daemon {
-			themeName := fm.ThemeName()
-			if theme.IsDefaultName(themeName) {
-				themeName = ""
-			}
-			_ = config.Save("theme", fmt.Sprintf("%q", themeName))
-		}
+// searchArgs turns cliamp search and cliamp search-sc into one argument that
+// plays the first match on YouTube or SoundCloud. It returns other arguments
+// as they are.
+func searchArgs(positional []string) ([]string, error) {
+	if len(positional) == 0 || (positional[0] != "search" && positional[0] != "search-sc") {
+		return positional, nil
+	}
+	if len(positional) == 1 {
+		return nil, fmt.Errorf("search requires a query string (e.g. cliamp search \"never gonna give you up\")")
+	}
+	prefix := "ytsearch1:"
+	if positional[0] == "search-sc" {
+		prefix = "scsearch1:"
+	}
+	return []string{prefix + strings.Join(positional[1:], " ")}, nil
+}
 
-		if path, secs, playlistName := fm.ResumeState(); path != "" && secs > 0 {
-			if resumeServer != nil && embyapi.IsStreamURL(path) {
-				context, index := fm.ResumeContext()
-				resume.SaveState(resume.State{
-					Path: path, PositionSec: secs, Playlist: playlistName,
-					Context: context, ContextIndex: index,
-				})
-			} else {
-				resume.Save(path, secs, playlistName)
-			}
+// newPlayer opens the audio output that cfg selects. closePlayer releases
+// the player and then the audio device.
+func newPlayer(cfg config.Config) (p *player.Player, closePlayer func(), err error) {
+	releaseDevice := func() {}
+	if cfg.AudioDevice != "" {
+		releaseDevice = player.PrepareAudioDevice(cfg.AudioDevice)
+	}
+
+	sampleRate := cfg.SampleRate
+	if sampleRate == 0 {
+		if detected := player.DeviceSampleRate(); detected > 0 {
+			sampleRate = detected
+		} else {
+			sampleRate = 44100
 		}
 	}
 
-	return nil
+	p, err = player.New(player.Quality{
+		SampleRate:      sampleRate,
+		BufferMs:        cfg.BufferMs,
+		ResampleQuality: cfg.ResampleQuality,
+		BitDepth:        cfg.BitDepth,
+	})
+	if err != nil {
+		releaseDevice()
+		return nil, nil, fmt.Errorf("player: %w", err)
+	}
+	return p, func() {
+		p.Close()
+		releaseDevice()
+	}, nil
+}
+
+// configureModel applies the settings of cfg to m. Headless mode has no
+// screen, so the view settings do not apply there.
+func configureModel(m *model.Model, cfg config.Config, headless, visualizer60FPS bool) {
+	m.SetCustomEQBands(cfg.EQ)
+	m.SetVisVolumeLinked(cfg.VisVolumeLinked)
+	m.SetSeekStepLarge(cfg.SeekStepLargeDuration())
+	m.SetLyricsOffset(cfg.LyricsOffsetMs)
+	m.SetInitialDirectory(cfg.InitialDirectory)
+	m.SetDownloadsDirectory(cfg.Downloads.Directory)
+	if cfg.EQPreset != "" && cfg.EQPreset != "Custom" {
+		m.SetEQPreset(cfg.EQPreset, nil)
+	}
+	if cfg.Theme != "" {
+		m.SetTheme(cfg.Theme)
+	}
+	if headless {
+		// The default visualizer stays, because it serves spectrum.get.
+		m.SetHeadless(true)
+		return
+	}
+	m.SetVisRows(cfg.VisRows)
+	m.SetVisualizer60FPS(visualizer60FPS)
+	if cfg.Visualizer != "" {
+		m.SetVisualizer(cfg.Visualizer)
+	}
+	if cfg.LowPower {
+		m.SetLowPower(true)
+	}
+	if cfg.Simplified {
+		m.SetSimplified(true)
+	}
+	if cfg.HideHelpBar {
+		m.SetHideHelpBar(true)
+	}
+	if cfg.HideSettingsPane {
+		m.SetHideSettingsPane(true)
+	}
+	if cfg.ShowMetadata {
+		m.SetShowMetadata(true)
+	}
+	if cfg.Expanded {
+		m.SetExpanded(true)
+	}
+}
+
+// startIPC serves the socket for prog. Headless mode is controlled only
+// through the socket, so there a failure is an error. The TUI reports the
+// failure and runs without the socket.
+func startIPC(prog *tea.Program, broker *ipc.Broker, plugins *luaplugin.Manager, headless bool) (stop func(), err error) {
+	srv, err := ipc.NewServerWithBroker(ipc.DefaultSocketPath(), broker)
+	if err != nil {
+		if headless {
+			return nil, fmt.Errorf("ipc: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "ipc: %v\n", err)
+		return func() {}, nil
+	}
+	srv.SetV2Dispatcher(newTUIV2Dispatcher(prog, srv.JobStore(), plugins))
+	srv.SetOperationRegistry(v2Operations(headless, plugins != nil))
+	go publishV2JobEvents(srv.Done(), srv.JobStore(), broker)
+	return func() { _ = srv.Close() }, nil
+}
+
+// saveOnExit keeps the theme and the resume position of the final Model.
+// When a Jellyfin or Emby server is the default provider, it also keeps the
+// list that the track played from.
+func saveOnExit(final tea.Model, headless bool, resumeServer *embyapi.Provider) {
+	fm, ok := final.(model.Model)
+	if !ok {
+		return
+	}
+	// Headless mode has no theme keys, so it keeps the saved theme.
+	if !headless {
+		themeName := fm.ThemeName()
+		if theme.IsDefaultName(themeName) {
+			themeName = ""
+		}
+		_ = config.SaveString("theme", themeName)
+	}
+
+	path, secs, playlistName := fm.ResumeState()
+	if path == "" || secs <= 0 {
+		return
+	}
+	if resumeServer != nil && embyapi.IsStreamURL(path) {
+		context, index := fm.ResumeContext()
+		resume.SaveState(resume.State{
+			Path: path, PositionSec: secs, Playlist: playlistName,
+			Context: context, ContextIndex: index,
+		})
+		return
+	}
+	resume.Save(path, secs, playlistName)
+}
+
+// programOptions returns the Bubbletea options of the TUI, or of headless
+// mode.
+func programOptions(headless, lowPower bool) []tea.ProgramOption {
+	switch {
+	case headless:
+		return headlessProgramOptions()
+	case lowPower:
+		return []tea.ProgramOption{tea.WithFPS(lowPowerUIFPS)}
+	}
+	return []tea.ProgramOption{tea.WithFPS(defaultUIFPS)}
 }
 
 // headlessProgramOptions build a program with no terminal: no renderer, no

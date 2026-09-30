@@ -456,6 +456,20 @@ func (s *providerSet) observeAuthURLs(send func(tea.Msg)) (restore func()) {
 	}
 }
 
+// serverResumeSaver saves the play context of each track that server owns,
+// so the next start can restore it.
+func serverResumeSaver(server *embyapi.Provider) model.ResumeSaver {
+	return func(track playlist.Track, positionSec int, context []playlist.Track, contextIndex int) {
+		if _, ok := server.RestoreTrack(track); !ok {
+			return
+		}
+		resume.SaveState(resume.State{
+			Path: track.Path, PositionSec: positionSec,
+			Context: context, ContextIndex: contextIndex,
+		})
+	}
+}
+
 // restoreServerContext rebuilds the saved play context of a Jellyfin or
 // Emby server. It returns the tracks, the index and the path of the track
 // that played. It fails when that track is not from this server.
