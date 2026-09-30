@@ -37,24 +37,30 @@ func (m *Model) appendTracks(tracks ...playlist.Track) int {
 }
 
 // moveTrack swaps the track at from with the track at to and saves the new
-// order to the loaded playlist. The playlist cursor stays on its track.
+// order to the loaded playlist. When the save fails, the queue keeps its
+// order. The playlist cursor stays on its track.
 func (m *Model) moveTrack(from, to int) (tea.Cmd, error) {
 	if m.playlist.Shuffled() {
 		m.status.Warning(shuffleMoveWarning, statusTTLShort)
 		return nil, errQueueShuffled
 	}
-	if !m.playlist.Move(from, to) {
+	tracks := m.playlist.Tracks()
+	if from < 0 || from >= len(tracks) || to < 0 || to >= len(tracks) || from == to {
 		return nil, errQueueIndex
 	}
+	tracks[from], tracks[to] = tracks[to], tracks[from]
+	if err := m.persistLoadedPlaylistOrder(tracks); err != nil {
+		return nil, err
+	}
+	m.playlist.Move(from, to)
 	switch m.plCursor {
 	case from:
 		m.plCursor = to
 	case to:
 		m.plCursor = from
 	}
-	m.recountHeaderState(m.playlist.Tracks())
+	m.recountHeaderState(tracks)
 	m.normalizeQueueOverlay()
-	m.persistLoadedPlaylistOrder()
 	m.adjustScroll()
 	return m.rearmStalePreload(), nil
 }
@@ -199,19 +205,19 @@ func orderByRows(saved, order []playlist.Track) []playlist.Track {
 	return out
 }
 
-// persistLoadedPlaylistOrder writes the queue order to the loaded playlist
-// file in one locked update, so a track or a tag that another writer added
-// after the load is kept.
-func (m *Model) persistLoadedPlaylistOrder() {
+// persistLoadedPlaylistOrder writes the order of queue to the loaded
+// playlist file in one locked update, so a track or a tag that another
+// writer added after the load is kept. It returns the error of a failed
+// save.
+func (m *Model) persistLoadedPlaylistOrder(queue []playlist.Track) error {
 	name := m.writableLoadedPlaylist()
 	if name == "" {
-		return
+		return nil
 	}
 	updater, ok := m.localProvider.(playlistUpdater)
 	if !ok {
-		return
+		return nil
 	}
-	queue := m.playlist.Tracks()
 	hasDirTracks := false
 	for _, t := range queue {
 		if t.DirSourced {
@@ -224,11 +230,12 @@ func (m *Model) persistLoadedPlaylistOrder() {
 	})
 	if err != nil {
 		m.status.Errorf(statusTTLDefault, "Save failed: %s", err)
-		return
+		return err
 	}
 	if hasDirTracks {
 		m.status.Warningf(statusTTLDefault, "Reordered %q (directory-sourced tracks keep scan order)", name)
-		return
+		return nil
 	}
 	m.status.Showf(statusTTLDefault, "Reordered %q", name)
+	return nil
 }

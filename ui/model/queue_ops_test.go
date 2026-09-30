@@ -52,7 +52,8 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 		v2Op   string
 		v2     ipc.Request
 		plugin PluginQueueMsg
-		// wantV2Err is the error of the V2 job, or "" when it succeeds.
+		// wantV2Err is the start of the error of the V2 job, or "" when it
+		// succeeds.
 		wantV2Err string
 		want      func(s queueOpState) bool
 	}{
@@ -76,6 +77,24 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 			wantV2Err: ipc.V2ErrorCodeConflict + ": " + errQueueShuffled.Error(),
 			want: func(s queueOpState) bool {
 				return s.queue == "a b c" && s.saved == "a b c" && s.cursor == 1 && s.preload
+			},
+		},
+		{
+			// The file is gone, so the save fails and the queue keeps its
+			// order, as a failed removal does.
+			name:   "move when the save fails",
+			cursor: 1,
+			setup: func(m *Model) {
+				if err := m.localProvider.(*local.Provider).DeletePlaylist("Mix"); err != nil {
+					panic(err)
+				}
+			},
+			key:  func(*Model) tea.Msg { return tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift} },
+			v2Op: "queue.move", v2: ipc.Request{Index: 1, To: 2},
+			plugin:    PluginQueueMsg{Op: "move", Index: 1, To: 2},
+			wantV2Err: ipc.V2ErrorCodeInternal + ": ",
+			want: func(s queueOpState) bool {
+				return s.queue == "a b c" && s.saved == "" && s.cursor == 1 && s.loaded == "Mix" && s.headerSegments == 2 && s.preload
 			},
 		},
 		{
@@ -188,7 +207,7 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 					m = next.(Model)
 				case "V2":
 					response := runV2(t, &m, tc.v2Op, tc.v2)
-					if tc.wantV2Err == "" && !response.OK || response.Error != tc.wantV2Err {
+					if response.OK != (tc.wantV2Err == "") || !strings.HasPrefix(response.Error, tc.wantV2Err) {
 						t.Fatalf("V2 %s = %+v, want error %q", tc.v2Op, response, tc.wantV2Err)
 					}
 				case "plugin":

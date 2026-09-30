@@ -134,8 +134,9 @@ follow the same rules:
   it fails with `conflict` and changes nothing.
 - When the live playlist mirrors a saved local playlist, `queue.move` saves
   the new order to that playlist. `queue.remove` removes the track from it
-  too. Favorites is not a playlist file, so an edit of a loaded Favorites
-  list changes only the live playlist.
+  too. When that save fails, the edit fails with `internal_error` and
+  changes nothing. Favorites is not a playlist file, so an edit of a loaded
+  Favorites list changes only the live playlist.
 - `queue`, `queue.move`, and `queue.remove` record no undo. After one of
   them, `Ctrl+Z` does not undo the last TUI edit, because that undo would
   drop the new change.
