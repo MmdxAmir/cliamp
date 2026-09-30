@@ -703,5 +703,5 @@ func (m *Model) navMaybeAdjustScroll() {
 	if m.navBrowser.search != "" {
 		count = len(m.navBrowser.searchIdx)
 	}
-	clampScroll(&m.navBrowser.cursor, &m.navBrowser.scroll, count, m.navVisible())
+	clampScroll(&m.navBrowser.cursor, &m.navBrowser.scroll, count, m.effectivePlaylistVisible())
 }

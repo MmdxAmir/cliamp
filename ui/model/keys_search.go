@@ -205,7 +205,7 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "ctrl+x":
 		m.toggleExpandedView()
-		m.searchMaybeAdjustScroll(m.searchVisible())
+		m.searchMaybeAdjustScroll(m.effectivePlaylistVisible())
 		return nil
 	case "ctrl+n":
 		if m.search.cursor < len(m.search.results)-1 {
@@ -213,7 +213,7 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 		} else if len(m.search.results) > 0 {
 			m.search.cursor = 0
 		}
-		m.searchMaybeAdjustScroll(m.searchVisible())
+		m.searchMaybeAdjustScroll(m.effectivePlaylistVisible())
 		return nil
 	case "ctrl+p":
 		if m.search.cursor > 0 {
@@ -221,14 +221,14 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 		} else if len(m.search.results) > 0 {
 			m.search.cursor = len(m.search.results) - 1
 		}
-		m.searchMaybeAdjustScroll(m.searchVisible())
+		m.searchMaybeAdjustScroll(m.effectivePlaylistVisible())
 		return nil
 	case "ctrl+u":
 		m.editText("playlist-search", &m.search.query, msg)
 		m.updateSearch()
 		return nil
 	case "ctrl+d":
-		step := m.searchVisible()
+		step := m.effectivePlaylistVisible()
 		if step < 1 {
 			step = 1
 		}
@@ -236,7 +236,7 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.search.cursor >= len(m.search.results) {
 			m.search.cursor = max(0, len(m.search.results)-1)
 		}
-		m.searchMaybeAdjustScroll(m.searchVisible())
+		m.searchMaybeAdjustScroll(m.effectivePlaylistVisible())
 		return nil
 	}
 
@@ -273,7 +273,7 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 		} else if len(m.search.results) > 0 {
 			m.search.cursor = len(m.search.results) - 1
 		}
-		m.searchMaybeAdjustScroll(m.searchVisible())
+		m.searchMaybeAdjustScroll(m.effectivePlaylistVisible())
 
 	case tea.KeyDown:
 		if m.search.cursor < len(m.search.results)-1 {
@@ -281,7 +281,7 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 		} else if len(m.search.results) > 0 {
 			m.search.cursor = 0
 		}
-		m.searchMaybeAdjustScroll(m.searchVisible())
+		m.searchMaybeAdjustScroll(m.effectivePlaylistVisible())
 
 	default:
 		if m.editText("playlist-search", &m.search.query, msg) {
@@ -345,21 +345,21 @@ func (m *Model) handleNetSearchResultsKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "ctrl+x":
 		m.toggleExpandedView()
-		m.netSearchResultsMaybeAdjustScroll(m.netSearchResultsVisible())
+		m.netSearchResultsMaybeAdjustScroll(m.effectivePlaylistVisible())
 	case "up", "k", "ctrl+p":
 		if m.netSearch.cursor > 0 {
 			m.netSearch.cursor--
 		} else if count > 0 {
 			m.netSearch.cursor = count - 1
 		}
-		m.netSearchResultsMaybeAdjustScroll(m.netSearchResultsVisible())
+		m.netSearchResultsMaybeAdjustScroll(m.effectivePlaylistVisible())
 	case "down", "j", "ctrl+n":
 		if m.netSearch.cursor < count-1 {
 			m.netSearch.cursor++
 		} else if count > 0 {
 			m.netSearch.cursor = 0
 		}
-		m.netSearchResultsMaybeAdjustScroll(m.netSearchResultsVisible())
+		m.netSearchResultsMaybeAdjustScroll(m.effectivePlaylistVisible())
 	case "enter":
 		if count > 0 && !m.netSearch.loading {
 			track := m.netSearch.results[m.netSearch.cursor]
@@ -389,7 +389,7 @@ func (m *Model) handleNetSearchResultsKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.netSearch.scroll = 0
 		m.netSearch.err = ""
 	case "ctrl+u":
-		step := m.netSearchResultsVisible()
+		step := m.effectivePlaylistVisible()
 		if step < 1 {
 			step = 1
 		}
@@ -398,9 +398,9 @@ func (m *Model) handleNetSearchResultsKey(msg tea.KeyPressMsg) tea.Cmd {
 		} else {
 			m.netSearch.cursor = 0
 		}
-		m.netSearchResultsMaybeAdjustScroll(m.netSearchResultsVisible())
+		m.netSearchResultsMaybeAdjustScroll(m.effectivePlaylistVisible())
 	case "ctrl+d":
-		step := m.netSearchResultsVisible()
+		step := m.effectivePlaylistVisible()
 		if step < 1 {
 			step = 1
 		}
@@ -408,7 +408,7 @@ func (m *Model) handleNetSearchResultsKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.netSearch.cursor >= count {
 			m.netSearch.cursor = max(0, count-1)
 		}
-		m.netSearchResultsMaybeAdjustScroll(m.netSearchResultsVisible())
+		m.netSearchResultsMaybeAdjustScroll(m.effectivePlaylistVisible())
 	}
 	return nil
 }

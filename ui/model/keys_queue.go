@@ -17,7 +17,7 @@ func (m *Model) normalizeQueueOverlay() {
 		return
 	}
 	m.queue.cursor = min(max(0, m.queue.cursor), count-1)
-	visible := m.queueVisible()
+	visible := m.effectivePlaylistVisible()
 	if visible <= 0 {
 		m.queue.scroll = min(max(0, m.queue.scroll), count-1)
 		if m.queue.cursor < m.queue.scroll {

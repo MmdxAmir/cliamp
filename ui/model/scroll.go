@@ -122,13 +122,13 @@ func (m *Model) clampActiveScrollState() {
 	}
 	switch m.activeScreen() {
 	case screenKeymap:
-		m.keymapMaybeAdjustScroll(m.keymapVisible())
+		m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
 	case screenThemePicker:
-		m.themePickerMaybeAdjustScroll(m.themePickerVisible())
+		m.themePickerMaybeAdjustScroll(m.effectivePlaylistVisible())
 	case screenVisPicker:
-		m.visPickerMaybeAdjustScroll(m.visPickerVisible())
+		m.visPickerMaybeAdjustScroll(m.effectivePlaylistVisible())
 	case screenDevicePicker:
-		clampScroll(&m.devicePicker.cursor, &m.devicePicker.scroll, len(m.devicePicker.devices), m.devicePickerVisible())
+		clampScroll(&m.devicePicker.cursor, &m.devicePicker.scroll, len(m.devicePicker.devices), m.effectivePlaylistVisible())
 	case screenPlaylistPicker:
 		m.plPickerMaybeAdjustScroll(m.plPickerVisible())
 	case screenFileBrowser:
@@ -137,27 +137,27 @@ func (m *Model) clampActiveScrollState() {
 		m.navMaybeAdjustScroll()
 	case screenPlaylistManager:
 		if m.plManager.screen == plMgrScreenList {
-			m.plMgrListMaybeAdjustScroll(m.plMgrListVisible())
+			m.plMgrListMaybeAdjustScroll(m.effectivePlaylistVisible())
 		} else if m.plManager.screen == plMgrScreenTracks {
-			m.plMgrTracksMaybeAdjustScroll(m.plMgrTracksVisible())
+			m.plMgrTracksMaybeAdjustScroll(m.effectivePlaylistVisible())
 		} else if m.plManager.screen == plMgrScreenDirs {
-			m.plMgrDirsMaybeAdjustScroll(m.plMgrDirsVisible())
+			m.plMgrDirsMaybeAdjustScroll(m.effectivePlaylistVisible())
 		}
 	case screenSpotSearch:
 		if m.spotSearch.screen == spotSearchResults {
 			m.spotSearchResultsMaybeAdjustScroll(m.spotSearchResultsVisible())
 		} else if m.spotSearch.screen == spotSearchPlaylist {
-			m.spotSearchPlaylistMaybeAdjustScroll(m.spotSearchPlaylistVisible())
+			m.spotSearchPlaylistMaybeAdjustScroll(m.effectivePlaylistVisible())
 		}
 	case screenQueue:
 		m.normalizeQueueOverlay()
 	case screenInfo:
 		m.infoMaybeAdjustScroll()
 	case screenSearch:
-		m.searchMaybeAdjustScroll(m.searchVisible())
+		m.searchMaybeAdjustScroll(m.effectivePlaylistVisible())
 	case screenNetSearch:
 		if m.netSearch.screen == netSearchResults {
-			m.netSearchResultsMaybeAdjustScroll(m.netSearchResultsVisible())
+			m.netSearchResultsMaybeAdjustScroll(m.effectivePlaylistVisible())
 		}
 	case screenLyrics:
 		m.lyrics.scroll = min(m.lyrics.scroll, max(0, len(m.lyrics.lines)-m.effectivePlaylistVisible()))

@@ -232,8 +232,8 @@ func TestResizeClampsActiveOverlayCursor(t *testing.T) {
 	if m.themePicker.cursor >= len(m.themes)+1 {
 		t.Fatalf("theme cursor = %d, want within %d entries", m.themePicker.cursor, len(m.themes)+1)
 	}
-	if m.themePicker.cursor < m.themePicker.scroll || m.themePicker.cursor >= m.themePicker.scroll+m.themePickerVisible() {
-		t.Fatalf("theme cursor %d outside viewport [%d,%d)", m.themePicker.cursor, m.themePicker.scroll, m.themePicker.scroll+m.themePickerVisible())
+	if m.themePicker.cursor < m.themePicker.scroll || m.themePicker.cursor >= m.themePicker.scroll+m.effectivePlaylistVisible() {
+		t.Fatalf("theme cursor %d outside viewport [%d,%d)", m.themePicker.cursor, m.themePicker.scroll, m.themePicker.scroll+m.effectivePlaylistVisible())
 	}
 }
 

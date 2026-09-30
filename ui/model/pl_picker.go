@@ -302,7 +302,7 @@ func (m *Model) refreshPlaylistManagerAfterWrite(name string) {
 		if tracks, err := m.localProvider.Tracks(name); err == nil {
 			m.plMgrLoadTracks(tracks)
 			m.plMgrRecomputeFilter()
-			m.plMgrTracksMaybeAdjustScroll(m.plMgrTracksVisible())
+			m.plMgrTracksMaybeAdjustScroll(m.effectivePlaylistVisible())
 		}
 	}
 }
