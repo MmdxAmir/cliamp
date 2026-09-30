@@ -1,7 +1,6 @@
 package model
 
 import (
-	"errors"
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
@@ -9,7 +8,6 @@ import (
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -119,82 +117,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case playlistsLoadedMsg:
-		if msg.gen != m.requests.provider || !m.isActiveProvider(msg.providerName) {
-			return m, nil
-		}
-		m.provLoading = m.provSearch.loading
-		if msg.err != nil {
-			if errors.Is(msg.err, playlist.ErrNeedsAuth) {
-				m.provSignIn = true
-				m.err = nil
-				return m, nil
-			}
-			if len(msg.playlists) == 0 {
-				m.err = msg.err
-				return m, nil
-			}
-			m.err = nil
-			m.status.Warningf(statusTTLLong, "%s", msg.err)
-		}
-		m.replaceProviderLists(msg.playlists)
-		cmd := m.startCatalogLoading()
+		cmd := m.handlePlaylistsLoaded(msg)
 		return m, cmd
 
 	case tracksLoadedMsg:
-		if msg.gen != m.requests.tracks || !m.isActiveProvider(msg.providerName) {
-			return m, nil
-		}
-		m.provLoading = false
-		m.tracksPaging = msg.err == nil && msg.next > 0
-		if msg.err != nil {
-			if errors.Is(msg.err, playlist.ErrNeedsAuth) {
-				m.provSignIn = true
-				m.err = nil
-				return m, nil
-			}
-			if errors.Is(msg.err, playlist.ErrListChanged) {
-				// The list moved under a paged read, so what is on screen is a
-				// partial view of a list that no longer exists. Say so and let it
-				// expire: reopening starts a clean load, and a persistent error
-				// would sit in front of every later status message.
-				m.status.Warningf(statusTTLDefault, "Playlist changed while loading — reopen current playlist to reload")
-				return m, nil
-			}
-			m.err = msg.err
-			return m, nil
-		}
-		if msg.offset > 0 {
-			m.playlist.Add(msg.tracks...)
-			m.normalizeQueueOverlay()
-			m.addToHeaderState(msg.tracks)
-			// Add mixes the page into the upcoming shuffle order, so an armed
-			// preload may no longer be the next track. The gapless swap runs on
-			// the audio thread and the model then names the new track from
-			// playlist.Next(), so a stale preload would play one track while the
-			// UI, scrobble and now-playing announced another. Drop it and let the
-			// tick loop re-arm against the order this page produced.
-			if m.player.HasPreload() || m.preloading {
-				m.player.ClearPreload()
-				m.preloading = false
-			}
-		} else {
-			m.replacePlayerPlaylist(msg.tracks)
-			if msg.playlistExact {
-				m.setLoadedLocalPlaylist(msg.providerName, msg.playlistID)
-			}
-		}
-		if msg.next > 0 {
-			m.adjustScroll()
-			if pager, ok := m.provider.(provider.TrackPager); ok {
-				return m, fetchTracksPageCmd(pager, msg.providerName, msg.playlistID, msg.next, msg.gen)
-			}
-		}
-		if msg.offset > 0 {
-			msg.tracks = m.playlist.Tracks()
-		}
-		m.applyTracksResume(msg)
-		m.adjustScroll()
-		return m, nil
+		cmd := m.handleTracksLoaded(msg)
+		return m, cmd
 
 	case navArtistsLoadedMsg:
 		if !m.isCurrentNavRequest(msg.gen) {
@@ -289,46 +217,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case catalogBatchMsg:
-		if msg.gen != m.requests.catalog || !m.isActiveProvider(msg.providerName) {
-			return m, nil
-		}
-		m.catalogBatch.loading = false
-		if msg.err != nil {
-			m.catalogBatch.done = true
-			m.status.Errorf(statusTTLDefault, "Catalog load failed: %s", msg.err)
-			return m, nil
-		}
-		if msg.added == 0 {
-			m.catalogBatch.done = true
-			return m, nil
-		}
-		if err := m.refreshProviderListsNow(); err != nil {
-			m.err = err
-		}
-		m.catalogBatch.offset += msg.added
-		if msg.added < catalogBatchSize {
-			m.catalogBatch.done = true
-		}
+		m.handleCatalogBatch(msg)
 		return m, nil
 
 	case catalogSearchMsg:
-		if msg.gen != m.requests.catalog || !m.isActiveProvider(msg.providerName) {
-			return m, nil
-		}
-		m.provLoading = false
-		m.provSearch.loading = false
-		if msg.err != nil {
-			m.status.Errorf(statusTTLDefault, "Search failed: %s", msg.err)
-		} else {
-			if err := m.refreshProviderListsNow(); err != nil {
-				m.err = err
-			}
-			m.provCursor = 0
-			m.provScroll = 0
-			if msg.count == 0 {
-				m.status.Warning("No results found", statusTTLDefault)
-			}
-		}
+		m.handleCatalogSearch(msg)
 		return m, nil
 
 	case ytdlBatchMsg:
@@ -625,21 +518,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case provAuthDoneMsg:
-		if msg.gen != m.requests.auth || !m.isActiveProvider(msg.providerName) {
-			return m, nil
-		}
-		m.provAuthURL = ""
-		if msg.err != nil {
-			// Keep the sign-in prompt, so Enter retries without a restart.
-			m.err = msg.err
-			m.provLoading = false
-			m.provSignIn = true
-			return m, nil
-		}
-		m.err = nil
-		m.provSignIn = false
-		m.provLoading = true
-		cmd := m.fetchProviderPlaylists()
+		cmd := m.handleProvAuthDone(msg)
 		return m, cmd
 
 	case ProvAuthURLMsg:
