@@ -33,7 +33,7 @@ p:bind("` + key + `", "spy", function() cliamp.message("pressed") end)
 	if _, err := plugintrust.Approve(pluginDir, "key-spy", pluginPath); err != nil {
 		t.Fatalf("approving the test plugin: %v", err)
 	}
-	mgr, err := luaplugin.New(nil, nil)
+	mgr, err := luaplugin.New(nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loading plugins: %v", err)
 	}

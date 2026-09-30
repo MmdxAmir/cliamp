@@ -8,15 +8,6 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// SetReservedKeys records the set of keys owned by cliamp's core UI. Plugins
-// attempting to bind one of these keys get a logged warning and their bind
-// call returns false. Called once during startup from main.go.
-func (m *Manager) SetReservedKeys(keys map[string]bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.reservedKeys = keys
-}
-
 // KeyBinding describes a plugin-registered keybinding for the Ctrl+K overlay.
 type KeyBinding struct {
 	Key         string

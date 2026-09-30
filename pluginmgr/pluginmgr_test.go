@@ -466,7 +466,7 @@ func TestTrustMatchesRuntime(t *testing.T) {
 			if _, err := plugintrust.Approve(pluginDir, "p", path); err != nil {
 				t.Fatal(err)
 			}
-			mgr, loadErr := luaplugin.New(nil, nil)
+			mgr, loadErr := luaplugin.New(nil, nil, nil)
 			mgr.Close()
 
 			if (trustErr == nil) != tt.accept {
@@ -495,7 +495,7 @@ func TestTrustAndRuntimePickSameFile(t *testing.T) {
 	if err := Trust("p", true); err != nil {
 		t.Fatalf("Trust: %v", err)
 	}
-	mgr, err := luaplugin.New(nil, nil)
+	mgr, err := luaplugin.New(nil, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

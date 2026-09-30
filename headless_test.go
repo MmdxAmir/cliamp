@@ -69,7 +69,7 @@ func newTestPlugins(t *testing.T, sources map[string]string) *luaplugin.Manager 
 			t.Fatal(err)
 		}
 	}
-	mgr, err := luaplugin.New(nil, nil)
+	mgr, err := luaplugin.New(nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

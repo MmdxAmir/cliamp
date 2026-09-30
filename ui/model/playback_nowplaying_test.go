@@ -52,7 +52,7 @@ end)
 	if _, err := plugintrust.Approve(pluginDir, "event-spy", pluginPath); err != nil {
 		t.Fatal(err)
 	}
-	mgr, err := luaplugin.New(nil, nil)
+	mgr, err := luaplugin.New(nil, nil, nil)
 	closePlugins := sync.OnceFunc(mgr.Close)
 	t.Cleanup(closePlugins)
 	if err != nil {

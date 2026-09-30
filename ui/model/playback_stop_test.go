@@ -46,7 +46,7 @@ p:on("playback.stop", function() p:publish("stopped", {}) end)`
 		t.Fatal(err)
 	}
 	pub := &stopSpyPublisher{published: make(chan string, 4)}
-	mgr, err := luaplugin.New(nil, pub)
+	mgr, err := luaplugin.New(nil, pub, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

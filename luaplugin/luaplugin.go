@@ -165,9 +165,13 @@ type Manager struct {
 // pluginCfg maps plugin names to their [plugins.<name>] config keys.
 // publisher backs p:publish() and may be nil; it is installed before any plugin
 // runs so a plugin can publish from its top-level chunk.
+// reservedKeys holds the keys that cliamp's core UI owns. A p:bind of one of
+// them logs a warning and returns false. It is also installed before any
+// plugin runs, so a bind in the top-level chunk is refused too.
 // Returns a Manager (possibly with 0 plugins) and any non-fatal load error.
-func New(pluginCfg map[string]map[string]string, publisher EventPublisher) (*Manager, error) {
+func New(pluginCfg map[string]map[string]string, publisher EventPublisher, reservedKeys map[string]bool) (*Manager, error) {
 	m := newManager(resolveAllowedBinaries(pluginCfg), publisher)
+	m.reservedKeys = reservedKeys
 
 	dir, err := appdir.PluginDir()
 	if err != nil {

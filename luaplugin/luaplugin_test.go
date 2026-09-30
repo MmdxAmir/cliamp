@@ -1220,7 +1220,6 @@ func TestEmitPreservesOrderPerPlugin(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestManager()
-			m.SetReservedKeys(map[string]bool{})
 			p := loadTestPlugin(t, m, "order", `
 				local p = plugin.register({name = "order", type = "hook", permissions = {"keymap"}})
 				p:on("ev", function(data) record(tostring(data.n)) end)
@@ -1414,7 +1413,7 @@ func TestNewTreatsBadTrustManifestAsUntrusted(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m, err := New(nil, nil)
+			m, err := New(nil, nil, nil)
 			if m == nil {
 				t.Fatal("New returned a nil Manager")
 			}

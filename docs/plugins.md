@@ -259,7 +259,7 @@ local p = plugin.register({
 p:bind("ctrl+n", "Extract chapters", function(key) ... end)
 
 -- Not listed (hidden binding):
-p:bind("ctrl+e", function(key) ... end)
+p:bind("ctrl+t", function(key) ... end)
 ```
 
 Returns `true` on success. Returns `false, reason` when cliamp's core UI owns the key or the plugin lacks the `keymap` permission. Pass a description as the middle argument to show the binding in the `Ctrl+K` keymap overlay. Omit it for an internal-only binding.

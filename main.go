@@ -133,12 +133,11 @@ func run(overrides config.Overrides, positional []string, headless, visualizer60
 	pluginBroker := ipc.NewBroker()
 	defer pluginBroker.Close()
 
-	luaMgr, luaErr := luaplugin.New(cfg.Plugins, pluginBroker)
+	luaMgr, luaErr := luaplugin.New(cfg.Plugins, pluginBroker, model.ReservedKeys())
 	if luaErr != nil {
 		fmt.Fprintf(os.Stderr, "lua plugins: %v\n", luaErr)
 	}
 	if luaMgr != nil {
-		luaMgr.SetReservedKeys(model.ReservedKeys())
 		defer luaMgr.Close()
 	}
 

@@ -1,6 +1,8 @@
 package luaplugin
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -8,11 +10,13 @@ import (
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
+
+	"github.com/bjarneo/cliamp/internal/plugintrust"
 )
 
 func TestPluginBindAndEmit(t *testing.T) {
 	m := newTestManager()
-	m.SetReservedKeys(map[string]bool{"q": true, "ctrl+c": true})
+	m.reservedKeys = map[string]bool{"q": true, "ctrl+c": true}
 
 	var fired atomic.Int64
 	p := loadTestPlugin(t, m, "kb", `
@@ -39,7 +43,7 @@ func TestPluginBindAndEmit(t *testing.T) {
 
 func TestPluginBindRejectsReservedKey(t *testing.T) {
 	m := newTestManager()
-	m.SetReservedKeys(map[string]bool{"q": true})
+	m.reservedKeys = map[string]bool{"q": true}
 
 	p := loadTestPlugin(t, m, "kb", `
 		local p = plugin.register({name = "kb", type = "hook", permissions = {"keymap"}})
@@ -84,7 +88,6 @@ func TestEmitKeyUnboundReturnsFalse(t *testing.T) {
 
 func TestPluginUnbind(t *testing.T) {
 	m := newTestManager()
-	m.SetReservedKeys(map[string]bool{})
 
 	p := loadTestPlugin(t, m, "kb", `
 		local p = plugin.register({name = "kb", type = "hook", permissions = {"keymap"}})
@@ -101,7 +104,6 @@ func TestPluginUnbind(t *testing.T) {
 
 func TestPluginBindWithDescriptionSurfacesInKeyBindings(t *testing.T) {
 	m := newTestManager()
-	m.SetReservedKeys(map[string]bool{})
 
 	loadTestPlugin(t, m, "kb", `
 		local p = plugin.register({name = "kb", type = "hook", permissions = {"keymap"}})
@@ -120,7 +122,6 @@ func TestPluginBindWithDescriptionSurfacesInKeyBindings(t *testing.T) {
 
 func TestKeyBindingsRemovedOnCleanup(t *testing.T) {
 	m := newTestManager()
-	m.SetReservedKeys(map[string]bool{})
 	p := loadTestPlugin(t, m, "kb", `
 		local p = plugin.register({name = "kb", type = "hook", permissions = {"keymap"}})
 		p:bind("x", "Do thing", function() end)
@@ -139,7 +140,6 @@ func TestKeyBindingsRemovedOnCleanup(t *testing.T) {
 
 func TestCleanupPluginRemovesBinds(t *testing.T) {
 	m := newTestManager()
-	m.SetReservedKeys(map[string]bool{})
 
 	p := loadTestPlugin(t, m, "kb", `
 		local p = plugin.register({name = "kb", type = "hook", permissions = {"keymap"}})
@@ -225,7 +225,6 @@ func TestCleanupPluginRemovesCommands(t *testing.T) {
 // commands and key bindings of the plugin that owns the name.
 func TestFailedPluginKeepsOtherPluginsCommands(t *testing.T) {
 	m := newTestManager()
-	m.SetReservedKeys(map[string]bool{})
 	loadTestPlugin(t, m, "a", `
 		local p = plugin.register({name = "dup", type = "hook", permissions = {"keymap"}})
 		p:command("hi", function() return "from a" end)
@@ -261,4 +260,47 @@ func waitAtomic(t *testing.T, counter *atomic.Int64, target int64, timeout time.
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("counter reached %d, want %d", counter.Load(), target)
+}
+
+// New installs the reserved keys before any plugin runs, so a bind in the
+// top-level chunk of a plugin is refused like a later one.
+func TestNewRefusesReservedKeyAtTopLevel(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLIAMP_CONFIG_DIR", dir)
+	pluginDir := filepath.Join(dir, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(pluginDir, "kb.lua")
+	src := `
+		local p = plugin.register({name = "kb", type = "hook", permissions = {"keymap"}})
+		_G.ok, _G.err = p:bind("space", "Toggle", function() end)
+	`
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plugintrust.Approve(pluginDir, "kb", path); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := New(nil, nil, map[string]bool{"space": true})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer m.Close()
+
+	if m.EmitKey("space") || len(m.KeyBindings()) != 0 {
+		t.Fatalf("space stayed bound, KeyBindings = %+v", m.KeyBindings())
+	}
+	p := m.plugins[0]
+	p.mu.Lock()
+	ok := p.L.GetGlobal("ok")
+	p.mu.Unlock()
+	if ok != lua.LFalse {
+		t.Fatalf("p:bind(space) = %v, want false", ok)
+	}
+	logged, err := os.ReadFile(filepath.Join(dir, pluginLogName))
+	if err != nil || !strings.Contains(string(logged), `refusing to bind "space"`) {
+		t.Fatalf("plugin log = %q, %v, want the reserved key warning", logged, err)
+	}
 }
