@@ -198,9 +198,11 @@ func TestHandleGlobalKey(t *testing.T) {
 		wantQuit bool
 		// wantKeymap is keymap.visible after the key.
 		wantKeymap bool
+		// wantUndo is whether the key restores the removed track.
+		wantUndo bool
 	}{
 		{name: "ctrl+c quits", key: tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, wantOK: true, wantQuit: true},
-		{name: "ctrl+z undoes", key: tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl}, wantOK: true},
+		{name: "ctrl+z undoes", key: tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl}, wantOK: true, wantUndo: true},
 		{name: "ctrl+k opens the keymap", key: tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}, wantOK: true, wantKeymap: true},
 		{name: "ctrl+k over the keymap goes on", key: tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}, keymap: true, wantKeymap: true},
 		{name: "q goes on", key: tea.KeyPressMsg{Text: "q"}},
@@ -211,6 +213,10 @@ func TestHandleGlobalKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := keybindingTestModel()
+			m.playlist.Add(playlist.Track{Title: "One"}, playlist.Track{Title: "Two"})
+			if _, err := m.removeTrack(0, true); err != nil {
+				t.Fatalf("removeTrack: %v", err)
+			}
 			m.keymap.visible = tt.keymap
 			if tt.tooSmall {
 				m.width, m.height = 39, 9
@@ -227,6 +233,13 @@ func TestHandleGlobalKey(t *testing.T) {
 			}
 			if m.keymap.visible != tt.wantKeymap {
 				t.Errorf("keymap.visible = %v, want %v", m.keymap.visible, tt.wantKeymap)
+			}
+			wantLen := 1
+			if tt.wantUndo {
+				wantLen = 2
+			}
+			if got := m.playlist.Len(); got != wantLen {
+				t.Errorf("playlist.Len() = %d, want %d", got, wantLen)
 			}
 		})
 	}
