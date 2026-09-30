@@ -512,3 +512,47 @@ func TestTrustAndRuntimePickSameFile(t *testing.T) {
 		t.Errorf("List output = %q, want one trusted row for p.lua", out.String())
 	}
 }
+
+// cliamp plugins list and trust explain a trust manifest that does not
+// load. list still shows each plugin, as untrusted like the player treats
+// it. trust fails before it asks, and it leaves the file as it is.
+func TestBadTrustManifest(t *testing.T) {
+	manifests := []struct {
+		name    string
+		content string
+	}{
+		{"not JSON", "{"},
+		{"unsupported version", `{"version":2,"plugins":{}}`},
+	}
+	for _, mf := range manifests {
+		for _, cmd := range []string{"list", "trust"} {
+			t.Run(mf.name+"/"+cmd, func(t *testing.T) {
+				pluginDir, _ := installForTest(t, "hello", `plugin.register({name = "hello", type = "hook"})`)
+				manifest := filepath.Join(pluginDir, ".trust.json")
+				if err := os.WriteFile(manifest, []byte(mf.content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				out := silenceOutput(t)
+				var err error
+				if cmd == "list" {
+					err = List()
+					if !strings.Contains(out.String(), "untrusted") {
+						t.Errorf("List output = %q, want hello as untrusted", out.String())
+					}
+				} else {
+					err = Trust("hello", false)
+					if strings.Contains(out.String(), "[y/N]") {
+						t.Errorf("Trust asked for approval: %q", out.String())
+					}
+				}
+				hint := "delete " + manifest + ", then run `cliamp plugins trust <name>` for each plugin"
+				if err == nil || !strings.Contains(err.Error(), hint) {
+					t.Fatalf("%s error = %v, want the hint %q", cmd, err, hint)
+				}
+				if data, _ := os.ReadFile(manifest); string(data) != mf.content {
+					t.Errorf("manifest = %q, want it unchanged", data)
+				}
+			})
+		}
+	}
+}

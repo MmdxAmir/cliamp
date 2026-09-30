@@ -54,10 +54,9 @@ func List() error {
 		return nil
 	}
 
+	// Like the player, treat every plugin as untrusted when the manifest
+	// does not load, and return the error after the list.
 	manifest, trustErr := plugintrust.Load(dir)
-	if trustErr != nil {
-		return trustErr
-	}
 	for i := range plugins {
 		switch err := plugintrust.Verify(manifest, plugins[i].id, plugins[i].path); {
 		case err == nil:
@@ -87,7 +86,16 @@ func List() error {
 	for _, p := range plugins {
 		fmt.Fprintf(output, "%-*s  %-*s  %-*s  %-9s  %s\n", nameW, p.Name, typeW, p.Type, verW, p.Version, p.trust, p.Description)
 	}
+	if trustErr != nil {
+		return manifestError(dir, trustErr)
+	}
 	return nil
+}
+
+// manifestError explains how to recover from a trust manifest that does not
+// load. cliamp plugins trust cannot add to such a file.
+func manifestError(dir string, err error) error {
+	return fmt.Errorf("%w: delete %s, then run `cliamp plugins trust <name>` for each plugin", err, plugintrust.ManifestPath(dir))
 }
 
 // Install downloads a plugin from the given source and saves it to the plugins directory.
@@ -185,6 +193,9 @@ func Trust(name string, assumeYes bool) error {
 		return fmt.Errorf("plugin %q not found", name)
 	}
 	path := files[i].Path
+	if _, err := plugintrust.Load(dir); err != nil {
+		return manifestError(dir, err)
+	}
 	info := extractMetadata(path)
 	if info.err != nil {
 		return fmt.Errorf("inspect plugin metadata: %w", info.err)
