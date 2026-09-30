@@ -193,7 +193,7 @@ func run(overrides config.Overrides, positional []string, headless, visualizer60
 	}
 
 	if luaMgr != nil {
-		luaSend, stopLuaSend := newLuaSender(prog.Send)
+		luaSend, stopLuaSend := newOrderedSender(prog.Send)
 		defer stopLuaSend()
 		luaMgr.SetControlProvider(luaControlProvider(luaSend))
 		luaMgr.SetUIProvider(luaUIProvider(luaSend))
@@ -343,10 +343,16 @@ func startIPC(send func(tea.Msg), broker *ipc.Broker, plugins *luaplugin.Manager
 		fmt.Fprintln(os.Stderr, err)
 		return func() {}, nil
 	}
-	srv.SetV2Dispatcher(newV2Dispatcher(send, srv.JobStore(), plugins))
+	// Program.Send may wait for the update loop, so the requests go through
+	// an ordered queue and the socket can acknowledge a job at once.
+	queue, stopQueue := newOrderedSender(send)
+	srv.SetV2Dispatcher(newV2Dispatcher(queue, srv.JobStore(), plugins))
 	srv.SetOperationRegistry(v2Operations(headless, plugins != nil))
 	go publishV2JobEvents(srv.Done(), srv.JobStore(), broker)
-	return func() { _ = srv.Close() }, nil
+	return func() {
+		_ = srv.Close()
+		stopQueue()
+	}, nil
 }
 
 // saveOnExit keeps the theme and the resume position of the final Model.
@@ -457,14 +463,16 @@ func v2Operations(headless, plugins bool) *ipc.OperationRegistry {
 var v2ReplyTimeout = 3 * time.Second
 
 // newV2Dispatcher answers the V2 requests of the TUI and of headless mode.
-// send delivers a request to the Model, as prog.Send does. The plugin jobs
-// run against plugins.
+// send delivers a request to the Model. It must return at once and keep the
+// order of the requests, as the queue of newOrderedSender does, so a job is
+// acknowledged before the Model reads it and jobs run in the order they came
+// in. The plugin jobs run against plugins.
 func newV2Dispatcher(send func(tea.Msg), jobs *ipc.JobStore, plugins *luaplugin.Manager) ipc.V2Dispatcher {
 	return ipc.V2DispatcherFunc(func(ctx context.Context, request ipc.V2Request) (ipc.V2Result, *ipc.V2Error) {
 		switch request.Method {
 		case "state.get", "spectrum.get":
 			reply := make(chan model.V2RequestResult, 1)
-			go send(model.V2RequestMsg{Request: request, Reply: reply})
+			send(model.V2RequestMsg{Request: request, Reply: reply})
 			select {
 			case result := <-reply:
 				return result.Result, result.Error
@@ -483,9 +491,7 @@ func newV2Dispatcher(send func(tea.Msg), jobs *ipc.JobStore, plugins *luaplugin.
 			go runV2PluginJob(jobs, job.ID, request, plugins)
 			return ipc.V2Result{Job: &job}, nil
 		}
-		// Program.Send may wait for the update loop. Job submission itself
-		// stays non-blocking so the IPC response can always acknowledge the job.
-		go send(model.V2RequestMsg{Request: request, Jobs: jobs, JobID: job.ID})
+		send(model.V2RequestMsg{Request: request, Jobs: jobs, JobID: job.ID})
 		return ipc.V2Result{Job: &job}, nil
 	})
 }

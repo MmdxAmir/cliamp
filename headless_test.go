@@ -488,3 +488,45 @@ cliamp.fs.write(` + strconv.Quote(marker) + `, "loaded")`
 		t.Fatalf("cliamp.log = %q, want no provider built", log)
 	}
 }
+
+// A client can send jobs back to back without a wait for each result. The
+// dispatcher acknowledges each job while the event loop is busy, and the
+// Model gets the jobs in the order that they came in.
+func TestV2JobsReachTheModelInOrder(t *testing.T) {
+	const n = 50
+	sink := newBlockingSend(n)
+	queue, stop := newOrderedSender(sink.send)
+	defer stop()
+	dispatcher := newV2Dispatcher(queue, ipc.NewJobStore(), nil)
+
+	ids := make([]string, n)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range n {
+			result, v2Err := dispatcher.DispatchV2(context.Background(), ipc.V2Request{Operation: "queue.move"})
+			if v2Err != nil || result.Job == nil {
+				t.Errorf("job %d = %+v, %+v", i, result, v2Err)
+				return
+			}
+			ids[i] = result.Job.ID
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("a job waited for the event loop")
+	}
+
+	close(sink.release)
+	for i := range n {
+		select {
+		case msg := <-sink.got:
+			if request := msg.(model.V2RequestMsg); request.JobID != ids[i] {
+				t.Fatalf("message %d is job %s, want %s", i, request.JobID, ids[i])
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("message %d did not arrive", i)
+		}
+	}
+}

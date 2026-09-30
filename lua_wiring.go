@@ -87,13 +87,15 @@ func luaControlProvider(send func(tea.Msg)) luaplugin.ControlProvider {
 	}
 }
 
-// newLuaSender returns a send func for the Lua providers and a stop func. A
-// plugin calls a control or cliamp.message while it holds its own lock, and
-// send, which is prog.Send, waits until the event loop reads the message.
-// The returned func only queues the message and returns at once. One
-// goroutine passes the queued messages to send in order, as mediactl does
-// for D-Bus calls. The queue has no bound, so no message is lost.
-func newLuaSender(send func(tea.Msg)) (queue func(tea.Msg), stop func()) {
+// newOrderedSender returns a send func for the Lua providers and the V2 jobs
+// of the socket, and a stop func. A plugin calls a control or cliamp.message
+// while it holds its own lock, and the socket acknowledges a job before the
+// Model runs it. send, which is prog.Send, waits until the event loop reads
+// the message. The returned func only queues the message and returns at
+// once. One goroutine passes the queued messages to send in order, as
+// mediactl does for D-Bus calls. The queue has no bound, so no message is
+// lost.
+func newOrderedSender(send func(tea.Msg)) (queue func(tea.Msg), stop func()) {
 	var (
 		mu      sync.Mutex
 		pending []tea.Msg

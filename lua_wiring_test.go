@@ -76,7 +76,7 @@ func (b *blockingSend) send(msg tea.Msg) {
 // messages in the order that the plugin sent them.
 func TestLuaSenderDoesNotBlockAndKeepsOrder(t *testing.T) {
 	sink := newBlockingSend(3)
-	queue, stop := newLuaSender(sink.send)
+	queue, stop := newOrderedSender(sink.send)
 	defer stop()
 	ctrl := luaControlProvider(queue)
 	ui := luaUIProvider(queue)
@@ -118,7 +118,7 @@ func TestLuaSenderDoesNotBlockAndKeepsOrder(t *testing.T) {
 func TestLuaSenderKeepsEveryMessage(t *testing.T) {
 	const n = 1000
 	sink := newBlockingSend(n)
-	queue, stop := newLuaSender(sink.send)
+	queue, stop := newOrderedSender(sink.send)
 	defer stop()
 
 	done := make(chan struct{})
