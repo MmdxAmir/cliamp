@@ -108,10 +108,13 @@ The socket is `cliamp.sock` in the config directory. `ipc.DefaultSocketPath` ret
 To add an operation:
 
 1. Add it to `DefaultOperationRegistry` in `ipc/operations.go`.
-2. Handle it in `handleV2Request` in `ui/model/ipc_runtime.go`, or in `ui/model/ipc_extended.go`.
-3. Add a CLI command in `commands.go` when users need one.
-4. Add table-driven tests in `ui/model/`, and in `ipc/` for a protocol change.
-5. Document it in `docs/remote-control.md`.
+2. Put new parameter fields on `ipc.Request` in `ipc/protocol.go` when the existing fields do not fit.
+3. Handle it in `handleV2Request` in `ui/model/ipc_runtime.go`, or in `ui/model/ipc_extended.go`. `handleV2Request` sends only `provider.*` and `playlist.*` names to `ipc_extended.go` by itself. For another name, add it to the case that calls `handleV2DeferredRequest`, and add a case to the switch in `handleV2DeferredRequest`. `handleV2Request` fails an unknown name with `unavailable`.
+4. For a queue edit, add the name to `v2MutatesLivePlaylist` in `ui/model/ipc_runtime.go`. The revision check then covers it.
+5. When headless mode cannot serve the operation, unregister it in `v2Operations` in `main.go`.
+6. Add a CLI command in `commands.go` when users need one.
+7. Add table-driven tests in `ui/model/`, and in `ipc/` for a protocol change.
+8. Document it in `docs/remote-control.md`.
 
 ### ui/model by concern
 
@@ -119,11 +122,11 @@ To add an operation:
 |---------|-------|
 | State and setup | `model.go` holds the `Model` struct, the screens, the focus areas and the `ConfigSaver` seam. `state.go` groups the sub-structs. `init.go` holds `New`, the setters, `SetHeadless` and `Init` |
 | Update loop | `update.go` is one type switch. After each message it lays out the frame, drops a stale preload, tells the media controls, emits the plugin events and publishes the IPC and plugin state. `update_load.go`, `update_nav.go`, `update_playback.go`, `update_provider.go` and `update_search.go` hold the message bodies. `tick.go` runs the frame tick. `commands.go` holds the `tea.Cmd` constructors and their messages |
-| Actions | `actions.go` holds one verb for each user intent that more than one entry point starts: keys, media controls, Lua and IPC. `queue_ops.go` holds the one queue edit rule for keys, IPC and Lua. `playback.go`, `playback_state.go`, `preload.go`, `seek.go` and `audio.go` run playback, the gapless preload, seek, EQ and speed |
+| Actions | `actions.go` holds one verb for each user intent that more than one entry point starts: keys, media controls, Lua and IPC. `queue_ops.go` holds the one queue edit rule for keys, IPC and Lua. `playback.go`, `playback_state.go`, `preload.go`, `seek.go` and `audio.go` run playback, the gapless preload, seek, EQ and speed. `eq_presets.go` holds the built-in EQ presets. `ytdl_batch.go` loads a long YouTube playlist in batches |
 | Reports | `notifications.go` updates the media controls. At track start it records history and sends the now-playing report. When a track that played past half its length is left, it sends the scrobble. `report_queue.go` keeps the provider reports in order. `favorites.go` copies a ♥ favorite to the service |
 | Keys | `keys.go` holds `handleKey` and the global keys. `keys_*.go` hold the keys of each screen. `command_registry.go` lists every key with its mode. It feeds the help bar, the `Ctrl+K` keymap in `keymap.go` and `ReservedKeys` for plugins |
-| Overlays | `overlays_table.go` holds `overlayStack`. The first open overlay in it renders, gets the keys and gets pasted text. `overlays.go`, `inline_overlays.go`, `inline_overlays_nav.go`, `filebrowser.go`, `pl_picker.go`, `plmgr_append.go`, `lyrics.go`, `metadata.go`, `jump.go` and the `*_subs.go` files implement the overlays |
-| View | `view.go`, `view_columns.go`, `view_helpers.go`, `view_nav.go`, `view_overlays.go`, `layout.go`, `scroll.go`, `playlist_rows.go`, `styles.go` and `title.go` |
+| Overlays | `overlays_table.go` holds `overlayStack`. The first open overlay in it renders, gets the keys and gets pasted text. `overlays.go`, `inline_overlays.go`, `inline_overlays_nav.go`, `filebrowser.go`, `pl_picker.go`, `plmgr_append.go`, `lyrics.go`, `metadata.go`, `jump.go` and the `*_subs.go` files implement the overlays. `filter_list.go` holds the cursor, the scroll and the `/` filter of a list overlay. `search.go` filters the playlist for the `/` search |
+| View | `view.go`, `view_columns.go`, `view_helpers.go`, `view_nav.go`, `view_overlays.go`, `layout.go`, `scroll.go`, `playlist_rows.go`, `styles.go` and `title.go`. `textinput.go` edits the inline text inputs and draws their cursor |
 | Providers | `providers.go` switches providers, loads the provider pane and maps the `Shift+letter` shortcuts. `keys_radio.go` handles the catalog, the favorites and the location consent. `nav_labels.go` names the browse levels |
 | IPC | `ipc_runtime.go` and `ipc_extended.go`. See [IPC](#ipc) |
 | Plugins | `plugin_events.go` emits the Lua events after each Update. `plugin_state.go` publishes the `PluginState` snapshot that Lua reads. `plugin_queue.go` applies `PluginQueueMsg` |
