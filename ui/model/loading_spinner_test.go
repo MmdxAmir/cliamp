@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 // loadingSpinnerCases puts the model into each load that shows a spinner.
@@ -57,13 +56,10 @@ var loadingSpinnerCases = []struct {
 }
 
 func TestLoadingTextsShowTheSpinner(t *testing.T) {
-	old := ui.PanelWidth
-	ui.PanelWidth = 80
-	t.Cleanup(func() { ui.PanelWidth = old })
-
 	for _, tt := range loadingSpinnerCases {
 		t.Run(tt.name, func(t *testing.T) {
 			m := keybindingTestModel()
+			m.layout.panelWidth = 80
 			m.plVisible = 6
 			tt.setup(&m)
 			body := ansi.Strip(tt.body(&m))

@@ -303,7 +303,7 @@ func (m Model) mainSections(playlist string, includeTransient, contentFirst bool
 				// playlist header rule runs the whole frame width.
 				sections = append(sections,
 					m.renderSourceVolume(),
-					fillSeparator(m.renderPlaylistHeader(), ui.PanelWidth))
+					fillSeparator(m.renderPlaylistHeader(), m.layout.panelWidth))
 			default:
 				sections = append(sections, m.renderControls())
 				if source := m.renderProviderPill(); source != "" {
@@ -355,8 +355,8 @@ func (m Model) renderSimplifiedTrackInfo() string {
 		}
 	}
 
-	name = scrollTrackName(name, max(1, ui.PanelWidth-lipgloss.Width(duration)-1), m.titleOff)
-	gap := max(1, ui.PanelWidth-lipgloss.Width(name)-lipgloss.Width(duration))
+	name = scrollTrackName(name, max(1, m.layout.panelWidth-lipgloss.Width(duration)-1), m.titleOff)
+	gap := max(1, m.layout.panelWidth-lipgloss.Width(name)-lipgloss.Width(duration))
 	return trackStyle.Render(name) + strings.Repeat(" ", gap) + dimStyle.Render(duration)
 }
 
@@ -467,7 +467,7 @@ func (m Model) renderCompactControls() string {
 }
 
 func (m Model) renderCompactSource() string {
-	return m.settingsSource(ui.PanelWidth)
+	return m.settingsSource(m.layout.panelWidth)
 }
 
 // centerFrame centers a pre-rendered frame in the terminal.
@@ -499,7 +499,7 @@ func (m Model) renderTitle() string {
 		return title
 	}
 	indicator := dimStyle.Render("[" + label + "]")
-	gap := max(ui.PanelWidth-lipgloss.Width(title)-lipgloss.Width(indicator), 1)
+	gap := max(m.layout.panelWidth-lipgloss.Width(title)-lipgloss.Width(indicator), 1)
 	return title + strings.Repeat(" ", gap) + indicator
 }
 
@@ -508,7 +508,7 @@ func (m Model) renderTrackInfo() string {
 	name := trackInfoName(track, m.streamTitle)
 	// The "♫ " prefix takes two cells; the rest of the row is the marquee's,
 	// so a name only scrolls once it genuinely cannot fit.
-	return trackStyle.Render("♫ " + scrollTrackName(name, ui.PanelWidth-2, m.titleOff))
+	return trackStyle.Render("♫ " + scrollTrackName(name, m.layout.panelWidth-2, m.titleOff))
 }
 
 func (m Model) renderTimeStatus() string {
@@ -549,7 +549,7 @@ func (m Model) renderTimeStatus() string {
 	}
 
 	left := timeStyle.Render(timeStr)
-	gap := max(ui.PanelWidth-lipgloss.Width(left)-lipgloss.Width(status), 1)
+	gap := max(m.layout.panelWidth-lipgloss.Width(left)-lipgloss.Width(status), 1)
 
 	return left + strings.Repeat(" ", gap) + status
 }
@@ -597,19 +597,19 @@ func (m Model) fullVisTopLine() string {
 }
 
 func (m Model) renderSeekBar() string {
-	if ui.PanelWidth <= 0 {
+	if m.layout.panelWidth <= 0 {
 		return ""
 	}
 	// During buffering, show a dim bar — avoids speaker.Lock() contention.
 	if m.buffering {
-		return seekDimStyle.Render(strings.Repeat(seekEmptyGlyph, ui.PanelWidth))
+		return seekDimStyle.Render(strings.Repeat(seekEmptyGlyph, m.layout.panelWidth))
 	}
 	// Show a static streaming bar for non-seekable streams with no known duration.
 	if !m.player.Seekable() && m.player.IsPlaying() && m.cachedDur == 0 {
 		label := " STREAMING "
-		pad := ui.PanelWidth - lipgloss.Width(label)
+		pad := m.layout.panelWidth - lipgloss.Width(label)
 		if pad < 0 {
-			return seekFillStyle.Render(label[:ui.PanelWidth])
+			return seekFillStyle.Render(label[:m.layout.panelWidth])
 		}
 		left := pad / 2
 		right := pad - left
@@ -625,7 +625,7 @@ func (m Model) renderSeekBar() string {
 	}
 	progress = max(0, min(1, progress))
 
-	w := ui.PanelWidth
+	w := m.layout.panelWidth
 	filled := min(int(progress*float64(w)), w)
 	if filled >= w {
 		// Finished: there is no cell left to put the head in.
@@ -680,7 +680,7 @@ func (m Model) renderControls() string {
 	volSuffix := dimStyle.Render(dbStr) + monoStr
 	volLabelW := lipgloss.Width(volLabel)
 	volSuffixW := lipgloss.Width(volSuffix)
-	barW := max(6, (ui.PanelWidth-leftW-2-volLabelW-volSuffixW)*3/4)
+	barW := max(6, (m.layout.panelWidth-leftW-2-volLabelW-volSuffixW)*3/4)
 	filled := int(frac * float64(barW))
 
 	bar := volBarStyle.Render(strings.Repeat("█", filled)) +
@@ -688,7 +688,7 @@ func (m Model) renderControls() string {
 
 	right := volLabel + bar + volSuffix
 	rightW := lipgloss.Width(right)
-	gap := max(1, ui.PanelWidth-leftW-rightW)
+	gap := max(1, m.layout.panelWidth-leftW-rightW)
 
 	return left + strings.Repeat(" ", gap) + right
 }
@@ -720,13 +720,13 @@ func (m Model) renderSourceVolume() string {
 
 	leftW := lipgloss.Width(left)
 	fixedW := lipgloss.Width(label) + lipgloss.Width(dbStr) + lipgloss.Width(mono)
-	barW := max(6, (ui.PanelWidth-leftW-2-fixedW)*3/4)
+	barW := max(6, (m.layout.panelWidth-leftW-2-fixedW)*3/4)
 	filled := int(frac * float64(barW))
 
 	right := label + volBarStyle.Render(strings.Repeat("█", filled)) +
 		dimStyle.Render(strings.Repeat("░", barW-filled)) + dimStyle.Render(dbStr) + mono
 
-	gap := max(1, ui.PanelWidth-leftW-lipgloss.Width(right))
+	gap := max(1, m.layout.panelWidth-leftW-lipgloss.Width(right))
 	return left + strings.Repeat(" ", gap) + right
 }
 
@@ -754,7 +754,7 @@ func (m Model) renderProviderPill() string {
 	if m.focus == focusProvPill {
 		indicator = activeToggle.Render("["+current+"]") + dimStyle.Render(fmt.Sprintf(" %d/%d", m.provPillIdx+1, len(m.providers)))
 	}
-	if ui.PanelWidth < 110 {
+	if m.layout.panelWidth < 110 {
 		return srcLabel + indicator
 	}
 
@@ -783,7 +783,7 @@ func (m Model) renderPlaylistHeader() string {
 		case m.providerCatalogSearching():
 			label += " / Search results"
 		}
-		return dimStyle.Render(labeledSeparator("", label))
+		return dimStyle.Render(labeledSeparator("", label, m.layout.panelWidth))
 	}
 	return m.renderPlaybackHeader()
 }
@@ -845,7 +845,7 @@ func (m Model) renderPlaybackHeader() string {
 		if i > 0 {
 			w++ // separating space
 		}
-		if width+w > ui.PanelWidth {
+		if width+w > m.layout.panelWidth {
 			break
 		}
 		if i > 0 {
@@ -964,12 +964,12 @@ func (m Model) renderProviderList() string {
 				title := m.providerSectionTitle(sl.IDPrefix(p.ID))
 				if title != prevTitle {
 					if title != "" && len(lines) < visibleBudget {
-						lines = append(lines, dimStyle.Render(labeledSeparator("  ", title)))
+						lines = append(lines, dimStyle.Render(labeledSeparator("  ", title, m.layout.panelWidth)))
 					}
 					prevTitle = title
 				}
 			} else if hasSections && p.Section != prevSection {
-				header := labeledSeparator("  ", p.Section)
+				header := labeledSeparator("  ", p.Section, m.layout.panelWidth)
 				if len(lines) < visibleBudget {
 					lines = append(lines, dimStyle.Render(header))
 				}
@@ -1005,7 +1005,7 @@ func (m Model) renderLocationPrompt(budget int) string {
 	}
 
 	lines := []string{""}
-	for _, line := range wrapText(question, ui.PanelWidth-6) {
+	for _, line := range wrapText(question, m.layout.panelWidth-6) {
 		lines = append(lines, "  "+line)
 	}
 	lines = append(lines, "", playlistSelectedStyle.Render("  y  Yes"), dimStyle.Render("  n  No, don't"))
@@ -1145,7 +1145,7 @@ func (m Model) renderPlaylist() string {
 
 		name := trackViewName(t)
 		queueSuffix := ""
-		if queuePosition > 0 && ui.PanelWidth >= 64 {
+		if queuePosition > 0 && m.layout.panelWidth >= 64 {
 			queueSuffix = fmt.Sprintf(" [Q%d]", queuePosition)
 		}
 		queueLen := lipgloss.Width(queueSuffix)
@@ -1160,17 +1160,17 @@ func (m Model) renderPlaylist() string {
 
 		// State markers always occupy the same cells; low-priority queue position,
 		// album, and unavailable labels appear only when the terminal has room.
-		name = truncate(name, ui.PanelWidth-linePrefixWidth-queueLen-durationGap)
+		name = truncate(name, m.layout.panelWidth-linePrefixWidth-queueLen-durationGap)
 		// Truncate the album to fit whatever space remains after the track name.
 		albumSuffix := ""
 		nameLen := lipgloss.Width(name)
-		if t.Unplayable && ui.PanelWidth >= 68 {
-			remaining := ui.PanelWidth - linePrefixWidth - nameLen - queueLen - durationGap
+		if t.Unplayable && m.layout.panelWidth >= 68 {
+			remaining := m.layout.panelWidth - linePrefixWidth - nameLen - queueLen - durationGap
 			if remaining >= len(" (unavailable)") {
 				albumSuffix = truncate(" (unavailable)", remaining)
 			}
-		} else if album := t.Album; album != "" && !m.showAlbumHeaders && ui.PanelWidth >= 56 {
-			remaining := ui.PanelWidth - linePrefixWidth - nameLen - queueLen - durationGap - 3 // 3 = " · "
+		} else if album := t.Album; album != "" && !m.showAlbumHeaders && m.layout.panelWidth >= 56 {
+			remaining := m.layout.panelWidth - linePrefixWidth - nameLen - queueLen - durationGap - 3 // 3 = " · "
 			if remaining >= 4 {
 				albumSuffix = " · " + truncate(album, remaining)
 			}
@@ -1186,7 +1186,7 @@ func (m Model) renderPlaylist() string {
 			line += activeToggle.Render(queueSuffix)
 		}
 		if duration != "" {
-			padding := max(1, ui.PanelWidth-lipgloss.Width(line)-durationLen)
+			padding := max(1, m.layout.panelWidth-lipgloss.Width(line)-durationLen)
 			line += strings.Repeat(" ", padding) + dimStyle.Render(duration)
 		}
 		lines = append(lines, line)
@@ -1230,7 +1230,7 @@ func (m Model) renderBottomStatus() string {
 
 	leftW := lipgloss.Width(left)
 	rightW := lipgloss.Width(right)
-	gap := max(1, ui.PanelWidth-leftW-rightW)
+	gap := max(1, m.layout.panelWidth-leftW-rightW)
 
 	if right == "" {
 		return left

@@ -186,7 +186,7 @@ func (m Model) keymapHeaderLine() string {
 	if m.keymap.isFiltered() {
 		return m.filterHeader("Filter: Keymap", "keymap", m.keymap.filter, fmt.Sprintf("%d/%d", m.keymapCount(), len(m.keymap.entries)))
 	}
-	return sepHeaderN("Keymap", m.keymap.cursor+1, len(m.keymap.entries))
+	return sepHeaderN("Keymap", m.keymap.cursor+1, len(m.keymap.entries), m.layout.panelWidth)
 }
 
 // keymapMaybeAdjustScroll keeps the cursor visible in the current keymap window.

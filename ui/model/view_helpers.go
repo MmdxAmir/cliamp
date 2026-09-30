@@ -11,7 +11,6 @@ import (
 
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 const restrictedViewSuffix = " [E]"
@@ -103,17 +102,17 @@ func formatPlaylistDuration(secs int) string {
 //
 //	"01. Title · Album         3:42"
 //
-// with the duration right-aligned at ui.PanelWidth - 4 (to leave space for
+// with the duration right-aligned at width - 4 (to leave space for
 // the cursor prefix the caller adds). The title column is truncated as
 // needed; the duration is hidden when secs is 0.
-func formatTrackRow(num int, name string, secs int) string {
+func formatTrackRow(num int, name string, secs, width int) string {
 	const prefixOverhead = 4 // leaves room for "  " / "> " caller prefix
 	dur := formatTrackTime(secs)
 	numStr := fmt.Sprintf("%d. ", num)
 	numLen := lipgloss.Width(numStr)
 	durLen := lipgloss.Width(dur)
 
-	titleBudget := ui.PanelWidth - prefixOverhead - numLen
+	titleBudget := width - prefixOverhead - numLen
 	if dur != "" {
 		titleBudget -= durLen + 1 // +1 for spacing gap
 	}
@@ -125,7 +124,7 @@ func formatTrackRow(num int, name string, secs int) string {
 		return numStr + title
 	}
 
-	pad := ui.PanelWidth - prefixOverhead - durLen - numLen - lipgloss.Width(title)
+	pad := width - prefixOverhead - durLen - numLen - lipgloss.Width(title)
 	if pad < 1 {
 		pad = 1
 	}
@@ -246,14 +245,14 @@ func helpKey(key, label string) string {
 	return helpKeyStyle.Render(" "+key+" ") + helpStyle.Render(" "+label)
 }
 
-// fitHelpLine keeps a hint line to a single panel-wide row. A longer line would
-// wrap to two rows and shift the layout height, so this clips it (ANSI-aware)
-// to one row.
-func fitHelpLine(s string) string {
-	if ui.PanelWidth <= 0 || lipgloss.Width(s) <= ui.PanelWidth {
+// fitHelpLine keeps a hint line to a single row width cells wide. A longer
+// line would wrap to two rows and shift the layout height, so this clips it
+// (ANSI-aware) to one row.
+func fitHelpLine(s string, width int) string {
+	if width <= 0 || lipgloss.Width(s) <= width {
 		return s
 	}
-	return ansi.Truncate(s, ui.PanelWidth, "")
+	return ansi.Truncate(s, width, "")
 }
 
 // toggleAlbumHeadersManual flips header visibility and pins the choice so
@@ -462,18 +461,18 @@ func (m Model) albumSeparatorRows(tracks []playlist.Track, scroll, cursor int, s
 	return rows
 }
 
-// separatorLine pads or truncates an unstyled separator to exactly fill the
-// playlist pane width. The caller styles the result, so the "─" fill is added
-// bare; use fillSeparator for a line that is already rendered.
-func separatorLine(line string) string {
-	if ui.PanelWidth <= 0 {
+// separatorLine pads or truncates an unstyled separator to exactly width
+// cells. The caller styles the result, so the "─" fill is added bare; use
+// fillSeparator for a line that is already rendered.
+func separatorLine(line string, width int) string {
+	if width <= 0 {
 		return ""
 	}
 	switch w := lipgloss.Width(line); {
-	case w < ui.PanelWidth:
-		return line + strings.Repeat("─", ui.PanelWidth-w)
-	case w > ui.PanelWidth:
-		return ansi.Truncate(line, ui.PanelWidth, "")
+	case w < width:
+		return line + strings.Repeat("─", width-w)
+	case w > width:
+		return ansi.Truncate(line, width, "")
 	default:
 		return line
 	}
@@ -494,21 +493,21 @@ func fillSeparator(line string, width int) string {
 	return ansi.Truncate(line, width, "")
 }
 
-// labeledSeparator builds a labeled separator line.
-func labeledSeparator(indent, label string) string {
-	return separatorLine(indent + "── " + label + " ")
+// labeledSeparator builds a labeled separator line width cells wide.
+func labeledSeparator(indent, label string, width int) string {
+	return separatorLine(indent+"── "+label+" ", width)
 }
 
 // albumSeparator builds an album separator line.
 func (m Model) albumSeparator(album string, year int) string {
 	if album == "" {
-		return dimStyle.Render(strings.Repeat("─", ui.PanelWidth))
+		return dimStyle.Render(strings.Repeat("─", m.layout.panelWidth))
 	}
 	label := album
 	if year != 0 {
 		label += fmt.Sprintf(" (%d)", year)
 	}
-	return dimStyle.Render(labeledSeparator("", label))
+	return dimStyle.Render(labeledSeparator("", label, m.layout.panelWidth))
 }
 
 // navScrollItems renders a filtered or unfiltered scrolled list for nav browsers.

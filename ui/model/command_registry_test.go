@@ -8,15 +8,10 @@ import (
 
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 func TestCommandHelpKeepsEssentialHintsAtMinimumWidth(t *testing.T) {
-	oldPanelWidth := ui.PanelWidth
-	ui.PanelWidth = 40
-	t.Cleanup(func() { ui.PanelWidth = oldPanelWidth })
-
-	m := Model{width: 40, playlist: playlist.New()}
+	m := Model{width: 40, layout: frameLayout{panelWidth: 40}, playlist: playlist.New()}
 	m.playlist.Add(playlist.Track{Title: "Track"})
 	m.playlist.Queue(0)
 
@@ -92,12 +87,9 @@ func TestMixcloudShortcutRegistryEntry(t *testing.T) {
 }
 
 func TestContextHelpAdvertisesProviderBrowsing(t *testing.T) {
-	oldPanelWidth := ui.PanelWidth
-	ui.PanelWidth = 80
-	t.Cleanup(func() { ui.PanelWidth = oldPanelWidth })
-
 	browse := trackArtistBrowseProvider{interactionBrowseProvider{commandsTestProvider{name: "Mixcloud"}}}
 	m := keybindingTestModel()
+	m.layout.panelWidth = 80
 	m.provider = browse
 	m.providers = append(m.providers, provider.Entry{Key: "mixcloud", Name: "Mixcloud", Provider: browse})
 	m.playlist.Add(playlist.Track{

@@ -9,13 +9,9 @@ import (
 
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 func TestPlaylistStateMarkersStayVisibleWithoutColor(t *testing.T) {
-	oldPanelWidth := ui.PanelWidth
-	ui.PanelWidth = 80
-	t.Cleanup(func() { ui.PanelWidth = oldPanelWidth })
 
 	p := playlist.New()
 	p.Add(
@@ -25,6 +21,7 @@ func TestPlaylistStateMarkersStayVisibleWithoutColor(t *testing.T) {
 	p.Queue(0)
 	fake := &playbackFakeEngine{playing: true}
 	m := Model{
+		layout:    frameLayout{panelWidth: 80},
 		player:    fake,
 		playlist:  p,
 		focus:     focusPlaylist,
@@ -49,13 +46,11 @@ func TestPlaylistStateMarkersStayVisibleWithoutColor(t *testing.T) {
 }
 
 func TestPlaylistShowsKnownTrackDuration(t *testing.T) {
-	oldPanelWidth := ui.PanelWidth
-	ui.PanelWidth = 80
-	t.Cleanup(func() { ui.PanelWidth = oldPanelWidth })
 
 	p := playlist.New()
 	p.Add(playlist.Track{Title: "Timed", DurationSecs: 222})
 	m := Model{
+		layout:    frameLayout{panelWidth: 80},
 		player:    &playbackFakeEngine{},
 		playlist:  p,
 		focus:     focusPlaylist,
@@ -84,19 +79,17 @@ func TestNonSeekableStreamUsesLiveTime(t *testing.T) {
 }
 
 func TestProviderIndicatorProgressivelyShowsNeighbors(t *testing.T) {
-	oldPanelWidth := ui.PanelWidth
-	t.Cleanup(func() { ui.PanelWidth = oldPanelWidth })
 	m := Model{
 		providers:   []provider.Entry{{Name: "Radio"}, {Name: "Spotify"}, {Name: "Local"}},
 		provPillIdx: 1,
 	}
 
-	ui.PanelWidth = 80
+	m.layout.panelWidth = 80
 	if plain := ansi.Strip(m.renderProviderPill()); !strings.Contains(plain, "SRC [Spotify] 2/3") || strings.Contains(plain, "Radio") {
 		t.Fatalf("compact source indicator = %q, want current provider only", plain)
 	}
 
-	ui.PanelWidth = 120
+	m.layout.panelWidth = 120
 	if plain := ansi.Strip(m.renderProviderPill()); !strings.Contains(plain, "[Radio]") || !strings.Contains(plain, "[Local]") {
 		t.Fatalf("wide source indicator = %q, want neighboring providers", plain)
 	}

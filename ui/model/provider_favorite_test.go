@@ -61,7 +61,6 @@ func favoriteAlbumTestModel(view string) (Model, *favoriteAlbumTestProvider) {
 }
 
 func TestFavoriteFromProviderAlbumsAndSearch(t *testing.T) {
-	withFrameWidth(t, 100)
 	for _, view := range []string{"pane", "category", "albums", "results"} {
 		for _, outcome := range []string{"add", "remove", "error", "inactive provider"} {
 			t.Run(view+"/"+outcome, func(t *testing.T) {
@@ -134,7 +133,6 @@ func TestFavoriteFromProviderAlbumsAndSearch(t *testing.T) {
 }
 
 func TestFavoriteActionAndHelpGuardSelection(t *testing.T) {
-	withFrameWidth(t, 100)
 	for _, tt := range []struct {
 		name, view string
 		setup      func(*Model)

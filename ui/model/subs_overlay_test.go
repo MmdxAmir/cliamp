@@ -2,7 +2,6 @@ package model
 
 import (
 	"fmt"
-	"github.com/bjarneo/cliamp/ui"
 	"strings"
 	"testing"
 
@@ -537,10 +536,8 @@ func TestOpenSubsOverlayReportsWhetherItOpened(t *testing.T) {
 
 // With one row of budget and a notice to show, the notice is all that fits.
 func TestRenderSubsBodyOneRowWithNotice(t *testing.T) {
-	old := ui.PanelWidth
-	ui.PanelWidth = 60
-	t.Cleanup(func() { ui.PanelWidth = old })
 	m := stubSubsModel()
+	m.layout.panelWidth = 60
 	m.openSubsOverlay()
 	m.plVisible = 1
 	m.subs.err = "feed failed"

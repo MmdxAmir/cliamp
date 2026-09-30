@@ -711,6 +711,7 @@ func TestAlbumLeafKeepsSelectedRowHighlightedWhileLoading(t *testing.T) {
 
 func TestUnknownArtistItemCountIsOmitted(t *testing.T) {
 	m := keybindingTestModel()
+	m.layout.panelWidth = 80
 	m.plVisible = 5
 	m.navBrowser = navBrowserState{
 		prov:    &labelProv{},
@@ -908,6 +909,7 @@ func TestNextTrackNormalizesQueueAfterSkippingUnavailableEntry(t *testing.T) {
 	m := Model{
 		player:    &playbackFakeEngine{},
 		playlist:  p,
+		layout:    frameLayout{panelWidth: 80},
 		plVisible: 2,
 		queue:     queueOverlay{visible: true, cursor: 2, scroll: 2},
 	}

@@ -217,7 +217,6 @@ func (m *Model) recomputeLayout() {
 
 	m.layout = layout
 	ui.FrameStyle = ui.FrameStyle.Padding(paddingV, paddingH).Width(width)
-	ui.PanelWidth = layout.panelWidth
 	if m.vis != nil {
 		m.vis.Cols = layout.panelWidth
 		if m.simplified {

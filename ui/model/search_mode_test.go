@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 // TestSearchInputsShowModeAndExitKey checks that every search or filter input
@@ -78,11 +77,8 @@ func TestSearchInputsShowModeAndExitKey(t *testing.T) {
 	for _, width := range []int{40, 80} {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				old := ui.PanelWidth
-				ui.PanelWidth = width
-				t.Cleanup(func() { ui.PanelWidth = old })
-
 				m := keybindingTestModel()
+				m.layout.panelWidth = width
 				m.plVisible = 6
 				tt.setup(&m)
 				line, _, _ := strings.Cut(tt.header(&m), "\n")
@@ -118,10 +114,6 @@ func TestCtrlFFallbackNamesTheProviderWithoutSearch(t *testing.T) {
 }
 
 func TestProviderSearchHelpShowsHowToLeave(t *testing.T) {
-	old := ui.PanelWidth
-	ui.PanelWidth = 80
-	t.Cleanup(func() { ui.PanelWidth = old })
-
 	cs := &catalogTestProvider{commandsTestProvider: commandsTestProvider{name: "Radio"}}
 	tests := []struct {
 		name      string
@@ -136,6 +128,7 @@ func TestProviderSearchHelpShowsHowToLeave(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := keybindingTestModel()
+			m.layout.panelWidth = 80
 			m.provider = cs
 			m.focus = focusProvider
 			tt.setup(&m)

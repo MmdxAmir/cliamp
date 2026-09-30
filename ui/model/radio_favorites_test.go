@@ -36,7 +36,6 @@ func radioFavoriteTestModel(t *testing.T) (Model, *radio.Provider, []playlist.Tr
 		}
 		tracks = append(tracks, got...)
 	}
-	withFrameWidth(t, 180)
 	m := keybindingTestModel()
 	m.width, m.height = 180, 40
 	m.SetRadioFavorites(favorites)
@@ -48,7 +47,6 @@ func radioFavoriteTestModel(t *testing.T) (Model, *radio.Provider, []playlist.Tr
 }
 
 func TestRadioFavoriteAfterBrowseLoadsPlaylist(t *testing.T) {
-	withFrameWidth(t, 140)
 	for _, route := range []string{"browse:countries", "browse:tags"} {
 		t.Run(route, func(t *testing.T) {
 			m, p, tracks := radioFavoriteTestModel(t)
@@ -156,7 +154,6 @@ func failingFavorites(t *testing.T) *favorites.Store {
 // saved local playlist the same row toggles the track favorite, because the
 // row no longer carries the station metadata the Radio pane uses.
 func TestRadioRowFavoriteDispatch(t *testing.T) {
-	withFrameWidth(t, 140)
 	for _, tc := range []struct {
 		name        string
 		saved       bool

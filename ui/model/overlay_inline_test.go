@@ -75,7 +75,6 @@ func TestInlineOverlaysFitTerminal(t *testing.T) {
 	for _, sz := range sizes {
 		for _, ov := range overlays {
 			t.Run(fmt.Sprintf("%s_%dx%d", ov.name, sz.w, sz.h), func(t *testing.T) {
-				withFrameWidth(t, sz.w)
 				m := newInlineOverlayModel(t, sz.w, sz.h)
 				ov.set(&m)
 

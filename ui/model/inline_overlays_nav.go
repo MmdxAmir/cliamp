@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 // — provider browser (nav) —
@@ -60,24 +59,24 @@ func (m Model) navView() navViewKind {
 
 func (m Model) navHeaderLine() string {
 	if m.navBrowser.confirmReplace {
-		return sepHeader("Replace current queue?")
+		return sepHeader("Replace current queue?", m.layout.panelWidth)
 	}
 	if m.navBrowser.searching {
 		return m.filterHeader("Filter: "+m.navBreadcrumb(), "nav-search", m.navBrowser.search, "")
 	}
 	switch m.navView() {
 	case navViewArtists:
-		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.artists))
+		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.artists), m.layout.panelWidth)
 	case navViewAlbums:
-		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.albums))
+		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.albums), m.layout.panelWidth)
 	case navViewTracks:
-		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.tracks))
+		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.tracks), m.layout.panelWidth)
 	case navViewGenres:
-		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.genres))
+		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.genres), m.layout.panelWidth)
 	case navViewGenreSorts:
-		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.genreSorts))
+		return sepHeaderN(m.navBreadcrumb(), m.navBrowser.cursor+1, len(m.navBrowser.genreSorts), m.layout.panelWidth)
 	default:
-		return sepHeader(m.navBreadcrumb())
+		return sepHeader(m.navBreadcrumb(), m.layout.panelWidth)
 	}
 }
 
@@ -105,7 +104,7 @@ func (m Model) renderNavBody() string {
 			if a.AlbumCount > 0 {
 				name = fmt.Sprintf("%s (%d %s)", name, a.AlbumCount, labels.albumsLower())
 			}
-			return truncate(name, ui.PanelWidth-6)
+			return truncate(name, m.layout.panelWidth-6)
 		})
 		return strings.Join(items, "\n")
 	case navViewAlbums:
@@ -122,9 +121,9 @@ func (m Model) renderNavBody() string {
 			a := m.navBrowser.albums[i]
 			name := albumViewName(a)
 			if a.Year > 0 {
-				return truncate(fmt.Sprintf("%s — %s (%d)", name, a.Artist, a.Year), ui.PanelWidth-6)
+				return truncate(fmt.Sprintf("%s — %s (%d)", name, a.Artist, a.Year), m.layout.panelWidth-6)
 			}
-			return truncate(fmt.Sprintf("%s — %s", name, a.Artist), ui.PanelWidth-6)
+			return truncate(fmt.Sprintf("%s — %s", name, a.Artist), m.layout.panelWidth-6)
 		})
 		return strings.Join(items, "\n")
 	case navViewTracks:
@@ -154,7 +153,7 @@ func (m Model) renderNavBody() string {
 			if genre.Group != "" && !strings.EqualFold(genre.Group, "music") {
 				label += " — " + genre.Group
 			}
-			return truncate(label, ui.PanelWidth-6)
+			return truncate(label, m.layout.panelWidth-6)
 		})
 		return strings.Join(items, "\n")
 	case navViewGenreSorts:
@@ -162,7 +161,7 @@ func (m Model) renderNavBody() string {
 			return bodyMessage("No views found.", budget)
 		}
 		items := m.navScrollItems(len(m.navBrowser.genreSorts), func(i int) string {
-			return truncate(m.navBrowser.genreSorts[i].Label, ui.PanelWidth-6)
+			return truncate(m.navBrowser.genreSorts[i].Label, m.layout.panelWidth-6)
 		})
 		return strings.Join(items, "\n")
 	default:
@@ -189,7 +188,7 @@ func (m Model) renderNavTrackBody(budget int) string {
 	if m.navBrowser.search != "" {
 		items := m.navScrollItems(len(m.navBrowser.tracks), func(i int) string {
 			t := m.navBrowser.tracks[i]
-			return formatTrackRow(i+1, trackViewName(t)+trackAlbumSuffix(t, m.showAlbumHeaders), t.DurationSecs)
+			return formatTrackRow(i+1, trackViewName(t)+trackAlbumSuffix(t, m.showAlbumHeaders), t.DurationSecs, m.layout.panelWidth)
 		})
 		return strings.Join(items, "\n")
 	}
@@ -201,7 +200,7 @@ func (m Model) renderNavTrackBody(budget int) string {
 
 func (m Model) fbHeaderLine() string {
 	if m.fileBrowser.confirmReplace {
-		return sepHeader("Replace current queue?")
+		return sepHeader("Replace current queue?", m.layout.panelWidth)
 	}
 	if m.fileBrowser.filtering {
 		return m.filterHeader("Filter: Files", "file-browser-search", m.fileBrowser.filter, "")
@@ -210,7 +209,7 @@ func (m Model) fbHeaderLine() string {
 	if n := len(m.fileBrowser.selected); n > 0 {
 		label += fmt.Sprintf("  [%d selected]", n)
 	}
-	return sepHeader(label)
+	return sepHeader(label, m.layout.panelWidth)
 }
 
 func (m Model) renderFileBrowserBody() string {
@@ -251,7 +250,7 @@ func (m Model) renderFileBrowserBody() string {
 		if e.isAudio {
 			suffix = " ♫"
 		}
-		label := truncate(check+e.name+suffix, max(1, ui.PanelWidth-2))
+		label := truncate(check+e.name+suffix, max(1, m.layout.panelWidth-2))
 
 		switch {
 		case m.fileBrowser.filtering:

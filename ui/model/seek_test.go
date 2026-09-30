@@ -213,12 +213,10 @@ func TestPendingSeekSurvivesFailedSeek(t *testing.T) {
 // carries a head everywhere but the very end, and never moves backwards.
 func TestSeekBarPlayheadTracksProgress(t *testing.T) {
 	const width = 40
-	// recomputeLayout inside the constructor resets ui.PanelWidth, so pin the
+	// recomputeLayout inside the constructor sets the panel width, so pin the
 	// bar width after the model exists.
 	m := newLayoutTestModel(80, 24)
-	prev := ui.PanelWidth
-	ui.PanelWidth = width
-	defer func() { ui.PanelWidth = prev }()
+	m.layout.panelWidth = width
 
 	m.cachedDur = time.Duration(width) * time.Second
 
@@ -257,9 +255,7 @@ func TestSeekBarSeparatesFillFromRemainder(t *testing.T) {
 		t.Fatal("fill and remainder glyphs must differ")
 	}
 	m := newLayoutTestModel(80, 24)
-	prev := ui.PanelWidth
-	ui.PanelWidth = 20
-	defer func() { ui.PanelWidth = prev }()
+	m.layout.panelWidth = 20
 
 	m.cachedDur = 100 * time.Second
 	m.cachedPos = 50 * time.Second

@@ -11,7 +11,6 @@ import (
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 func TestRestrictedMarkersAreViewOnly(t *testing.T) {
@@ -198,13 +197,13 @@ func TestPlaylistLabel(t *testing.T) {
 
 func TestFormatTrackRow(t *testing.T) {
 	// No duration: returns just "N. title".
-	row := formatTrackRow(3, "Song", 0)
+	row := formatTrackRow(3, "Song", 0, 80)
 	if row != "3. Song" {
 		t.Errorf("no-duration row = %q, want %q", row, "3. Song")
 	}
 
 	// With duration: ends with the time string.
-	row = formatTrackRow(3, "Song", 222)
+	row = formatTrackRow(3, "Song", 222, 80)
 	if !strings.HasSuffix(row, "3:42") {
 		t.Errorf("with-duration row %q does not end with %q", row, "3:42")
 	}
@@ -223,16 +222,12 @@ func marqueeWindow(t *testing.T, m Model) string {
 // TestRenderTrackInfoFitsWithoutScrolling checks that a name with room to
 // spare is drawn whole: the marquee only moves when it has to.
 func TestRenderTrackInfoFitsWithoutScrolling(t *testing.T) {
-	oldPanelWidth := ui.PanelWidth
-	ui.PanelWidth = 80
-	t.Cleanup(func() { ui.PanelWidth = oldPanelWidth })
-
 	p := playlist.New()
 	p.Add(playlist.Track{Artist: "Bonobo", Title: "Kerala", Album: "Migration"})
 	name := "Bonobo - Kerala · Migration"
 
 	for _, tick := range []int{0, 1, 7, 40, 1000} {
-		m := Model{playlist: p, titleOff: tick}
+		m := Model{layout: frameLayout{panelWidth: 80}, playlist: p, titleOff: tick}
 		if got := marqueeWindow(t, m); got != name {
 			t.Fatalf("tick %d: renderTrackInfo() = %q, want the whole name %q", tick, got, name)
 		}
@@ -243,38 +238,38 @@ func TestRenderTrackInfoFitsWithoutScrolling(t *testing.T) {
 // right: it holds at the start, it advances a cell at a time, and it comes
 // back around instead of freezing after one pass.
 func TestRenderTrackInfoMarqueeLoops(t *testing.T) {
-	oldPanelWidth := ui.PanelWidth
-	ui.PanelWidth = 20
-	t.Cleanup(func() { ui.PanelWidth = oldPanelWidth })
-
+	const panelWidth = 20
 	track := playlist.Track{Artist: "Long Artist", Title: "Long Title", Album: "Long Album"}
 	p := playlist.New()
 	p.Add(track)
 	name := track.DisplayName() + " · " + track.Album
-	width := ui.PanelWidth - 2
+	width := panelWidth - 2
 	cycle := lipgloss.Width(name + marqueeGap)
+	window := func(tick int) string {
+		return marqueeWindow(t, Model{layout: frameLayout{panelWidth: panelWidth}, playlist: p, titleOff: tick})
+	}
 
-	start := marqueeWindow(t, Model{playlist: p, titleOff: 0})
+	start := window(0)
 	if want := ansi.Truncate(name, width, ""); start != want {
 		t.Fatalf("at rest = %q, want the head of the name %q", start, want)
 	}
 
 	// Held at the start for the whole hold window, then moving.
-	if got := marqueeWindow(t, Model{playlist: p, titleOff: marqueeHoldTicks - 1}); got != start {
+	if got := window(marqueeHoldTicks - 1); got != start {
 		t.Fatalf("during hold = %q, want it still at %q", got, start)
 	}
-	if got := marqueeWindow(t, Model{playlist: p, titleOff: marqueeHoldTicks + 1}); got == start {
+	if got := window(marqueeHoldTicks + 1); got == start {
 		t.Fatalf("after hold = %q, want the window to have advanced", got)
 	}
 
 	// A full cycle brings it back to the start rather than leaving it parked.
-	if got := marqueeWindow(t, Model{playlist: p, titleOff: cycle + marqueeHoldTicks}); got != start {
+	if got := window(cycle + marqueeHoldTicks); got != start {
 		t.Fatalf("after a full cycle = %q, want back at %q", got, start)
 	}
 
 	// Every window is exactly one row wide, at every point in the cycle.
 	for tick := range cycle + 2*marqueeHoldTicks {
-		if got := lipgloss.Width(marqueeWindow(t, Model{playlist: p, titleOff: tick})); got > width {
+		if got := lipgloss.Width(window(tick)); got > width {
 			t.Fatalf("tick %d: window width = %d, want at most %d", tick, got, width)
 		}
 	}
@@ -300,10 +295,6 @@ func TestMarqueeMeasuresDisplayCells(t *testing.T) {
 // simplified row scrolls against its own budget: it shares the row with the
 // duration, so the marquee gets less width than the full view's.
 func TestRenderSimplifiedTrackInfoLeavesRoomForDuration(t *testing.T) {
-	oldPanelWidth := ui.PanelWidth
-	ui.PanelWidth = 30
-	t.Cleanup(func() { ui.PanelWidth = oldPanelWidth })
-
 	p := playlist.New()
 	p.Add(playlist.Track{
 		Artist:       "An Artist With A Very Long Name",
@@ -312,10 +303,10 @@ func TestRenderSimplifiedTrackInfoLeavesRoomForDuration(t *testing.T) {
 	})
 
 	for _, tick := range []int{0, marqueeHoldTicks + 2, 200} {
-		m := Model{playlist: p, titleOff: tick}
+		m := Model{layout: frameLayout{panelWidth: 30}, playlist: p, titleOff: tick}
 		row := ansi.Strip(m.renderSimplifiedTrackInfo())
-		if got := lipgloss.Width(row); got > ui.PanelWidth {
-			t.Fatalf("tick %d: row width = %d, want at most %d: %q", tick, got, ui.PanelWidth, row)
+		if got := lipgloss.Width(row); got > m.layout.panelWidth {
+			t.Fatalf("tick %d: row width = %d, want at most %d: %q", tick, got, m.layout.panelWidth, row)
 		}
 		if !strings.HasSuffix(row, "0:01") {
 			t.Fatalf("tick %d: row %q lost its duration", tick, row)

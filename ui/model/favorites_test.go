@@ -81,7 +81,6 @@ func favoriteKeyTestModel(t *testing.T) (Model, *favorites.Store) {
 }
 
 func TestFavoriteKeyDispatchByContext(t *testing.T) {
-	withFrameWidth(t, 100)
 	for _, tc := range []struct {
 		name     string
 		setup    func(*Model)
@@ -206,7 +205,6 @@ func TestFavoriteKeyDispatchByContext(t *testing.T) {
 // On a show or an album, f keeps the provider favorite, such as a podcast
 // subscription, and does not touch the ♥ favorites.
 func TestFavoriteKeyKeepsProviderFavorites(t *testing.T) {
-	withFrameWidth(t, 100)
 	for _, tc := range []struct {
 		view   string
 		wantID string

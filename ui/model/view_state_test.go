@@ -13,20 +13,7 @@ import (
 	"github.com/bjarneo/cliamp/ui"
 )
 
-func withFrameWidth(t *testing.T, width int) {
-	t.Helper()
-	prevFrameStyle := ui.FrameStyle
-	prevPanelWidth := ui.PanelWidth
-	ui.FrameStyle = ui.FrameStyle.Width(width)
-	ui.PanelWidth = max(0, width-2*ui.PaddingH)
-	t.Cleanup(func() {
-		ui.FrameStyle = prevFrameStyle
-		ui.PanelWidth = prevPanelWidth
-	})
-}
-
 func TestMainViewShrinksPlaylistForFooterMessages(t *testing.T) {
-	withFrameWidth(t, 80)
 
 	pl := playlist.New()
 	for i := range 12 {
@@ -97,7 +84,6 @@ func TestRenderTransientIncludesNonColorSeverityLabels(t *testing.T) {
 }
 
 func TestRenderPlaylistKeepsCursorVisibleWhenFooterShrinksBudget(t *testing.T) {
-	withFrameWidth(t, 80)
 
 	pl := playlist.New()
 	for i := range 12 {
@@ -134,7 +120,6 @@ func TestRenderPlaylistKeepsCursorVisibleWhenFooterShrinksBudget(t *testing.T) {
 }
 
 func TestViewConsumesInitialVisualizerRefresh(t *testing.T) {
-	withFrameWidth(t, 80)
 
 	m := Model{
 		player:   &playbackFakeEngine{},
@@ -159,7 +144,6 @@ func TestViewConsumesInitialVisualizerRefresh(t *testing.T) {
 }
 
 func TestOverlayViewIncludesFooterMessages(t *testing.T) {
-	withFrameWidth(t, 80)
 
 	// Footer/transient messages are now rendered by the inline overlay layout
 	// (mainSectionsOverlay) rather than by each overlay renderer.
@@ -183,7 +167,6 @@ func TestOverlayViewIncludesFooterMessages(t *testing.T) {
 }
 
 func TestKeymapRendersInline(t *testing.T) {
-	withFrameWidth(t, 80)
 
 	m := Model{
 		player:    &playbackFakeEngine{},
@@ -211,7 +194,6 @@ func TestKeymapRendersInline(t *testing.T) {
 }
 
 func TestFullVisualizerViewFitsTerminalWidth(t *testing.T) {
-	withFrameWidth(t, 80)
 
 	m := Model{
 		player:   &playbackFakeEngine{},
@@ -235,7 +217,6 @@ func stripAnsi(str string) string {
 }
 
 func TestRenderPlaylistAddsPaddingToTrackNumber(t *testing.T) {
-	withFrameWidth(t, 80)
 
 	pl := playlist.New()
 	for i := range 120 {

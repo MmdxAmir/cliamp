@@ -8,14 +8,9 @@ import (
 
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 func TestEmptyStatesNameTheNextStep(t *testing.T) {
-	old := ui.PanelWidth
-	ui.PanelWidth = 80
-	t.Cleanup(func() { ui.PanelWidth = old })
-
 	tests := []struct {
 		name   string
 		setup  func(*Model)
@@ -77,6 +72,7 @@ func TestEmptyStatesNameTheNextStep(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := keybindingTestModel()
+			m.layout.panelWidth = 80
 			m.plVisible = 10
 			if tt.setup != nil {
 				tt.setup(&m)

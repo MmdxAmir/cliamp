@@ -7,7 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 // commandMode identifies the UI contexts in which a command is available.
@@ -396,7 +395,7 @@ func (m Model) commandHint(mode commandMode, key string) string {
 	if !ok {
 		return ""
 	}
-	return fitHelpLine("  " + helpKey(command.KeyLabel, command.label(m)))
+	return fitHelpLine("  "+helpKey(command.KeyLabel, command.label(m)), m.layout.panelWidth)
 }
 
 // pressKeyHint renders "Press <key> <text>" for the command that key runs in
@@ -406,12 +405,12 @@ func (m Model) pressKeyHint(mode commandMode, key, text string) string {
 	if !ok {
 		return ""
 	}
-	return fitHelpLine(dimStyle.Render("  Press ") + helpKeyStyle.Render(" "+command.KeyLabel+" ") + dimStyle.Render(" "+text))
+	return fitHelpLine(dimStyle.Render("  Press ")+helpKeyStyle.Render(" "+command.KeyLabel+" ")+dimStyle.Render(" "+text), m.layout.panelWidth)
 }
 
 func (m Model) helpWidth() int {
-	if ui.PanelWidth > 0 {
-		return ui.PanelWidth
+	if m.layout.panelWidth > 0 {
+		return m.layout.panelWidth
 	}
 	if m.width > 0 {
 		return m.width

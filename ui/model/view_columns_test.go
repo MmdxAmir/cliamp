@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 // newColumnTestModel builds a full-tier model with several providers so the
@@ -220,19 +219,19 @@ func TestTwoColumnPlaylistUsesReclaimedRows(t *testing.T) {
 }
 
 // TestTwoColumnPlaylistRendersAtColumnWidth checks that the playlist lays out
-// inside its column rather than at the full panel width, and that the global
-// panel width is restored afterwards for the full-width chrome.
+// inside its column rather than at the full panel width, and that the panel
+// width stays whole for the full-width chrome.
 func TestTwoColumnPlaylistRendersAtColumnWidth(t *testing.T) {
 	m := newColumnTestModel(100, 30)
-	before := ui.PanelWidth
+	before := m.layout.panelWidth
 
 	for _, line := range strings.Split(m.renderBodyRegion(), "\n") {
 		if got, want := lipgloss.Width(line), m.layout.panelWidth; got != want {
 			t.Fatalf("body row width = %d, want %d: %q", got, want, ansi.Strip(line))
 		}
 	}
-	if ui.PanelWidth != before {
-		t.Fatalf("panel width left at %d, want %d restored", ui.PanelWidth, before)
+	if m.layout.panelWidth != before {
+		t.Fatalf("panel width left at %d, want %d", m.layout.panelWidth, before)
 	}
 }
 
@@ -377,7 +376,7 @@ func TestPlaylistHeaderDropsBadgesThatDoNotFit(t *testing.T) {
 		return m
 	}
 	headerAt := func(m Model, width int) string {
-		defer ui.WithPanelWidth(width)()
+		m.layout.panelWidth = width
 		return ansi.Strip(m.renderPlaylistHeader())
 	}
 

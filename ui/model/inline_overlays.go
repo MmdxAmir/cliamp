@@ -11,7 +11,6 @@ import (
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/theme"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 // Inline overlays render in the playlist region while the now-playing,
@@ -28,24 +27,24 @@ import (
 
 // — shared header/body helpers —
 
-// sepHeader renders a labeled separator. The label is embedded before the "─"
-// fill, so separatorLine truncates it to the panel width: it never wraps.
-func sepHeader(label string) string {
-	return dimStyle.Render(labeledSeparator("", label))
+// sepHeader renders a labeled separator width cells wide. The label is
+// embedded before the "─" fill, so separatorLine truncates it: it never wraps.
+func sepHeader(label string, width int) string {
+	return dimStyle.Render(labeledSeparator("", label, width))
 }
 
 // sepHeaderN appends an "n/total" position counter to a separator label.
-func sepHeaderN(label string, pos, total int) string {
+func sepHeaderN(label string, pos, total, width int) string {
 	if total <= 0 {
-		return sepHeader(label)
+		return sepHeader(label, width)
 	}
-	return sepHeader(fmt.Sprintf("%s  %d/%d", label, pos, total))
+	return sepHeader(fmt.Sprintf("%s  %d/%d", label, pos, total), width)
 }
 
 // promptHeader renders an editable input with the shared editor cursor at its
 // actual insertion point, then clips it to the panel width.
 func (m Model) promptHeader(field, label, value string) string {
-	return playlistSelectedStyle.Render(truncate("  "+label+": "+m.textWithCursor(field, value), ui.PanelWidth))
+	return playlistSelectedStyle.Render(truncate("  "+label+": "+m.textWithCursor(field, value), m.layout.panelWidth))
 }
 
 // filterHeader renders the line of an open search or filter input. Every
@@ -62,12 +61,12 @@ func (m Model) filterHeader(label, field, query, count string) string {
 	if count != "" {
 		tail = dimStyle.Render("  "+count) + exit
 	}
-	if ui.PanelWidth <= 0 {
+	if m.layout.panelWidth <= 0 {
 		return activeToggle.Render("  ["+label+"]") + " " + playlistSelectedStyle.Render(input) + tail
 	}
 	// The badge adds five columns: two spaces, two brackets, and one space.
 	labelRoom := func() int {
-		return ui.PanelWidth - lipgloss.Width(tail) - 5 - min(lipgloss.Width(input), minInput)
+		return m.layout.panelWidth - lipgloss.Width(tail) - 5 - min(lipgloss.Width(input), minInput)
 	}
 	for _, shorter := range []string{exit, ""} {
 		if labelRoom() >= min(lipgloss.Width(label), minLabel) {
@@ -76,7 +75,7 @@ func (m Model) filterHeader(label, field, query, count string) string {
 		tail = shorter
 	}
 	label = truncate(label, max(1, labelRoom()))
-	inputRoom := ui.PanelWidth - lipgloss.Width(tail) - 5 - lipgloss.Width(label)
+	inputRoom := m.layout.panelWidth - lipgloss.Width(tail) - 5 - lipgloss.Width(label)
 	return activeToggle.Render("  ["+label+"]") + " " + playlistSelectedStyle.Render(truncate(input, max(1, inputRoom))) + tail
 }
 
@@ -119,10 +118,10 @@ func (m Model) renderSpotSearchResults(budget int) string {
 			if budget == 1 {
 				continue
 			}
-			lines = append(lines, dimStyle.Render(labeledSeparator("", row.Section)))
+			lines = append(lines, dimStyle.Render(labeledSeparator("", row.Section, m.layout.panelWidth)))
 			continue
 		}
-		label := truncate(trackViewName(row.Track), ui.PanelWidth-8)
+		label := truncate(trackViewName(row.Track), m.layout.panelWidth-8)
 		lines = append(lines, cursorLine(label, row.Index == m.spotSearch.cursor))
 	}
 	return strings.Join(padLines(lines, budget, len(lines)), "\n")
@@ -142,7 +141,7 @@ func (m Model) renderTrackRowsBody(tracks []playlist.Track, cursor, scroll, budg
 			continue
 		}
 		i, t := row.Index, row.Track
-		label := formatTrackRow(i+1, trackViewName(t)+trackAlbumSuffix(t, m.showAlbumHeaders), t.DurationSecs)
+		label := formatTrackRow(i+1, trackViewName(t)+trackAlbumSuffix(t, m.showAlbumHeaders), t.DurationSecs, m.layout.panelWidth)
 		lines = append(lines, cursorLine(label, i == cursor))
 	}
 	return bodyLines(lines, budget)
@@ -195,7 +194,7 @@ func (m Model) themePickerHeaderLine() string {
 	if m.themePicker.filtering || m.themePicker.filter != "" {
 		return m.filterHeader("Filter: Themes", "theme-picker-filter", m.themePicker.filter, fmt.Sprintf("%d/%d", m.themePickerViewCount(), m.themeCount()))
 	}
-	return sepHeaderN("Themes", m.themePicker.cursor+1, m.themePickerViewCount())
+	return sepHeaderN("Themes", m.themePicker.cursor+1, m.themePickerViewCount(), m.layout.panelWidth)
 }
 
 func (m Model) renderThemeBody() string {
@@ -224,9 +223,9 @@ func (m Model) renderThemeBody() string {
 
 func (m Model) deviceHeaderLine() string {
 	if m.devicePicker.loading {
-		return sepHeader("Audio Devices")
+		return sepHeader("Audio Devices", m.layout.panelWidth)
 	}
-	return sepHeaderN("Audio Devices", m.devicePicker.cursor+1, len(m.devicePicker.devices))
+	return sepHeaderN("Audio Devices", m.devicePicker.cursor+1, len(m.devicePicker.devices), m.layout.panelWidth)
 }
 
 func (m Model) renderDeviceBody() string {
@@ -344,11 +343,11 @@ func (m Model) queueRow(t playlist.Track, idx, numWidth int, reporters []provide
 		durationGap = lipgloss.Width(duration) + 1
 	}
 	prefixWidth := lipgloss.Width(markers) + numWidth + 2 // 2 for ". "
-	name := truncate(trackViewName(t), ui.PanelWidth-prefixWidth-durationGap)
+	name := truncate(trackViewName(t), m.layout.panelWidth-prefixWidth-durationGap)
 
 	line := styled + style.Render(fmt.Sprintf("%*d. ", numWidth, idx+1)) + style.Render(name)
 	if duration != "" {
-		padding := max(1, ui.PanelWidth-lipgloss.Width(line)-lipgloss.Width(duration))
+		padding := max(1, m.layout.panelWidth-lipgloss.Width(line)-lipgloss.Width(duration))
 		line += strings.Repeat(" ", padding) + dimStyle.Render(duration)
 	}
 	return line
@@ -518,7 +517,7 @@ func (m Model) netSearchSource() string {
 
 func (m Model) netSearchHeaderLine() string {
 	if m.netSearch.screen == netSearchResults {
-		return sepHeaderN(m.netSearchSource()+" Results", m.netSearch.cursor+1, len(m.netSearch.results))
+		return sepHeaderN(m.netSearchSource()+" Results", m.netSearch.cursor+1, len(m.netSearch.results), m.layout.panelWidth)
 	}
 	return m.filterHeader("Search: "+m.netSearchSource(), "net-search", m.netSearch.query, "")
 }
@@ -546,7 +545,7 @@ func (m Model) renderNetSearchBody() string {
 	}
 	items := make([]string, len(m.netSearch.results))
 	for i, t := range m.netSearch.results {
-		items[i] = truncate(trackViewName(t), ui.PanelWidth-8)
+		items[i] = truncate(trackViewName(t), m.layout.panelWidth-8)
 	}
 	return windowList(items, m.netSearch.cursor, m.netSearch.scroll, budget)
 }
@@ -556,9 +555,9 @@ func (m Model) renderNetSearchBody() string {
 func (m Model) spotSearchHeaderLine() string {
 	switch m.spotSearch.screen {
 	case spotSearchResults:
-		return sepHeaderN("Results", m.spotSearch.cursor+1, len(m.spotSearch.results))
+		return sepHeaderN("Results", m.spotSearch.cursor+1, len(m.spotSearch.results), m.layout.panelWidth)
 	case spotSearchPlaylist:
-		return sepHeaderN("Add to Playlist", m.spotSearch.cursor+1, len(m.spotSearch.playlists)+1)
+		return sepHeaderN("Add to Playlist", m.spotSearch.cursor+1, len(m.spotSearch.playlists)+1, m.layout.panelWidth)
 	case spotSearchNewName:
 		return m.promptHeader("spot-playlist-name", "New Playlist", m.spotSearch.newName)
 	default:
@@ -590,7 +589,7 @@ func (m Model) renderSpotSearchBody() string {
 			break
 		}
 		track := m.spotSearch.selTrack
-		head := dimStyle.Render("  " + truncate(fmt.Sprintf("%s - %s", track.Artist, track.Title), ui.PanelWidth-2))
+		head := dimStyle.Render("  " + truncate(fmt.Sprintf("%s - %s", track.Artist, track.Title), m.layout.panelWidth-2))
 		count := len(m.spotSearch.playlists) + 1
 		items := make([]string, count)
 		for i := range count {

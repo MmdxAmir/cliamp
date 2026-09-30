@@ -213,7 +213,9 @@ func init() {
 			key:     (*Model).handleQueueKey,
 			context: fixedContext(commandModeQueue, "Queue"),
 			view: overlayView{
-				func(m *Model) string { return sepHeaderN("Queue", m.queue.cursor+1, m.playlist.QueueLen()) },
+				func(m *Model) string {
+					return sepHeaderN("Queue", m.queue.cursor+1, m.playlist.QueueLen(), m.layout.panelWidth)
+				},
 				(*Model).renderQueueBody},
 		},
 		{
@@ -237,13 +239,13 @@ func init() {
 			screen:  screenInfo,
 			key:     (*Model).handleInfoKey,
 			context: fixedContext(commandModeInfo, "Track Info"),
-			view:    overlayView{func(*Model) string { return sepHeader("Track Info") }, (*Model).renderInfoBody},
+			view:    overlayView{func(m *Model) string { return sepHeader("Track Info", m.layout.panelWidth) }, (*Model).renderInfoBody},
 		},
 		{
 			screen:  screenLyrics,
 			key:     (*Model).handleLyricsKey,
 			context: fixedContext(commandModeLyrics, "Lyrics"),
-			view:    overlayView{func(*Model) string { return sepHeader("Lyrics") }, (*Model).renderLyricsBody},
+			view:    overlayView{func(m *Model) string { return sepHeader("Lyrics", m.layout.panelWidth) }, (*Model).renderLyricsBody},
 		},
 		{
 			screen: screenJump,
@@ -253,7 +255,7 @@ func init() {
 				m.jumpErr = ""
 			},
 			context: fixedContext(commandModeJump, "Jump to Time"),
-			view:    overlayView{func(*Model) string { return sepHeader("Jump to Time") }, (*Model).renderJumpBody},
+			view:    overlayView{func(m *Model) string { return sepHeader("Jump to Time", m.layout.panelWidth) }, (*Model).renderJumpBody},
 		},
 		{
 			screen: screenURLInput,

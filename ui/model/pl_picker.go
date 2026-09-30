@@ -9,7 +9,6 @@ import (
 
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 func (m *Model) openPlaylistPicker(tracks []playlist.Track, title string) {
@@ -77,7 +76,7 @@ func (m Model) plPickerHeaderLine() string {
 	if m.plPicker.screen == plPickerNewName {
 		return m.promptHeader("playlist-picker-name", "New Playlist", m.plPicker.newName)
 	}
-	return sepHeaderN("Write to Playlist", m.plPicker.cursor+1, m.plPickerCount())
+	return sepHeaderN("Write to Playlist", m.plPicker.cursor+1, m.plPickerCount(), m.layout.panelWidth)
 }
 
 func (m Model) renderPlaylistPickerBody() string {
@@ -85,7 +84,7 @@ func (m Model) renderPlaylistPickerBody() string {
 	if m.plPicker.screen == plPickerNewName {
 		msg := "Create an empty playlist."
 		if n := len(m.plPicker.tracks); n == 1 {
-			msg = "Create and add: " + truncate(m.plPicker.tracks[0].DisplayName(), max(1, ui.PanelWidth-18))
+			msg = "Create and add: " + truncate(m.plPicker.tracks[0].DisplayName(), max(1, m.layout.panelWidth-18))
 		} else if n > 1 {
 			msg = fmt.Sprintf("Create and add %d tracks.", n)
 		}
@@ -113,7 +112,7 @@ func (m Model) renderPlaylistPickerBody() string {
 	default:
 		head = fmt.Sprintf("%d tracks selected", n)
 	}
-	head = dimStyle.Render("  " + truncate(head, max(1, ui.PanelWidth-2)))
+	head = dimStyle.Render("  " + truncate(head, max(1, m.layout.panelWidth-2)))
 	list := windowList(items, m.plPicker.cursor, m.plPicker.scroll, max(0, budget-1))
 	return strings.Join([]string{head, list}, "\n")
 }
