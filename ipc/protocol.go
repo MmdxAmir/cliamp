@@ -97,6 +97,7 @@ type TrackInfo struct {
 	StreamTitle   string            `json:"stream_title,omitempty"`
 	Station       string            `json:"station,omitempty"`
 	Realtime      bool              `json:"realtime,omitempty"`
+	Restricted    bool              `json:"restricted,omitempty"`
 	Feed          bool              `json:"feed,omitempty"`
 	Bookmark      bool              `json:"bookmark,omitempty"`
 	Unplayable    bool              `json:"unplayable,omitempty"`

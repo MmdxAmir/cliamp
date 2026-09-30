@@ -20,6 +20,9 @@ type Track struct {
 	Feed         bool // true for RSS/podcast feed URLs (resolved before playback)
 	DurationSecs int  // known duration in seconds (0 = unknown)
 	Bookmark     bool // user-bookmarked track
+	// Restricted marks a track that its provider may refuse to play, such as
+	// an exclusive Mixcloud show. The UI marks it, and playback still tries.
+	Restricted bool
 
 	Unplayable bool // true when the track is known not playable in the current playback context
 

@@ -368,7 +368,7 @@ func trackInfoName(track playlist.Track, streamTitle string) string {
 	name := trackViewName(track)
 	if track.Meta(provider.MetaPodcastFeed) != "" {
 		name = track.DisplayName()
-		if track.Meta(provider.MetaMixcloudExclusive) == "true" {
+		if track.Restricted {
 			name = strings.TrimSpace(name) + restrictedViewSuffix
 		}
 	}

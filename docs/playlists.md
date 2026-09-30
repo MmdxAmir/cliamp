@@ -127,6 +127,7 @@ Each `[[track]]` section supports these keys:
 | `duration_secs` | No | Duration in seconds |
 | `stream` | No | Treat a provider URI, such as `qobuz://track/42`, as a network stream. cliamp writes it for provider tracks. HTTP and HTTPS paths are always streams. |
 | `realtime` | No | Treat an HTTP URL as live radio. Reconnect after pause or disconnect. |
+| `restricted` | No | Mark a track that its provider may refuse to play, such as an exclusive Mixcloud show. cliamp shows an `[E]` suffix and still tries to play it. |
 | `feed` | No | Treat the URL as an RSS or podcast feed. cliamp resolves it before playback. |
 | `provider_meta.<key>` | No | Provider data, such as `provider_meta.navidrome.id` or `provider_meta.podcast.guid`. cliamp uses it to scrobble, to sync favorites, and to recognize stations and podcast episodes. The `<key>` holds only letters, digits, `.`, `_` and `-`. cliamp does not save a key with other characters. |
 | `embedded_lyrics` | No | Lyrics from local file tags |
@@ -139,7 +140,10 @@ cliamp keeps this flag when it saves the playlist.
 `favorites.toml` and `history.toml` use the same track keys, except
 `embedded_lyrics` and `bookmark`. Older versions saved a
 podcast episode with `podcast_feed` and `podcast_guid`. cliamp still reads
-these keys and writes `provider_meta` keys on the next save.
+these keys and writes `provider_meta` keys on the next save. Older versions
+also marked an exclusive Mixcloud show with
+`provider_meta.mixcloud.exclusive = "true"`. cliamp reads it as
+`restricted = true` and writes `restricted` on the next save.
 
 ### Directory Sources (`[[dir]]`)
 

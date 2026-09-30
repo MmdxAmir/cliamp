@@ -22,7 +22,7 @@ func trackViewName(track playlist.Track) string {
 	if track.Meta(provider.MetaPodcastFeed) != "" && track.Title != "" {
 		name = podcastEpisodeViewName(track)
 	}
-	if track.Meta(provider.MetaMixcloudExclusive) == "true" {
+	if track.Restricted {
 		return strings.TrimSpace(name) + restrictedViewSuffix
 	}
 	return name

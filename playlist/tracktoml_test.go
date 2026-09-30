@@ -24,6 +24,7 @@ func fullTOMLTrack() Track {
 		Feed:           true,
 		DurationSecs:   208,
 		Bookmark:       true,
+		Restricted:     true,
 		Unplayable:     true,
 		DirSourced:     true,
 		EmbeddedLyrics: "[00:01.00]Line",
@@ -85,6 +86,7 @@ func TestTrackTOMLRoundTrip(t *testing.T) {
 				Realtime:     true,
 				Feed:         true,
 				DurationSecs: full.DurationSecs,
+				Restricted:   true,
 				AlbumArtURL:  full.AlbumArtURL,
 				ProviderMeta: full.ProviderMeta,
 			},
@@ -156,6 +158,7 @@ track_number = 3
 duration_secs = 208
 feed = true
 realtime = true
+restricted = true
 album_art_url = "file:///tmp/cover.jpg"
 provider_meta.navidrome.id = "42"
 provider_meta.podcast.feed = "https://feed.example.com/rss"
@@ -237,6 +240,39 @@ func TestWriteTrackTOMLDropsUnsafeMetaKeys(t *testing.T) {
 			}
 			if meta := TrackFromTOML(got[0]).ProviderMeta; !reflect.DeepEqual(meta, want) {
 				t.Errorf("ProviderMeta = %q, want %q:\n%s", meta, want, b.String())
+			}
+		})
+	}
+}
+
+// Older versions marked an exclusive Mixcloud show with a provider_meta key.
+// TrackFromTOML reads it as Restricted and keeps it out of ProviderMeta.
+func TestTrackFromTOMLReadsLegacyRestrictedKey(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields map[string]string
+		want   Track
+	}{
+		{
+			name:   "legacy exclusive show",
+			fields: map[string]string{"path": "/a", "provider_meta.mixcloud.exclusive": "true", "provider_meta.mixcloud.key": "/c/a/"},
+			want:   Track{Path: "/a", Restricted: true, ProviderMeta: map[string]string{"mixcloud.key": "/c/a/"}},
+		},
+		{
+			name:   "legacy key set to false",
+			fields: map[string]string{"path": "/a", "provider_meta.mixcloud.exclusive": "false"},
+			want:   Track{Path: "/a"},
+		},
+		{
+			name:   "restricted key",
+			fields: map[string]string{"path": "/a", "restricted": "true"},
+			want:   Track{Path: "/a", Restricted: true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := TrackFromTOML(tt.fields); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("TrackFromTOML = %+v, want %+v", got, tt.want)
 			}
 		})
 	}

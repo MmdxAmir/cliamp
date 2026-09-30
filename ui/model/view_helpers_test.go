@@ -14,11 +14,7 @@ import (
 )
 
 func TestRestrictedMarkersAreViewOnly(t *testing.T) {
-	track := playlist.Track{
-		Title:        "Members Only",
-		Artist:       "Creator",
-		ProviderMeta: map[string]string{provider.MetaMixcloudExclusive: "true"},
-	}
+	track := playlist.Track{Title: "Members Only", Artist: "Creator", Restricted: true}
 	if got := trackViewName(track); got != "Creator - Members Only [E]" {
 		t.Fatalf("trackViewName = %q", got)
 	}
@@ -37,14 +33,6 @@ func TestRestrictedMarkersAreViewOnly(t *testing.T) {
 	plain := playlist.Track{Title: "Open Show", Artist: "Creator"}
 	if got := trackViewName(plain); got != "Creator - Open Show" {
 		t.Fatalf("unrestricted trackViewName = %q", got)
-	}
-	notExclusive := playlist.Track{
-		Title:        "Open Show",
-		Artist:       "Creator",
-		ProviderMeta: map[string]string{provider.MetaMixcloudExclusive: "false"},
-	}
-	if got := trackViewName(notExclusive); got != "Creator - Open Show" {
-		t.Fatalf("non-exclusive trackViewName = %q", got)
 	}
 	if got := albumViewName(provider.AlbumInfo{Name: "Open Show"}); got != "Open Show" {
 		t.Fatalf("unrestricted albumViewName = %q", got)
@@ -108,7 +96,7 @@ func TestPodcastNowPlayingKeepsShowName(t *testing.T) {
 	if got, want := trackInfoName(track, ""), track.DisplayName()+" · "+track.Album; got != want {
 		t.Errorf("now-playing name = %q, want %q", got, want)
 	}
-	track.ProviderMeta[provider.MetaMixcloudExclusive] = "true"
+	track.Restricted = true
 	if got, want := trackInfoName(track, ""), track.DisplayName()+restrictedViewSuffix+" · "+track.Album; got != want {
 		t.Errorf("restricted now-playing name = %q, want %q", got, want)
 	}

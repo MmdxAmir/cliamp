@@ -13,6 +13,11 @@ import (
 // section, e.g. provider_meta.navidrome.id.
 const tomlMetaPrefix = "provider_meta."
 
+// legacyRestrictedMetaKey is the ProviderMeta key that marked an exclusive
+// Mixcloud show before Track.Restricted. Files that older versions wrote
+// still hold it, and TrackFromTOML reads it as Restricted.
+const legacyRestrictedMetaKey = "mixcloud.exclusive"
+
 // WriteTrackTOML writes the persisted fields of t as `key = value` lines. The
 // caller writes the section header and its own keys, such as a timestamp.
 // Empty optional fields are left out, and ProviderMeta keys come in sorted
@@ -51,6 +56,9 @@ func WriteTrackTOML(w io.Writer, t Track) {
 	if t.Realtime {
 		fmt.Fprintln(w, "realtime = true")
 	}
+	if t.Restricted {
+		fmt.Fprintln(w, "restricted = true")
+	}
 	if t.AlbumArtURL != "" {
 		fmt.Fprintf(w, "album_art_url = %q\n", t.AlbumArtURL)
 	}
@@ -85,7 +93,8 @@ func validMetaKey(k string) bool {
 // as tomlutil.ParseSections passes them. It ignores keys it does not know, so
 // a store can keep its own keys in the same section. Stream is set for an
 // HTTP path and for the stream key. ProviderMeta stays nil when the section
-// has no provider_meta keys.
+// has no provider_meta keys. The legacy provider_meta.mixcloud.exclusive key
+// sets Restricted and does not reach ProviderMeta.
 func TrackFromTOML(f map[string]string) Track {
 	t := Track{
 		Path:        f["path"],
@@ -95,6 +104,7 @@ func TrackFromTOML(f map[string]string) Track {
 		Genre:       f["genre"],
 		Feed:        f["feed"] == "true",
 		Realtime:    f["realtime"] == "true",
+		Restricted:  f["restricted"] == "true",
 		AlbumArtURL: f["album_art_url"],
 	}
 	t.Stream = IsURL(t.Path) || f["stream"] == "true"
@@ -109,6 +119,10 @@ func TrackFromTOML(f map[string]string) Track {
 	}
 	for k, v := range f {
 		if metaKey, ok := strings.CutPrefix(k, tomlMetaPrefix); ok {
+			if metaKey == legacyRestrictedMetaKey {
+				t.Restricted = t.Restricted || v == "true"
+				continue
+			}
 			if t.ProviderMeta == nil {
 				t.ProviderMeta = make(map[string]string)
 			}

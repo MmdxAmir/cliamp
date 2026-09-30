@@ -394,9 +394,9 @@ func TestMergeTrackMeta(t *testing.T) {
 	}{
 		{
 			name: "sparse replay keeps the stored meta and flags",
-			prev: playlist.Track{Path: "/a", Title: "A", Stream: true, Realtime: true, Feed: true, AlbumArtURL: "https://art.example/a.jpg", ProviderMeta: meta},
+			prev: playlist.Track{Path: "/a", Title: "A", Stream: true, Realtime: true, Feed: true, Restricted: true, AlbumArtURL: "https://art.example/a.jpg", ProviderMeta: meta},
 			cur:  playlist.Track{Path: "/a"},
-			want: playlist.Track{Path: "/a", Title: "A", Stream: true, Realtime: true, Feed: true, AlbumArtURL: "https://art.example/a.jpg", ProviderMeta: meta},
+			want: playlist.Track{Path: "/a", Title: "A", Stream: true, Realtime: true, Feed: true, Restricted: true, AlbumArtURL: "https://art.example/a.jpg", ProviderMeta: meta},
 		},
 		{
 			name: "replay cover replaces the stored cover",

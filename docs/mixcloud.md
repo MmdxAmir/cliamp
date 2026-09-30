@@ -261,8 +261,10 @@ browser or profile from SoundCloud, NetEase, or YouTube. One provider does not
 override another provider session.
 
 Shows that Mixcloud flags as exclusive have an `[E]` suffix in the cliamp UI.
-This presentation marker is not written to exported playlists, IPC output, or
-Now Playing metadata. It is a warning, not an automatic skip. A signed-in user
+cliamp saves the flag as `restricted = true` in playlists, Favorites and
+Recently Played, and IPC track output reports it as `restricted`. The suffix
+is not added to titles in exported playlists, IPC output, or Now Playing
+metadata. It is a warning, not an automatic skip. A signed-in user
 may have access through a subscription. Another account gets the Mixcloud
 restricted-show error when playback starts. cliamp cannot determine access from
 public metadata, so it does not filter these rows.

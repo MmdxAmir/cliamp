@@ -663,7 +663,7 @@ func ipcTrackInfo(track playlist.Track, index, queuePosition int, favorite bool)
 		Path: track.Path, AlbumArtURL: track.AlbumArtURL, Year: track.Year,
 		TrackNumber: track.TrackNumber, DurationSecs: track.DurationSecs, Index: index,
 		QueuePosition: queuePosition, Stream: track.Stream, Realtime: track.Realtime,
-		Feed: track.Feed, Bookmark: favorite, Unplayable: track.Unplayable,
+		Restricted: track.Restricted, Feed: track.Feed, Bookmark: favorite, Unplayable: track.Unplayable,
 		DirSourced: track.DirSourced, ProviderMeta: maps.Clone(track.ProviderMeta),
 	}
 }
@@ -674,7 +674,7 @@ func ipcTrackFromInfo(info ipc.TrackInfo) playlist.Track {
 		Path: info.Path, AlbumArtURL: info.AlbumArtURL, Year: info.Year,
 		TrackNumber: info.TrackNumber, DurationSecs: info.DurationSecs,
 		Stream: info.Stream || playlist.IsURL(info.Path), Realtime: info.Realtime,
-		Feed: info.Feed, Unplayable: info.Unplayable,
+		Restricted: info.Restricted, Feed: info.Feed, Unplayable: info.Unplayable,
 		DirSourced: info.DirSourced, ProviderMeta: maps.Clone(info.ProviderMeta),
 	}
 }

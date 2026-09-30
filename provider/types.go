@@ -82,10 +82,6 @@ const (
 	MetaMixcloudKey = "mixcloud.key"
 	// MetaMixcloudCreator is the profile username that owns a Mixcloud show.
 	MetaMixcloudCreator = "mixcloud.creator"
-	// MetaMixcloudExclusive marks a show that Mixcloud may restrict to
-	// signed-in users or subscribers. The viewer's entitlement is resolved
-	// only during playback, so it is informational rather than Unplayable.
-	MetaMixcloudExclusive = "mixcloud.exclusive"
 
 	MetaAudiobookshelfID      = "audiobookshelf.id"
 	MetaAudiobookshelfEpisode = "audiobookshelf.episode"

@@ -240,6 +240,7 @@ func mergeTrackMeta(prev, cur playlist.Track) playlist.Track {
 	cur.Stream = cur.Stream || prev.Stream
 	cur.Feed = cur.Feed || prev.Feed
 	cur.Realtime = cur.Realtime || prev.Realtime
+	cur.Restricted = cur.Restricted || prev.Restricted
 	if len(cur.ProviderMeta) == 0 {
 		cur.ProviderMeta = prev.ProviderMeta
 	}

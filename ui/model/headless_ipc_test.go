@@ -349,10 +349,10 @@ func TestHeadlessLibraryRequests(t *testing.T) {
 }
 
 func TestIPCTrackInfoConversion(t *testing.T) {
-	track := playlist.Track{Path: "https://example.com/stream", Title: "Stream", Artist: "Artist", Realtime: true}
+	track := playlist.Track{Path: "https://example.com/stream", Title: "Stream", Artist: "Artist", Realtime: true, Restricted: true}
 	info := ipcTrackInfo(track, 3, 2, false)
 	converted := ipcTrackFromInfo(info)
-	if info.Index != 3 || info.QueuePosition != 2 || converted.Path != track.Path || !converted.Stream || !converted.Realtime {
+	if info.Index != 3 || info.QueuePosition != 2 || !info.Restricted || converted.Path != track.Path || !converted.Stream || !converted.Realtime || !converted.Restricted {
 		t.Fatalf("conversion lost metadata: info=%+v converted=%+v", info, converted)
 	}
 }
