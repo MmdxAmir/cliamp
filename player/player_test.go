@@ -211,6 +211,67 @@ func TestClearPreloadDoesNotWaitForClose(t *testing.T) {
 	}
 }
 
+// A native decoder seek runs on the UI goroutine and drops the preload,
+// because the gapless boundary moved. It must not wait while that preload
+// closes.
+func TestNativeSeekDoesNotWaitForPreloadClose(t *testing.T) {
+	tests := []struct {
+		name    string
+		preload bool
+	}{
+		{name: "no preload"},
+		{name: "preload with a slow close", preload: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestPlayer()
+			p.gapless = &gaplessStreamer{}
+			current := newPlaybackTestDecoder()
+			p.current = &trackPipeline{
+				decoder:  current,
+				stream:   current,
+				format:   beep.Format{SampleRate: 100, NumChannels: 2, Precision: 2},
+				seekable: true,
+			}
+			var decoder *blockingCloseDecoder
+			if tt.preload {
+				decoder = &blockingCloseDecoder{playbackTestDecoder: newPlaybackTestDecoder(), release: make(chan struct{})}
+				if err := p.preloadPipelineForGeneration(&trackPipeline{decoder: decoder, stream: decoder}, 0); err != nil {
+					t.Fatalf("preloadPipelineForGeneration: %v", err)
+				}
+			}
+
+			done := make(chan error, 1)
+			go func() { done <- p.Seek(time.Second) }()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("Seek: %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				if decoder != nil {
+					close(decoder.release)
+					<-done
+				}
+				t.Fatal("Seek waited for the old preload to close")
+			}
+
+			if p.HasPreload() {
+				t.Fatal("Seek kept the preloaded pipeline")
+			}
+			if decoder == nil {
+				return
+			}
+			close(decoder.release)
+			select {
+			case <-decoder.closed:
+			case <-time.After(2 * time.Second):
+				t.Fatal("Seek did not close the old preload")
+			}
+		})
+	}
+}
+
 func TestSetVolumeMinClamps(t *testing.T) {
 	p := newTestPlayer()
 

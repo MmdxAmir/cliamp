@@ -506,7 +506,9 @@ func (p *Player) Seek(d time.Duration) error {
 	speaker.Unlock()
 	p.lifecycleMu.Unlock()
 	if old != nil {
-		old.close()
+		// Seek runs on the UI goroutine, and a close can wait for an ffmpeg
+		// or yt-dlp process to exit, as in ClearPreload.
+		go old.close()
 	}
 	return nil
 }
