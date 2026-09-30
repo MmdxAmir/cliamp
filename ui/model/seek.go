@@ -29,28 +29,7 @@ func (m *Model) doSeek(d time.Duration) tea.Cmd {
 	return m.seekRelative(d, seekDebounceTicks)
 }
 
-func (m *Model) streamSeekRelative(delta time.Duration) tea.Cmd {
-	p := m.player
-	gen := m.seek.gen
-	return func() tea.Msg {
-		err := p.Seek(delta)
-		return seekTickMsg{err: err, gen: gen}
-	}
-}
-
-func (m *Model) streamSeekAbsolute(target time.Duration) tea.Cmd {
-	p := m.player
-	gen := m.seek.gen
-	return func() tea.Msg {
-		err := p.Seek(target - p.Position())
-		return seekTickMsg{err: err, target: target, gen: gen}
-	}
-}
-
 func (m *Model) seekRelative(d time.Duration, debounceTicks int) tea.Cmd {
-	if m.player.IsStreamSeek() {
-		return m.streamSeekRelative(d)
-	}
 	if !m.needsDebouncedSeek() {
 		m.player.Seek(d)
 		m.finishSeek()
@@ -87,9 +66,6 @@ func (m *Model) seekAbsolute(target time.Duration) tea.Cmd {
 // seek. A seek that restarts a decoder runs in the returned Cmd and reports
 // its error through seekTickMsg.
 func (m *Model) trySeekAbsolute(target time.Duration) (tea.Cmd, error) {
-	if m.player.IsStreamSeek() {
-		return m.streamSeekAbsolute(target), nil
-	}
 	if !m.needsDebouncedSeek() {
 		if err := m.player.Seek(target - m.player.Position()); err != nil {
 			return nil, err

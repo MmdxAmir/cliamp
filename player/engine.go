@@ -33,7 +33,6 @@ type Engine interface {
 	Drained() bool
 	HasPreload() bool
 	Seekable() bool
-	IsStreamSeek() bool
 	IsYTDLSeek() bool
 	GaplessAdvanced() bool
 	LastPlayedDuration() time.Duration

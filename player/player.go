@@ -760,11 +760,6 @@ func (p *Player) IsYTDLSeek() bool {
 	return cur != nil && cur.ytdlSeek
 }
 
-// IsStreamSeek reports whether seeking requires a slow HTTP reconnect.
-func (p *Player) IsStreamSeek() bool {
-	return false
-}
-
 // Position returns the current playback position.
 // streamOffset is added for yt-dlp streams restarted at a time offset.
 func (p *Player) Position() time.Duration {

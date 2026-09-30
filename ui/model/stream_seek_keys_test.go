@@ -7,57 +7,14 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/internal/playback"
+	"github.com/bjarneo/cliamp/ui"
 )
 
-// fakeEngine plays an hour-long track. It overrides only the stream-seek
-// methods of playbackFakeEngine.
-type fakeEngine struct {
-	playbackFakeEngine
-	streamSeek bool
-}
-
-func newFakeEngine(streamSeek bool, position time.Duration) *fakeEngine {
-	return &fakeEngine{
-		playbackFakeEngine: playbackFakeEngine{playing: true, duration: time.Hour, position: position},
-		streamSeek:         streamSeek,
-	}
-}
-
-func (f *fakeEngine) Seekable() bool     { return f.streamSeek }
-func (f *fakeEngine) IsStreamSeek() bool { return f.streamSeek }
-
-func assertStreamSeekCmd(t *testing.T, eng *fakeEngine, cmd tea.Cmd, want time.Duration) {
-	t.Helper()
-
-	if cmd == nil {
-		t.Fatal("cmd = nil, want seek cmd for HTTP stream")
-	}
-
-	msg := cmd()
-	if _, ok := msg.(seekTickMsg); !ok {
-		t.Fatalf("cmd() msg = %T, want seekTickMsg", msg)
-	}
-
-	if len(eng.seekCalls) != 1 {
-		t.Fatalf("Seek call count after cmd() = %d, want 1", len(eng.seekCalls))
-	}
-	if got := eng.seekCalls[0]; got != want {
-		t.Fatalf("Seek arg = %v, want %v", got, want)
-	}
-}
-
-func assertDeferredStreamSeek(t *testing.T, eng *fakeEngine, cmd tea.Cmd, position, want time.Duration) {
-	t.Helper()
-
-	if len(eng.seekCalls) != 0 {
-		t.Fatalf("Seek call count before cmd() = %d, want 0", len(eng.seekCalls))
-	}
-
-	eng.position = position
-	assertStreamSeekCmd(t, eng, cmd, want)
-}
-
-func TestDeferredHTTPStreamSeek(t *testing.T) {
+// TestStreamSeekEntryPoints checks that each way to seek a seekable stream
+// restarts its decoder in a command, never in Update. A seek key waits for
+// the debounce. The command seeks to the target from the position that the
+// player reports when the command runs.
+func TestStreamSeekEntryPoints(t *testing.T) {
 	cases := []struct {
 		name       string
 		initialPos time.Duration
@@ -67,9 +24,10 @@ func TestDeferredHTTPStreamSeek(t *testing.T) {
 		check      func(*testing.T, *Model)
 	}{
 		{
-			name:      "right key",
-			settlePos: 8 * time.Second,
-			want:      5 * time.Second,
+			name:       "right key",
+			initialPos: 3 * time.Second,
+			settlePos:  5 * time.Second,
+			want:       3 * time.Second,
 			invoke: func(m *Model) tea.Cmd {
 				return m.handleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 			},
@@ -80,7 +38,8 @@ func TestDeferredHTTPStreamSeek(t *testing.T) {
 			settlePos:  5 * time.Second,
 			want:       5 * time.Second,
 			invoke: func(m *Model) tea.Cmd {
-				_, cmd := m.Update(playback.SetPositionMsg{Position: 10 * time.Second})
+				updated, cmd := m.Update(playback.SetPositionMsg{Position: 10 * time.Second})
+				*m = updated.(Model)
 				return cmd
 			},
 		},
@@ -108,9 +67,10 @@ func TestDeferredHTTPStreamSeek(t *testing.T) {
 			name:       "seek message",
 			initialPos: 3 * time.Second,
 			settlePos:  5 * time.Second,
-			want:       4 * time.Second,
+			want:       2 * time.Second,
 			invoke: func(m *Model) tea.Cmd {
-				_, cmd := m.Update(playback.SeekMsg{Offset: 4 * time.Second})
+				updated, cmd := m.Update(playback.SeekMsg{Offset: 4 * time.Second})
+				*m = updated.(Model)
 				return cmd
 			},
 		},
@@ -118,14 +78,30 @@ func TestDeferredHTTPStreamSeek(t *testing.T) {
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newFakeEngine(true, tt.initialPos)
-			m := Model{player: eng}
+			eng := &playbackFakeEngine{playing: true, seekable: true, duration: time.Hour, position: tt.initialPos}
+			m := streamSeekModel(eng)
 
 			cmd := tt.invoke(&m)
 			if tt.check != nil {
 				tt.check(t, &m)
 			}
-			assertDeferredStreamSeek(t, eng, cmd, tt.settlePos, tt.want)
+			if cmd == nil {
+				cmd = m.tickSeek(time.Duration(seekDebounceTicks) * ui.TickFast)
+			}
+			if len(eng.seekCalls) != 0 {
+				t.Fatalf("Seek calls in Update = %v, want none", eng.seekCalls)
+			}
+			if cmd == nil {
+				t.Fatal("no seek command, want the seek to run in a command")
+			}
+
+			eng.position = tt.settlePos
+			if _, ok := cmd().(seekTickMsg); !ok {
+				t.Fatal("seek command did not return seekTickMsg")
+			}
+			if len(eng.seekCalls) != 1 || eng.seekCalls[0] != tt.want {
+				t.Fatalf("Seek calls = %v, want [%v]", eng.seekCalls, tt.want)
+			}
 		})
 	}
 }

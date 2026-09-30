@@ -122,7 +122,6 @@ func (f *playbackFakeEngine) IsPaused() bool     { return f.paused }
 func (f *playbackFakeEngine) Drained() bool      { return f.drained }
 func (f *playbackFakeEngine) HasPreload() bool   { return f.hasPreload }
 func (f *playbackFakeEngine) Seekable() bool     { return f.seekable }
-func (f *playbackFakeEngine) IsStreamSeek() bool { return false }
 func (f *playbackFakeEngine) IsYTDLSeek() bool   { return f.ytdlSeek }
 func (f *playbackFakeEngine) IsLiveStream() bool { return f.live }
 func (f *playbackFakeEngine) GaplessAdvanced() bool {

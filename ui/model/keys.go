@@ -16,7 +16,7 @@ import (
 func (m *Model) quit() tea.Cmd {
 	// Only save resume for seekable tracks:
 	// - local files (not stream)
-	// - HTTP streams with known duration (podcast MP3s, seek-by-reconnect)
+	// - HTTP streams with known duration (podcast MP3s)
 	// - finite Mixcloud shows (yt-dlp tracks with a counted PCM position)
 	// Other yt-dlp sites and real-time live streams remain excluded.
 	if track, _ := m.currentPlaybackTrack(); track.Path != "" &&

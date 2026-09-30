@@ -32,7 +32,7 @@ func TestAttachNotifierPublishesCurrentPlaybackState(t *testing.T) {
 
 	notifier := &fakeNotifier{}
 	m := Model{
-		player:   newFakeEngine(false, 0),
+		player:   &playbackFakeEngine{playing: true, duration: time.Hour},
 		playlist: pl,
 	}
 
