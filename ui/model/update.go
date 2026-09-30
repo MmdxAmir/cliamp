@@ -139,7 +139,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			if msg.resume {
-				m.status.Warningf(statusTTLLong, "Couldn't resume this show; playing from the previous position: %s", msg.err)
+				m.status.Warningf(statusTTLLong, "Couldn't resume this track; playing from the previous position: %s", msg.err)
 			} else {
 				m.status.Warningf(statusTTLMedium, "Seek failed; playback continues from the previous position: %s", msg.err)
 			}

@@ -260,17 +260,20 @@ func TestReloadedResolverTracksStayOffUpdate(t *testing.T) {
 	}
 	// Each action runs on the Model after the async start and returns the
 	// command of the seek. It must not call the player in Update.
+	resume := func(m *Model, played streamPlayedMsg) tea.Cmd {
+		updated, cmd := m.Update(played)
+		*m = updated.(Model)
+		return cmd
+	}
 	actions := []struct {
-		name   string
-		resume bool // the startup resume hint names the track
-		act    func(m *Model, played streamPlayedMsg) tea.Cmd
+		name    string
+		resume  bool  // the startup resume hint names the track
+		seekErr error // the seek command fails with this error
+		act     func(m *Model, played streamPlayedMsg) tea.Cmd
 	}{
 		{name: "seek", act: func(m *Model, _ streamPlayedMsg) tea.Cmd { return m.seekAbsolute(30 * time.Second) }},
-		{name: "resume", resume: true, act: func(m *Model, played streamPlayedMsg) tea.Cmd {
-			updated, cmd := m.Update(played)
-			*m = updated.(Model)
-			return cmd
-		}},
+		{name: "resume", resume: true, act: resume},
+		{name: "failed resume", resume: true, seekErr: errors.New("connection reset"), act: resume},
 	}
 	keep := func(string) {}
 	for _, store := range stores {
@@ -321,6 +324,20 @@ func TestReloadedResolverTracksStayOffUpdate(t *testing.T) {
 						}
 						if action.resume && (!m.seek.inFlight || m.seek.targetPos != 30*time.Second) {
 							t.Fatalf("resume seek in flight %v to %v, want an async seek to 30s", m.seek.inFlight, m.seek.targetPos)
+						}
+						if action.seekErr == nil {
+							return
+						}
+						// A failed resume names the track, which can be music
+						// rather than a show, and spends the resume hint.
+						player.seekErr = action.seekErr
+						for _, msg := range runCmd(seek) {
+							updated, _ := m.Update(msg)
+							m = updated.(Model)
+						}
+						want := "Couldn't resume this track; playing from the previous position: connection reset"
+						if m.status.text != want || m.resume.path != "" || m.resume.secs != 0 {
+							t.Fatalf("after the failed resume: status %q, resume hint %q/%ds; want %q and no hint", m.status.text, m.resume.path, m.resume.secs, want)
 						}
 					})
 				}
