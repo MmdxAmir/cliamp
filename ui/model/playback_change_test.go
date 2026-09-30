@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -38,7 +39,7 @@ func (r *countingReporter) scrobbled() []string {
 }
 
 // changeEngine moves its position as a player does: a start plays from its
-// offset, a stop goes to 0 and a seek moves the position.
+// offset, a stop goes to 0 and a seek that works moves the position.
 type changeEngine struct {
 	playbackFakeEngine
 	volume      float64
@@ -56,8 +57,11 @@ func (e *changeEngine) Stop() {
 }
 
 func (e *changeEngine) Seek(d time.Duration) error {
+	if err := e.playbackFakeEngine.Seek(d); err != nil {
+		return err
+	}
 	e.position += d
-	return e.playbackFakeEngine.Seek(d)
+	return nil
 }
 
 func (e *changeEngine) SetVolume(db float64) { e.volume = db }
@@ -286,7 +290,7 @@ func TestPlaybackStateEventFiresOncePerChange(t *testing.T) {
 }
 
 // A track that is left once scrobbles once, also when a stop or a start of
-// the next track follows, and a replay after a rewind can scrobble again.
+// the next track follows.
 func TestLeaveTrackReportsEachStartOnce(t *testing.T) {
 	c := newPlaybackChange()
 	m := c.m
@@ -299,17 +303,46 @@ func TestLeaveTrackReportsEachStartOnce(t *testing.T) {
 	if got := c.reporter.scrobbled(); len(got) != 1 {
 		t.Fatalf("scrobbles = %v, want one", got)
 	}
+}
 
-	c = newPlaybackChange()
-	c.engine.seekable = true
-	m = c.m
-	m.prevTrack()
-	c.engine.position = 170 * time.Second
-	m.nextTrack()
-	if m.reports != nil {
-		m.reports.waitIdle(t)
+// A rewind with previous scrobbles the play so far. The replay can scrobble
+// again only after the rewind lands, so a rewind that fails and plays on
+// scrobbles the track once.
+func TestRewindStartsAReplayWhenItLands(t *testing.T) {
+	seekErr := errors.New("seek failed")
+	tests := []struct {
+		name  string
+		setup func(e *changeEngine)
+		want  int
+	}{
+		{name: "an in-place rewind", want: 2},
+		{name: "a failed in-place rewind", setup: func(e *changeEngine) { e.seekErr = seekErr }, want: 1},
+		{name: "a decoder rewind", setup: func(e *changeEngine) { e.ytdlSeek = true }, want: 2},
+		{name: "a failed decoder rewind", setup: func(e *changeEngine) {
+			e.ytdlSeek = true
+			e.seekYTDLErr = seekErr
+		}, want: 1},
 	}
-	if got := c.reporter.scrobbled(); len(got) != 2 {
-		t.Fatalf("scrobbles = %v, want one for the play and one for the replay", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newPlaybackChange()
+			c.engine.seekable = true
+			if tt.setup != nil {
+				tt.setup(c.engine)
+			}
+			m := c.m
+			if cmd := m.prevTrack(); cmd != nil {
+				next, _ := m.Update(cmd())
+				m = next.(Model)
+			}
+			c.engine.position = 170 * time.Second
+			m.nextTrack()
+			if m.reports != nil {
+				m.reports.waitIdle(t)
+			}
+			if got := c.reporter.scrobbled(); len(got) != tt.want {
+				t.Fatalf("scrobbles = %v, want %d", got, tt.want)
+			}
+		})
 	}
 }

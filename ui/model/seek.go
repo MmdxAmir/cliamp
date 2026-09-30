@@ -122,8 +122,13 @@ func (m *Model) queueSeekTarget(target time.Duration, debounceTicks int) tea.Cmd
 // finishSeek tells the media controls and plugins that a seek landed. The
 // media controls get the new state before the MPRIS Seeked signal, also for
 // a seek within the same second, so a client that reads Position on the
-// signal sees the new value.
+// signal sees the new value. A rewind with previous that lands starts a
+// replay, which can scrobble again.
 func (m *Model) finishSeek() {
+	if m.seek.rewind {
+		m.seek.rewind = false
+		m.playingTrackLeft = false
+	}
 	m.notice.sent = false
 	m.notifyPlaybackChange()
 	if m.notifier != nil {

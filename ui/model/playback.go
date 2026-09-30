@@ -121,10 +121,16 @@ func (m *Model) prevTrack() tea.Cmd {
 	if m.player.Position() > 3*time.Second {
 		if m.player.Seekable() {
 			// Seekable media rewinds in place; non-seekable streams must be restarted.
-			// The rewind ends the play so far, and the replay can scrobble again.
+			// The rewind ends the play so far. finishSeek starts the replay,
+			// which can scrobble again, when the rewind lands. A failed
+			// rewind plays on as the play that was already reported.
 			m.leaveTrack(m.player.PositionAndDuration())
-			m.playingTrackLeft = false
-			return m.seekAbsolute(0)
+			m.seek.rewind = true
+			cmd, err := m.trySeekAbsolute(0)
+			if err != nil {
+				m.seek.rewind = false
+			}
+			return cmd
 		}
 		track, idx := m.currentPlaybackTrack()
 		if idx >= 0 {
@@ -516,6 +522,7 @@ func (m *Model) beginPlaybackTrack(track playlist.Track) (playlist.Track, tea.Cm
 	m.seek.timerFor = 0
 	m.seek.grace = 0
 	m.seek.graceFor = 0
+	m.seek.rewind = false
 	if m.lyrics.visible {
 		q := lyricsLookupKey(track, track.Artist, track.Title)
 		if q == "" {

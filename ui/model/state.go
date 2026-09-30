@@ -74,6 +74,7 @@ type seekState struct {
 	targetPos time.Duration // absolute target position
 	timer     int           // tick countdown for debounce (0 = idle)
 	grace     int           // ticks to suppress reconnect after seek completes
+	rewind    bool          // a rewind with previous waits to land and start a replay
 	timerFor  time.Duration
 	graceFor  time.Duration
 }
