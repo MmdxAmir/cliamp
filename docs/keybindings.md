@@ -388,3 +388,5 @@ query to their search API. Their services control matching rules.
 |---|---|
 | `?` / `Ctrl+K` | Show keymap. `Enter` runs the selected command. |
 | `q` / `Ctrl+C` | Quit |
+
+cliamp also quits as the `q` key does when it gets `SIGINT`, `SIGTERM` or `SIGHUP`. It then saves the resume position. The terminal sends `SIGHUP` when you close its window.

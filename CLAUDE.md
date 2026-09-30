@@ -75,7 +75,7 @@ Other directories: `docs/` holds the user docs, one `.md` per feature. `site/` i
    5. Open the `player.Player` in `newPlayer`. `registerPlayerHooks` adds the stream factories, source resolvers and URL matchers of the providers.
    6. Create the IPC event broker and load the Lua plugins with `luaplugin.New`.
    7. Build the Model with `model.New` and `config.SaveFunc{}`. `configureModel` applies the settings. In headless mode it calls `SetHeadless(true)`.
-   8. Create the Bubbletea program with `programOptions`. In headless mode `quitOnSignals` turns SIGINT and SIGTERM into `playback.QuitMsg`.
+   8. Create the Bubbletea program with `programOptions`. In both modes `quitOnSignals` turns SIGINT, SIGTERM and SIGHUP into `playback.QuitMsg`, so the exit save runs.
    9. Attach the sign-in URL observers, the media controls in `wireMediaCtl`, and the Lua control and UI providers from `lua_wiring.go`.
    10. Start the IPC server in `startIPC`. In headless mode a failed bind ends the run.
    11. `mediactl.Run` runs the program until it quits. `saveOnExit` then saves the theme and the resume position.

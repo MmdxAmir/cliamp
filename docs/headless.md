@@ -13,7 +13,7 @@ cliamp --daemon --auto-play --playlist Lofi  # start playing on launch
 cliamp --daemon ~/Music --auto-play          # auto-play a directory
 ```
 
-To stop the daemon, press `Ctrl+C` or send `SIGINT` or `SIGTERM`. cliamp saves the resume position, as the `q` key does in the TUI. A second signal stops a daemon that does not exit.
+To stop the daemon, press `Ctrl+C` or send `SIGINT`, `SIGTERM` or `SIGHUP`. The shell sends `SIGHUP` to a background daemon when its terminal closes. cliamp saves the resume position, as the `q` key does in the TUI. A second signal stops a daemon that does not exit.
 
 ## What works
 

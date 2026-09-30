@@ -3,6 +3,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"syscall"
 	"testing"
@@ -35,15 +36,33 @@ func (r quitRecorder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (quitRecorder) View() tea.View { return tea.NewView("") }
 
-// A real SIGINT or SIGTERM reaches the headless Model as a quit message, so
-// the Model keeps the resume position. The program then ends with no error.
-// The signal handler of Bubbletea would end the program with no Update, and
-// on SIGINT with an error.
-func TestHeadlessSignalQuitsThroughTheModel(t *testing.T) {
-	for _, sig := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
-		t.Run(sig.String(), func(t *testing.T) {
+// A real SIGINT, SIGTERM or SIGHUP reaches the Model as a quit message in
+// headless mode and in the TUI, so the Model keeps the resume position. The
+// program then ends with no error. The signal handler of Bubbletea would end
+// the program with no Update, and on SIGINT with an error. A closed terminal
+// sends SIGHUP.
+func TestSignalQuitsThroughTheModel(t *testing.T) {
+	// The TUI program runs with no terminal here, as headless mode does.
+	noTerminal := []tea.ProgramOption{tea.WithInput(nil), tea.WithoutRenderer(), tea.WithOutput(io.Discard)}
+	type signalCase struct {
+		name    string
+		options []tea.ProgramOption
+		sig     syscall.Signal
+	}
+	var cases []signalCase
+	for _, mode := range []signalCase{
+		{name: "headless", options: programOptions(true, false)},
+		{name: "TUI", options: append(programOptions(false, false), noTerminal...)},
+		{name: "low-power TUI", options: append(programOptions(false, true), noTerminal...)},
+	} {
+		for _, sig := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP} {
+			cases = append(cases, signalCase{name: mode.name + " " + sig.String(), options: mode.options, sig: sig})
+		}
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
 			started := make(chan struct{})
-			prog := tea.NewProgram(quitRecorder{started: started}, headlessProgramOptions()...)
+			prog := tea.NewProgram(quitRecorder{started: started}, tc.options...)
 			stop := quitOnSignals(prog.Send)
 			defer stop()
 
@@ -60,10 +79,10 @@ func TestHeadlessSignalQuitsThroughTheModel(t *testing.T) {
 			case <-started:
 			case <-time.After(5 * time.Second):
 				prog.Kill()
-				t.Fatal("the headless program did not start")
+				t.Fatal("the program did not start")
 			}
 
-			if err := syscall.Kill(os.Getpid(), sig); err != nil {
+			if err := syscall.Kill(os.Getpid(), tc.sig); err != nil {
 				prog.Kill()
 				t.Fatal(err)
 			}
@@ -78,7 +97,7 @@ func TestHeadlessSignalQuitsThroughTheModel(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				// The signal handler of Bubbletea can block the shutdown, so
 				// Kill could block as well.
-				t.Fatal("the headless program did not quit")
+				t.Fatal("the program did not quit")
 			}
 		})
 	}

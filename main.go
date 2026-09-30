@@ -182,10 +182,8 @@ func run(overrides config.Overrides, positional []string, headless, visualizer60
 	}
 
 	prog := tea.NewProgram(m, programOptions(headless, cfg.LowPower)...)
-	if headless {
-		stopSignals := quitOnSignals(prog.Send)
-		defer stopSignals()
-	}
+	stopSignals := quitOnSignals(prog.Send)
+	defer stopSignals()
 	defer providers.observeAuthURLs(prog.Send)()
 
 	svc, svcErr := wireMediaCtl(prog)
@@ -393,20 +391,19 @@ func saveExitResume(path string, secs int, playlistName string, resumeContext fu
 }
 
 // programOptions returns the Bubbletea options of the TUI, or of headless
-// mode.
+// mode. run handles the signals itself in both modes, see quitOnSignals.
 func programOptions(headless, lowPower bool) []tea.ProgramOption {
 	switch {
 	case headless:
 		return headlessProgramOptions()
 	case lowPower:
-		return []tea.ProgramOption{tea.WithFPS(lowPowerUIFPS)}
+		return []tea.ProgramOption{tea.WithFPS(lowPowerUIFPS), tea.WithoutSignalHandler()}
 	}
-	return []tea.ProgramOption{tea.WithFPS(defaultUIFPS)}
+	return []tea.ProgramOption{tea.WithFPS(defaultUIFPS), tea.WithoutSignalHandler()}
 }
 
 // headlessProgramOptions build a program with no terminal: no renderer, no
-// input and no output. The frame ticker runs at its lowest rate. run
-// handles the signals itself, see quitOnSignals.
+// input and no output. The frame ticker runs at its lowest rate.
 func headlessProgramOptions() []tea.ProgramOption {
 	return []tea.ProgramOption{
 		tea.WithoutRenderer(),
@@ -417,11 +414,11 @@ func headlessProgramOptions() []tea.ProgramOption {
 	}
 }
 
-// quitOnSignals sends SIGINT and SIGTERM to quitOnSignal until stop is
-// called.
+// quitOnSignals sends SIGINT, SIGTERM and SIGHUP to quitOnSignal until stop
+// is called.
 func quitOnSignals(send func(tea.Msg)) (stop func()) {
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go quitOnSignal(signals, send)
 	return func() {
 		signal.Stop(signals)
@@ -429,11 +426,12 @@ func quitOnSignals(send func(tea.Msg)) (stop func()) {
 	}
 }
 
-// quitOnSignal asks the Model to quit on the first SIGINT or SIGTERM, so it
-// saves the resume position as the q key does. The signal handler of
-// Bubbletea ends the program with no Update, and on SIGINT it also returns
-// an error. After the first signal the default action is back, so a second
-// signal ends a program that does not quit.
+// quitOnSignal asks the Model to quit on the first SIGINT, SIGTERM or
+// SIGHUP, so it saves the resume position as the q key does. A closed
+// terminal sends SIGHUP. The signal handler of Bubbletea ends the program
+// with no Update, and on SIGINT it also returns an error. After the first
+// signal the default action is back, so a second signal ends a program that
+// does not quit.
 func quitOnSignal(signals chan os.Signal, send func(tea.Msg)) {
 	if _, ok := <-signals; ok {
 		signal.Stop(signals)
