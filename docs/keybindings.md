@@ -288,7 +288,7 @@ the provider pane.
 | `R` | Replace the queue with all visible tracks (start from the top, confirm when non-empty) |
 | `q` | Queue the highlighted track to play next |
 | `s` | Cycle album sort (album list only) |
-| `S` `N` `P` `J` `E` `Y` `C` `X` `M` `Q` `T` `L` `O` | Switch to that provider without opening the main pane. `R` replaces the queue on the track screen. |
+| `S` `N` `P` `J` `E` `B` `Y` `C` `X` `M` `Q` `T` `L` `R` `O` | Switch to that provider without opening the main pane. On the track screen, `R` replaces the queue instead. |
 | `Esc` `b` | Go back one level; close the browser |
 
 The Mixcloud browser menu has **By Show**, **By Creator**, **By Creator / Show**,
@@ -321,7 +321,8 @@ Navidrome, Podcasts, or Local Playlists:
 | `Ctrl+F` | Run the provider online or server search (Spotify, Navidrome, NetEase, and others). |
 | `Ctrl+R` | Refresh the provider: reload the currently open playlist or starting wave in place (e.g. a fresh Yandex "Моя волна" batch), or return to the playlist list. For Mixcloud, also clear the cached `/me/` identity. |
 | `p` | Open the playlist manager (Local pane only; create, rename, delete, add dirs/tracks) |
-| `S` `N` `P` `J` `E` `Y` `C` `X` `M` `Q` `L` `R` `O` | Switch to that provider |
+| `S` `P` `J` `E` `B` `Y` `C` `X` `M` `Q` `T` `L` `R` `O` | Switch to that provider |
+| `N` | Open the browser of the provider on screen |
 | `Tab` | Leave the provider pane and focus Source, or the first visible playback control |
 | `Shift+Tab` | Leave the provider pane and focus the last visible playback control (Speed, or Repeat with Settings closed) |
 | `Esc` `b` | Back to the playlist pane; in Podcasts, clear show search first |
