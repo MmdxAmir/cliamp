@@ -467,24 +467,11 @@ func (m *Model) handleTick(msg tickMsg) tea.Cmd {
 		}
 		m.leaveTrack(fullDur, fullDur)
 
-		var newTrack playlist.Track
-		var ok bool
-		if m.playbackDetached {
-			var idx int
-			newTrack, idx = m.playlist.Current()
-			ok = idx >= 0
-			m.playbackDetached = false
-		} else {
-			newTrack, ok = m.playlist.Next()
-			m.normalizeQueueOverlay()
-		}
+		newTrack, ok := m.advanceToNext()
 		if !ok {
-			m.endQueue()
 			cmds = append(cmds, tickCmdAt(m.tickInterval()))
 			return tea.Batch(cmds...)
 		}
-		m.plCursor = m.playlist.Index()
-		m.adjustScroll()
 		var gaplessLyricCmd tea.Cmd
 		newTrack, gaplessLyricCmd = m.beginPlaybackTrack(newTrack)
 		if gaplessLyricCmd != nil {

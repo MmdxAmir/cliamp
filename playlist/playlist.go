@@ -346,6 +346,18 @@ type SelectionActivation struct {
 	Skipped bool
 }
 
+// PeekSelected returns the track that ActivateSelected would activate,
+// without a change to the playlist.
+func (p *Playlist) PeekSelected() (Track, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, idx, ok := p.resolveSelectedPlayablePos()
+	if !ok {
+		return Track{}, false
+	}
+	return cloneTrack(p.tracks[idx]), true
+}
+
 // ActivateSelected promotes the selected row to the active playable track.
 // Queue state is ignored for candidate selection and left unchanged. If no
 // playable track can be activated, playlist state is unchanged.

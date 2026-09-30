@@ -75,6 +75,18 @@ func TestQueueEndEvent(t *testing.T) {
 			want: true,
 		},
 		{
+			name:   "playlist replaced by unplayable tracks while the track played",
+			player: &playbackFakeEngine{playing: true, drained: true},
+			tracks: []playlist.Track{last},
+			load: func(_ *testing.T, m *Model) {
+				startedPlaybackTrack(m, last)
+				m.detachPlaybackTrack()
+				m.replacePlaylist([]playlist.Track{{Path: "/music/missing.flac", Unplayable: true}})
+			},
+			msgs: []tea.Msg{tickMsg(time.Now())},
+			want: true,
+		},
+		{
 			name:   "next pressed with nothing loaded",
 			player: &playbackFakeEngine{},
 			tracks: []playlist.Track{first, last},

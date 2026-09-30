@@ -98,12 +98,11 @@ func (m *Model) preloadTarget() (playlist.Track, bool) {
 	if currentIdx >= 0 && m.currentPlaybackIsLive(current) {
 		return playlist.Track{}, false
 	}
+	// Arm the track that advanceToNext picks.
 	var next playlist.Track
 	var ok bool
 	if m.playbackDetached {
-		var idx int
-		next, idx = m.playlist.Current()
-		ok = idx >= 0
+		next, ok = m.playlist.PeekSelected()
 	} else {
 		next, ok = m.playlist.PeekNext()
 	}

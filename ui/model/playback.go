@@ -96,23 +96,43 @@ func (m *Model) tickResumeSave(now time.Time) {
 // nextTrack advances to the next playlist track and starts playing it.
 // Unplayable tracks are skipped automatically.
 func (m *Model) nextTrack() tea.Cmd {
+	track, ok := m.advanceToNext()
+	if !ok {
+		return nil
+	}
+	return m.playTrack(track)
+}
+
+// advanceToNext moves the playlist to the track that plays after the current
+// one and returns it. After a replace detached the playing track, that is the
+// selected row of the new list, or the first playable row after it. When
+// nothing playable follows, it ends the queue and returns false. nextTrack
+// then starts the track, and a gapless switch already plays it.
+func (m *Model) advanceToNext() (playlist.Track, bool) {
+	var track playlist.Track
+	var ok bool
 	if m.playbackDetached {
 		m.playbackDetached = false
-		if m.playlist.Len() == 0 {
-			m.endQueue()
-			return nil
+		var activation playlist.SelectionActivation
+		activation, ok = m.playlist.ActivateSelected()
+		track = activation.Track
+		switch {
+		case !ok && m.playlist.Len() > 0:
+			m.status.Warning("No available tracks", statusTTLDefault)
+		case activation.Skipped:
+			m.status.Warning("Track unavailable, skipping...", statusTTLDefault)
 		}
-		return m.playCurrentTrack()
+	} else {
+		track, ok = m.playlist.Next()
 	}
-	track, ok := m.playlist.Next()
 	m.normalizeQueueOverlay()
 	if !ok {
 		m.endQueue()
-		return nil
+		return playlist.Track{}, false
 	}
 	m.plCursor = m.playlist.Index()
 	m.adjustScroll()
-	return m.playTrack(track)
+	return track, true
 }
 
 // prevTrack goes to the previous track, or restarts if >3s into the current one.

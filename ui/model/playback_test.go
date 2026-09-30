@@ -1435,3 +1435,73 @@ func TestPlaysLive(t *testing.T) {
 		})
 	}
 }
+
+// TestNextTrackRulesAgree checks that the preload, a skip or drain through
+// nextTrack, and a gapless switch all pick the same next track. After a
+// replace detached the playing track, that is the selected row of the new
+// list, or the first playable row after it.
+func TestNextTrackRulesAgree(t *testing.T) {
+	playing := playlist.Track{Title: "Playing", Path: "playing.mp3"}
+	missing := playlist.Track{Title: "Missing", Path: "missing.mp3", Unplayable: true}
+	a := playlist.Track{Title: "A", Path: "a.mp3"}
+	b := playlist.Track{Title: "B", Path: "b.mp3"}
+	tests := []struct {
+		name     string
+		tracks   []playlist.Track // the list the playing track came from
+		detachTo []playlist.Track // the list that replaced it, when not nil
+		want     string           // the path that plays next, or "" at the end
+	}{
+		{name: "next in order", tracks: []playlist.Track{playing, a}, want: "a.mp3"},
+		{name: "unplayable row skipped", tracks: []playlist.Track{playing, missing, a}, want: "a.mp3"},
+		{name: "end of the list", tracks: []playlist.Track{playing}},
+		{name: "detached first row", tracks: []playlist.Track{playing}, detachTo: []playlist.Track{a, b}, want: "a.mp3"},
+		{name: "detached unplayable first row", tracks: []playlist.Track{playing}, detachTo: []playlist.Track{missing, b}, want: "b.mp3"},
+		{name: "detached with nothing playable", tracks: []playlist.Track{playing}, detachTo: []playlist.Track{missing}},
+		{name: "detached empty list", tracks: []playlist.Track{playing}, detachTo: []playlist.Track{}},
+	}
+	for _, tt := range tests {
+		setup := func(engine *playbackFakeEngine) Model {
+			p := playlist.New()
+			p.Replace(tt.tracks)
+			m := Model{player: engine, playlist: p, vis: ui.NewVisualizer(float64(engine.SampleRate()))}
+			m.SetVisualizer("none")
+			startedPlaybackTrack(&m, playing)
+			if tt.detachTo != nil {
+				m.detachPlaybackTrack()
+				m.replacePlaylist(tt.detachTo)
+			}
+			return m
+		}
+		t.Run(tt.name, func(t *testing.T) {
+			m := setup(&playbackFakeEngine{playing: true})
+			preloaded := ""
+			if next, ok := m.preloadTarget(); ok {
+				preloaded = next.Path
+			}
+			if preloaded != tt.want {
+				t.Errorf("preloadTarget = %q, want %q", preloaded, tt.want)
+			}
+
+			engine := &playbackFakeEngine{playing: true}
+			m = setup(engine)
+			m.nextTrack()
+			if got := strings.Join(engine.playCalls, ","); got != tt.want {
+				t.Errorf("nextTrack plays %q, want %q", got, tt.want)
+			}
+
+			m = setup(&playbackFakeEngine{playing: true, gaplessAdvanced: true})
+			updated, _ := m.Update(tickMsg(time.Now()))
+			m = updated.(Model)
+			got := ""
+			if track, idx := m.currentPlaybackTrack(); idx >= 0 && m.playingTrackActive {
+				got = track.Path
+			}
+			if got != tt.want {
+				t.Errorf("gapless switch plays %q, want %q", got, tt.want)
+			}
+			if m.playbackDetached {
+				t.Error("playbackDetached = true after the advance, want false")
+			}
+		})
+	}
+}
