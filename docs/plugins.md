@@ -485,7 +485,7 @@ cliamp.player.next()              -- skip to next track
 cliamp.player.prev()              -- go to previous track
 cliamp.player.play_pause()        -- toggle play/pause
 cliamp.player.stop()              -- stop playback
-cliamp.player.set_volume(-5)      -- set volume in dB (-30 to +6)
+cliamp.player.set_volume(-5)      -- set volume in dB (volume_min to +6)
 cliamp.player.set_speed(1.25)     -- set playback speed (0.25 to 2.0)
 cliamp.player.seek(30)            -- seek to 30 seconds
 cliamp.player.toggle_mono()       -- toggle mono output

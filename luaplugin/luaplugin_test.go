@@ -609,30 +609,36 @@ func TestManagerWithControlProvider(t *testing.T) {
 	}
 }
 
+// set_volume caps the volume at +6 dB and passes a low value on, so the
+// player clamps it to its volume_min floor. set_speed clamps to 0.25 to 2.
 func TestControlClampsBounds(t *testing.T) {
-	m := newTestManager()
-	var gotVol float64
-	var gotSpeed float64
-	m.SetControlProvider(ControlProvider{
-		SetVolume: func(db float64) { gotVol = db },
-		SetSpeed:  func(r float64) { gotSpeed = r },
-	})
-
-	loadTestPlugin(t, m, "clamp-test", `
-		plugin.register({
-			name = "clamp-test",
-			type = "hook",
-			permissions = {"control"},
-		})
-		cliamp.player.set_volume(100)
-		cliamp.player.set_speed(10)
-	`)
-
-	if gotVol != 6 {
-		t.Fatalf("set_volume(100) clamped to %v, want 6", gotVol)
+	tests := []struct {
+		call      string
+		wantVol   float64
+		wantSpeed float64
+	}{
+		{"cliamp.player.set_volume(100)", 6, 0},
+		{"cliamp.player.set_volume(-45)", -45, 0},
+		{"cliamp.player.set_volume(-80)", -80, 0},
+		{"cliamp.player.set_speed(10)", 0, 2},
+		{"cliamp.player.set_speed(0.1)", 0, 0.25},
 	}
-	if gotSpeed != 2.0 {
-		t.Fatalf("set_speed(10) clamped to %v, want 2.0", gotSpeed)
+	for _, tt := range tests {
+		t.Run(tt.call, func(t *testing.T) {
+			m := newTestManager()
+			var gotVol, gotSpeed float64
+			m.SetControlProvider(ControlProvider{
+				SetVolume: func(db float64) { gotVol = db },
+				SetSpeed:  func(r float64) { gotSpeed = r },
+			})
+			loadTestPlugin(t, m, "clamp-test", `
+				plugin.register({name = "clamp-test", type = "hook", permissions = {"control"}})
+				`+tt.call+`
+			`)
+			if gotVol != tt.wantVol || gotSpeed != tt.wantSpeed {
+				t.Fatalf("volume, speed = %v, %v; want %v, %v", gotVol, gotSpeed, tt.wantVol, tt.wantSpeed)
+			}
+		})
 	}
 }
 

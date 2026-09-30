@@ -52,7 +52,8 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, loadCtrl func() *Cont
 			return 0
 		}
 		db := float64(L.CheckNumber(1))
-		ctrl.SetVolume(max(min(db, 6), -30))
+		// The player clamps the low end to its volume_min floor.
+		ctrl.SetVolume(min(db, 6))
 		return 0
 	}))
 
