@@ -18,6 +18,10 @@ import (
 	"github.com/bjarneo/cliamp/ui"
 )
 
+// The queue edits, the playlist manager and the duration backfill save
+// through playlistUpdater. A changed method set would make them skip the save.
+var _ playlistUpdater = (*local.Provider)(nil)
+
 // remoteListProvider serves the same tracks for every playlist and album, as
 // a Navidrome server does for one list.
 type remoteListProvider struct {

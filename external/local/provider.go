@@ -32,7 +32,6 @@ var (
 	_ provider.PlaylistPrepender        = (*Provider)(nil)
 	_ provider.PlaylistCreator          = (*Provider)(nil)
 	_ provider.PlaylistSaver            = (*Provider)(nil)
-	_ provider.PlaylistUpdater          = (*Provider)(nil)
 	_ provider.PlaylistDeleter          = (*Provider)(nil)
 	_ provider.PlaylistRenamer          = (*Provider)(nil)
 	_ provider.Searcher                 = (*Provider)(nil)
@@ -905,9 +904,8 @@ func (p *Provider) SavePlaylist(name string, tracks []playlist.Track) error {
 // explicit [[track]] entries in document order and may change the slice.
 // It gets no tracks from directory sources, because the save drops them and
 // a directory scan must not hold the lock. The save keeps the [[dir]]
-// sections. When fn returns provider.ErrPlaylistUnchanged, nothing is saved
+// sections. When fn returns playlist.ErrPlaylistUnchanged, nothing is saved
 // and the result is nil.
-// Implements provider.PlaylistUpdater.
 func (p *Provider) UpdatePlaylist(name string, fn func([]playlist.Track) ([]playlist.Track, error)) error {
 	if err := writable(name); err != nil {
 		return err
@@ -922,7 +920,7 @@ func (p *Provider) UpdatePlaylist(name string, fn func([]playlist.Track) ([]play
 		return err
 	}
 	tracks, err := fn(doc.tracks)
-	if errors.Is(err, provider.ErrPlaylistUnchanged) {
+	if errors.Is(err, playlist.ErrPlaylistUnchanged) {
 		return nil
 	}
 	if err != nil {

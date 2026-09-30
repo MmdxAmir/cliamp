@@ -8,7 +8,6 @@ import (
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -24,7 +23,7 @@ type backfillTestProvider struct {
 func (p *backfillTestProvider) UpdatePlaylist(_ string, fn func([]playlist.Track) ([]playlist.Track, error)) error {
 	p.updates++
 	tracks, err := fn(cloneTracks(p.tracks))
-	if errors.Is(err, provider.ErrPlaylistUnchanged) {
+	if errors.Is(err, playlist.ErrPlaylistUnchanged) {
 		return nil
 	}
 	if err != nil {

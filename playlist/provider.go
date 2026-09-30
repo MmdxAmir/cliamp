@@ -11,6 +11,10 @@ var ErrNeedsAuth = errors.New("sign-in required")
 // into one coherent result. Reopening the list starts a clean load.
 var ErrListChanged = errors.New("list changed while loading")
 
+// ErrPlaylistUnchanged is returned by the fn of an UpdatePlaylist call when fn
+// made no change. UpdatePlaylist then saves nothing and returns nil.
+var ErrPlaylistUnchanged = errors.New("playlist unchanged")
+
 // PlaylistInfo describes a playlist with its name and track count.
 //
 // DurationSecs is optional: providers that can compute it cheaply should

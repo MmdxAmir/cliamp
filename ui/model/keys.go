@@ -2529,7 +2529,7 @@ func (m *Model) plMgrToggleMarkAll() {
 // locked update, so a change that another writer made after the manager
 // loaded the playlist is kept.
 func (m *Model) plMgrUpdateTracks(status string, fn func([]playlist.Track) ([]playlist.Track, error)) bool {
-	updater, ok := m.localProvider.(provider.PlaylistUpdater)
+	updater, ok := m.localProvider.(playlistUpdater)
 	if !ok {
 		m.status.Warning("Playlist saving is not supported", statusTTLDefault)
 		return false
@@ -2752,7 +2752,7 @@ func (m *Model) persistLoadedPlaylistOrder() {
 	if name == "" {
 		return
 	}
-	updater, ok := m.localProvider.(provider.PlaylistUpdater)
+	updater, ok := m.localProvider.(playlistUpdater)
 	if !ok {
 		return
 	}

@@ -10,7 +10,6 @@ import (
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/provider"
 )
 
 func TestUpdatePlaylist(t *testing.T) {
@@ -37,7 +36,7 @@ func TestUpdatePlaylist(t *testing.T) {
 			name: "fn reports no change",
 			list: "Mix",
 			fn: func([]playlist.Track) ([]playlist.Track, error) {
-				return nil, provider.ErrPlaylistUnchanged
+				return nil, playlist.ErrPlaylistUnchanged
 			},
 			wantPaths: []string{"/a.mp3", "/b.mp3"},
 			wantSame:  true,

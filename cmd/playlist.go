@@ -19,7 +19,6 @@ import (
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/sshurl"
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/resolve"
 )
 
@@ -379,7 +378,7 @@ func PlaylistDedupe(name string) error {
 			kept = append(kept, t)
 		}
 		if len(removed) == 0 {
-			return nil, provider.ErrPlaylistUnchanged
+			return nil, playlist.ErrPlaylistUnchanged
 		}
 		return kept, nil
 	})

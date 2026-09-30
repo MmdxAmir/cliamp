@@ -42,7 +42,7 @@ func (p *playlistManagerTestProvider) SavePlaylist(name string, tracks []playlis
 
 func (p *playlistManagerTestProvider) UpdatePlaylist(name string, fn func([]playlist.Track) ([]playlist.Track, error)) error {
 	tracks, err := fn(append([]playlist.Track(nil), p.saved...))
-	if errors.Is(err, provider.ErrPlaylistUnchanged) {
+	if errors.Is(err, playlist.ErrPlaylistUnchanged) {
 		return nil
 	}
 	if err != nil {

@@ -346,7 +346,7 @@ func (m *Model) removeSelectedFromPlaylist() {
 	var saved []playlist.Track
 	persisted := false
 	if loaded != "" {
-		if updater, ok := m.localProvider.(provider.PlaylistUpdater); ok {
+		if updater, ok := m.localProvider.(playlistUpdater); ok {
 			err := updater.UpdatePlaylist(loaded, func(tracks []playlist.Track) ([]playlist.Track, error) {
 				// Another writer or a new file in a directory source can
 				// have shifted indexes since the queue was loaded. Match the
@@ -509,6 +509,15 @@ func (m *Model) hasSourceResolver(path string) bool {
 	return ok && r.HasSourceResolver(path)
 }
 
+// playlistUpdater is a provider that can change a saved playlist in one
+// read-modify-write that no other writer interleaves with, as the local
+// provider does. UpdatePlaylist passes the current tracks of the playlist to
+// fn and saves the tracks that fn returns. fn runs while other writers wait,
+// so keep slow work, such as network calls, out of it.
+type playlistUpdater interface {
+	UpdatePlaylist(name string, fn func([]playlist.Track) ([]playlist.Track, error)) error
+}
+
 // backfillLoadedPlaylistDuration records the decoded duration of a local
 // track that has none. It sets the duration in the queue at once. The
 // returned command writes it to the loaded playlist file through one locked
@@ -524,7 +533,7 @@ func (m *Model) backfillLoadedPlaylistDuration(track playlist.Track) tea.Cmd {
 	if dur <= 0 {
 		return nil
 	}
-	updater, ok := m.localProvider.(provider.PlaylistUpdater)
+	updater, ok := m.localProvider.(playlistUpdater)
 	if !ok {
 		return nil
 	}
@@ -546,7 +555,7 @@ func (m *Model) backfillLoadedPlaylistDuration(track playlist.Track) tea.Cmd {
 				tracks[i].DurationSecs = dur
 				return tracks, nil
 			}
-			return nil, provider.ErrPlaylistUnchanged
+			return nil, playlist.ErrPlaylistUnchanged
 		})
 		return nil
 	}
