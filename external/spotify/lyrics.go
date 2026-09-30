@@ -18,9 +18,9 @@ import (
 // maxLyricsBody limits color-lyrics responses to 2 MB.
 const maxLyricsBody = 2 << 20
 
-// TrackIDFromPath extracts the Spotify track ID from a track path of the
+// trackIDFromPath extracts the Spotify track ID from a track path of the
 // form "spotify:track:<id>". It returns "" for anything else.
-func TrackIDFromPath(path string) string {
+func trackIDFromPath(path string) string {
 	id, ok := strings.CutPrefix(path, trackURIPrefix)
 	if !ok {
 		return ""
@@ -31,8 +31,13 @@ func TrackIDFromPath(path string) string {
 // TrackLyrics fetches synced lyrics for a Spotify track using Spotify's
 // internal color-lyrics endpoint (the one powering the web player's lyrics
 // view). This endpoint is undocumented and may change without notice; callers
-// must treat failures as a signal to fall back to other lyric sources.
-func (p *SpotifyProvider) TrackLyrics(ctx context.Context, trackID string) ([]lyrics.Line, error) {
+// must treat failures as a signal to fall back to other lyric sources. A
+// track that is not a Spotify track returns lyrics.ErrNotFound at once.
+func (p *SpotifyProvider) TrackLyrics(ctx context.Context, track playlist.Track) ([]lyrics.Line, error) {
+	trackID := trackIDFromPath(track.Path)
+	if trackID == "" {
+		return nil, lyrics.ErrNotFound
+	}
 	p.mu.Lock()
 	sess := p.session
 	p.mu.Unlock()

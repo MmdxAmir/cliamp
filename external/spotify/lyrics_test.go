@@ -13,6 +13,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/bjarneo/cliamp/lyrics"
+	"github.com/bjarneo/cliamp/playlist"
 )
 
 func TestTrackIDFromPath(t *testing.T) {
@@ -30,8 +31,8 @@ func TestTrackIDFromPath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := TrackIDFromPath(tt.path); got != tt.want {
-				t.Errorf("TrackIDFromPath(%q) = %q, want %q", tt.path, got, tt.want)
+			if got := trackIDFromPath(tt.path); got != tt.want {
+				t.Errorf("trackIDFromPath(%q) = %q, want %q", tt.path, got, tt.want)
 			}
 		})
 	}
@@ -130,7 +131,7 @@ func TestProviderTrackLyrics(t *testing.T) {
 
 	t.Run("fetches synced lyrics", func(t *testing.T) {
 		prov, requests := lyricsSpotify(t, http.StatusOK, body)
-		lines, err := prov.TrackLyrics(context.Background(), "trk1")
+		lines, err := prov.TrackLyrics(context.Background(), playlist.Track{Path: "spotify:track:trk1"})
 		if err != nil {
 			t.Fatalf("TrackLyrics() err: %v", err)
 		}
@@ -154,21 +155,37 @@ func TestProviderTrackLyrics(t *testing.T) {
 
 	t.Run("maps not found to ErrNotFound", func(t *testing.T) {
 		prov, _ := lyricsSpotify(t, http.StatusNotFound, `{"error":{}}`)
-		if _, err := prov.TrackLyrics(context.Background(), "trk1"); !errors.Is(err, lyrics.ErrNotFound) {
+		if _, err := prov.TrackLyrics(context.Background(), playlist.Track{Path: "spotify:track:trk1"}); !errors.Is(err, lyrics.ErrNotFound) {
 			t.Fatalf("err = %v, want ErrNotFound", err)
 		}
 	})
 
 	t.Run("server error is wrapped", func(t *testing.T) {
 		prov, _ := lyricsSpotify(t, http.StatusInternalServerError, `{}`)
-		if _, err := prov.TrackLyrics(context.Background(), "trk1"); err == nil || errors.Is(err, lyrics.ErrNotFound) {
+		if _, err := prov.TrackLyrics(context.Background(), playlist.Track{Path: "spotify:track:trk1"}); err == nil || errors.Is(err, lyrics.ErrNotFound) {
 			t.Fatalf("err = %v, want non-NotFound error", err)
+		}
+	})
+
+	t.Run("other tracks are not found without a request", func(t *testing.T) {
+		for _, path := range []string{"/music/song.flac", "spotify:episode:ep1", "spotify:track:", "qobuz://track/1"} {
+			prov, requests := lyricsSpotify(t, http.StatusOK, body)
+			if _, err := prov.TrackLyrics(context.Background(), playlist.Track{Path: path}); !errors.Is(err, lyrics.ErrNotFound) {
+				t.Errorf("TrackLyrics(%q) err = %v, want ErrNotFound", path, err)
+			}
+			if len(*requests) != 0 {
+				t.Errorf("TrackLyrics(%q) sent %d requests, want none", path, len(*requests))
+			}
+		}
+		// A provider that is not signed in also answers without an auth error.
+		if _, err := New(nil, "client", 320).TrackLyrics(context.Background(), playlist.Track{Path: "/music/song.flac"}); !errors.Is(err, lyrics.ErrNotFound) {
+			t.Errorf("unsigned TrackLyrics(local) err = %v, want ErrNotFound", err)
 		}
 	})
 
 	t.Run("unsigned provider returns needs auth", func(t *testing.T) {
 		prov := New(nil, "client", 320)
-		_, err := prov.TrackLyrics(context.Background(), "trk1")
+		_, err := prov.TrackLyrics(context.Background(), playlist.Track{Path: "spotify:track:trk1"})
 		if err == nil || !strings.Contains(err.Error(), "not signed in") {
 			t.Fatalf("err = %v, want not-signed-in error", err)
 		}

@@ -9,7 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/external/radio"
-	"github.com/bjarneo/cliamp/external/spotify"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/lyrics"
 	"github.com/bjarneo/cliamp/player"
@@ -266,16 +265,17 @@ func fetchLyricsCmd(artist, title, query string, gen uint64) tea.Cmd {
 	}
 }
 
-func fetchTrackLyricsCmd(track playlist.Track, artist, title, query string, gen uint64, sp spotifyLyricFetcher) tea.Cmd {
+func fetchTrackLyricsCmd(track playlist.Track, artist, title, query string, gen uint64, sources []trackLyricsSource) tea.Cmd {
 	return func() tea.Msg {
 		if lines := lyrics.ParseEmbedded(track.EmbeddedLyrics); len(lines) > 0 {
 			return lyricsLoadedMsg{lines: lines, query: query, gen: gen}
 		}
-		// Spotify tracks: synced lyrics straight from Spotify before the
-		// generic artist/title lookup. Failures fall through silently.
-		if id := spotify.TrackIDFromPath(track.Path); sp != nil && id != "" {
+		// Provider tracks, such as Spotify tracks: synced lyrics straight from
+		// the provider before the generic artist/title lookup. Failures fall
+		// through silently.
+		for _, source := range sources {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			lines, err := sp.TrackLyrics(ctx, id)
+			lines, err := source.TrackLyrics(ctx, track)
 			cancel()
 			if err == nil && len(lines) > 0 {
 				return lyricsLoadedMsg{lines: lines, query: query, gen: gen}

@@ -13,23 +13,23 @@ import (
 	"github.com/bjarneo/cliamp/playlist"
 )
 
-// spotifyLyricFetcher matches providers that can fetch synced lyrics for a
-// track by its Spotify ID (satisfied by *spotify.SpotifyProvider).
-type spotifyLyricFetcher interface {
-	TrackLyrics(ctx context.Context, trackID string) ([]lyrics.Line, error)
+// trackLyricsSource is a provider that has synced lyrics for its own tracks,
+// as the Spotify provider has. It returns lyrics.ErrNotFound at once for a
+// track that is not its own.
+type trackLyricsSource interface {
+	TrackLyrics(ctx context.Context, track playlist.Track) ([]lyrics.Line, error)
 }
 
-// spotifyLyricFetcher returns the configured Spotify provider, or nil when it
-// is not configured or does not implement lyric lookups.
-func (m *Model) spotifyLyricFetcher() spotifyLyricFetcher {
+// trackLyricsSources returns the registered providers that have synced
+// lyrics, in provider order.
+func (m Model) trackLyricsSources() []trackLyricsSource {
+	var sources []trackLyricsSource
 	for _, entry := range m.providers {
-		if entry.Key != "spotify" || entry.Provider == nil {
-			continue
+		if s, ok := entry.Provider.(trackLyricsSource); ok {
+			sources = append(sources, s)
 		}
-		f, _ := entry.Provider.(spotifyLyricFetcher)
-		return f
 	}
-	return nil
+	return sources
 }
 
 // lyricsArtistTitle resolves the best artist and title for a lyrics lookup.

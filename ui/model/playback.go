@@ -642,7 +642,7 @@ func (m *Model) beginPlaybackTrack(track playlist.Track) (playlist.Track, tea.Cm
 }
 
 func (m *Model) fetchLyricsForTrack(track playlist.Track, artist, title string) tea.Cmd {
-	return fetchTrackLyricsCmd(track, artist, title, m.lyrics.query, nextRequest(&m.requests.lyrics), m.spotifyLyricFetcher())
+	return fetchTrackLyricsCmd(track, artist, title, m.lyrics.query, nextRequest(&m.requests.lyrics), m.trackLyricsSources())
 }
 
 // togglePlayPause starts playback if stopped, or toggles pause if playing.
