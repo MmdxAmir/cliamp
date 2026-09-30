@@ -53,7 +53,7 @@ func (d *luaModeDriver) Render(v *Visualizer) string {
 		d.initialized = true
 		v.luaHost.InitVis(name, v.Rows, v.columns())
 	}
-	return v.luaHost.RenderVis(name, luaBands(v.bands), v.Rows, v.columns(), v.frame)
+	return v.luaHost.RenderVis(name, luaBands(v.SmoothedBands()), v.Rows, v.columns(), v.frame)
 }
 
 func (d *luaModeDriver) Tick(v *Visualizer, ctx VisTickContext) {

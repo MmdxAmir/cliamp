@@ -118,3 +118,24 @@ func TestLuaModeWithoutHost(t *testing.T) {
 	v.SetMode(VisBars)
 	v.Render()
 }
+
+// A Lua mode gets the smoothed bands that the built-in spectrum modes draw,
+// not the raw analysis.
+func TestLuaModeGetsSmoothedBands(t *testing.T) {
+	host := &fakeLuaHost{}
+	v := newLuaTestVisualizer(t, host)
+	v.SetMode(VisCount)
+	for i := range v.bands {
+		v.bands[i] = 1
+	}
+	v.smoothedBands = make([]float64, len(v.bands))
+	for i := range v.smoothedBands {
+		v.smoothedBands[i] = 0.5
+	}
+	v.Render()
+	for i, got := range host.bands {
+		if got != 0.5 {
+			t.Fatalf("band %d = %v, want the smoothed 0.5", i, got)
+		}
+	}
+}
