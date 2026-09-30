@@ -681,9 +681,10 @@ func (m *Model) applyResume() tea.Cmd {
 		return nil
 	}
 	target := m.clampPosition(time.Duration(m.resume.secs) * time.Second)
-	// A seekable decoder already started at the hint. A second seek would
-	// restart a local ffmpeg decoder in Update, so spend the hint here.
-	if (m.player.Position() - target).Abs() <= time.Second {
+	// A seekable decoder already started at the hint and can play on past it
+	// before this runs. A second seek would restart a local ffmpeg decoder in
+	// Update, so spend the hint here.
+	if m.player.Position() >= target-time.Second {
 		m.clearResume(track)
 		return nil
 	}

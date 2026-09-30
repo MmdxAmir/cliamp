@@ -151,16 +151,20 @@ func TestPlayTrackResumeSeeksOnlyWhenStartMissedHint(t *testing.T) {
 	tests := []struct {
 		name           string
 		track          playlist.Track
-		ytdl           bool // the player starts the page at 0 and seeks by restart
-		startMissed    bool // the start seek failed, so the file plays from 0
+		ytdl           bool          // the player starts the page at 0 and seeks by restart
+		startMissed    bool          // the start seek failed, so the file plays from 0
+		lag            time.Duration // how far the track plays on before Update takes the start
 		wantAsync      bool
 		wantSeeks      []time.Duration // Seek calls in Update
 		wantResumeSeek bool
 	}{
 		// ffmpeg already starts at the hint, and a second seek would start
 		// a new ffmpeg in Update.
-		{name: "local ffmpeg file", track: playlist.Track{Title: "Book", Path: "/books/book.m4b"}, wantAsync: true},
-		{name: "yt-dlp page", track: playlist.Track{Title: "Show", Path: "https://www.mixcloud.com/creator/show/", Stream: true}, ytdl: true, wantAsync: true, wantResumeSeek: true},
+		{name: "local ffmpeg file", track: playlist.Track{Title: "Book", Path: "/books/book.m4b"}, lag: 200 * time.Millisecond, wantAsync: true},
+		// The decoder plays on past the hint while the start message
+		// waits, and that is no reason to seek back.
+		{name: "local ffmpeg file, late start message", track: playlist.Track{Title: "Book", Path: "/books/book.m4b"}, lag: 2 * time.Second, wantAsync: true},
+		{name: "yt-dlp page", track: playlist.Track{Title: "Show", Path: "https://www.mixcloud.com/creator/show/", Stream: true}, ytdl: true, lag: 200 * time.Millisecond, wantAsync: true, wantResumeSeek: true},
 		{name: "native local file", track: playlist.Track{Title: "Song", Path: "/music/song.mp3"}},
 		{name: "native local file, start seek failed", track: playlist.Track{Title: "Song", Path: "/music/song.mp3"}, startMissed: true, wantSeeks: []time.Duration{10 * time.Minute}},
 	}
@@ -174,7 +178,7 @@ func TestPlayTrackResumeSeeksOnlyWhenStartMissedHint(t *testing.T) {
 			if tt.wantAsync {
 				msg := streamPlayedFrom(t, cmd)
 				// The track plays on while the start message waits.
-				player.position += 200 * time.Millisecond
+				player.position += tt.lag
 				updated, next := m.Update(msg)
 				m = updated.(Model)
 				cmd = next
