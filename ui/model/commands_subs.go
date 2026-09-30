@@ -220,5 +220,5 @@ func (m *Model) handleSubsLatestAll(msg subsLatestAllMsg) tea.Cmd {
 	if !m.addLatestSweep(msg) {
 		return nil
 	}
-	return m.rearmPreload()
+	return m.rearmStalePreload()
 }

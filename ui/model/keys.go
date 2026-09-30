@@ -605,7 +605,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 				m.playlist.Queue(m.plCursor)
 			}
 			m.normalizeQueueOverlay()
-			return m.rearmPreload()
+			return m.rearmStalePreload()
 		}
 
 	case "w":

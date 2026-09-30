@@ -264,7 +264,7 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 				m.playlist.Queue(idx)
 			}
 			m.normalizeQueueOverlay()
-			return m.rearmPreload()
+			return m.rearmStalePreload()
 		}
 
 	case tea.KeyUp:

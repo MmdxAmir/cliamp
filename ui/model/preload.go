@@ -22,13 +22,16 @@ const streamPreloadLeadTime = 3 * time.Second
 // takes 3-10 seconds, so we start preloading much earlier.
 const ytdlPreloadLeadTime = 15 * time.Second
 
-// rearmPreload discards any armed gapless pipeline and re-arms from the
-// current playlist state. Call after any change that alters which track
-// plays next.
-func (m *Model) rearmPreload() tea.Cmd {
-	nextRequest(&m.requests.preload)
-	m.preloading = false
-	m.player.ClearPreload()
+// rearmStalePreload drops a preload that no longer holds the next track and
+// arms the next track at once. A preload that still holds it stays, so an
+// edit below the next track opens no new stream. Nothing is armed while
+// playback is stopped, a track still buffers or a paged load runs. Call it
+// after any change that can alter which track plays next.
+func (m *Model) rearmStalePreload() tea.Cmd {
+	m.dropStalePreload()
+	if !m.player.IsPlaying() || m.buffering || m.tracksPaging || m.preloading || m.player.HasPreload() {
+		return nil
+	}
 	return m.preloadNext()
 }
 
@@ -45,7 +48,7 @@ func (m *Model) rearmPreload() tea.Cmd {
 // and the tick loop will retry on the next pass.
 func (m *Model) preloadNext() tea.Cmd {
 	next, ok := m.preloadTarget()
-	if !ok || next.Path == m.preloadFailed {
+	if !ok || next.Path == m.preloadFailed || (m.preloading && m.preloadFor == next.Path) {
 		return nil
 	}
 	isYTDL := playlist.IsYTDL(next.Path)

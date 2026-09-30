@@ -284,7 +284,7 @@ func (m *Model) queueAlbumNext(album playlist.Track, tracks []playlist.Track) te
 	if !m.player.IsPlaying() {
 		return m.nextTrack()
 	}
-	return m.rearmPreload()
+	return m.rearmStalePreload()
 }
 
 // closeNetSearch fully resets the net search overlay and restores focus,
@@ -335,7 +335,7 @@ func (m *Model) queueTrackNext(track playlist.Track) tea.Cmd {
 	if !m.player.IsPlaying() {
 		return m.nextTrack()
 	}
-	return m.rearmPreload()
+	return m.rearmStalePreload()
 }
 
 // recordPlaylistUndo lets Ctrl+Z undo the queue edit that just ran. The undo
@@ -387,7 +387,7 @@ func (m *Model) undoPlaylistMutation() tea.Cmd {
 	}
 	m.adjustScroll()
 	m.status.Show("Restored previous playlist state", statusTTLDefault)
-	return m.rearmPreload()
+	return m.rearmStalePreload()
 }
 
 // playTrack plays a track, using async starts for streams and local ffmpeg

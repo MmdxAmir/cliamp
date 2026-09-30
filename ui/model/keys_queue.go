@@ -63,7 +63,7 @@ func (m *Model) handleQueueKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.normalizeQueueOverlay()
 		if moved {
-			return m.rearmPreload()
+			return m.rearmStalePreload()
 		}
 	case "shift+down":
 		moved := false
@@ -75,7 +75,7 @@ func (m *Model) handleQueueKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.normalizeQueueOverlay()
 		if moved {
-			return m.rearmPreload()
+			return m.rearmStalePreload()
 		}
 	case "d":
 		removed := false
@@ -88,7 +88,7 @@ func (m *Model) handleQueueKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.normalizeQueueOverlay()
 		if removed {
-			return m.rearmPreload()
+			return m.rearmStalePreload()
 		}
 	case "c":
 		cleared := false
@@ -102,7 +102,7 @@ func (m *Model) handleQueueKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.queue.visible = false
 		if cleared {
-			return m.rearmPreload()
+			return m.rearmStalePreload()
 		}
 	case "esc", "A":
 		m.queue.visible = false

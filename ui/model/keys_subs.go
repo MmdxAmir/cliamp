@@ -219,7 +219,7 @@ func (m *Model) appendSubscriptionTracks(tracks []playlist.Track, mode subsLoadM
 		return m.playCurrentTrack()
 	}
 	m.normalizeQueueOverlay()
-	return m.rearmPreload()
+	return m.rearmStalePreload()
 }
 
 // selectedProviderShow returns the ID and name of the show highlighted in the

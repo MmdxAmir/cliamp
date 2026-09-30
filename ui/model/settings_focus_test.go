@@ -291,8 +291,9 @@ func TestSettingsFocusActions(t *testing.T) {
 						t.Fatal("global mono toggle was swallowed")
 					}
 				}
-				if modeChanged && (cmd == nil || p.clearPreloadCalls != 1 || !m.preloading) {
-					t.Fatal("mode change did not clear and rearm gapless preload")
+				// Nothing plays, so a mode change arms no gapless preload.
+				if modeChanged && (cmd != nil || m.preloading || len(p.preloadCalls) != 0) {
+					t.Fatal("mode change armed a gapless preload while nothing plays")
 				}
 				if m.plCursor != 2 || len(p.seekCalls) != 0 || m.buffering || m.focus != focus {
 					t.Fatal("focused action moved the playlist, sought, played, or changed focus")

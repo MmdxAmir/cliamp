@@ -143,18 +143,6 @@ func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 	return m.rearmStalePreload(), nil
 }
 
-// rearmStalePreload drops a preload that no longer holds the next track and
-// arms the next track at once. A preload that still holds it stays, so an
-// edit below the next track opens no new stream. Nothing is armed while
-// playback is stopped or a track still buffers.
-func (m *Model) rearmStalePreload() tea.Cmd {
-	m.dropStalePreload()
-	if !m.player.IsPlaying() || m.buffering || m.tracksPaging || m.preloading || m.player.HasPreload() {
-		return nil
-	}
-	return m.preloadNext()
-}
-
 // pathRow names a row of a track list by its path and by the count of
 // earlier rows with that path, so two rows of one path stay apart.
 type pathRow struct {

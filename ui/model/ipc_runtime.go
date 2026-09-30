@@ -319,7 +319,7 @@ func (m *Model) handleV2PlayNext(jobs *ipc.JobStore, jobID string, request ipc.R
 	}
 	m.normalizeQueueOverlay()
 	m.completeV2Job(jobs, jobID, m.v2PlayNextResponse())
-	return nil
+	return m.rearmStalePreload()
 }
 
 func (m *Model) handleV2Theme(jobs *ipc.JobStore, jobID string, request ipc.Request) tea.Cmd {

@@ -577,7 +577,7 @@ func (m *Model) handleNavTrackListKey(msg tea.KeyPressMsg) tea.Cmd {
 			if !m.player.IsPlaying() {
 				return m.nextTrack()
 			}
-			return m.rearmPreload()
+			return m.rearmStalePreload()
 		}
 	case "f":
 		if idx := m.selectedNavRawIndex(len(m.navBrowser.tracks)); idx >= 0 {

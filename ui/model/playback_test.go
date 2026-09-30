@@ -1338,7 +1338,7 @@ func TestGaplessAdvanceRecordsNewTrackEvenWithoutDuration(t *testing.T) {
 }
 
 func TestQueueToggleRearmsGaplessPreload(t *testing.T) {
-	player := &playbackFakeEngine{playing: true}
+	player := &playbackFakeEngine{playing: true, hasPreload: true}
 	p := playlist.New()
 	p.Replace([]playlist.Track{
 		{Title: "Playing", Path: "a.mp3", DurationSecs: 180},
@@ -1346,9 +1346,10 @@ func TestQueueToggleRearmsGaplessPreload(t *testing.T) {
 		{Title: "Queued", Path: "c.mp3", DurationSecs: 180},
 	})
 	m := Model{
-		player:   player,
-		playlist: p,
-		plCursor: 2,
+		player:     player,
+		playlist:   p,
+		plCursor:   2,
+		preloadFor: "b.mp3",
 	}
 
 	cmd := m.handleKey(tea.KeyPressMsg{Text: "a"})

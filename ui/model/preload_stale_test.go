@@ -40,12 +40,32 @@ func armedModel() (Model, *playbackFakeEngine) {
 // Every way of changing the next track drops the armed b.mp3 and arms the
 // new next track at once, with no tick.
 func TestUpdateDropsStalePreload(t *testing.T) {
+	// queueC puts c.mp3 in the play-next list, so c.mp3 is next and armed.
+	queueC := func(m *Model, _ *playbackFakeEngine) {
+		m.playlist.Queue(2)
+		m.preloadFor = "c.mp3"
+	}
 	for _, tc := range []struct {
 		name     string
 		cursor   int
+		setup    func(m *Model, player *playbackFakeEngine)
 		msg      tea.Msg
 		wantNext string
 	}{
+		{name: "IPC playnext.remove", setup: queueC, msg: v2Request(t, "playnext.remove", ipc.Request{Index: 0}), wantNext: "b.mp3"},
+		{name: "IPC playnext.clear", setup: queueC, msg: v2Request(t, "playnext.clear", ipc.Request{}), wantNext: "b.mp3"},
+		{name: "IPC playnext.move", setup: func(m *Model, player *playbackFakeEngine) {
+			queueC(m, player)
+			m.playlist.Queue(1)
+		}, msg: v2Request(t, "playnext.move", ipc.Request{Index: 0, To: 1}), wantNext: "b.mp3"},
+		{name: "IPC playnext.remove while paused", setup: func(m *Model, player *playbackFakeEngine) {
+			queueC(m, player)
+			player.paused = true
+		}, msg: v2Request(t, "playnext.remove", ipc.Request{Index: 0}), wantNext: "b.mp3"},
+		{name: "queue overlay remove", setup: func(m *Model, player *playbackFakeEngine) {
+			queueC(m, player)
+			m.queue.visible = true
+		}, msg: tea.KeyPressMsg{Text: "d", Code: 'd'}, wantNext: "b.mp3"},
 		{name: "IPC repeat one", msg: v2Request(t, "repeat", ipc.Request{Name: "one"}), wantNext: "a.mp3"},
 		{name: "IPC enqueue a later track", msg: v2Request(t, "queue.enqueue", ipc.Request{Index: 2}), wantNext: "c.mp3"},
 		{name: "plugin swap next away", msg: PluginQueueMsg{Op: "move", Index: 1, To: 2}, wantNext: "c.mp3"},
@@ -56,16 +76,58 @@ func TestUpdateDropsStalePreload(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m, player := armedModel()
 			m.plCursor = tc.cursor
+			if tc.setup != nil {
+				tc.setup(&m, player)
+			}
+			armed := m.preloadFor
 
 			next, _ := m.Update(tc.msg)
 			m = next.(Model)
-			if player.clearPreloadCalls == 0 || (m.preloadFor == "b.mp3" && (m.preloading || player.hasPreload)) {
-				t.Fatalf("b.mp3 still armed after the next track changed (ClearPreload %d)", player.clearPreloadCalls)
+			if player.clearPreloadCalls == 0 || (m.preloadFor == armed && (m.preloading || player.hasPreload)) {
+				t.Fatalf("%s still armed after the next track changed (ClearPreload %d)", armed, player.clearPreloadCalls)
 			}
 			if !m.preloading || m.preloadFor != tc.wantNext {
 				t.Fatalf("preloading %v for %q, want %s in flight at once", m.preloading, m.preloadFor, tc.wantNext)
 			}
 		})
+	}
+}
+
+// While a track buffers, the engine still holds the old pipeline. A change
+// of the next track then arms nothing, and the start of the track arms the
+// new next track.
+func TestRearmWaitsWhileBuffering(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		msg  tea.Msg
+	}{
+		{name: "shuffle key", msg: tea.KeyPressMsg{Text: "z", Code: 'z'}},
+		{name: "repeat key", msg: tea.KeyPressMsg{Text: "r", Code: 'r'}},
+		{name: "queue key", msg: tea.KeyPressMsg{Text: "a", Code: 'a'}},
+		{name: "IPC shuffle", msg: v2Request(t, "shuffle", ipc.Request{Name: "on"})},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, player := armedModel()
+			m.plCursor = 2
+			player.hasPreload, m.preloadFor = false, ""
+			m.buffering = true
+
+			next, _ := m.Update(tc.msg)
+			m = next.(Model)
+			if m.preloading || len(player.preloadCalls) != 0 {
+				t.Fatalf("preloading %v for %q, calls %v, want no preload while the track buffers", m.preloading, m.preloadFor, player.preloadCalls)
+			}
+		})
+	}
+}
+
+// A preload that still loads for the next track is not started again.
+func TestPreloadNextKeepsAnInFlightPreload(t *testing.T) {
+	m, player := armedModel()
+	player.hasPreload, m.preloading = false, true
+	gen := m.requests.preload
+	if cmd := m.preloadNext(); cmd != nil || m.requests.preload != gen {
+		t.Fatal("preloadNext started a second preload of b.mp3")
 	}
 }
 
@@ -184,8 +246,9 @@ func TestV2ModeChangeRearmsPreloadAndReportsSaveError(t *testing.T) {
 			if response := runV2(t, &m, tc.op, ipc.Request{Name: tc.name}); !response.OK {
 				t.Fatalf("response = %+v", response)
 			}
+			// Shuffle can keep b.mp3 next, and then its preload stays.
 			next, ok := m.playlist.PeekNext()
-			if !ok || player.clearPreloadCalls == 0 || !m.preloading || m.preloadFor != next.Path {
+			if !ok || m.preloadFor != next.Path || !m.preloading && !player.hasPreload {
 				t.Fatalf("preloading %v for %q after ClearPreload %d, want %q armed at once", m.preloading, m.preloadFor, player.clearPreloadCalls, next.Path)
 			}
 			if !strings.Contains(m.status.text, "Config save failed: disk full") {
@@ -221,7 +284,6 @@ type verbState struct {
 	// preload is true when an armed or loading preload holds the track
 	// that plays next. Shuffle picks that track at random.
 	preload     bool
-	clears      int
 	notified    bool
 	scrobbled   string
 	pluginState bool
@@ -266,12 +328,12 @@ func TestVerbEntryPointsReachTheSameState(t *testing.T) {
 		{name: "setShuffle", entries: map[string]tea.Msg{
 			"key": key("z"), "V2": v2("shuffle", ipc.Request{Name: "on"}), "V2 toggle": v2("shuffle", ipc.Request{}),
 		}, done: func(s verbState) bool {
-			return s.shuffle && s.saved == "map[shuffle:true]" && s.clears == 1 && s.preload
+			return s.shuffle && s.saved == "map[shuffle:true]" && s.preload
 		}},
 		{name: "setRepeat", entries: map[string]tea.Msg{
 			"key": key("r"), "V2": v2("repeat", ipc.Request{Name: "all"}), "V2 cycle": v2("repeat", ipc.Request{}),
 		}, done: func(s verbState) bool {
-			return s.repeat == playlist.RepeatAll && s.saved == `map[repeat:"All"]` && s.clears == 1 && s.preload
+			return s.repeat == playlist.RepeatAll && s.saved == `map[repeat:"All"]` && s.preload
 		}},
 		{name: "cycleVisualizer", entries: map[string]tea.Msg{
 			"key": key("v"), "full-screen key": fullVis("v"), "V2": v2("vis", ipc.Request{Name: "next"}),
@@ -357,7 +419,6 @@ func runVerbEntry(t *testing.T, msg tea.Msg, skips, notifies bool) verbState {
 		repeat:   m.playlist.Repeat(),
 		vis:      m.vis.ModeName(),
 		saved:    fmt.Sprint(saver.saved),
-		clears:   engine.clearPreloadCalls,
 		notified: len(notifier.updates) > 0,
 	}
 	if next, ok := m.preloadTarget(); ok && (m.preloading || engine.hasPreload) {

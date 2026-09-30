@@ -40,7 +40,7 @@ func (m *Model) setShuffle(on bool) tea.Cmd {
 	}
 	m.adjustScroll()
 	_ = m.saveConfigBool("shuffle", m.playlist.Shuffled())
-	return m.rearmPreload()
+	return m.rearmStalePreload()
 }
 
 // setRepeat sets the repeat mode, saves it and re-arms the preload for the
@@ -48,7 +48,7 @@ func (m *Model) setShuffle(on bool) tea.Cmd {
 func (m *Model) setRepeat(mode playlist.RepeatMode) tea.Cmd {
 	m.playlist.SetRepeat(mode)
 	_ = m.saveConfigString("repeat", m.playlist.Repeat().String())
-	return m.rearmPreload()
+	return m.rearmStalePreload()
 }
 
 // cycleVisualizer switches to the next visualizer mode, fits the layout to
