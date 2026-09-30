@@ -221,8 +221,17 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
+	key := msg.String()
+	if (key == "up" || key == "k") && m.fileBrowser.filter != "" && m.fileBrowser.cursor == 0 {
+		m.fileBrowser.filtering = true
+		return nil
+	}
+	if visible := m.fbVisible(); stepListCursor(key, &m.fileBrowser.cursor, m.fbCount(), visible) {
+		m.fbMaybeAdjustScroll(visible)
+		return nil
+	}
 	var cd string
-	switch msg.String() {
+	switch key {
 	case "esc", "o", "q":
 		m.fileBrowser.visible = false
 		m.fileBrowser.clearFilter()
@@ -240,43 +249,6 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.fileBrowser.beginFilter()
 		m.fbUpdateFilter()
 		return nil
-
-	case "up", "k":
-		if m.fileBrowser.filter != "" && m.fileBrowser.cursor == 0 {
-			m.fileBrowser.filtering = true
-			return nil
-		}
-		count := m.fbCount()
-		if m.fileBrowser.cursor > 0 {
-			m.fileBrowser.cursor--
-		} else if count > 0 {
-			m.fileBrowser.cursor = count - 1
-		}
-		m.fbMaybeAdjustScroll(m.fbVisible())
-
-	case "down", "j":
-		count := m.fbCount()
-		if m.fileBrowser.cursor < count-1 {
-			m.fileBrowser.cursor++
-		} else if count > 0 {
-			m.fileBrowser.cursor = 0
-		}
-		m.fbMaybeAdjustScroll(m.fbVisible())
-
-	case "pgup", "ctrl+u":
-		if m.fileBrowser.cursor > 0 {
-			visible := m.fbVisible()
-			m.fileBrowser.cursor -= min(m.fileBrowser.cursor, visible)
-			m.fbMaybeAdjustScroll(visible)
-		}
-
-	case "pgdown", "ctrl+d":
-		count := m.fbCount()
-		if m.fileBrowser.cursor < count-1 {
-			visible := m.fbVisible()
-			m.fileBrowser.cursor = min(count-1, m.fileBrowser.cursor+visible)
-			m.fbMaybeAdjustScroll(visible)
-		}
 
 	case "right", "l":
 		return m.fbDescend()
@@ -355,17 +327,6 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyPressMsg) tea.Cmd {
 				}
 			}
 		}
-
-	case "home", "g":
-		m.fileBrowser.cursor = 0
-		m.fbMaybeAdjustScroll(m.fbVisible())
-
-	case "end", "G":
-		count := m.fbCount()
-		if count > 0 {
-			m.fileBrowser.cursor = count - 1
-		}
-		m.fbMaybeAdjustScroll(m.fbVisible())
 
 	case "R":
 		if len(m.fileBrowser.selected) > 0 && m.fileBrowser.targetPlaylist == "" {

@@ -168,7 +168,7 @@ func handlerCalls(fd *ast.FuncDecl) []string {
 
 // keyHelpers take keys on behalf of the handler that calls them, in the mode
 // of that handler. Their keys count as keys of the caller.
-var keyHelpers = []string{"filterKey"}
+var keyHelpers = []string{"filterKey", "stepListCursor"}
 
 // helperCalls returns the names of the keyHelpers that fd calls, as methods
 // on m or as plain functions.
@@ -284,6 +284,9 @@ func (m *Model) handleProbeKey(msg tea.KeyPressMsg) tea.Cmd {
 	if msg.Code == tea.KeySpace || m.name == "not a key" {
 		m.editText("field", &m.name, msg)
 	}
+	if stepListCursor(key, &m.cursor, 3, 1) || m.filterKey(&m.list, "field", msg, 3, nil) {
+		return nil
+	}
 	return nil
 }
 func shortcut(key string) string {
@@ -303,6 +306,9 @@ func shortcut(key string) string {
 	}
 	if got, want := handlerCalls(probe), []string{"handleOtherKey"}; !slices.Equal(got, want) {
 		t.Errorf("handlerCalls = %q, want %q", got, want)
+	}
+	if got, want := helperCalls(probe), []string{"stepListCursor", "filterKey"}; !slices.Equal(got, want) {
+		t.Errorf("helperCalls = %q, want %q", got, want)
 	}
 	if got, want := handlerKeys(t, file.Decls[1].(*ast.FuncDecl)), []string{"S"}; !slices.Equal(got, want) {
 		t.Errorf("handlerKeys(shortcut) = %q, want %q", got, want)

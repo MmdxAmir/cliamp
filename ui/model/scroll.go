@@ -25,6 +25,41 @@ func clampScroll(cursor, scroll *int, count, visible int) {
 	}
 }
 
+// stepListCursor moves cursor for the list navigation keys: up and down
+// wrap, page up and page down move by page rows, and home and end jump to the
+// ends. count is the row count. It returns false for any other key.
+func stepListCursor(key string, cursor *int, count, page int) bool {
+	switch key {
+	case "up", "k":
+		if *cursor > 0 {
+			*cursor--
+		} else if count > 0 {
+			*cursor = count - 1
+		}
+	case "down", "j":
+		if *cursor < count-1 {
+			*cursor++
+		} else if count > 0 {
+			*cursor = 0
+		}
+	case "pgup", "ctrl+u":
+		*cursor -= min(max(0, *cursor), page)
+	case "pgdown", "ctrl+d":
+		if *cursor < count-1 {
+			*cursor = min(count-1, *cursor+page)
+		}
+	case "home", "g":
+		*cursor = 0
+	case "end", "G":
+		if count > 0 {
+			*cursor = count - 1
+		}
+	default:
+		return false
+	}
+	return true
+}
+
 // applyHeightMode sets plVisible based on the current heightExpanded state.
 func (m *Model) applyHeightMode() {
 	m.recomputeLayout()

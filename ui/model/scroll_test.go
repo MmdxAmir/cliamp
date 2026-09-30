@@ -178,3 +178,41 @@ func fullSpanPlaylistScroll(m Model, tracks []playlist.Track, visible int) int {
 	}
 	return scroll
 }
+
+func TestStepListCursor(t *testing.T) {
+	tests := []struct {
+		key         string
+		cursor      int
+		count, page int
+		want        int
+		wantHandled bool
+	}{
+		{key: "up", cursor: 2, count: 5, page: 3, want: 1, wantHandled: true},
+		{key: "k", cursor: 0, count: 5, page: 3, want: 4, wantHandled: true},
+		{key: "up", cursor: 0, count: 0, page: 3, want: 0, wantHandled: true},
+		{key: "down", cursor: 2, count: 5, page: 3, want: 3, wantHandled: true},
+		{key: "j", cursor: 4, count: 5, page: 3, want: 0, wantHandled: true},
+		{key: "down", cursor: 0, count: 0, page: 3, want: 0, wantHandled: true},
+		{key: "pgup", cursor: 4, count: 5, page: 3, want: 1, wantHandled: true},
+		{key: "ctrl+u", cursor: 2, count: 5, page: 3, want: 0, wantHandled: true},
+		{key: "pgup", cursor: 0, count: 5, page: 3, want: 0, wantHandled: true},
+		{key: "pgdown", cursor: 0, count: 5, page: 3, want: 3, wantHandled: true},
+		{key: "ctrl+d", cursor: 3, count: 5, page: 3, want: 4, wantHandled: true},
+		{key: "pgdown", cursor: 4, count: 5, page: 3, want: 4, wantHandled: true},
+		{key: "pgdown", cursor: 0, count: 0, page: 3, want: 0, wantHandled: true},
+		{key: "home", cursor: 3, count: 5, page: 3, want: 0, wantHandled: true},
+		{key: "g", cursor: 3, count: 5, page: 3, want: 0, wantHandled: true},
+		{key: "end", cursor: 1, count: 5, page: 3, want: 4, wantHandled: true},
+		{key: "G", cursor: 1, count: 0, page: 3, want: 1, wantHandled: true},
+		{key: "enter", cursor: 1, count: 5, page: 3, want: 1},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s from %d of %d", tt.key, tt.cursor, tt.count), func(t *testing.T) {
+			cursor := tt.cursor
+			handled := stepListCursor(tt.key, &cursor, tt.count, tt.page)
+			if handled != tt.wantHandled || cursor != tt.want {
+				t.Fatalf("stepListCursor = %t, cursor %d; want %t, cursor %d", handled, cursor, tt.wantHandled, tt.want)
+			}
+		})
+	}
+}

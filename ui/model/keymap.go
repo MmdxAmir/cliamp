@@ -230,7 +230,17 @@ func (m *Model) handleKeymapKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.handleKeymapSearchKey(msg)
 	}
 
-	switch msg.String() {
+	key := msg.String()
+	if (key == "up" || key == "k") && m.keymap.filter != "" && m.keymap.cursor == 0 {
+		m.keymap.filtering = true
+		return nil
+	}
+	visible := m.effectivePlaylistVisible()
+	if stepListCursor(key, &m.keymap.cursor, m.keymapCount(), visible) {
+		m.keymapMaybeAdjustScroll(visible)
+		return nil
+	}
+	switch key {
 	case "esc", "ctrl+k", "?", "q":
 		m.closeKeymap()
 
@@ -239,56 +249,8 @@ func (m *Model) handleKeymapKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.updateKeymapFilter()
 		return nil
 
-	case "up", "k":
-		if m.keymap.filter != "" && m.keymap.cursor == 0 {
-			m.keymap.filtering = true
-			return nil
-		}
-		count := m.keymapCount()
-		if m.keymap.cursor > 0 {
-			m.keymap.cursor--
-		} else if count > 0 {
-			m.keymap.cursor = count - 1
-		}
-		m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
-
-	case "down", "j":
-		count := m.keymapCount()
-		if m.keymap.cursor < count-1 {
-			m.keymap.cursor++
-		} else if count > 0 {
-			m.keymap.cursor = 0
-		}
-		m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
-
 	case "ctrl+x":
 		m.toggleExpandedView()
-		m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
-
-	case "pgup", "ctrl+u":
-		if m.keymap.cursor > 0 {
-			visible := m.effectivePlaylistVisible()
-			m.keymap.cursor -= min(m.keymap.cursor, visible)
-			m.keymapMaybeAdjustScroll(visible)
-		}
-
-	case "pgdown", "ctrl+d":
-		count := m.keymapCount()
-		if m.keymap.cursor < count-1 {
-			visible := m.effectivePlaylistVisible()
-			m.keymap.cursor = min(count-1, m.keymap.cursor+visible)
-			m.keymapMaybeAdjustScroll(visible)
-		}
-
-	case "home", "g":
-		m.keymap.cursor = 0
-		m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
-
-	case "end", "G":
-		count := m.keymapCount()
-		if count > 0 {
-			m.keymap.cursor = count - 1
-		}
 		m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
 
 	case "backspace", "h":
