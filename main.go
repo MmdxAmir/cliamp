@@ -56,6 +56,11 @@ func run(overrides config.Overrides, positional []string, headless, visualizer60
 	} else {
 		applog.Info("cliamp starting (version=%s level=%s)", appmeta.Version(), appliedLevel)
 	}
+	if headless {
+		if err := checkNotRunning(); err != nil {
+			return err
+		}
+	}
 
 	providers := buildProviders(cfg, !headless && isCharDevice(os.Stdin))
 	defer providers.Close()
@@ -212,6 +217,23 @@ func run(overrides config.Overrides, positional []string, headless, visualizer60
 		return err
 	}
 	saveOnExit(finalModel, headless, resumeServer)
+	return nil
+}
+
+// checkNotRunning returns an error when another instance serves the socket.
+// Headless mode calls it before it builds the providers, opens the audio
+// device or loads the plugins. The app.quit hooks of the plugins could
+// otherwise change the files of the running instance. startIPC still
+// catches an instance that starts after the check.
+func checkNotRunning() error {
+	socket := ipc.DefaultSocketPath()
+	running, err := ipc.Listening(socket)
+	if err != nil {
+		return err
+	}
+	if running {
+		return fmt.Errorf("cliamp is already running (socket %s)", socket)
+	}
 	return nil
 }
 

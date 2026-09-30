@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -388,5 +389,53 @@ func TestConfigureModel(t *testing.T) {
 				t.Fatalf("visualizer = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// A second headless instance stops before it builds the providers, opens
+// the audio device or loads the plugins. The app.quit hook of a plugin
+// would otherwise change the files of the running instance.
+func TestHeadlessSecondInstance(t *testing.T) {
+	startTestIPC(t, ipc.RuntimeSnapshot{}, func(*ipc.JobStore, string, ipc.V2Request) {})
+	dir := os.Getenv("CLIAMP_CONFIG_DIR")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, name := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"} {
+		t.Setenv(name, filepath.Join(home, name))
+	}
+	// Keep a regression off the session bus and the sound card.
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+filepath.Join(home, "bus"))
+	if err := os.WriteFile(filepath.Join(home, ".asoundrc"), []byte("pcm.!default { type null }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	marker := filepath.Join(t.TempDir(), "loaded")
+	pluginDir := filepath.Join(dir, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(pluginDir, "marker.lua")
+	src := `plugin.register({name = "marker", type = "hook"})
+cliamp.fs.write(` + strconv.Quote(marker) + `, "loaded")`
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plugintrust.Approve(pluginDir, "marker", path); err != nil {
+		t.Fatal(err)
+	}
+
+	err := run(config.Overrides{}, nil, true, false)
+	if err == nil || !strings.Contains(err.Error(), "cliamp is already running") || !strings.Contains(err.Error(), ipc.DefaultSocketPath()) {
+		t.Fatalf("run error = %v, want the running instance and its socket", err)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("plugin marker: %v, want no plugin loaded", err)
+	}
+	log, err := os.ReadFile(filepath.Join(dir, "cliamp.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(log), "provider registered") {
+		t.Fatalf("cliamp.log = %q, want no provider built", log)
 	}
 }

@@ -544,17 +544,30 @@ func writeJSONLine(conn net.Conn, value any) bool {
 	return true
 }
 
+// Listening reports whether a server accepts connections on sockPath. A
+// missing socket, or one that refuses the connection, is not an error.
+func Listening(sockPath string) (bool, error) {
+	conn, err := dialSocket(sockPath, 200*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		return true, nil
+	}
+	if isSocketUnavailable(err) {
+		return false, nil
+	}
+	return false, fmt.Errorf("ipc: probe socket %s: %w", sockPath, err)
+}
+
 // cleanStaleSocket removes a leftover socket and PID file from a dead process.
 // A connect probe always runs before deleting either path, so a live server is
 // never displaced because its PID file is missing, stale, or malformed.
 func cleanStaleSocket(sockPath string) error {
-	conn, err := dialSocket(sockPath, 200*time.Millisecond)
-	if err == nil {
-		_ = conn.Close()
-		return fmt.Errorf("ipc: cliamp is already running")
+	listening, err := Listening(sockPath)
+	if err != nil {
+		return err
 	}
-	if !isSocketUnavailable(err) {
-		return fmt.Errorf("ipc: probe socket %s: %w", sockPath, err)
+	if listening {
+		return fmt.Errorf("ipc: cliamp is already running")
 	}
 
 	pidPath := sockPath + ".pid"
