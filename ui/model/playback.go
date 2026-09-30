@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/applog"
+	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -350,9 +351,9 @@ func (m *Model) undoPlaylistMutation() tea.Cmd {
 	return m.rearmPreload()
 }
 
-// playTrack plays a track, using async starts for streams and sync I/O for
-// local files. The player picks the pipeline, such as the yt-dlp | ffmpeg
-// chain for a yt-dlp page URL.
+// playTrack plays a track, using async starts for streams and local ffmpeg
+// formats, and sync I/O for other local files. The player picks the
+// pipeline, such as the yt-dlp | ffmpeg chain for a yt-dlp page URL.
 func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 	m.pausedAt = time.Time{}
 	if track.Feed || playlist.IsFeed(track.Path) {
@@ -370,9 +371,10 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 
 	dur := time.Duration(track.DurationSecs) * time.Second
 	// yt-dlp page URLs (YouTube, SoundCloud, Bandcamp, etc.) and custom URIs
-	// such as spotify: open over the network, which can take seconds. Start
-	// them off the Update goroutine like streams.
-	if track.Stream || playlist.IsYTDL(track.Path) || m.isCustomStreamURI(track.Path) {
+	// such as spotify: open over the network, which can take seconds. A
+	// local file that ffmpeg decodes waits for ffprobe and the first audio.
+	// Start them off the Update goroutine like streams.
+	if track.Stream || playlist.IsYTDL(track.Path) || m.isCustomStreamURI(track.Path) || player.UsesLocalFFmpeg(track.Path) {
 		m.buffering = true
 		m.bufferingAt = time.Now()
 		m.err = nil
@@ -450,7 +452,7 @@ type playlistUpdater interface {
 // never stores those tracks.
 func (m *Model) backfillLoadedPlaylistDuration(track playlist.Track) tea.Cmd {
 	name := m.writableLoadedPlaylist()
-	if name == "" || track.DurationSecs > 0 || track.Stream || playlist.IsURL(track.Path) || strings.HasPrefix(track.Path, "ssh://") {
+	if name == "" || track.DurationSecs > 0 || track.Stream || playlist.IsURL(track.Path) || strings.HasPrefix(track.Path, "ssh://") || m.isCustomStreamURI(track.Path) {
 		return nil
 	}
 	dur := int(m.player.Duration().Seconds())

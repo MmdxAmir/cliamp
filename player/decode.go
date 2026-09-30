@@ -294,6 +294,14 @@ func needsFFmpeg(ext string) bool {
 	return false
 }
 
+// UsesLocalFFmpeg reports whether PlayAt decodes the local file at path
+// through ffmpeg. Such a start runs ffprobe and waits up to
+// ffmpegPipeTimeout for the first audio, so a UI caller starts it off its
+// event loop.
+func UsesLocalFFmpeg(path string) bool {
+	return !isURL(path) && !isSSH(path) && needsFFmpeg(formatExt(path))
+}
+
 // isHLS reports whether the extension denotes an HLS playlist that ffmpeg must
 // open by URL (so it can fetch and demux the segments itself).
 func isHLS(ext string) bool { return ext == ".m3u8" }

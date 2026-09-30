@@ -89,7 +89,10 @@ func streamPlayedFrom(t *testing.T, cmd tea.Cmd) streamPlayedMsg {
 	return streamPlayedMsg{}
 }
 
-func TestPlayTrackStartsCustomURIOffUpdate(t *testing.T) {
+// TestPlayTrackStartsSlowSourcesOffUpdate checks that a start that can wait
+// on the network or on ffmpeg runs in a command, and a native local file
+// starts in Update.
+func TestPlayTrackStartsSlowSourcesOffUpdate(t *testing.T) {
 	tests := []struct {
 		name      string
 		path      string
@@ -103,6 +106,9 @@ func TestPlayTrackStartsCustomURIOffUpdate(t *testing.T) {
 		// The player routes a yt-dlp page to the yt-dlp chain inside the
 		// same start as every other source.
 		{name: "yt-dlp page", path: "https://www.youtube.com/watch?v=abc", wantAsync: true},
+		// ffmpeg decodes an m4a file after an ffprobe run, which a slow
+		// mount can stall.
+		{name: "local ffmpeg format", path: "/music/local.m4a", wantAsync: true},
 		{name: "local file", path: "local.mp3", wantAsync: false},
 	}
 	for _, tt := range tests {

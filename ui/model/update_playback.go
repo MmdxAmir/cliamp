@@ -114,7 +114,7 @@ func (m *Model) handleStreamPlayed(msg streamPlayedMsg) tea.Cmd {
 		m.reconnect.attempts = 0
 		return m.nextTrack()
 	}
-	var resumeCmd tea.Cmd
+	var resumeCmd, backfillCmd tea.Cmd
 	if errors.Is(msg.err, playlist.ErrNeedsAuth) {
 		// The provider session went stale, for example after Spotify
 		// rejected the stream keys. Ask for sign-in, not a raw error.
@@ -133,9 +133,12 @@ func (m *Model) handleStreamPlayed(msg streamPlayedMsg) tea.Cmd {
 		m.reconnect.at = time.Time{}
 		resumeCmd = m.applyResume()
 		m.nowPlaying(track)
+		// A local ffmpeg format starts here too, and its decoded
+		// duration can fill the loaded playlist.
+		backfillCmd = m.backfillLoadedPlaylistDuration(track)
 	}
 	preloadCmd := m.preloadNext()
-	return tea.Batch(resumeCmd, preloadCmd)
+	return tea.Batch(resumeCmd, preloadCmd, backfillCmd)
 }
 
 // handleTrackSaved reports the result of a track save or download.

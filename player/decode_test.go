@@ -40,6 +40,27 @@ func TestNeedsFFmpeg(t *testing.T) {
 	}
 }
 
+func TestUsesLocalFFmpeg(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{path: "/music/track.m4a", want: true},
+		{path: "/music/Track.OPUS", want: true},
+		{path: "relative/track.wma", want: true},
+		{path: "/music/track.mp3", want: false},
+		{path: "/music/track.flac", want: false},
+		{path: "https://example.com/track.m4a", want: false},
+		{path: "ssh://host/music/track.m4a", want: false},
+		{path: "spotify:track:abc", want: false},
+	}
+	for _, tt := range tests {
+		if got := UsesLocalFFmpeg(tt.path); got != tt.want {
+			t.Errorf("UsesLocalFFmpeg(%q) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}
+
 // TestAudioExtensionsHaveADecoder checks that each extension that the
 // playlist package accepts has a decoder route: a native decoder in
 // decodeWithExt or the ffmpeg route in needsFFmpeg.

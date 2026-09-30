@@ -99,3 +99,60 @@ func TestBackfillLoadedPlaylistDuration(t *testing.T) {
 		})
 	}
 }
+
+// A local ffmpeg format starts in a command. Its decoded duration fills the
+// queue and the playlist file when the start reports back. A provider URI
+// that an older file saved without the stream flag also starts there, and
+// it keeps no duration, because it is not a local file.
+func TestBackfillLoadedPlaylistDurationAfterAsyncStart(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		path      string
+		wantQueue int
+		wantSaves int
+	}{
+		{name: "local ffmpeg format", path: "/music/a.m4a", wantQueue: 240, wantSaves: 1},
+		{name: "provider uri", path: "qobuz://track/42"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			track := playlist.Track{Path: tc.path, Title: "A"}
+			store := &backfillTestProvider{
+				commandsTestProvider: commandsTestProvider{name: "Local"},
+				tracks:               []playlist.Track{track},
+			}
+			pl := playlist.New()
+			pl.Add(track)
+			pl.SetIndex(0)
+			engine := &playbackFakeEngine{duration: 240 * time.Second}
+			m := Model{
+				player:         sourceResolverEngine{engine, []string{"qobuz://track/"}},
+				playlist:       pl,
+				vis:            ui.NewVisualizer(44100),
+				localProvider:  store,
+				loadedPlaylist: "Mix",
+			}
+
+			cmd := m.playTrack(track)
+			if len(engine.playCalls) != 0 || !m.buffering {
+				t.Fatalf("playTrack started the track in Update: play calls %v, buffering %v", engine.playCalls, m.buffering)
+			}
+			played := streamPlayedFrom(t, cmd)
+			if got, _ := m.playlist.Track(0); got.DurationSecs != 0 {
+				t.Fatalf("queue duration before the start reported back = %d, want 0", got.DurationSecs)
+			}
+
+			updated, cmd := m.Update(played)
+			m = updated.(Model)
+			if got, _ := m.playlist.Track(0); got.DurationSecs != tc.wantQueue {
+				t.Fatalf("queue duration = %d, want %d", got.DurationSecs, tc.wantQueue)
+			}
+			runCmd(cmd)
+			if len(store.saves) != tc.wantSaves {
+				t.Fatalf("saves = %+v, want %d", store.saves, tc.wantSaves)
+			}
+			if tc.wantSaves > 0 && store.saves[0][0].DurationSecs != tc.wantQueue {
+				t.Fatalf("saved track = %+v, want %d s", store.saves[0][0], tc.wantQueue)
+			}
+		})
+	}
+}

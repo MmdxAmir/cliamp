@@ -568,6 +568,10 @@ brew install ffmpeg
 
 MP3, WAV, FLAC, and OGG work without ffmpeg.
 
+cliamp starts a local file that ffmpeg decodes in the background and shows
+`Buffering...` until ffmpeg sends audio. The UI stays responsive on a slow
+disk or network mount.
+
 ## Download directory
 
 By default, TUI `Ctrl+S` saves yt-dlp downloads and temporary audio files in
