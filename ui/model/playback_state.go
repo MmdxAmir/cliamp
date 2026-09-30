@@ -18,12 +18,12 @@ func (m Model) currentPlaybackTrack() (playlist.Track, int) {
 }
 
 func (m Model) currentPlaybackIsLive(track playlist.Track) bool {
-	return PlaysLive(track, m.player)
+	return playsLive(track, m.player)
 }
 
-// PlaysLive reports whether track, playing on engine, is a live stream with
-// no track boundary. The Model and the Lua track API share this rule.
-func PlaysLive(track playlist.Track, engine interface{ Duration() time.Duration }) bool {
+// playsLive reports whether track, playing on engine, is a live stream with
+// no track boundary. The Model and the published plugin state use this rule.
+func playsLive(track playlist.Track, engine interface{ Duration() time.Duration }) bool {
 	if track.IsLive() {
 		// A yt-dlp live flag is a listing-time snapshot and may be restored from
 		// a favorite or saved playlist. Once the broadcast ends the same URL

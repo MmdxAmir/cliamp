@@ -1426,8 +1426,8 @@ func TestPlaysLive(t *testing.T) {
 			if tt.engine != nil {
 				engine = tt.engine
 			}
-			if got := PlaysLive(tt.track, engine); got != tt.want {
-				t.Fatalf("PlaysLive() = %v, want %v", got, tt.want)
+			if got := playsLive(tt.track, engine); got != tt.want {
+				t.Fatalf("playsLive() = %v, want %v", got, tt.want)
 			}
 		})
 	}
