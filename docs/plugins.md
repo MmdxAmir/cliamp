@@ -352,8 +352,21 @@ cliamp.queue.add(path)         -- resolve a file/dir/URL and append
 cliamp.queue.add(track)        --> true | nil, err  -- append a track table as given
 cliamp.queue.jump(index)       -- make index current and play it
 cliamp.queue.remove(index)     -- remove the track at index
-cliamp.queue.move(from, to)    -- reorder a track
+cliamp.queue.move(from, to)    -- swap the tracks at from and to
 ```
+
+`add`, `remove`, and `move` follow the rules of the `Shift+Up`, `Shift+Down`,
+and `x` keys and of IPC:
+
+- While shuffle is on, `move` changes nothing.
+- When the queue mirrors a saved local playlist, `move` saves the new order to
+  that playlist. `remove` removes the track from it too, and `Ctrl+Z` restores
+  the track. Favorites is not a playlist file, so an edit of a loaded Favorites
+  list changes only the queue.
+- `remove` does not remove a track that a directory source supplies. A removal
+  of the playing track stops playback.
+- `add` appends. The queue then mirrors no saved playlist.
+- When an edit changes the next track, cliamp re-arms the gapless preload.
 
 `add` accepts every input that the CLI accepts: a local file or directory, an
 HTTP stream, an M3U/PLS URL, or a YouTube/yt-dlp URL. cliamp resolves it off the

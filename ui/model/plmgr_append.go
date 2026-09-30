@@ -37,7 +37,7 @@ func (m *Model) appendTracksToPlaylist(tracks []playlist.Track, what string) tea
 		return cmd
 	}
 	m.adjustScroll()
-	return m.rearmPreload()
+	return m.rearmStalePreload()
 }
 
 // plMgrAppendPlaylist appends every track of the highlighted saved playlist to

@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"strings"
 	"time"
@@ -227,7 +228,7 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 		}
 		m.appendTracks(playlist.TrackFromPath(request.Path))
 		m.completeV2Job(jobs, jobID, m.v2PlaylistResponse())
-		return nil
+		return m.rearmStalePreload()
 	}
 	if request.Cmd == "queue.list" {
 		m.completeV2Job(jobs, jobID, m.v2PlaylistResponsePage(request.Offset, request.Limit))
@@ -270,27 +271,22 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 		}
 		m.playlist.Queue(request.Index)
 		m.normalizeQueueOverlay()
-	case "queue.remove":
-		if request.Index < 0 || request.Index >= m.playlist.Len() {
-			m.failV2Job(jobs, jobID, v2InvalidParamsError())
+		m.completeV2Job(jobs, jobID, m.v2PlaylistResponse())
+		return m.rearmStalePreload()
+	case "queue.remove", "queue.move":
+		var cmd tea.Cmd
+		var err error
+		if request.Cmd == "queue.remove" {
+			cmd, err = m.removeTrack(request.Index)
+		} else {
+			cmd, err = m.moveTrack(request.Index, request.To)
+		}
+		if err != nil {
+			m.failV2Job(jobs, jobID, v2QueueEditError(err))
 			return nil
 		}
-		if request.Index == m.playlist.Index() {
-			m.stopPlayback()
-		}
-		if !m.playlist.Remove(request.Index) {
-			m.failV2Job(jobs, jobID, v2InvalidParamsError())
-			return nil
-		}
-		m.setHeaderStateFromTracks(m.playlist.Tracks())
-		m.normalizeQueueOverlay()
-	case "queue.move":
-		if !m.playlist.Move(request.Index, request.To) {
-			m.failV2Job(jobs, jobID, v2InvalidParamsError())
-			return nil
-		}
-		m.setHeaderStateFromTracks(m.playlist.Tracks())
-		m.normalizeQueueOverlay()
+		m.completeV2Job(jobs, jobID, m.v2PlaylistResponse())
+		return cmd
 	case "queue.clear":
 		m.stopPlayback()
 		m.retireTracksPaging()
@@ -869,4 +865,21 @@ func v2UnavailableError() *ipc.V2Error {
 
 func v2InternalError() *ipc.V2Error {
 	return &ipc.V2Error{Code: ipc.V2ErrorCodeInternal, Message: ipc.V2MessageInternal}
+}
+
+// v2QueueEditError returns the V2 error for a refused queue edit. A bad
+// index is invalid_params. A move under shuffle and a track from a
+// directory source are a conflict. A failed save is internal_error.
+func v2QueueEditError(err error) *ipc.V2Error {
+	var v2Err *ipc.V2Error
+	switch {
+	case errors.Is(err, errQueueIndex):
+		return v2InvalidParamsError()
+	case errors.Is(err, errQueueShuffled), errors.Is(err, errQueueDirTrack):
+		v2Err = v2ConflictError()
+	default:
+		v2Err = v2InternalError()
+	}
+	v2Err.Detail = err.Error()
+	return v2Err
 }

@@ -289,6 +289,12 @@ const minTracksPerAlbum = 3.0
 // cohesion heuristic. A fresh load also clears any manual override.
 func (m *Model) setHeaderStateFromTracks(tracks []playlist.Track) {
 	m.headerManual = false
+	m.recountHeaderState(tracks)
+}
+
+// recountHeaderState resets the running counters and counts tracks again,
+// after a queue edit that moved or removed tracks. A manual override stays.
+func (m *Model) recountHeaderState(tracks []playlist.Track) {
 	m.headerLastAlbum = ""
 	m.headerSegments = 0
 	m.headerTracks = 0

@@ -109,7 +109,8 @@ func TestUpdateKeepsValidPreload(t *testing.T) {
 }
 
 // When nothing plays after the current track any more, the preload is
-// dropped and nothing replaces it.
+// dropped and nothing replaces it. The first remove drops b.mp3 and arms
+// c.mp3 at once. The second remove drops c.mp3.
 func TestUpdateDropsPreloadWhenNothingPlaysNext(t *testing.T) {
 	m, player := armedModel()
 	for range 2 {
@@ -118,13 +119,14 @@ func TestUpdateDropsPreloadWhenNothingPlaysNext(t *testing.T) {
 	}
 	next, _ := m.Update(tickMsg(time.Now()))
 	m = next.(Model)
-	if player.clearPreloadCalls != 1 || player.hasPreload || m.preloading {
-		t.Fatalf("ClearPreload %d, armed %v, preloading %v; want b.mp3 dropped and nothing armed", player.clearPreloadCalls, player.hasPreload, m.preloading)
+	if player.clearPreloadCalls != 2 || player.hasPreload || m.preloading {
+		t.Fatalf("ClearPreload %d, armed %v, preloading %v; want b.mp3 and c.mp3 dropped and nothing armed", player.clearPreloadCalls, player.hasPreload, m.preloading)
 	}
 }
 
 // A preload still loading is dropped as well, and its late completion does not
-// clear the in-flight flag of the one that replaces it.
+// clear the in-flight flag of the one that replaces it. The remove arms the
+// replacement c.mp3 at once.
 func TestUpdateDropsStaleInFlightPreload(t *testing.T) {
 	m, player := armedModel()
 	player.hasPreload, m.preloading = false, true
@@ -132,8 +134,8 @@ func TestUpdateDropsStaleInFlightPreload(t *testing.T) {
 
 	next, _ := m.Update(PluginQueueMsg{Op: "remove", Index: 1})
 	m = next.(Model)
-	if player.clearPreloadCalls != 1 || m.preloading {
-		t.Fatalf("in-flight b.mp3 kept (ClearPreload %d, preloading %v)", player.clearPreloadCalls, m.preloading)
+	if player.clearPreloadCalls != 1 || !m.preloading || m.preloadFor != "c.mp3" {
+		t.Fatalf("ClearPreload %d, preloading %v for %q; want b.mp3 dropped and c.mp3 in flight", player.clearPreloadCalls, m.preloading, m.preloadFor)
 	}
 	next, _ = m.Update(tickMsg(time.Now()))
 	next, _ = next.(Model).Update(streamPreloadedMsg{path: "b.mp3", gen: stale})

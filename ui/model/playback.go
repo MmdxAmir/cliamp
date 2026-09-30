@@ -3,8 +3,6 @@ package model
 import (
 	"context"
 	"errors"
-	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -305,73 +303,6 @@ func (m *Model) queueTrackNext(track playlist.Track) tea.Cmd {
 		return cmd
 	}
 	return m.rearmPreload()
-}
-
-// removeSelectedFromPlaylist removes the track at the current playlist cursor.
-// If the active track is removed, playback is stopped; the cursor is clamped
-// to the new playlist length.
-func (m *Model) removeSelectedFromPlaylist() {
-	idx := m.plCursor
-	if idx < 0 || idx >= m.playlist.Len() {
-		return
-	}
-	snapshot := m.playlist.Snapshot()
-	track, ok := m.playlist.Track(idx)
-	if !ok {
-		return
-	}
-	if track.DirSourced {
-		m.status.Warningf(statusTTLDefault, "Can't remove %q: it's supplied by the playlist's directory source", track.DisplayName())
-		return
-	}
-	loaded := m.loadedPlaylist
-	var saved []playlist.Track
-	persisted := false
-	if loaded != "" {
-		if updater, ok := m.localProvider.(playlistUpdater); ok {
-			err := updater.UpdatePlaylist(loaded, func(tracks []playlist.Track) ([]playlist.Track, error) {
-				// Another writer or a new file in a directory source can
-				// have shifted indexes since the queue was loaded. Match the
-				// persisted explicit track by path so the wrong track is
-				// never removed.
-				savedIdx := slices.IndexFunc(tracks, func(candidate playlist.Track) bool {
-					return !candidate.DirSourced && candidate.Path == track.Path
-				})
-				if savedIdx < 0 {
-					return nil, fmt.Errorf("selected track is no longer in %q", loaded)
-				}
-				saved = cloneTracks(tracks)
-				return slices.Delete(tracks, savedIdx, savedIdx+1), nil
-			})
-			if err != nil {
-				m.status.Errorf(statusTTLDefault, "Remove failed: %s", err)
-				return
-			}
-			persisted = true
-		}
-	}
-	wasActive := idx == m.playlist.Index()
-	if !m.playlist.Remove(idx) {
-		return
-	}
-	m.normalizeQueueOverlay()
-	m.playlistUndo = playlistUndo{active: true, snapshot: snapshot, loaded: loaded, saved: saved, persisted: persisted}
-	if wasActive {
-		m.stopPlayback()
-		m.player.ClearPreload()
-	}
-	if newLen := m.playlist.Len(); newLen == 0 {
-		m.plCursor = 0
-	} else if m.plCursor >= newLen {
-		m.plCursor = newLen - 1
-	}
-	m.adjustScroll()
-	if loaded != "" {
-		m.status.Showf(statusTTLDefault, "Removed from %q: %s (Ctrl+Z to undo)", loaded, track.DisplayName())
-	} else {
-		m.status.Showf(statusTTLDefault, "Removed from queue: %s (Ctrl+Z to undo)", track.DisplayName())
-	}
-	m.notifyPlayback()
 }
 
 func (m *Model) undoPlaylistMutation() tea.Cmd {

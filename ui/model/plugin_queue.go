@@ -47,14 +47,12 @@ func (m *Model) handlePluginQueue(msg PluginQueueMsg) tea.Cmd {
 		return tea.Batch(refresh, cmd)
 
 	case "remove":
-		m.removeIndex(msg.Index)
-		return nil
+		cmd, _ := m.removeTrack(msg.Index)
+		return cmd
 
 	case "move":
-		if m.playlist.Move(msg.Index, msg.To) {
-			m.adjustScroll()
-		}
-		return nil
+		cmd, _ := m.moveTrack(msg.Index, msg.To)
+		return cmd
 	}
 	return nil
 }
@@ -68,32 +66,7 @@ func (m *Model) appendPluginTracks(tracks ...playlist.Track) tea.Cmd {
 	}
 	m.appendTracks(tracks...)
 	m.notifyPlayback()
-	return m.rearmPreload()
-}
-
-// removeIndex removes the track at idx, mirroring the side effects of the
-// interactive delete: stop playback if the active track was removed and clamp
-// the playlist cursor.
-func (m *Model) removeIndex(idx int) {
-	if idx < 0 || idx >= m.playlist.Len() {
-		return
-	}
-	wasActive := idx == m.playlist.Index()
-	if !m.playlist.Remove(idx) {
-		return
-	}
-	m.normalizeQueueOverlay()
-	if wasActive {
-		m.stopPlayback()
-		m.player.ClearPreload()
-	}
-	if newLen := m.playlist.Len(); newLen == 0 {
-		m.plCursor = 0
-	} else if m.plCursor >= newLen {
-		m.plCursor = newLen - 1
-	}
-	m.adjustScroll()
-	m.notifyPlayback()
+	return m.rearmStalePreload()
 }
 
 // resolvePluginAddCmd resolves a plugin-supplied path/URL off the UI thread,

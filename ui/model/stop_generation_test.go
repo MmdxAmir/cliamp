@@ -26,13 +26,12 @@ func TestStopRefusesPendingStreamStart(t *testing.T) {
 			return updated.(Model)
 		}},
 		{name: "remove the playing track from the playlist", stop: func(_ *testing.T, m Model) Model {
-			m.plCursor = 0
-			m.removeSelectedFromPlaylist()
+			m.removeTrack(0)
 			return m
 		}},
 		{name: "plugin removes the playing track", stop: func(_ *testing.T, m Model) Model {
-			m.removeIndex(0)
-			return m
+			updated, _ := m.Update(PluginQueueMsg{Op: "remove", Index: 0})
+			return updated.(Model)
 		}},
 		{name: "IPC queue.clear", stop: func(t *testing.T, m Model) Model {
 			if response := runV2(t, &m, "queue.clear", ipc.Request{}); !response.OK {

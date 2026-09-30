@@ -124,6 +124,22 @@ Run `cliamp remote capabilities` to get the current machine-readable list.
 `queue.*` applies to the live playlist. `playnext.*` applies only to the
 play-next list. They use separate zero-based indexes.
 
+`queue`, `queue.move`, and `queue.remove` follow the rules of the
+`Shift+Up`, `Shift+Down`, and `x` keys. The Lua `cliamp.queue` functions
+follow the same rules:
+
+- `queue.move` swaps the tracks at `index` and `to`. While shuffle is on,
+  it fails with `conflict` and changes nothing.
+- When the live playlist mirrors a saved local playlist, `queue.move` saves
+  the new order to that playlist. `queue.remove` removes the track from it
+  too, and `Ctrl+Z` in the TUI restores the track. Favorites is not a
+  playlist file, so an edit of a loaded Favorites list changes only the
+  live playlist.
+- `queue.remove` fails with `conflict` for a track that a directory source
+  supplies. A removal of the playing track stops playback.
+- `queue` appends a track. The live playlist then mirrors no saved playlist.
+- When an edit changes the next track, cliamp re-arms the gapless preload.
+
 `vis` with the name `list` returns every mode in the order of the `v` key
 cycle: the built-in modes, then the visualizers of Lua plugins. `cliamp vis
 list` prints the same list when cliamp runs.

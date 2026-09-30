@@ -602,12 +602,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 
-	// Move works in track order, so it cannot move a row of the shuffle view.
-	if (key == "shift+up" || key == "shift+down") && m.focus == focusPlaylist && m.playlist.Shuffled() {
-		m.status.Warning(shuffleMoveWarning, statusTTLShort)
-		return nil
-	}
-
 	switch key {
 	case "q", "ctrl+c":
 		return m.quit()
@@ -688,22 +682,14 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "f":
 		return m.togglePlaylistStar()
 
-	case "shift+up":
-		if m.focus == focusPlaylist && m.plCursor > 0 {
-			if m.playlist.Move(m.plCursor, m.plCursor-1) {
-				m.plCursor--
-				m.persistLoadedPlaylistOrder()
-				m.adjustScroll()
+	case "shift+up", "shift+down":
+		if m.focus == focusPlaylist {
+			to := m.plCursor + 1
+			if key == "shift+up" {
+				to = m.plCursor - 1
 			}
-		}
-
-	case "shift+down":
-		if m.focus == focusPlaylist && m.plCursor < m.playlist.Len()-1 {
-			if m.playlist.Move(m.plCursor, m.plCursor+1) {
-				m.plCursor++
-				m.persistLoadedPlaylistOrder()
-				m.adjustScroll()
-			}
+			cmd, _ := m.moveTrack(m.plCursor, to)
+			return cmd
 		}
 
 	case "up", "k":
@@ -951,7 +937,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case "x":
 		if m.focus == focusPlaylist {
-			m.keepPlCursorRow(m.removeSelectedFromPlaylist)
+			var cmd tea.Cmd
+			m.keepPlCursorRow(func() { cmd, _ = m.removeTrack(m.plCursor) })
+			return cmd
 		}
 
 	case "d":
