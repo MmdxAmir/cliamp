@@ -330,6 +330,10 @@ cliamp.track.is_live()        --> boolean (no track boundary: radio, or a stream
 cliamp.track.duration_secs()  --> number
 ```
 
+`cliamp.track` reports the track that plays, as `playback.state` does. When you load a playlist during playback, the old track plays on, and `cliamp.track` reports it until the next track starts. For a radio stream, `title` and `artist` come from the stream title when the station sends one. When nothing plays, `cliamp.track` reports the current track of the queue.
+
+cliamp updates the values of `cliamp.player`, `cliamp.track`, and `cliamp.queue` after it handles each key, message, or tick. `cliamp.player.position()` and `cliamp.player.duration()` read the audio engine directly.
+
 ### cliamp.queue
 
 You can read the playlist without permission. To change it, declare `permissions = {"control"}`. All indices are 0-based, as in `cliamp.queue.current()`.

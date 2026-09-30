@@ -3,6 +3,7 @@ package model
 
 import (
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/bjarneo/cliamp/external/radio"
@@ -455,6 +456,10 @@ type Model struct {
 	// delta events to plugins from one place. Held behind a pointer so the
 	// snapshot survives Update's value-receiver copy.
 	pluginEmit *pluginEmitState
+
+	// pluginState holds the state that Lua plugins read. It is nil when no
+	// plugin is loaded. See publishPluginState.
+	pluginState *atomic.Pointer[PluginState]
 
 	// ipcRuntime publishes GUI-facing runtime snapshots from the Update owner.
 	// It is shared by value-receiver copies of Model.

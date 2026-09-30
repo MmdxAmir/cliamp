@@ -69,6 +69,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.maybeRequestVisualizerRefresh(msg, wasScreen, wasVisualizerVisible, wasMode, wasPlaying, wasPaused)
 		m.emitPluginEvents()
 		m.publishIPCRuntimeState()
+		m.publishPluginState()
 	}()
 
 	switch msg := msg.(type) {

@@ -2,6 +2,7 @@ package model
 
 import (
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -54,6 +55,10 @@ func New(p player.Engine, pl *playlist.Playlist, providers []provider.Entry, def
 	}
 	if luaMgr != nil {
 		m.pluginEmit = &pluginEmitState{}
+		if luaMgr.PluginCount() > 0 {
+			m.pluginState = new(atomic.Pointer[PluginState])
+			m.publishPluginState()
+		}
 	}
 	m.termTitle = initialTerminalTitleState()
 	// Select the default provider pill.

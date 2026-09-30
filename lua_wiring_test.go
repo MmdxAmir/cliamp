@@ -152,3 +152,46 @@ func TestLuaSenderDropsWhenFull(t *testing.T) {
 		t.Fatalf("messages arrived out of order: %v", got)
 	}
 }
+
+type fakeClock struct{ position, duration time.Duration }
+
+func (c fakeClock) Position() time.Duration { return c.position }
+func (c fakeClock) Duration() time.Duration { return c.duration }
+
+// The Lua state reads the state that the Model published, and the engine
+// clock for the position and the duration.
+func TestLuaStateProviderReadsPublishedState(t *testing.T) {
+	queue := []luaplugin.QueueEntry{{Track: luaplugin.Track{Title: "A"}}, {Track: luaplugin.Track{Title: "B"}, Index: 1, Queued: true}}
+	published := model.PluginState{
+		Status: "paused", Volume: -12, Speed: 1.25, Mono: true, Repeat: "All", Shuffle: true,
+		EQBands: [10]float64{3}, Track: luaplugin.Track{Title: "B", Live: true},
+		Count: 2, Index: 1, HasNext: true, Queue: queue,
+	}
+	sp := luaStateProvider(fakeClock{position: 90 * time.Second, duration: 180 * time.Second},
+		func() model.PluginState { return published })
+	tests := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"state", sp.PlayerState(), "paused"},
+		{"position", sp.Position(), 90.0},
+		{"duration", sp.Duration(), 180.0},
+		{"volume", sp.Volume(), -12.0},
+		{"speed", sp.Speed(), 1.25},
+		{"mono", sp.Mono(), true},
+		{"repeat", sp.RepeatMode(), "All"},
+		{"shuffle", sp.Shuffle(), true},
+		{"eq bands", sp.EQBands(), [10]float64{3}},
+		{"track", sp.CurrentTrack(), luaplugin.Track{Title: "B", Live: true}},
+		{"count", sp.PlaylistCount(), 2},
+		{"index", sp.CurrentIndex(), 1},
+		{"has next", sp.HasNext(), true},
+		{"queue", sp.QueueList(), queue},
+	}
+	for _, tt := range tests {
+		if !reflect.DeepEqual(tt.got, tt.want) {
+			t.Errorf("%s = %#v, want %#v", tt.name, tt.got, tt.want)
+		}
+	}
+}

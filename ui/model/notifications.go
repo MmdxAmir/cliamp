@@ -32,20 +32,24 @@ func (m *Model) notifyPlugins() {
 	}
 	track, _ := m.currentPlaybackTrack()
 	artist, title := m.resolveTrackDisplay(track)
-	status := "stopped"
-	if m.player.IsPlaying() {
-		if m.player.IsPaused() {
-			status = "paused"
-		} else {
-			status = "playing"
-		}
-	}
 	data := trackToMap(track)
-	data["status"] = status
+	data["status"] = m.playerStatus()
 	data["title"] = title
 	data["artist"] = artist
 	data["position"] = m.player.Position().Seconds()
 	m.luaMgr.Emit(luaplugin.EventPlaybackState, data)
+}
+
+// playerStatus returns the player state that Lua plugins see: "playing",
+// "paused" or "stopped".
+func (m *Model) playerStatus() string {
+	switch {
+	case !m.player.IsPlaying():
+		return "stopped"
+	case m.player.IsPaused():
+		return "paused"
+	}
+	return "playing"
 }
 
 // resolveTrackDisplay returns the display artist and title, applying ICY

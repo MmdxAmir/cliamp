@@ -9,54 +9,37 @@ import (
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/luaplugin"
-	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/ui/model"
 )
 
-// luaStateProvider gives Lua plugins read access to the player and the
-// playlist.
-func luaStateProvider(p *player.Player, pl *playlist.Playlist) luaplugin.StateProvider {
+// luaStateProvider gives Lua plugins read access to the playback state. The
+// values come from the state that the Model publishes after each Update, so
+// cliamp.track.* reports the track that plays. Position and Duration read
+// the engine clock, which moves between Updates.
+func luaStateProvider(clock engineClock, load func() model.PluginState) luaplugin.StateProvider {
 	return luaplugin.StateProvider{
-		PlayerState: func() string {
-			if !p.IsPlaying() {
-				return "stopped"
-			}
-			if p.IsPaused() {
-				return "paused"
-			}
-			return "playing"
-		},
-		Position:   func() float64 { return p.Position().Seconds() },
-		Duration:   func() float64 { return p.Duration().Seconds() },
-		Volume:     func() float64 { return p.Volume() },
-		Speed:      func() float64 { return p.Speed() },
-		Mono:       func() bool { return p.Mono() },
-		RepeatMode: func() string { return pl.Repeat().String() },
-		Shuffle:    func() bool { return pl.Shuffled() },
-		EQBands:    func() [10]float64 { return p.EQBands() },
-		CurrentTrack: func() luaplugin.Track {
-			t, _ := pl.Current()
-			track := luaTrack(t)
-			track.Live = model.PlaysLive(t, p)
-			return track
-		},
-		PlaylistCount: func() int { return pl.Len() },
-		CurrentIndex:  func() int { return pl.Index() },
-		HasNext:       pl.HasNext,
-		QueueList: func() []luaplugin.QueueEntry {
-			tracks := pl.Tracks()
-			out := make([]luaplugin.QueueEntry, len(tracks))
-			for i, t := range tracks {
-				out[i] = luaplugin.QueueEntry{
-					Track:  luaTrack(t),
-					Index:  i,
-					Queued: pl.QueuePosition(i) > 0, // 1-based; 0 means not queued
-				}
-			}
-			return out
-		},
+		PlayerState:   func() string { return load().Status },
+		Position:      func() float64 { return clock.Position().Seconds() },
+		Duration:      func() float64 { return clock.Duration().Seconds() },
+		Volume:        func() float64 { return load().Volume },
+		Speed:         func() float64 { return load().Speed },
+		Mono:          func() bool { return load().Mono },
+		RepeatMode:    func() string { return load().Repeat },
+		Shuffle:       func() bool { return load().Shuffle },
+		EQBands:       func() [10]float64 { return load().EQBands },
+		CurrentTrack:  func() luaplugin.Track { return load().Track },
+		PlaylistCount: func() int { return load().Count },
+		CurrentIndex:  func() int { return load().Index },
+		HasNext:       func() bool { return load().HasNext },
+		QueueList:     func() []luaplugin.QueueEntry { return load().Queue },
 	}
+}
+
+// engineClock is the part of the player that luaStateProvider reads live.
+type engineClock interface {
+	Position() time.Duration
+	Duration() time.Duration
 }
 
 // luaControlProvider gives Lua plugins control of playback. Each control
@@ -96,14 +79,6 @@ func luaControlProvider(send func(tea.Msg)) luaplugin.ControlProvider {
 		QueueMove: func(from, to int) {
 			send(model.PluginQueueMsg{Op: "move", Index: from, To: to})
 		},
-	}
-}
-
-// luaTrack returns t as Lua plugins see it, with no live flag.
-func luaTrack(t playlist.Track) luaplugin.Track {
-	return luaplugin.Track{
-		Title: t.Title, Artist: t.Artist, Album: t.Album, Genre: t.Genre, Path: t.Path,
-		Year: t.Year, Number: t.TrackNumber, Duration: t.DurationSecs, Stream: t.Stream,
 	}
 }
 
