@@ -418,7 +418,7 @@ func TestIPCProviderSearchKeepsThePaneSearch(t *testing.T) {
 			m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "radio", Name: "Radio", Provider: tc.wrap(counts)}})
 			counts.searching = true
 			m.provSearch.query = "rock"
-			m.providerLists = []playlist.PlaylistInfo{{ID: "s:0", Name: "Rock FM"}}
+			m.provPane.lists = []playlist.PlaylistInfo{{ID: "s:0", Name: "Rock FM"}}
 
 			list := runV2(t, &m, "provider.list", ipc.Request{})
 			if len(list.Providers) != 1 || list.Providers[0].Searchable != (tc.wantErr == "") {
@@ -438,8 +438,8 @@ func TestIPCProviderSearchKeepsThePaneSearch(t *testing.T) {
 			if counts.catalogSearches != 0 || counts.clears != 0 || !counts.IsSearching() {
 				t.Fatalf("pane search changed: %d catalog searches, %d clears, searching %v", counts.catalogSearches, counts.clears, counts.IsSearching())
 			}
-			if m.provSearch.query != "rock" || len(m.providerLists) != 1 || m.providerLists[0].ID != "s:0" {
-				t.Fatalf("pane state = %q %+v, want the rock search rows", m.provSearch.query, m.providerLists)
+			if m.provSearch.query != "rock" || len(m.provPane.lists) != 1 || m.provPane.lists[0].ID != "s:0" {
+				t.Fatalf("pane state = %q %+v, want the rock search rows", m.provSearch.query, m.provPane.lists)
 			}
 		})
 	}

@@ -62,7 +62,7 @@ func TestResolveFailureClearsOnlyItsOwnLoadingFlag(t *testing.T) {
 				player:      engine,
 				playlist:    playlist.New(),
 				vis:         ui.NewVisualizer(float64(engine.SampleRate())),
-				provLoading: true,
+				provPane:    providerPane{loading: true},
 				feedLoading: true,
 				buffering:   true,
 			}
@@ -80,9 +80,9 @@ func TestResolveFailureClearsOnlyItsOwnLoadingFlag(t *testing.T) {
 			if m.feedLoading != tc.wantFeedLoading {
 				t.Fatalf("feedLoading = %v, want %v", m.feedLoading, tc.wantFeedLoading)
 			}
-			if !m.provLoading || !m.buffering || m.provSignIn {
-				t.Fatalf("provLoading=%v buffering=%v provSignIn=%v, want the unrelated flags unchanged",
-					m.provLoading, m.buffering, m.provSignIn)
+			if !m.provPane.loading || !m.buffering || m.provPane.signIn {
+				t.Fatalf("provPane.loading=%v buffering=%v provPane.signIn=%v, want the unrelated flags unchanged",
+					m.provPane.loading, m.buffering, m.provPane.signIn)
 			}
 		})
 	}

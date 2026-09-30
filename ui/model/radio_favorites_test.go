@@ -86,7 +86,7 @@ func TestRadioFavoriteAfterBrowseLoadsPlaylist(t *testing.T) {
 				t.Fatalf("status = %q", m.status.text)
 			}
 			found := false
-			for _, list := range m.providerLists {
+			for _, list := range m.provPane.lists {
 				if list.ID == "f:"+tracks[1].Path {
 					found = strings.Contains(list.Name, "Selected FM")
 				}
@@ -359,31 +359,31 @@ func TestRadioFavoriteRefreshKeepsCatalogSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.providerLists = providerListsWithBrowse(p, lists)
-	for i, list := range m.providerLists {
+	m.provPane.lists = providerListsWithBrowse(p, lists)
+	for i, list := range m.provPane.lists {
 		if list.ID == "c:1" {
-			m.provCursor = i
+			m.provPane.cursor = i
 		}
 	}
-	cmd := m.openProviderList(m.provCursor)
+	cmd := m.openProviderList(m.provPane.cursor)
 	updated, _ := m.Update(cmd())
 	m = updated.(Model)
 
 	for _, wantFavorite := range []bool{true, false} {
-		oldCursor := m.provCursor
+		oldCursor := m.provPane.cursor
 		m.handleKey(tea.KeyPressMsg{Text: "f"})
-		if selected := m.providerLists[m.provCursor]; selected.ID != "c:1" {
+		if selected := m.provPane.lists[m.provPane.cursor]; selected.ID != "c:1" {
 			t.Fatalf("refresh moved selection to %+v, want c:1", selected)
 		}
 		delta := -1
 		if wantFavorite {
 			delta = 1
 		}
-		if m.provCursor != oldCursor+delta {
-			t.Fatalf("cursor = %d, want %d after favorite row change", m.provCursor, oldCursor+delta)
+		if m.provPane.cursor != oldCursor+delta {
+			t.Fatalf("cursor = %d, want %d after favorite row change", m.provPane.cursor, oldCursor+delta)
 		}
 		m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
-		if m.focus != focusProvider || m.providerLists[m.provCursor].ID != "c:1" {
+		if m.focus != focusProvider || m.provPane.lists[m.provPane.cursor].ID != "c:1" {
 			t.Fatal("returning to provider lost the highlighted station")
 		}
 		m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -398,14 +398,14 @@ func TestProviderListRefreshPreservesLatestSelection(t *testing.T) {
 	m.handleKey(tea.KeyPressMsg{Text: "f"})
 	cmd := fetchPlaylistsCmd(p, m.requests.provider)
 	// The user can move the provider cursor while an initialization notification is pending.
-	for i, list := range m.providerLists {
+	for i, list := range m.provPane.lists {
 		if list.ID == "c:1" {
-			m.provCursor = i
+			m.provPane.cursor = i
 		}
 	}
 	updated, _ := m.Update(cmd())
 	m = updated.(Model)
-	if m.providerLists[m.provCursor].ID != "c:1" {
+	if m.provPane.lists[m.provPane.cursor].ID != "c:1" {
 		t.Fatal("refresh overwrote navigation performed while it was pending")
 	}
 }
@@ -434,11 +434,11 @@ func TestRadioFavoriteRefreshKeepsSurvivingFavoriteSelection(t *testing.T) {
 			// Select the second favorite in the provider pane, but leave the first
 			// station selected in playback. Esc returns without loading another queue.
 			favoritesSeen := 0
-			for i, list := range m.providerLists {
+			for i, list := range m.provPane.lists {
 				if strings.HasPrefix(list.ID, "f:") {
 					favoritesSeen++
 					if favoritesSeen == 2 {
-						m.provCursor = i
+						m.provPane.cursor = i
 						break
 					}
 				}
@@ -446,7 +446,7 @@ func TestRadioFavoriteRefreshKeepsSurvivingFavoriteSelection(t *testing.T) {
 			for _, wantFavorite := range []bool{false, true} {
 				m.handleKey(tea.KeyPressMsg{Text: "f"})
 				m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
-				selected := m.providerLists[m.provCursor]
+				selected := m.provPane.lists[m.provPane.cursor]
 				if !strings.HasPrefix(selected.ID, "f:") {
 					t.Fatalf("highlight moved out of Favorites to %+v", selected)
 				}
@@ -480,9 +480,9 @@ func TestRadioProviderToggleRejectsDelayedPlaybackRefresh(t *testing.T) {
 	delayed := fetchPlaylistsCmd(p, m.requests.provider)()
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	found := false
-	for i, list := range m.providerLists {
+	for i, list := range m.provPane.lists {
 		if list.ID == "f:"+tracks[0].Path {
-			m.provCursor = i
+			m.provPane.cursor = i
 			found = true
 			break
 		}
@@ -497,7 +497,7 @@ func TestRadioProviderToggleRejectsDelayedPlaybackRefresh(t *testing.T) {
 	updated, _ := m.Update(delayed)
 	m = updated.(Model)
 	found = false
-	for _, list := range m.providerLists {
+	for _, list := range m.provPane.lists {
 		if list.ID == "f:"+tracks[0].Path {
 			t.Fatal("delayed refresh restored the removed favorite row")
 		}
@@ -528,9 +528,9 @@ func TestRadioRefreshDuringCatalogLoading(t *testing.T) {
 					t.Fatal(err)
 				}
 				m.replaceProviderLists(lists)
-				for i, list := range m.providerLists {
+				for i, list := range m.provPane.lists {
 					if list.ID == "c:1" {
-						m.provCursor = i
+						m.provPane.cursor = i
 					}
 				}
 				m.replacePlayerPlaylist(tracks)
@@ -539,7 +539,7 @@ func TestRadioRefreshDuringCatalogLoading(t *testing.T) {
 				if cmd := m.handleKey(tea.KeyPressMsg{Text: "f"}); cmd != nil {
 					t.Fatal("favorite refresh should be synchronous")
 				}
-				if m.providerLists[m.provCursor].ID != "c:1" {
+				if m.provPane.lists[m.provPane.cursor].ID != "c:1" {
 					t.Fatal("favorite mutation moved the selection")
 				}
 				// Initialization can still have a queued notification. Capture it
@@ -557,11 +557,11 @@ func TestRadioRefreshDuringCatalogLoading(t *testing.T) {
 				for _, msg := range messages {
 					updated, _ := m.Update(msg)
 					m = updated.(Model)
-					if got := m.providerLists[m.provCursor].ID; got != "c:1" {
+					if got := m.provPane.lists[m.provPane.cursor].ID; got != "c:1" {
 						t.Fatalf("after %T selected %s, want c:1", msg, got)
 					}
 					found := false
-					for _, row := range m.providerLists {
+					for _, row := range m.provPane.lists {
 						found = found || row.ID == "c:2"
 					}
 					if !found {
@@ -654,12 +654,12 @@ func TestRadioInitializationAndSwitchUseCurrentState(t *testing.T) {
 	p.AppendCatalog([]radio.CatalogStation{{Name: "New FM", URL: "https://radio.example/new"}})
 	updated, _ := m.Update(notification)
 	m = updated.(Model)
-	if m.providerLists[len(m.providerLists)-1].ID != "c:2" {
+	if m.provPane.lists[len(m.provPane.lists)-1].ID != "c:2" {
 		t.Fatal("initialization used stale rows")
 	}
 	m.provider = commandsTestProvider{name: "Other"}
 	m.switchProvider(len(m.providers) - 1)
-	if m.provLoading || m.providerLists[len(m.providerLists)-1].ID != "c:2" {
+	if m.provPane.loading || m.provPane.lists[len(m.provPane.lists)-1].ID != "c:2" {
 		t.Fatal("switching to Radio did not synchronously project current rows")
 	}
 }
@@ -680,9 +680,9 @@ func TestRadioFavoriteDoesNotStartCatalogLoading(t *testing.T) {
 				if err := m.refreshProviderListsNow(); err != nil {
 					t.Fatal(err)
 				}
-				for i, row := range m.providerLists {
+				for i, row := range m.provPane.lists {
 					if row.ID == "c:0" {
-						m.provCursor = i
+						m.provPane.cursor = i
 					}
 				}
 				if pane == "provider" {
@@ -703,11 +703,11 @@ func TestRadioFavoriteDoesNotStartCatalogLoading(t *testing.T) {
 				if m.radioFavorites.Contains(tracks[0].Path) == remove {
 					t.Fatal("favorite did not change")
 				}
-				if m.providerLists[m.provCursor].ID != "c:0" {
+				if m.provPane.lists[m.provPane.cursor].ID != "c:0" {
 					t.Fatal("favorite moved the selection")
 				}
 				hasFavorite := false
-				for _, row := range m.providerLists {
+				for _, row := range m.provPane.lists {
 					hasFavorite = hasFavorite || row.ID == "f:"+tracks[0].Path
 				}
 				if hasFavorite == remove {
@@ -724,14 +724,14 @@ func TestRadioPlaybackFavoritePreservesPendingTrackLoad(t *testing.T) {
 	if err := m.refreshProviderListsNow(); err != nil {
 		t.Fatal(err)
 	}
-	for i, row := range m.providerLists {
+	for i, row := range m.provPane.lists {
 		if row.ID == "c:1" {
-			m.provCursor = i
+			m.provPane.cursor = i
 		}
 	}
 	m.focus = focusProvider
 	pending := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if pending == nil || !m.provLoading {
+	if pending == nil || !m.provPane.loading {
 		t.Fatal("provider selection did not start a track load")
 	}
 	trackGen := m.requests.tracks
@@ -742,7 +742,7 @@ func TestRadioPlaybackFavoritePreservesPendingTrackLoad(t *testing.T) {
 	}
 	updated, cmd := m.Update(tea.KeyPressMsg{Text: "f"})
 	m = updated.(Model)
-	if cmd != nil || !m.provLoading || m.requests.tracks != trackGen {
+	if cmd != nil || !m.provPane.loading || m.requests.tracks != trackGen {
 		t.Fatal("favorite changed the pending track load")
 	}
 	if !m.radioFavorites.Contains(tracks[0].Path) {
@@ -758,7 +758,7 @@ func TestRadioPlaybackFavoritePreservesPendingTrackLoad(t *testing.T) {
 	updated, _ = m.Update(pending())
 	m = updated.(Model)
 	track, ok := m.playlist.Track(0)
-	if m.provLoading || !ok || track.Path != tracks[1].Path {
+	if m.provPane.loading || !ok || track.Path != tracks[1].Path {
 		t.Fatal("original track load did not complete")
 	}
 }
@@ -835,9 +835,9 @@ func TestRadioFavoriteKeyFollowsDisplayedState(t *testing.T) {
 				if remove {
 					selectedID = "f:" + tracks[0].Path
 				}
-				for i, row := range m.providerLists {
+				for i, row := range m.provPane.lists {
 					if row.ID == selectedID {
-						m.provCursor = i
+						m.provPane.cursor = i
 					}
 				}
 				if pane == "provider" {

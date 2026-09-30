@@ -60,7 +60,7 @@ type provSearchState struct {
 	active  bool
 	loading bool // catalog search in flight, before IsSearching reports results
 	query   string
-	results []int // indices into providerLists
+	results []int // indices into provPane.lists
 	cursor  int
 	scroll  int
 }
@@ -79,6 +79,39 @@ type seekState struct {
 	rewindDur time.Duration // duration of the play that a landed rewind reports
 	timerFor  time.Duration
 	graceFor  time.Duration
+}
+
+// providerPane holds the playlist list of the active provider on the left
+// of the main screen.
+type providerPane struct {
+	lists   []playlist.PlaylistInfo
+	cursor  int
+	scroll  int
+	loading bool
+	signIn  bool   // true when provider needs interactive sign-in
+	askLoc  bool   // true while the location question is on screen
+	authURL string // OAuth URL to display while interactive auth is in flight
+}
+
+// jumpState holds the jump-to-time input.
+type jumpState struct {
+	active bool
+	input  string
+	err    string
+}
+
+// urlInputState holds the input that loads a playlist or stream URL at
+// runtime.
+type urlInputState struct {
+	active bool
+	input  string
+	err    string
+}
+
+// infoOverlay holds state for the track info overlay.
+type infoOverlay struct {
+	visible bool
+	scroll  int
 }
 
 // themePickerState holds state for the theme picker overlay. The raw rows

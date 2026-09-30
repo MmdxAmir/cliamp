@@ -118,7 +118,7 @@ func (m *Model) handleStreamPlayed(msg streamPlayedMsg) tea.Cmd {
 	if errors.Is(msg.err, playlist.ErrNeedsAuth) {
 		// The provider session went stale, for example after Spotify
 		// rejected the stream keys. Ask for sign-in, not a raw error.
-		m.provSignIn = true
+		m.provPane.signIn = true
 		m.err = nil
 		m.status.Warningf(statusTTLLong, "Sign-in required to play %s.", track.DisplayName())
 	} else if msg.err != nil {

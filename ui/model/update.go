@@ -230,10 +230,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case ProvAuthURLMsg:
-		if !m.provLoading || !m.isActiveProvider(msg.ProviderName) {
+		if !m.provPane.loading || !m.isActiveProvider(msg.ProviderName) {
 			return m, nil
 		}
-		m.provAuthURL = msg.URL
+		m.provPane.authURL = msg.URL
 		return m, nil
 
 	case devicesListedMsg:

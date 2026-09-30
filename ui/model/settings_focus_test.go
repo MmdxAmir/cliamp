@@ -321,8 +321,8 @@ func TestSettingsFocusDoesNotStealOverlayTabs(t *testing.T) {
 		{"keymap", func(m *Model) { m.openKeymap() }},
 		{"search", func(m *Model) { m.handleKey(tea.KeyPressMsg{Text: "/"}) }},
 		{"provider filter", func(m *Model) { m.focus = focusProvider; m.provSearch.active = true }},
-		{"URL", func(m *Model) { m.urlInputting = true }},
-		{"track info", func(m *Model) { m.showInfo = true }},
+		{"URL", func(m *Model) { m.urlInput.active = true }},
+		{"track info", func(m *Model) { m.info.visible = true }},
 	} {
 		t.Run(setup.name, func(t *testing.T) {
 			m := newColumnTestModel(100, 30)

@@ -21,7 +21,7 @@ func (m *Model) maybeLoadCatalogBatch() tea.Cmd {
 	if cs, ok := m.provider.(provider.CatalogSearcher); ok && cs.IsSearching() {
 		return nil
 	}
-	if m.provCursor >= len(m.providerLists)-10 {
+	if m.provPane.cursor >= len(m.provPane.lists)-10 {
 		m.catalogBatch.loading = true
 		return m.fetchCatalogBatch(loader)
 	}
@@ -31,7 +31,7 @@ func (m *Model) maybeLoadCatalogBatch() tea.Cmd {
 // answerLocationPrompt records the listener's answer to the location question
 // and refreshes the pane, where the offer row is replaced by their country.
 func (m *Model) answerLocationPrompt(allowed bool) tea.Cmd {
-	m.provAskLoc = false
+	m.provPane.askLoc = false
 	consenter, ok := m.provider.(provider.LocationConsenter)
 	if !ok {
 		return nil
@@ -52,17 +52,17 @@ func (m *Model) answerLocationPrompt(allowed bool) tea.Cmd {
 	}
 
 	// The offer row is gone and, on a yes, a country row has taken its place.
-	m.provLoading = true
+	m.provPane.loading = true
 	return m.fetchProviderPlaylists()
 }
 
 // toggleProviderFavorite toggles favorite status for the current entry in the
 // provider list when the provider supports it.
 func (m *Model) toggleProviderFavorite() tea.Cmd {
-	if m.provLoading || m.provCursor < 0 || m.provCursor >= len(m.providerLists) || m.selectedProviderListIsBrowseEntry() {
+	if m.provPane.loading || m.provPane.cursor < 0 || m.provPane.cursor >= len(m.provPane.lists) || m.selectedProviderListIsBrowseEntry() {
 		return nil
 	}
-	id := m.providerLists[m.provCursor].ID
+	id := m.provPane.lists[m.provPane.cursor].ID
 	if sl, ok := m.provider.(provider.SectionedList); ok {
 		if !sl.IsFavoritableID(id) {
 			return nil

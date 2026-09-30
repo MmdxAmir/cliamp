@@ -251,8 +251,8 @@ func init() {
 			screen: screenJump,
 			key:    (*Model).handleJumpKey,
 			paste: func(m *Model, s string) {
-				m.insertText("jump", &m.jumpInput, s)
-				m.jumpErr = ""
+				m.insertText("jump", &m.jump.input, s)
+				m.jump.err = ""
 			},
 			context: fixedContext(commandModeJump, "Jump to Time"),
 			view:    overlayView{func(m *Model) string { return sepHeader("Jump to Time", m.layout.panelWidth) }, (*Model).renderJumpBody},
@@ -261,12 +261,12 @@ func init() {
 			screen: screenURLInput,
 			key:    (*Model).handleURLInputKey,
 			paste: func(m *Model, s string) {
-				m.insertText("url", &m.urlInput, s)
-				m.urlErr = ""
+				m.insertText("url", &m.urlInput.input, s)
+				m.urlInput.err = ""
 			},
 			context: fixedContext(commandModeURL, "Load URL"),
 			view: overlayView{
-				func(m *Model) string { return m.promptHeader("url", "Load URL", m.urlInput) },
+				func(m *Model) string { return m.promptHeader("url", "Load URL", m.urlInput.input) },
 				(*Model).renderURLBody},
 		},
 		{
@@ -312,13 +312,13 @@ func (m *Model) overlayOpen(screen topLevelScreen) bool {
 	case screenSubs:
 		return m.subs.visible
 	case screenInfo:
-		return m.showInfo
+		return m.info.visible
 	case screenLyrics:
 		return m.lyrics.visible
 	case screenJump:
-		return m.jumping
+		return m.jump.active
 	case screenURLInput:
-		return m.urlInputting
+		return m.urlInput.active
 	case screenSearch:
 		return m.search.active
 	case screenNetSearch:

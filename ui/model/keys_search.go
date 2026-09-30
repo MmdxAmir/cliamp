@@ -101,9 +101,9 @@ func (m *Model) handleProvSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEscape:
 		m.provSearch.active = false
 	case tea.KeyEnter:
-		if len(m.provSearch.results) > 0 && !m.provLoading {
+		if len(m.provSearch.results) > 0 && !m.provPane.loading {
 			idx := m.provSearch.results[m.provSearch.cursor]
-			m.provCursor = idx
+			m.provPane.cursor = idx
 			m.providerMaybeAdjustScroll()
 			m.provSearch.active = false
 			return m.openProviderList(idx)
@@ -146,7 +146,7 @@ func (m *Model) handleCatalogSearchKey(msg tea.KeyPressMsg, cs provider.CatalogS
 		if m.provSearch.query == "" {
 			return m.restoreCatalog(cs)
 		}
-		m.provLoading = true
+		m.provPane.loading = true
 		m.provSearch.loading = true
 		m.catalogBatch.loading = false
 		nextRequest(&m.requests.provider)
@@ -174,10 +174,10 @@ func (m *Model) restoreCatalog(cs provider.CatalogSearcher) tea.Cmd {
 	// Clear before results arrive so providers can invalidate in-flight work.
 	cs.ClearSearch()
 	m.provSearch.loading = false
-	m.provLoading = true
+	m.provPane.loading = true
 	m.catalogBatch.loading = false
-	m.provCursor = 0
-	m.provScroll = 0
+	m.provPane.cursor = 0
+	m.provPane.scroll = 0
 	return m.fetchProviderPlaylists()
 }
 
@@ -189,7 +189,7 @@ func (m *Model) updateProvSearch() {
 		return
 	}
 	q := strings.ToLower(m.provSearch.query)
-	for i, pl := range m.providerLists {
+	for i, pl := range m.provPane.lists {
 		if strings.Contains(strings.ToLower(pl.Name), q) {
 			m.provSearch.results = append(m.provSearch.results, i)
 		}

@@ -134,8 +134,7 @@ func (m *Model) toggleMetadata() {
 	m.SetShowMetadata(!m.showMetadata)
 	_ = m.saveConfigBool("show_metadata", m.showMetadata)
 	if m.showMetadata && (!m.layout.twoColumn || m.metadataPaneRows(m.effectivePlaylistVisible()) == 0) {
-		m.showInfo = true
-		m.infoScroll = 0
+		m.info = infoOverlay{visible: true}
 		m.refreshChrome()
 	}
 }

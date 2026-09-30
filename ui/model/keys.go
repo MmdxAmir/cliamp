@@ -65,29 +65,29 @@ func (m *Model) providerScrollStep() int {
 
 func (m *Model) providerMaybeAdjustScroll() {
 	visible := m.providerScrollStep()
-	total := len(m.providerLists)
+	total := len(m.provPane.lists)
 	if total == 0 {
-		m.provScroll = 0
+		m.provPane.scroll = 0
 		return
 	}
 
-	if m.provCursor < m.provScroll {
-		m.provScroll = m.provCursor
+	if m.provPane.cursor < m.provPane.scroll {
+		m.provPane.scroll = m.provPane.cursor
 	}
 
-	if m.provScroll >= total {
-		m.provScroll = max(0, total-1)
+	if m.provPane.scroll >= total {
+		m.provPane.scroll = max(0, total-1)
 	}
 
 	// Provider lists can add radio-prefix or PlaylistInfo.Section headers. Keep
 	// the logical cursor visible in their rendered-row viewport.
-	for m.provScroll < total && m.providerRowsFromScroll(m.provScroll, m.provCursor) > visible {
-		m.provScroll++
+	for m.provPane.scroll < total && m.providerRowsFromScroll(m.provPane.scroll, m.provPane.cursor) > visible {
+		m.provPane.scroll++
 	}
 }
 
 func (m *Model) providerRowsFromScroll(scroll, cursor int) int {
-	total := len(m.providerLists)
+	total := len(m.provPane.lists)
 	if total == 0 || cursor < scroll || scroll < 0 || cursor >= total {
 		return 0
 	}
@@ -98,9 +98,9 @@ func (m *Model) providerRowsFromScroll(scroll, cursor int) int {
 	// how many rows a window holds and the cursor scrolls out of view.
 	headerAt := func(i int) string {
 		if isRadio {
-			return m.providerSectionTitle(sl.IDPrefix(m.providerLists[i].ID))
+			return m.providerSectionTitle(sl.IDPrefix(m.provPane.lists[i].ID))
 		}
-		return m.providerLists[i].Section
+		return m.provPane.lists[i].Section
 	}
 
 	prevHeader := ""
@@ -120,51 +120,51 @@ func (m *Model) providerRowsFromScroll(scroll, cursor int) int {
 }
 
 func (m *Model) providerMoveUp() {
-	if m.provCursor > 0 {
-		m.provCursor--
-	} else if len(m.providerLists) > 0 {
-		m.provCursor = len(m.providerLists) - 1
+	if m.provPane.cursor > 0 {
+		m.provPane.cursor--
+	} else if len(m.provPane.lists) > 0 {
+		m.provPane.cursor = len(m.provPane.lists) - 1
 	}
 	m.providerMaybeAdjustScroll()
 }
 
 func (m *Model) providerMoveDown() {
-	if m.provCursor < len(m.providerLists)-1 {
-		m.provCursor++
-	} else if len(m.providerLists) > 0 {
-		m.provCursor = 0
+	if m.provPane.cursor < len(m.provPane.lists)-1 {
+		m.provPane.cursor++
+	} else if len(m.provPane.lists) > 0 {
+		m.provPane.cursor = 0
 	}
 	m.providerMaybeAdjustScroll()
 }
 
 func (m *Model) providerPageUp() {
 	step := m.providerScrollStep()
-	if m.provCursor > 0 {
-		m.provCursor -= min(m.provCursor, step)
+	if m.provPane.cursor > 0 {
+		m.provPane.cursor -= min(m.provPane.cursor, step)
 	}
 	// Top-anchor behavior: place cursor at top of viewport when paging up.
-	m.provScroll = m.provCursor
+	m.provPane.scroll = m.provPane.cursor
 	m.providerMaybeAdjustScroll()
 }
 
 func (m *Model) providerPageDown() {
 	step := m.providerScrollStep()
-	if m.provCursor < len(m.providerLists)-1 {
-		m.provCursor = min(len(m.providerLists)-1, m.provCursor+step)
+	if m.provPane.cursor < len(m.provPane.lists)-1 {
+		m.provPane.cursor = min(len(m.provPane.lists)-1, m.provPane.cursor+step)
 	}
 	// Bottom-anchor behavior: bias viewport so cursor lands near bottom when paging down.
-	m.provScroll = max(0, m.provCursor-step+1)
+	m.provPane.scroll = max(0, m.provPane.cursor-step+1)
 	m.providerMaybeAdjustScroll()
 }
 
 func (m *Model) providerToTop() {
-	m.provCursor = 0
+	m.provPane.cursor = 0
 	m.providerMaybeAdjustScroll()
 }
 
 func (m *Model) providerToBottom() {
-	if len(m.providerLists) > 0 {
-		m.provCursor = len(m.providerLists) - 1
+	if len(m.provPane.lists) > 0 {
+		m.provPane.cursor = len(m.provPane.lists) - 1
 	}
 	m.providerMaybeAdjustScroll()
 }
@@ -202,8 +202,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.toggleMetadata()
 			return nil
 		case "i":
-			m.showInfo = true
-			m.infoScroll = 0
+			m.info = infoOverlay{visible: true}
 			return nil
 		}
 	}
@@ -254,7 +253,7 @@ func (m *Model) handleProviderPaneKey(msg tea.KeyPressMsg) tea.Cmd {
 	// The location question owns the keyboard until it is answered: it is
 	// a yes/no about the listener's own data, so it must not be dismissed
 	// by a stray key that happens to mean something else in this pane.
-	if m.provAskLoc {
+	if m.provPane.askLoc {
 		switch msg.String() {
 		case "y", "Y", "enter":
 			return m.answerLocationPrompt(true)
@@ -291,16 +290,16 @@ func (m *Model) handleProviderPaneKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Auto-load next catalog page when scrolling near the bottom.
 		return m.maybeLoadCatalogBatch()
 	case "enter":
-		if m.provSignIn {
+		if m.provPane.signIn {
 			if auth, ok := m.provider.(playlist.Authenticator); ok {
-				m.provSignIn = false
-				m.provLoading = true
+				m.provPane.signIn = false
+				m.provPane.loading = true
 				m.err = nil
 				return authenticateProviderCmd(auth, m.provider.Name(), nextRequest(&m.requests.auth))
 			}
 		}
-		if len(m.providerLists) > 0 && !m.provLoading {
-			return m.openProviderList(m.provCursor)
+		if len(m.provPane.lists) > 0 && !m.provPane.loading {
+			return m.openProviderList(m.provPane.cursor)
 		}
 	case "tab", "shift+tab":
 		// Leave the content-first provider layout before choosing a control;
@@ -448,7 +447,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 		// keeps its ID across Refresh. Keep plugin key bindings working:
 		// ctrl+r is no longer an unhandled key here, so forward it when
 		// another provider playlist is open.
-		if m.provider != nil && !m.provLoading && m.activeProviderPlaylistID != "" && !m.refreshesInPlace() {
+		if m.provider != nil && !m.provPane.loading && m.activeProviderPlaylistID != "" && !m.refreshesInPlace() {
 			if m.luaMgr != nil {
 				m.luaMgr.EmitKey(msg.String())
 			}
@@ -675,9 +674,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.openFileBrowser()
 
 	case "u":
-		m.urlInputting = true
-		m.urlInput = ""
-		m.urlErr = ""
+		m.urlInput = urlInputState{active: true}
 
 	case "N":
 		if cmd, ok := m.openSelectedTrackArtistBrowser(); ok {
@@ -761,16 +758,16 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *Model) handleInfoKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc", "i":
-		m.showInfo = false
+		m.info.visible = false
 	case "ctrl+i":
-		m.showInfo = false
+		m.info.visible = false
 		m.toggleMetadata()
 	case "up", "k":
-		if m.infoScroll > 0 {
-			m.infoScroll--
+		if m.info.scroll > 0 {
+			m.info.scroll--
 		}
 	case "down", "j":
-		m.infoScroll++
+		m.info.scroll++
 		m.infoMaybeAdjustScroll()
 	}
 	return nil
@@ -884,19 +881,12 @@ func (m *Model) saveTrack() tea.Cmd {
 	}
 }
 
-func (m *Model) resetJumpInput() {
-	m.jumpInput = ""
-	m.jumpErr = ""
-}
-
 func (m *Model) openJumpMode() {
-	m.jumping = true
-	m.resetJumpInput()
+	m.jump = jumpState{active: true}
 }
 
 func (m *Model) closeJumpMode() {
-	m.jumping = false
-	m.resetJumpInput()
+	m.jump = jumpState{}
 }
 
 // handleJumpKey processes key presses while in jump-time mode.
@@ -906,34 +896,34 @@ func (m *Model) handleJumpKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.closeJumpMode()
 		return nil
 	case tea.KeyEnter:
-		target, err := parseJumpTarget(m.jumpInput)
+		target, err := parseJumpTarget(m.jump.input)
 		if err != nil {
-			m.jumpErr = "Invalid jump: " + err.Error()
-			m.status.Warning(m.jumpErr, statusTTLDefault)
+			m.jump.err = "Invalid jump: " + err.Error()
+			m.status.Warning(m.jump.err, statusTTLDefault)
 			return nil
 		}
 		if !m.player.Seekable() {
-			m.jumpErr = "This track cannot be seeked."
-			m.status.Warning(m.jumpErr, statusTTLDefault)
+			m.jump.err = "This track cannot be seeked."
+			m.status.Warning(m.jump.err, statusTTLDefault)
 			return nil
 		}
 		if dur := m.player.Duration(); dur > 0 && target > dur {
-			m.jumpErr = fmt.Sprintf("Jump exceeds track duration (%s).", formatJumpClock(dur))
-			m.status.Warning(m.jumpErr, statusTTLDefault)
+			m.jump.err = fmt.Sprintf("Jump exceeds track duration (%s).", formatJumpClock(dur))
+			m.status.Warning(m.jump.err, statusTTLDefault)
 			return nil
 		}
 		cmd, err := m.trySeekAbsolute(target)
 		if err != nil {
-			m.jumpErr = "Seek failed: " + err.Error()
-			m.status.Warning(m.jumpErr, statusTTLDefault)
+			m.jump.err = "Seek failed: " + err.Error()
+			m.status.Warning(m.jump.err, statusTTLDefault)
 			return nil
 		}
 		m.closeJumpMode()
 		return cmd
 	}
 
-	if m.editText("jump", &m.jumpInput, msg) {
-		m.jumpErr = ""
+	if m.editText("jump", &m.jump.input, msg) {
+		m.jump.err = ""
 	}
 	return nil
 }
@@ -973,20 +963,20 @@ func (m *Model) handlePaste(content string) tea.Cmd {
 func (m *Model) handleURLInputKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.Code {
 	case tea.KeyEscape:
-		m.urlInputting = false
+		m.urlInput.active = false
 	case tea.KeyEnter:
-		m.urlInputting = false
-		input := strings.TrimSpace(m.urlInput)
+		m.urlInput.active = false
+		input := strings.TrimSpace(m.urlInput.input)
 		if input != "" {
 			m.feedLoading = true
 			m.status.Activity("Loading URL...", statusTTLLong)
 			return resolveURLCmd(input, true)
 		}
-		m.urlInputting = true
-		m.urlErr = "Enter a stream, track, or playlist URL."
+		m.urlInput.active = true
+		m.urlInput.err = "Enter a stream, track, or playlist URL."
 	default:
-		if m.editText("url", &m.urlInput, msg) {
-			m.urlErr = ""
+		if m.editText("url", &m.urlInput.input, msg) {
+			m.urlInput.err = ""
 		}
 	}
 	return nil

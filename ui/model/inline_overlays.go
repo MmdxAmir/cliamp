@@ -374,7 +374,7 @@ func clampedScroll(scroll, cursor, count, budget int) int {
 func (m Model) renderInfoBody() string {
 	budget := m.effectivePlaylistVisible()
 	lines := m.infoLines()
-	start := min(m.infoScroll, max(0, len(lines)-budget))
+	start := min(m.info.scroll, max(0, len(lines)-budget))
 	end := min(start+budget, len(lines))
 	return bodyLines(lines[start:end], budget)
 }
@@ -394,7 +394,7 @@ func (m Model) infoLines() []string {
 }
 
 func (m *Model) infoMaybeAdjustScroll() {
-	m.infoScroll = min(m.infoScroll, max(0, len(m.infoLines())-m.effectivePlaylistVisible()))
+	m.info.scroll = min(m.info.scroll, max(0, len(m.infoLines())-m.effectivePlaylistVisible()))
 }
 
 // — URL input —
@@ -402,8 +402,8 @@ func (m *Model) infoMaybeAdjustScroll() {
 func (m Model) renderURLBody() string {
 	budget := m.effectivePlaylistVisible()
 	lines := []string{dimStyle.Render("  Paste a stream, track, or playlist URL above.")}
-	if m.urlErr != "" {
-		lines = append(lines, errorStyle.Render("  "+m.urlErr))
+	if m.urlInput.err != "" {
+		lines = append(lines, errorStyle.Render("  "+m.urlInput.err))
 	}
 	return bodyLines(lines, budget)
 }
@@ -415,16 +415,16 @@ func (m Model) renderJumpBody() string {
 	pos := m.player.Position()
 	dur := m.player.Duration()
 	inputLine := dimStyle.Render("  " + formatJumpPlaceholder(dur))
-	if m.jumpInput != "" {
-		inputLine = playlistSelectedStyle.Render("  " + m.textWithCursor("jump", m.jumpInput))
+	if m.jump.input != "" {
+		inputLine = playlistSelectedStyle.Render("  " + m.textWithCursor("jump", m.jump.input))
 	}
 	lines := []string{
 		dimStyle.Render(fmt.Sprintf("  %s / %s", formatJumpClock(pos), formatJumpClock(dur))),
 		"",
 		inputLine,
 	}
-	if m.jumpErr != "" {
-		lines = append(lines, errorStyle.Render("  "+m.jumpErr))
+	if m.jump.err != "" {
+		lines = append(lines, errorStyle.Render("  "+m.jump.err))
 	}
 	return bodyLines(lines, budget)
 }

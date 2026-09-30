@@ -505,10 +505,10 @@ func TestTrackInfoScrollsWithinBodyBudget(t *testing.T) {
 	track.Year = 2026
 	track.TrackNumber = 1
 	m.playlist.SetTrack(0, track)
-	m.showInfo = true
+	m.info.visible = true
 
 	m.handleKey(tea.KeyPressMsg{Text: "j"})
-	if m.infoScroll == 0 {
+	if m.info.scroll == 0 {
 		t.Fatal("info scroll = 0 after down, want a later metadata row")
 	}
 	if got := m.renderInfoBody(); !strings.Contains(got, "Artist") {
@@ -531,10 +531,10 @@ func TestInlineOverlaysFitResponsiveTerminal(t *testing.T) {
 		{name: "navigation", set: func(m *Model) { m.navBrowser.visible = true }},
 		{name: "playlist manager", set: func(m *Model) { m.plManager.visible = true }},
 		{name: "queue", set: func(m *Model) { m.queue.visible = true }},
-		{name: "info", set: func(m *Model) { m.showInfo = true }},
+		{name: "info", set: func(m *Model) { m.info.visible = true }},
 		{name: "lyrics", set: func(m *Model) { m.lyrics.visible = true }},
-		{name: "jump", set: func(m *Model) { m.jumping = true }},
-		{name: "url", set: func(m *Model) { m.urlInputting = true }},
+		{name: "jump", set: func(m *Model) { m.jump.active = true }},
+		{name: "url", set: func(m *Model) { m.urlInput.active = true }},
 		{name: "search", set: func(m *Model) { m.search.active = true }},
 		{name: "online search", set: func(m *Model) { m.netSearch.active = true }},
 	}

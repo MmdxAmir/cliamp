@@ -141,7 +141,7 @@ func TestCtrlRRefreshesTheActiveProvider(t *testing.T) {
 			m.playlist.Add(playlist.Track{Title: "Song"})
 			m.focus = tt.focus
 			m.activeProviderPlaylistID = tt.playlistID
-			m.provLoading = tt.loading
+			m.provPane.loading = tt.loading
 			m.catalogBatch = catalogBatchState{offset: 100, done: true}
 
 			cmd := m.handleKey(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
@@ -169,8 +169,8 @@ func TestCtrlRRefreshesTheActiveProvider(t *testing.T) {
 			if cmd == nil {
 				t.Fatal("ctrl+r started no reload")
 			}
-			if !m.provLoading || m.catalogBatch != (catalogBatchState{}) {
-				t.Errorf("provLoading = %v, catalogBatch = %+v, want a fresh load", m.provLoading, m.catalogBatch)
+			if !m.provPane.loading || m.catalogBatch != (catalogBatchState{}) {
+				t.Errorf("provPane.loading = %v, catalogBatch = %+v, want a fresh load", m.provPane.loading, m.catalogBatch)
 			}
 			switch msg := cmd().(type) {
 			case tracksLoadedMsg:

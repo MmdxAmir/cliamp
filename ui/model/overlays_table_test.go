@@ -24,10 +24,10 @@ var overlayOpeners = map[topLevelScreen]func(*Model){
 	screenPlaylistManager: func(m *Model) { m.plManager.visible = true },
 	screenQueue:           func(m *Model) { m.queue.visible = true },
 	screenSubs:            func(m *Model) { m.subs.visible = true },
-	screenInfo:            func(m *Model) { m.showInfo = true },
+	screenInfo:            func(m *Model) { m.info.visible = true },
 	screenLyrics:          func(m *Model) { m.lyrics.visible = true },
-	screenJump:            func(m *Model) { m.jumping = true },
-	screenURLInput:        func(m *Model) { m.urlInputting = true },
+	screenJump:            func(m *Model) { m.jump.active = true },
+	screenURLInput:        func(m *Model) { m.urlInput.active = true },
 	screenSearch:          func(m *Model) { m.search.active = true },
 	screenNetSearch:       func(m *Model) { m.netSearch.active = true },
 }

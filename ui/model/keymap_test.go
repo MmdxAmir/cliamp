@@ -110,7 +110,7 @@ func TestKeymapEnterRunsSelectedCommand(t *testing.T) {
 		{
 			name: "load URL from the playlist",
 			key:  "u", action: "Load URL (stream/playlist)",
-			check: func(m *Model) bool { return m.urlInputting },
+			check: func(m *Model) bool { return m.urlInput.active },
 		},
 		{
 			name: "playlist search from the playlist",
@@ -120,7 +120,7 @@ func TestKeymapEnterRunsSelectedCommand(t *testing.T) {
 		{
 			name: "jump to time from the playlist",
 			key:  "Ctrl+J", action: "Jump to time",
-			check: func(m *Model) bool { return m.jumping },
+			check: func(m *Model) bool { return m.jump.active },
 		},
 		{
 			name: "queue manager from the playlist",

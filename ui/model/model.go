@@ -348,13 +348,7 @@ type Model struct {
 	// Provider state
 	provider                playlist.Provider
 	localProvider           playlist.Provider // local playlist provider for file-based playlist management (always available)
-	providerLists           []playlist.PlaylistInfo
-	provCursor              int
-	provScroll              int
-	provLoading             bool
-	provSignIn              bool             // true when provider needs interactive sign-in
-	provAskLoc              bool             // true while the location question is on screen
-	provAuthURL             string           // OAuth URL to display while interactive auth is in flight
+	provPane                providerPane
 	openDefaultProviderOnce bool             // open the provider's preferred hierarchy after Init
 	providers               []provider.Entry // all available providers
 	provPillIdx             int              // selected pill index
@@ -390,15 +384,8 @@ type Model struct {
 	eqSaveAfter    time.Duration
 	termTitle      terminalTitleState
 
-	// Jump to time mode
-	jumping   bool
-	jumpInput string
-	jumpErr   string
-
-	// URL input mode (load playlist/stream URL at runtime)
-	urlInputting bool
-	urlInput     string
-	urlErr       string
+	jump     jumpState
+	urlInput urlInputState
 
 	// Async feed/M3U URL resolution
 	pendingURLs []string
@@ -535,9 +522,7 @@ type Model struct {
 	themes   []theme.Theme
 	themeIdx int
 
-	// Track info overlay (metadata details)
-	showInfo   bool
-	infoScroll int
+	info infoOverlay
 
 	showAlbumHeaders bool
 	headerManual     bool

@@ -862,20 +862,20 @@ func (m Model) renderProviderList() string {
 	if visibleBudget <= 0 {
 		return ""
 	}
-	if m.provSignIn {
+	if m.provPane.signIn {
 		return dimStyle.Render(fmt.Sprintf("  Sign in to %s. Press Enter to continue.", m.provider.Name()))
 	}
-	if m.provLoading && (len(m.providerLists) == 0 || m.provSearch.loading) && !m.provSearch.active {
+	if m.provPane.loading && (len(m.provPane.lists) == 0 || m.provSearch.loading) && !m.provSearch.active {
 		label := fmt.Sprintf("Loading %s…", m.provider.Name())
 		if m.provSearch.loading {
 			label = fmt.Sprintf("Searching %s…", m.provider.Name())
 		}
 		lines := []string{loadingLine(label)}
-		if m.provAuthURL != "" {
+		if m.provPane.authURL != "" {
 			lines = append(lines,
 				"",
 				dimStyle.Render("  If your browser didn't open, visit this URL to sign in:"),
-				"  "+m.provAuthURL,
+				"  "+m.provPane.authURL,
 			)
 		}
 		for len(lines) < visibleBudget {
@@ -883,10 +883,10 @@ func (m Model) renderProviderList() string {
 		}
 		return strings.Join(lines, "\n")
 	}
-	if m.provAskLoc {
+	if m.provPane.askLoc {
 		return m.renderLocationPrompt(visibleBudget)
 	}
-	if len(m.providerLists) == 0 && !m.provSearch.active && !m.catalogBatch.loading {
+	if len(m.provPane.lists) == 0 && !m.provSearch.active && !m.catalogBatch.loading {
 		return m.renderProviderEmptyState(visibleBudget)
 	}
 
@@ -917,32 +917,32 @@ func (m Model) renderProviderList() string {
 				scroll := m.provSearch.scroll
 				for j := scroll; j < scroll+visible && j < len(m.provSearch.results); j++ {
 					idx := m.provSearch.results[j]
-					p := m.providerLists[idx]
+					p := m.provPane.lists[idx]
 					prefix, style := m.providerRowStyle(p, j == m.provSearch.cursor)
 					lines = append(lines, style.Render(playlistLabel(prefix, p)))
 				}
-				lines = append(lines, dimStyle.Render(fmt.Sprintf("  %d/%d playlists", len(m.provSearch.results), len(m.providerLists))))
+				lines = append(lines, dimStyle.Render(fmt.Sprintf("  %d/%d playlists", len(m.provSearch.results), len(m.provPane.lists))))
 			}
 		}
 	} else {
-		scroll := max(0, m.provScroll)
-		if scroll >= len(m.providerLists) {
-			scroll = max(0, len(m.providerLists)-1)
+		scroll := max(0, m.provPane.scroll)
+		if scroll >= len(m.provPane.lists) {
+			scroll = max(0, len(m.provPane.lists)-1)
 		}
-		if m.provCursor < scroll {
-			scroll = m.provCursor
+		if m.provPane.cursor < scroll {
+			scroll = m.provPane.cursor
 		}
 
-		hasSections := !sectioned && slices.ContainsFunc(m.providerLists, func(p playlist.PlaylistInfo) bool {
+		hasSections := !sectioned && slices.ContainsFunc(m.provPane.lists, func(p playlist.PlaylistInfo) bool {
 			return p.Section != ""
 		})
 
 		if sectioned {
-			for scroll < len(m.providerLists)-1 && m.providerRowsFromScroll(scroll, m.provCursor) > visibleBudget {
+			for scroll < len(m.provPane.lists)-1 && m.providerRowsFromScroll(scroll, m.provPane.cursor) > visibleBudget {
 				scroll++
 			}
-		} else if m.provCursor >= scroll+visibleBudget {
-			scroll = m.provCursor - visibleBudget + 1
+		} else if m.provPane.cursor >= scroll+visibleBudget {
+			scroll = m.provPane.cursor - visibleBudget + 1
 		}
 
 		// Headers are deduplicated on the resolved title, not the ID prefix:
@@ -950,15 +950,15 @@ func (m Model) renderProviderList() string {
 		// sits under the same "Countries" heading as the pinned places).
 		prevTitle := ""
 		if sectioned && scroll > 0 {
-			prevTitle = m.providerSectionTitle(sl.IDPrefix(m.providerLists[scroll-1].ID))
+			prevTitle = m.providerSectionTitle(sl.IDPrefix(m.provPane.lists[scroll-1].ID))
 		}
 		prevSection := ""
 		if hasSections && scroll > 0 {
-			prevSection = m.providerLists[scroll-1].Section
+			prevSection = m.provPane.lists[scroll-1].Section
 		}
 
-		for j := scroll; j < len(m.providerLists) && len(lines) < visibleBudget; j++ {
-			p := m.providerLists[j]
+		for j := scroll; j < len(m.provPane.lists) && len(lines) < visibleBudget; j++ {
+			p := m.provPane.lists[j]
 
 			if sectioned {
 				title := m.providerSectionTitle(sl.IDPrefix(p.ID))
@@ -980,7 +980,7 @@ func (m Model) renderProviderList() string {
 				break
 			}
 
-			prefix, style := m.providerRowStyle(p, j == m.provCursor)
+			prefix, style := m.providerRowStyle(p, j == m.provPane.cursor)
 			lines = append(lines, style.Render(playlistLabel(prefix, p)))
 		}
 	}

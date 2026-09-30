@@ -104,7 +104,7 @@ func TestContextHelpAdvertisesProviderBrowsing(t *testing.T) {
 	m.focus = focusProvider
 	paneBrowse := providerPaneBrowseProvider{interactionBrowseProvider{commandsTestProvider{name: "Mixcloud"}}}
 	m.provider = paneBrowse
-	m.providerLists = providerListsWithBrowse(paneBrowse, nil)
+	m.provPane.lists = providerListsWithBrowse(paneBrowse, nil)
 	if help := m.commandHelp(commandModeProvider); !strings.Contains(help, "N") || !strings.Contains(help, "Browse provider") || !strings.Contains(help, "Open") {
 		t.Fatalf("provider help does not advertise provider browse: %q", help)
 	}

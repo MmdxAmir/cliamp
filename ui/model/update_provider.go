@@ -15,10 +15,10 @@ func (m *Model) handlePlaylistsLoaded(msg playlistsLoadedMsg) tea.Cmd {
 	if msg.gen != m.requests.provider || !m.isActiveProvider(msg.providerName) {
 		return nil
 	}
-	m.provLoading = m.provSearch.loading
+	m.provPane.loading = m.provSearch.loading
 	if msg.err != nil {
 		if errors.Is(msg.err, playlist.ErrNeedsAuth) {
-			m.provSignIn = true
+			m.provPane.signIn = true
 			m.err = nil
 			return nil
 		}
@@ -39,11 +39,11 @@ func (m *Model) handleTracksLoaded(msg tracksLoadedMsg) tea.Cmd {
 	if msg.gen != m.requests.tracks || !m.isActiveProvider(msg.providerName) {
 		return nil
 	}
-	m.provLoading = false
+	m.provPane.loading = false
 	m.tracksPaging = msg.err == nil && msg.next > 0
 	if msg.err != nil {
 		if errors.Is(msg.err, playlist.ErrNeedsAuth) {
-			m.provSignIn = true
+			m.provPane.signIn = true
 			m.err = nil
 			return nil
 		}
@@ -121,7 +121,7 @@ func (m *Model) handleCatalogSearch(msg catalogSearchMsg) {
 	if msg.gen != m.requests.catalog || !m.isActiveProvider(msg.providerName) {
 		return
 	}
-	m.provLoading = false
+	m.provPane.loading = false
 	m.provSearch.loading = false
 	if msg.err != nil {
 		m.status.Errorf(statusTTLDefault, "Search failed: %s", msg.err)
@@ -129,8 +129,8 @@ func (m *Model) handleCatalogSearch(msg catalogSearchMsg) {
 		if err := m.refreshProviderListsNow(); err != nil {
 			m.err = err
 		}
-		m.provCursor = 0
-		m.provScroll = 0
+		m.provPane.cursor = 0
+		m.provPane.scroll = 0
 		if msg.count == 0 {
 			m.status.Warning("No results found", statusTTLDefault)
 		}
@@ -143,16 +143,16 @@ func (m *Model) handleProvAuthDone(msg provAuthDoneMsg) tea.Cmd {
 	if msg.gen != m.requests.auth || !m.isActiveProvider(msg.providerName) {
 		return nil
 	}
-	m.provAuthURL = ""
+	m.provPane.authURL = ""
 	if msg.err != nil {
 		// Keep the sign-in prompt, so Enter retries without a restart.
 		m.err = msg.err
-		m.provLoading = false
-		m.provSignIn = true
+		m.provPane.loading = false
+		m.provPane.signIn = true
 		return nil
 	}
 	m.err = nil
-	m.provSignIn = false
-	m.provLoading = true
+	m.provPane.signIn = false
+	m.provPane.loading = true
 	return m.fetchProviderPlaylists()
 }

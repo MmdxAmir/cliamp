@@ -40,8 +40,8 @@ func favoriteAlbumTestModel(view string) (Model, *favoriteAlbumTestProvider) {
 	}}}}
 	m := keybindingTestModel()
 	m.provider, m.focus = p, focusProvider
-	m.providerLists = providerListsWithBrowse(p, p.lists)
-	m.provCursor = len(m.providerLists) - 1
+	m.provPane.lists = providerListsWithBrowse(p, p.lists)
+	m.provPane.cursor = len(m.provPane.lists) - 1
 	m.navBrowser = navBrowserState{
 		prov: p, visible: view == "category" || view == "albums", mode: navBrowseModeByArtistAlbum,
 		screen: navBrowseScreenAlbums, search: "target",
@@ -121,8 +121,8 @@ func TestFavoriteFromProviderAlbumsAndSearch(t *testing.T) {
 				if p.playlistsCalls != wantReads {
 					t.Fatalf("playlist reads = %d, want %d", p.playlistsCalls, wantReads)
 				}
-				if wantRefresh && m.provCursor >= len(m.providerLists) {
-					t.Fatalf("provider cursor = %d after refresh of %d rows", m.provCursor, len(m.providerLists))
+				if wantRefresh && m.provPane.cursor >= len(m.provPane.lists) {
+					t.Fatalf("provider cursor = %d after refresh of %d rows", m.provPane.cursor, len(m.provPane.lists))
 				}
 				if !slices.Equal(m.navBrowser.albums, albums) || m.searchOverlay.results[1].Title != "Target Show" {
 					t.Fatal("favorite decorated album metadata")
@@ -137,8 +137,8 @@ func TestFavoriteActionAndHelpGuardSelection(t *testing.T) {
 		name, view string
 		setup      func(*Model)
 	}{
-		{"pane loading", "pane", func(m *Model) { m.provLoading = true }},
-		{"browse entry", "pane", func(m *Model) { m.provCursor = 0 }},
+		{"pane loading", "pane", func(m *Model) { m.provPane.loading = true }},
+		{"browse entry", "pane", func(m *Model) { m.provPane.cursor = 0 }},
 		{"pane read-only", "pane", func(m *Model) { m.provider = commandsTestProvider{} }},
 		{"category loading", "category", func(m *Model) { m.navBrowser.loading = true }},
 		{"album pagination", "albums", func(m *Model) { m.navBrowser.albumLoading = true }},

@@ -48,21 +48,21 @@ func TestHandlePasteRoutesToActiveInput(t *testing.T) {
 		},
 		{
 			name:    "jump input",
-			model:   Model{jumping: true, jumpInput: "1:"},
+			model:   Model{jump: jumpState{active: true, input: "1:"}},
 			content: "30",
 			check: func(t *testing.T, m *Model) {
-				if m.jumpInput != "1:30" {
-					t.Fatalf("jumpInput = %q, want %q", m.jumpInput, "1:30")
+				if m.jump.input != "1:30" {
+					t.Fatalf("jump.input = %q, want %q", m.jump.input, "1:30")
 				}
 			},
 		},
 		{
 			name:    "url input",
-			model:   Model{urlInputting: true},
+			model:   Model{urlInput: urlInputState{active: true}},
 			content: "https://example.com/song.mp3",
 			check: func(t *testing.T, m *Model) {
-				if m.urlInput != "https://example.com/song.mp3" {
-					t.Fatalf("urlInput = %q, want %q", m.urlInput, "https://example.com/song.mp3")
+				if m.urlInput.input != "https://example.com/song.mp3" {
+					t.Fatalf("urlInput = %q, want %q", m.urlInput.input, "https://example.com/song.mp3")
 				}
 			},
 		},

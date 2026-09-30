@@ -114,8 +114,8 @@ func TestMetadataFollowsSelectionWithoutFetching(t *testing.T) {
 			}
 			m.View()
 		}
-		if !m.showMetadata || m.showInfo || len(saver.saved) != 0 || p.fetches != 0 {
-			t.Fatalf("render changed metadata state or performed I/O: shown=%v info=%v saves=%v fetches=%d", m.showMetadata, m.showInfo, saver.saved, p.fetches)
+		if !m.showMetadata || m.info.visible || len(saver.saved) != 0 || p.fetches != 0 {
+			t.Fatalf("render changed metadata state or performed I/O: shown=%v info=%v saves=%v fetches=%d", m.showMetadata, m.info.visible, saver.saved, p.fetches)
 		}
 		if got, _ := m.currentPlaybackTrack(); got.Path != playing.Path {
 			t.Fatalf("inspection changed playback to %q", got.Path)
@@ -209,8 +209,8 @@ func TestMetadataToggleDefaultsAndPersistence(t *testing.T) {
 	for _, want := range []bool{true, false} {
 		updated, cmd := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModCtrl})
 		m = updated.(Model)
-		if cmd != nil || m.showMetadata != want || m.showInfo {
-			t.Fatalf("toggle: shown=%v info=%v command=%v, want shown=%v without overlay or command", m.showMetadata, m.showInfo, cmd != nil, want)
+		if cmd != nil || m.showMetadata != want || m.info.visible {
+			t.Fatalf("toggle: shown=%v info=%v command=%v, want shown=%v without overlay or command", m.showMetadata, m.info.visible, cmd != nil, want)
 		}
 		if len(saver.saved) != 1 || saver.saved["show_metadata"] != strconv.FormatBool(want) {
 			t.Fatalf("saved config = %v, want only show_metadata=%v", saver.saved, want)
@@ -248,8 +248,8 @@ func TestMetadataShortcutLeavesTabNavigationIntact(t *testing.T) {
 			m.configSaver = saver
 			updated, _ := m.Update(tt.key)
 			m = updated.(Model)
-			if m.focus != tt.want || m.showMetadata || m.showInfo || len(saver.saved) != 0 {
-				t.Fatalf("%s: focus=%s metadata=%v info=%v saves=%v", tt.key.String(), m.focus.label(), m.showMetadata, m.showInfo, saver.saved)
+			if m.focus != tt.want || m.showMetadata || m.info.visible || len(saver.saved) != 0 {
+				t.Fatalf("%s: focus=%s metadata=%v info=%v saves=%v", tt.key.String(), m.focus.label(), m.showMetadata, m.info.visible, saver.saved)
 			}
 		})
 	}
@@ -271,8 +271,8 @@ func TestMetadataLayoutAndFocusBudget(t *testing.T) {
 			saver := &recordingSaver{}
 			m.configSaver = saver
 			m.SetShowMetadata(true)
-			if !m.layout.twoColumn || m.showInfo || m.visRows != tt.visRows || m.vis.Rows < 1 {
-				t.Fatalf("metadata layout: twoColumn=%v info=%v configured=%d canvas=%d", m.layout.twoColumn, m.showInfo, m.visRows, m.vis.Rows)
+			if !m.layout.twoColumn || m.info.visible || m.visRows != tt.visRows || m.vis.Rows < 1 {
+				t.Fatalf("metadata layout: twoColumn=%v info=%v configured=%d canvas=%d", m.layout.twoColumn, m.info.visible, m.visRows, m.vis.Rows)
 			}
 			if got := m.layout.visualizerRows < before.visualizerRows; got != tt.borrow {
 				t.Fatalf("borrowed visualizer rows = %v, want %v", got, tt.borrow)
@@ -373,14 +373,14 @@ func TestMetadataFallbackAndPreference(t *testing.T) {
 			for _, want := range []bool{true, false, true} {
 				updated, _ := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModCtrl})
 				m = updated.(Model)
-				if m.showMetadata != want || m.showInfo != want || saver.saved["show_metadata"] != strconv.FormatBool(want) {
-					t.Fatalf("fallback toggle: metadata=%v info=%v saved=%v, want %v", m.showMetadata, m.showInfo, saver.saved, want)
+				if m.showMetadata != want || m.info.visible != want || saver.saved["show_metadata"] != strconv.FormatBool(want) {
+					t.Fatalf("fallback toggle: metadata=%v info=%v saved=%v, want %v", m.showMetadata, m.info.visible, saver.saved, want)
 				}
 				assertViewFits(t, m.View().Content, tt.width, tt.height)
 			}
 			updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 			m = updated.(Model)
-			if m.showInfo || !m.showMetadata || saver.saved["show_metadata"] != "true" || m.layout != before || m.visRows != 12 {
+			if m.info.visible || !m.showMetadata || saver.saved["show_metadata"] != "true" || m.layout != before || m.visRows != 12 {
 				t.Fatal("Esc did not retain preference and restore the non-sidebar layout")
 			}
 			if strings.Contains(ansi.Strip(m.View().Content), "Metadata [Ctrl+I]") {
@@ -390,7 +390,7 @@ func TestMetadataFallbackAndPreference(t *testing.T) {
 			m = updated.(Model)
 			m.SetSimplified(false)
 			m.SetHideSettingsPane(false)
-			if m.showInfo || !m.showMetadata || !strings.Contains(ansi.Strip(m.View().Content), "Metadata [Ctrl+I]") {
+			if m.info.visible || !m.showMetadata || !strings.Contains(ansi.Strip(m.View().Content), "Metadata [Ctrl+I]") {
 				t.Fatal("saved preference did not restore metadata in the wide sidebar")
 			}
 		})
@@ -405,17 +405,17 @@ func TestMetadataMoreDetailsFromSettingsFocus(t *testing.T) {
 			m.playlist.SetTrack(1, playlist.Track{Path: "/selected.mp3", Title: "Selected", Artist: "Artist", Album: "Album",
 				Genre: "Genre", Year: 2026, TrackNumber: 2, DurationSecs: 123})
 			m.handleKey(tea.KeyPressMsg{Code: 'i', Mod: tea.ModCtrl})
-			if !m.showMetadata || m.showInfo || m.focus != focus {
+			if !m.showMetadata || m.info.visible || m.focus != focus {
 				t.Fatal("Ctrl+I failed to open metadata without changing setting focus")
 			}
 			if pane := ansi.Strip(m.renderSettingsPane(m.effectivePlaylistVisible())); !strings.Contains(pane, "i: more details") {
 				t.Fatalf("truncated sidebar omitted the full-info hint:\n%s", pane)
 			}
-			m.infoScroll = 99
+			m.info.scroll = 99
 			updated, _ := m.Update(tea.KeyPressMsg{Text: "i"})
 			m = updated.(Model)
-			if !m.showInfo || !m.showMetadata || m.infoScroll != 0 || m.plCursor != 1 {
-				t.Fatalf("i from %s: info=%v metadata=%v scroll=%d cursor=%d", focus.label(), m.showInfo, m.showMetadata, m.infoScroll, m.plCursor)
+			if !m.info.visible || !m.showMetadata || m.info.scroll != 0 || m.plCursor != 1 {
+				t.Fatalf("i from %s: info=%v metadata=%v scroll=%d cursor=%d", focus.label(), m.info.visible, m.showMetadata, m.info.scroll, m.plCursor)
 			}
 			if info := ansi.Strip(m.renderInfoBody()); !strings.Contains(info, "Title: Selected") {
 				t.Fatalf("full info does not describe the highlighted track:\n%s", info)
@@ -424,12 +424,12 @@ func TestMetadataMoreDetailsFromSettingsFocus(t *testing.T) {
 				updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 				m = updated.(Model)
 			}
-			if info := ansi.Strip(m.renderInfoBody()); m.infoScroll == 0 || !strings.Contains(info, "Path: /selected.mp3") {
-				t.Fatalf("full info did not scroll to Path: scroll=%d\n%s", m.infoScroll, info)
+			if info := ansi.Strip(m.renderInfoBody()); m.info.scroll == 0 || !strings.Contains(info, "Path: /selected.mp3") {
+				t.Fatalf("full info did not scroll to Path: scroll=%d\n%s", m.info.scroll, info)
 			}
 			updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 			m = updated.(Model)
-			if m.showInfo || !m.showMetadata || m.focus != focus || !m.layout.twoColumn {
+			if m.info.visible || !m.showMetadata || m.focus != focus || !m.layout.twoColumn {
 				t.Fatal("Esc did not return to the focused setting with metadata still shown")
 			}
 		})
@@ -460,7 +460,7 @@ func TestMetadataKeyStaysLiteralInTextInputs(t *testing.T) {
 		{"playlist search", func(m *Model) *string { m.search.active = true; return &m.search.query }},
 		{"provider filter", func(m *Model) *string { m.provSearch.active = true; return &m.provSearch.query }},
 		{"provider search", func(m *Model) *string { m.searchOverlay.visible = true; return &m.searchOverlay.query }},
-		{"URL", func(m *Model) *string { m.urlInputting = true; return &m.urlInput }},
+		{"URL", func(m *Model) *string { m.urlInput.active = true; return &m.urlInput.input }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m := keybindingTestModel()
@@ -473,8 +473,8 @@ func TestMetadataKeyStaysLiteralInTextInputs(t *testing.T) {
 				}
 			}
 			m.handleKey(tea.KeyPressMsg{Code: 'i', Mod: tea.ModCtrl})
-			if *input != "II" || m.showMetadata || m.showInfo || len(saver.saved) != 0 {
-				t.Fatalf("input=%q metadata=%v info=%v saves=%v", *input, m.showMetadata, m.showInfo, saver.saved)
+			if *input != "II" || m.showMetadata || m.info.visible || len(saver.saved) != 0 {
+				t.Fatalf("input=%q metadata=%v info=%v saves=%v", *input, m.showMetadata, m.info.visible, saver.saved)
 			}
 		})
 	}

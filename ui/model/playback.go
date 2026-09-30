@@ -392,7 +392,7 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 		// silent reconnect failed). Surface the standard sign-in
 		// overlay rather than the raw stream error.
 		if errors.Is(err, playlist.ErrNeedsAuth) {
-			m.provSignIn = true
+			m.provPane.signIn = true
 			m.err = nil
 		} else {
 			m.err = err

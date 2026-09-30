@@ -47,8 +47,8 @@ var loadingSpinnerCases = []struct {
 		setup: func(m *Model) {
 			m.provider = &catalogTestProvider{commandsTestProvider: commandsTestProvider{name: "Radio"}}
 			m.focus = focusProvider
-			m.providerLists = []playlist.PlaylistInfo{{ID: "c:1", Name: "Old station"}}
-			m.provLoading, m.provSearch.loading = true, true
+			m.provPane.lists = []playlist.PlaylistInfo{{ID: "c:1", Name: "Old station"}}
+			m.provPane.loading, m.provSearch.loading = true, true
 		},
 		body: (*Model).renderProviderList,
 		want: "Searching Radio…",

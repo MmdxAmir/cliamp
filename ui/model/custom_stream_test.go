@@ -177,8 +177,8 @@ func TestStreamPlayedNeedsAuthAsksForSignIn(t *testing.T) {
 	})
 	m = updated.(Model)
 
-	if !m.provSignIn {
-		t.Fatal("provSignIn = false, want the sign-in prompt")
+	if !m.provPane.signIn {
+		t.Fatal("provPane.signIn = false, want the sign-in prompt")
 	}
 	if m.err != nil {
 		t.Fatalf("err = %v, want nil so the prompt is not hidden", m.err)
@@ -194,8 +194,8 @@ func TestProviderAuthFailureKeepsSignInPrompt(t *testing.T) {
 
 	updated, _ := m.Update(provAuthDoneMsg{providerName: "Spotify", gen: gen, err: errors.New("access_denied")})
 	m = updated.(Model)
-	if !m.provSignIn || m.err == nil {
-		t.Fatalf("after failure: provSignIn = %v, err = %v, want prompt and error", m.provSignIn, m.err)
+	if !m.provPane.signIn || m.err == nil {
+		t.Fatalf("after failure: provPane.signIn = %v, err = %v, want prompt and error", m.provPane.signIn, m.err)
 	}
 
 	// Enter retries the sign-in and clears the old error.
@@ -204,8 +204,8 @@ func TestProviderAuthFailureKeepsSignInPrompt(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("Enter on the sign-in prompt returned no command")
 	}
-	if m.provSignIn || !m.provLoading || m.err != nil {
-		t.Fatalf("after retry: provSignIn = %v, provLoading = %v, err = %v", m.provSignIn, m.provLoading, m.err)
+	if m.provPane.signIn || !m.provPane.loading || m.err != nil {
+		t.Fatalf("after retry: provPane.signIn = %v, provPane.loading = %v, err = %v", m.provPane.signIn, m.provPane.loading, m.err)
 	}
 }
 

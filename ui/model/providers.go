@@ -20,9 +20,9 @@ func (m *Model) resetProviderNav() {
 	nextRequest(&m.requests.auth)
 	nextRequest(&m.requests.catalog)
 	m.tracksPaging = false
-	m.provCursor = 0
-	m.provScroll = 0
-	m.provLoading = true
+	m.provPane.cursor = 0
+	m.provPane.scroll = 0
+	m.provPane.loading = true
 	m.provSearch.active = false
 	m.provSearch.loading = false
 	m.provSearch.query = ""
@@ -49,8 +49,8 @@ func (m *Model) switchProvider(idx int) tea.Cmd {
 	}
 	m.provPillIdx = idx
 	m.provider = m.providers[idx].Provider
-	m.providerLists = nil
-	m.provSignIn = false
+	m.provPane.lists = nil
+	m.provPane.signIn = false
 	m.catalogBatch = catalogBatchState{}
 	m.activeProviderPlaylistID = ""
 	m.resetProviderNav()
@@ -78,7 +78,7 @@ func (m *Model) fetchProviderPlaylists() tea.Cmd {
 // refreshRadioLists projects local Radio state on the Update owner. Only
 // directory loading is asynchronous; row snapshots never cross that boundary.
 func (m *Model) refreshRadioLists() tea.Cmd {
-	m.provLoading = m.provSearch.loading
+	m.provPane.loading = m.provSearch.loading
 	if err := m.refreshProviderListsNow(); err != nil {
 		m.err = err
 		return nil
@@ -121,15 +121,15 @@ func (m *Model) startCatalogLoading() tea.Cmd {
 // inserting favorites or other rows can change its numeric position.
 func (m *Model) replaceProviderLists(lists []playlist.PlaylistInfo) {
 	selectedID := ""
-	if m.provCursor >= 0 && m.provCursor < len(m.providerLists) {
-		selectedID = m.providerLists[m.provCursor].ID
+	if m.provPane.cursor >= 0 && m.provPane.cursor < len(m.provPane.lists) {
+		selectedID = m.provPane.lists[m.provPane.cursor].ID
 	}
-	m.providerLists = providerListsWithBrowse(m.provider, lists)
-	m.provCursor = max(0, min(m.provCursor, len(m.providerLists)-1))
+	m.provPane.lists = providerListsWithBrowse(m.provider, lists)
+	m.provPane.cursor = max(0, min(m.provPane.cursor, len(m.provPane.lists)-1))
 	if selectedID != "" {
-		for i, item := range m.providerLists {
+		for i, item := range m.provPane.lists {
 			if item.ID == selectedID {
-				m.provCursor = i
+				m.provPane.cursor = i
 				break
 			}
 		}
@@ -186,7 +186,7 @@ func (m *Model) refreshesInPlace() bool {
 // allows it. Otherwise it reloads the playlist list, or with tracksOnly it
 // reloads nothing. It does nothing while the provider loads.
 func (m *Model) refreshActiveProvider(tracksOnly bool) tea.Cmd {
-	if m.provider == nil || m.provLoading {
+	if m.provider == nil || m.provPane.loading {
 		return nil
 	}
 	inPlace := m.refreshesInPlace()
@@ -198,7 +198,7 @@ func (m *Model) refreshActiveProvider(tracksOnly bool) tea.Cmd {
 	}
 	nextRequest(&m.requests.catalog)
 	m.catalogBatch = catalogBatchState{}
-	m.provLoading = true
+	m.provPane.loading = true
 	m.status.Activityf(statusTTLShort, "Refreshing %s…", m.provider.Name())
 	if inPlace {
 		return m.fetchProviderTracks(m.activeProviderPlaylistID)
@@ -520,26 +520,26 @@ func providerBrowseEntryForMode(prov playlist.Provider, mode provider.BrowseMode
 }
 
 func (m Model) selectedProviderListIsBrowseEntry() bool {
-	if m.provCursor < 0 || m.provCursor >= len(m.providerLists) {
+	if m.provPane.cursor < 0 || m.provPane.cursor >= len(m.provPane.lists) {
 		return false
 	}
-	_, ok := providerBrowseEntryForID(m.provider, m.providerLists[m.provCursor].ID)
+	_, ok := providerBrowseEntryForID(m.provider, m.provPane.lists[m.provPane.cursor].ID)
 	return ok
 }
 
 // openProviderList activates either a playable provider list or a UI-only
 // hierarchical browse entry contributed by the provider.
 func (m *Model) openProviderList(index int) tea.Cmd {
-	if index < 0 || index >= len(m.providerLists) || m.provider == nil {
+	if index < 0 || index >= len(m.provPane.lists) || m.provider == nil {
 		return nil
 	}
-	item := m.providerLists[index]
+	item := m.provPane.lists[index]
 	// The location offer is a question, not a list. Selecting it raises the
 	// question; nothing about the listener's location is worked out until they
 	// answer it.
 	if consenter, ok := m.provider.(provider.LocationConsenter); ok {
 		if id := consenter.LocationConsentID(); id != "" && id == item.ID {
-			m.provAskLoc = true
+			m.provPane.askLoc = true
 			return nil
 		}
 	}
@@ -551,7 +551,7 @@ func (m *Model) openProviderList(index int) tea.Cmd {
 		}
 		return cmd
 	}
-	m.provLoading = true
+	m.provPane.loading = true
 	m.activeProviderPlaylistID = item.ID
 	return m.fetchProviderTracks(item.ID)
 }

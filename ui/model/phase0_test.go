@@ -158,11 +158,13 @@ func TestNavigationTrackReplaceWinsOverRadioShortcut(t *testing.T) {
 func TestStaleAsyncResponsesDoNotChangeCurrentState(t *testing.T) {
 	current := commandsTestProvider{name: "Current"}
 	m := Model{
-		player:        &playbackFakeEngine{},
-		playlist:      playlist.New(),
-		provider:      current,
-		providerLists: []playlist.PlaylistInfo{{ID: "current", Name: "Current"}},
-		provLoading:   true,
+		player:   &playbackFakeEngine{},
+		playlist: playlist.New(),
+		provider: current,
+		provPane: providerPane{
+			lists:   []playlist.PlaylistInfo{{ID: "current", Name: "Current"}},
+			loading: true,
+		},
 		navBrowser: navBrowserState{
 			visible: true,
 			loading: true,
@@ -238,10 +240,10 @@ func TestProviderRefreshFailureKeepsExistingLists(t *testing.T) {
 	current := commandsTestProvider{name: "Current"}
 	m := Model{
 		provider: current,
-		providerLists: []playlist.PlaylistInfo{
-			{ID: "mix", Name: "Mix"},
+		provPane: providerPane{
+			lists:   []playlist.PlaylistInfo{{ID: "mix", Name: "Mix"}},
+			loading: true,
 		},
-		provLoading: true,
 	}
 	m.requests.provider = 1
 
@@ -252,17 +254,17 @@ func TestProviderRefreshFailureKeepsExistingLists(t *testing.T) {
 	})
 	m = updated.(Model)
 
-	if len(m.providerLists) != 1 || m.providerLists[0].Name != "Mix" {
-		t.Fatalf("provider lists after refresh failure = %+v, want prior Mix list", m.providerLists)
+	if len(m.provPane.lists) != 1 || m.provPane.lists[0].Name != "Mix" {
+		t.Fatalf("provider lists after refresh failure = %+v, want prior Mix list", m.provPane.lists)
 	}
-	if m.provLoading {
-		t.Fatal("provLoading = true after failed refresh, want false")
+	if m.provPane.loading {
+		t.Fatal("provPane.loading = true after failed refresh, want false")
 	}
 }
 
 func TestProviderPartialRefreshShowsPublicListsAndWarning(t *testing.T) {
 	current := providerPaneBrowseProvider{interactionBrowseProvider{commandsTestProvider{name: "Mixcloud"}}}
-	m := Model{provider: current, provLoading: true}
+	m := Model{provider: current, provPane: providerPane{loading: true}}
 	m.requests.provider = 1
 
 	updated, _ := m.Update(playlistsLoadedMsg{
@@ -273,11 +275,11 @@ func TestProviderPartialRefreshShowsPublicListsAndWarning(t *testing.T) {
 	})
 	m = updated.(Model)
 
-	if got := len(m.providerLists); got != 4 {
-		t.Fatalf("provider lists = %+v, want three browse entries and public discovery", m.providerLists)
+	if got := len(m.provPane.lists); got != 4 {
+		t.Fatalf("provider lists = %+v, want three browse entries and public discovery", m.provPane.lists)
 	}
-	if m.providerLists[0].Name != "Shows" || m.providerLists[1].Name != "Creators" || m.providerLists[2].Name != "Genres" || m.providerLists[3].Name != "Recent Releases" {
-		t.Fatalf("provider lists = %+v", m.providerLists)
+	if m.provPane.lists[0].Name != "Shows" || m.provPane.lists[1].Name != "Creators" || m.provPane.lists[2].Name != "Genres" || m.provPane.lists[3].Name != "Recent Releases" {
+		t.Fatalf("provider lists = %+v", m.provPane.lists)
 	}
 	if m.err != nil || m.status.kind != feedbackWarning || !strings.Contains(m.status.text, "account views unavailable") {
 		t.Fatalf("partial refresh state = err:%v status:%+v", m.err, m.status)

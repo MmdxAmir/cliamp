@@ -56,7 +56,7 @@ func TestSearchInputsShowModeAndExitKey(t *testing.T) {
 			name: "provider pane filter",
 			setup: func(m *Model) {
 				m.focus = focusProvider
-				m.providerLists = []playlist.PlaylistInfo{{ID: "1", Name: "Mix"}}
+				m.provPane.lists = []playlist.PlaylistInfo{{ID: "1", Name: "Mix"}}
 				m.provSearch = provSearchState{active: true, query: "mi"}
 			},
 			header: (*Model).renderProviderList,
@@ -67,7 +67,7 @@ func TestSearchInputsShowModeAndExitKey(t *testing.T) {
 			setup: func(m *Model) {
 				m.provider = &catalogTestProvider{commandsTestProvider: commandsTestProvider{name: "Radio"}}
 				m.focus = focusProvider
-				m.providerLists = []playlist.PlaylistInfo{{ID: "c:1", Name: "Station"}}
+				m.provPane.lists = []playlist.PlaylistInfo{{ID: "c:1", Name: "Station"}}
 				m.provSearch = provSearchState{active: true, query: "rock"}
 			},
 			header: (*Model).renderProviderList,

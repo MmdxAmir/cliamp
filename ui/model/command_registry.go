@@ -228,11 +228,11 @@ var commandRegistry = []commandSpec{
 	}},
 	{Mode: commandModeProvider, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite", ContextHelp: true, Prominent: true, Enabled: func(m Model) bool {
 		_, ok := m.provider.(provider.FavoriteToggler)
-		if !ok || m.provLoading || m.provCursor < 0 || m.provCursor >= len(m.providerLists) || m.selectedProviderListIsBrowseEntry() {
+		if !ok || m.provPane.loading || m.provPane.cursor < 0 || m.provPane.cursor >= len(m.provPane.lists) || m.selectedProviderListIsBrowseEntry() {
 			return false
 		}
 		if sl, ok := m.provider.(provider.SectionedList); ok {
-			return sl.IsFavoritableID(m.providerLists[m.provCursor].ID)
+			return sl.IsFavoritableID(m.provPane.lists[m.provPane.cursor].ID)
 		}
 		return true
 	}},

@@ -90,17 +90,17 @@ func TestDeferredHTTPStreamSeek(t *testing.T) {
 			settlePos:  5 * time.Second,
 			want:       5 * time.Second,
 			invoke: func(m *Model) tea.Cmd {
-				m.jumping = true
-				m.jumpInput = "10"
+				m.jump.active = true
+				m.jump.input = "10"
 				return m.handleJumpKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 			},
 			check: func(t *testing.T, m *Model) {
 				t.Helper()
-				if m.jumping {
+				if m.jump.active {
 					t.Fatal("jump mode remained active after enter")
 				}
-				if m.jumpInput != "" {
-					t.Fatalf("jump input = %q, want empty", m.jumpInput)
+				if m.jump.input != "" {
+					t.Fatalf("jump input = %q, want empty", m.jump.input)
 				}
 			},
 		},

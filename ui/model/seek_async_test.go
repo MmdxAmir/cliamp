@@ -60,14 +60,14 @@ func TestYTDLSeekEntryPointsRunAsync(t *testing.T) {
 		{
 			name: "jump enter",
 			invoke: func(m *Model) tea.Cmd {
-				m.jumping = true
-				m.jumpInput = "1:00"
+				m.jump.active = true
+				m.jump.input = "1:00"
 				return m.handleJumpKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 			},
 			wantDelta: 50 * time.Second,
 			check: func(t *testing.T, m *Model) {
 				t.Helper()
-				if m.jumping {
+				if m.jump.active {
 					t.Fatal("jump mode remained active after enter")
 				}
 			},

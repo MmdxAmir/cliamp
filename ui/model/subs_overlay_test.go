@@ -373,7 +373,7 @@ func TestSelectedProviderShow(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := Model{provider: prov, playlist: playlist.New(), providerLists: lists, provCursor: tt.cursor, provLoading: tt.loading}
+			m := Model{provider: prov, playlist: playlist.New(), provPane: providerPane{lists: lists, cursor: tt.cursor, loading: tt.loading}}
 			id, _, ok := m.selectedProviderShow()
 			if ok != tt.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
@@ -393,9 +393,9 @@ func TestLoadLatestFromProviderListQueuesNewest(t *testing.T) {
 		favoritable: map[string]bool{"f:feed-a": true},
 	}
 	m := &Model{
-		provider:      prov,
-		playlist:      playlist.New(),
-		providerLists: []playlist.PlaylistInfo{{ID: "f:feed-a", Name: "Show"}},
+		provider: prov,
+		playlist: playlist.New(),
+		provPane: providerPane{lists: []playlist.PlaylistInfo{{ID: "f:feed-a", Name: "Show"}}},
 	}
 
 	cmd := m.loadLatestFromProviderList()
@@ -426,9 +426,9 @@ func TestLoadLatestFromProviderListQueuesNewest(t *testing.T) {
 func TestLoadLatestFromProviderListIgnoresSectionRows(t *testing.T) {
 	prov := &sectionedSubProv{favoritable: map[string]bool{}}
 	m := &Model{
-		provider:      prov,
-		playlist:      playlist.New(),
-		providerLists: []playlist.PlaylistInfo{{ID: "browse:categories", Name: "Browse Categories"}},
+		provider: prov,
+		playlist: playlist.New(),
+		provPane: providerPane{lists: []playlist.PlaylistInfo{{ID: "browse:categories", Name: "Browse Categories"}}},
 	}
 
 	if cmd := m.loadLatestFromProviderList(); cmd != nil {
@@ -444,9 +444,9 @@ func TestProviderListShowActionsNeedAShowLister(t *testing.T) {
 		t.Fatal("albumOnlyProv must load albums for this test to mean anything")
 	}
 	m := &Model{
-		provider:      prov,
-		playlist:      playlist.New(),
-		providerLists: []playlist.PlaylistInfo{{ID: "album-1", Name: "An Album"}},
+		provider: prov,
+		playlist: playlist.New(),
+		provPane: providerPane{lists: []playlist.PlaylistInfo{{ID: "album-1", Name: "An Album"}}},
 	}
 
 	if _, _, ok := m.selectedProviderShow(); ok {
@@ -468,9 +468,9 @@ func TestAppendShowFromProviderListAppendsEverything(t *testing.T) {
 		favoritable: map[string]bool{"f:feed-a": true},
 	}
 	m := &Model{
-		provider:      prov,
-		playlist:      playlist.New(),
-		providerLists: []playlist.PlaylistInfo{{ID: "f:feed-a", Name: "Show"}},
+		provider: prov,
+		playlist: playlist.New(),
+		provPane: providerPane{lists: []playlist.PlaylistInfo{{ID: "f:feed-a", Name: "Show"}}},
 	}
 	m.playlist.Add(playlist.Track{Path: "/already-here.mp3"})
 	m.playlist.Queue(0)

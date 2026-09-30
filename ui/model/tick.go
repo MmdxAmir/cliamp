@@ -247,7 +247,7 @@ func (m *Model) isFullyIdle() bool {
 // spinnerVisible reports whether a loading spinner is on the screen. The tick
 // then redraws at least every spinnerInterval so that the frames advance.
 func (m *Model) spinnerVisible() bool {
-	return m.provLoading || m.provSearch.loading || m.catalogBatch.loading || m.feedLoading ||
+	return m.provPane.loading || m.provSearch.loading || m.catalogBatch.loading || m.feedLoading ||
 		(m.lyrics.visible && m.lyrics.loading) ||
 		(m.netSearch.active && m.netSearch.loading) ||
 		(m.searchOverlay.visible && (m.searchOverlay.loading || m.searchOverlay.albumLoading)) ||

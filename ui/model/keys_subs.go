@@ -227,7 +227,7 @@ func (m *Model) appendSubscriptionTracks(tracks []playlist.Track, mode subsLoadM
 // provider list, and false when the row is a section entry, a browse entry, or
 // the provider lists albums rather than shows.
 func (m Model) selectedProviderShow() (id, name string, ok bool) {
-	if m.provLoading || m.provCursor < 0 || m.provCursor >= len(m.providerLists) {
+	if m.provPane.loading || m.provPane.cursor < 0 || m.provPane.cursor >= len(m.provPane.lists) {
 		return "", "", false
 	}
 	if m.selectedProviderListIsBrowseEntry() {
@@ -237,7 +237,7 @@ func (m Model) selectedProviderShow() (id, name string, ok bool) {
 	if !ok {
 		return "", "", false
 	}
-	entry := m.providerLists[m.provCursor]
+	entry := m.provPane.lists[m.provPane.cursor]
 	if !sl.IsShowID(entry.ID) {
 		return "", "", false
 	}

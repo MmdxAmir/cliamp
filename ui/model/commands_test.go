@@ -181,7 +181,7 @@ func TestPlaylistManagerTrackSortUsesLowercaseKey(t *testing.T) {
 func TestURLOverlayLoadsRawStream(t *testing.T) {
 	const raw = "https://example.com/live.mp3"
 
-	m := Model{urlInputting: true, urlInput: raw}
+	m := Model{urlInput: urlInputState{active: true, input: raw}}
 
 	cmd := m.handleURLInputKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
