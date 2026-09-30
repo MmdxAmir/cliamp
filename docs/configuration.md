@@ -74,6 +74,7 @@ eq = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 # Mirror draws tapered Braille bars around a persistent horizontal center axis.
 # ClassicPeak uses smooth bars and floating peak caps, with sampling aligned
 # to audible playback and adaptive redraws for smooth motion.
+# ClassicLED redraws at 30 FPS during playback, like the Winamp LED meter.
 # Neighboring bands are averaged into each bar.
 visualizer = "Bars"
 

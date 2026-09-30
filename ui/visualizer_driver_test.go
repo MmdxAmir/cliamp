@@ -648,7 +648,7 @@ func TestModesDeclareTapAndCadence(t *testing.T) {
 					t.Errorf("Analyze tap = %v, want %v", tap, want)
 				}
 			}
-			if got, want := v.DriverOwnsCadence(), mode == VisClassicPeak; got != want {
+			if got, want := v.DriverOwnsCadence(), mode == VisClassicPeak || mode == VisClassicLED; got != want {
 				t.Errorf("DriverOwnsCadence() = %v, want %v", got, want)
 			}
 		})

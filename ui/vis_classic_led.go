@@ -12,8 +12,9 @@ const (
 	classicLEDBarGap   = 1
 	// Frame cadence. Real Winamp ran around 30 FPS; matching that gives the
 	// characteristic chunky LED feel without burning CPU on smooth interpolation.
-	// The driver does not own its cadence, so the model redraws it at TickFast,
-	// or at TickAnim with the 60 FPS setting. The physics use the wall clock.
+	// The driver owns its cadence, so the model redraws it at this rate during
+	// playback, or at TickAnim with the 60 FPS setting. The physics use the
+	// wall clock.
 	classicLEDFPS = 30
 	// Body smoothing rates. Fast attack so a kick drum lights LEDs immediately,
 	// medium decay so the bar visibly settles a frame at a time.
@@ -61,6 +62,10 @@ func (d *classicLEDDriver) OnEnter(*Visualizer) {
 }
 
 func (d *classicLEDDriver) OnLeave(*Visualizer) {}
+
+// ownsCadence lets the model redraw ClassicLED at classicLEDFPS, which is
+// faster than TickFast.
+func (*classicLEDDriver) ownsCadence() {}
 
 func (d *classicLEDDriver) levels(v *Visualizer) []float64 {
 	return resampleBandsLinear(v.bands, classicLEDBarCount(v.columns()))
