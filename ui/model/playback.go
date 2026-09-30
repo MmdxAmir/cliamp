@@ -121,10 +121,10 @@ func (m *Model) prevTrack() tea.Cmd {
 	if m.player.Position() > 3*time.Second {
 		if m.player.Seekable() {
 			// Seekable media rewinds in place; non-seekable streams must be restarted.
-			// The rewind ends the play so far. finishSeek starts the replay,
-			// which can scrobble again, when the rewind lands. A failed
-			// rewind plays on as the play that was already reported.
-			m.leaveTrack(m.player.PositionAndDuration())
+			// The rewind ends the play so far. finishSeek reports that play
+			// and starts the replay, which can scrobble again, when the
+			// rewind lands. A failed rewind plays on as the same play.
+			m.seek.rewindAt, m.seek.rewindDur = m.player.PositionAndDuration()
 			m.seek.rewind = true
 			cmd, err := m.trySeekAbsolute(0)
 			if err != nil {

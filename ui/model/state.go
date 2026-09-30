@@ -75,6 +75,8 @@ type seekState struct {
 	timer     int           // tick countdown for debounce (0 = idle)
 	grace     int           // ticks to suppress reconnect after seek completes
 	rewind    bool          // a rewind with previous waits to land and start a replay
+	rewindAt  time.Duration // position of the play that a landed rewind reports
+	rewindDur time.Duration // duration of the play that a landed rewind reports
 	timerFor  time.Duration
 	graceFor  time.Duration
 }

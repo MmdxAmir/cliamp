@@ -305,14 +305,17 @@ func TestLeaveTrackReportsEachStartOnce(t *testing.T) {
 	}
 }
 
-// A rewind with previous scrobbles the play so far. The replay can scrobble
-// again only after the rewind lands, so a rewind that fails and plays on
-// scrobbles the track once.
+// A rewind with previous scrobbles the play so far when it lands, and the
+// replay can scrobble again. A rewind that fails plays on as the same play,
+// which scrobbles once when it is left.
 func TestRewindStartsAReplayWhenItLands(t *testing.T) {
 	seekErr := errors.New("seek failed")
 	tests := []struct {
 		name  string
 		setup func(e *changeEngine)
+		// drain ends the play at the end of the track instead of with a skip
+		// at 170 seconds.
+		drain bool
 		want  int
 	}{
 		{name: "an in-place rewind", want: 2},
@@ -322,6 +325,10 @@ func TestRewindStartsAReplayWhenItLands(t *testing.T) {
 			e.ytdlSeek = true
 			e.seekYTDLErr = seekErr
 		}, want: 1},
+		{name: "a failed early rewind", setup: func(e *changeEngine) {
+			e.position = 20 * time.Second
+			e.seekErr = seekErr
+		}, drain: true, want: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -335,8 +342,15 @@ func TestRewindStartsAReplayWhenItLands(t *testing.T) {
 				next, _ := m.Update(cmd())
 				m = next.(Model)
 			}
-			c.engine.position = 170 * time.Second
-			m.nextTrack()
+			if tt.drain {
+				c.engine.position = 180 * time.Second
+				c.engine.drained = true
+				next, _ := m.Update(tickMsg(time.Now()))
+				m = next.(Model)
+			} else {
+				c.engine.position = 170 * time.Second
+				m.nextTrack()
+			}
 			if m.reports != nil {
 				m.reports.waitIdle(t)
 			}

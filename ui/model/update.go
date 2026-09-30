@@ -140,7 +140,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resume.secs = 0
 		}
 		if msg.err != nil {
-			// A failed rewind plays on as the play that was already reported.
+			// A failed rewind plays on as the same play.
 			m.seek.rewind = false
 			if msg.resume {
 				m.status.Warningf(statusTTLLong, "Couldn't resume this track; playing from the previous position: %s", msg.err)
