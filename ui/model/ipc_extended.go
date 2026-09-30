@@ -89,9 +89,11 @@ type ipcFeedLoadResult struct {
 	err      error
 }
 
+// handleIPCURL resolves the URL of request in a command. A client that
+// disconnects cancels the request context, which stops the resolve.
 func (m *Model) handleIPCURL(request ipcURLRequest) tea.Cmd {
 	return func() tea.Msg {
-		tracks, err := resolve.URL(request.URL)
+		tracks, err := resolve.URLContext(requestContext(request.Context), request.URL)
 		return ipcURLLoadResult{request: request, tracks: tracks, err: err}
 	}
 }

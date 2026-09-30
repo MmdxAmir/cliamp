@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -343,6 +345,41 @@ func TestHeadlessLibraryRequests(t *testing.T) {
 			m := newHeadlessModel(t, &headlessEngine{}, providers)
 			if response := runV2(t, &m, tc.op, tc.params); !response.OK || !tc.ok(response) {
 				t.Fatalf("%s = %+v", tc.op, response)
+			}
+		})
+	}
+}
+
+// A client that disconnects cancels its url.load request. The resolve then
+// stops with the context error, and a live request resolves the URL.
+func TestIPCURLUsesRequestContext(t *testing.T) {
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	local := filepath.Join(t.TempDir(), "one.mp3")
+	if err := os.WriteFile(local, []byte("audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name       string
+		ctx        context.Context
+		url        string
+		wantErr    error
+		wantTracks int
+	}{
+		{name: "canceled request", ctx: canceled, url: "http://127.0.0.1:1/stream", wantErr: context.Canceled},
+		{name: "live request", ctx: context.Background(), url: local, wantTracks: 1},
+		{name: "no context", url: local, wantTracks: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m Model
+			msg := m.handleIPCURL(ipcURLRequest{URL: tt.url, Context: tt.ctx, Reply: make(chan ipc.Response, 1)})()
+			result, ok := msg.(ipcURLLoadResult)
+			if !ok {
+				t.Fatalf("message = %T, want ipcURLLoadResult", msg)
+			}
+			if !errors.Is(result.err, tt.wantErr) || len(result.tracks) != tt.wantTracks {
+				t.Fatalf("result = %d tracks, error %v; want %d tracks, error %v", len(result.tracks), result.err, tt.wantTracks, tt.wantErr)
 			}
 		})
 	}
