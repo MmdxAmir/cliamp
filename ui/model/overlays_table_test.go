@@ -157,9 +157,24 @@ func TestOverlayRoutesAgree(t *testing.T) {
 	}
 }
 
-// TestOverlayStackOrder pins the stack order where one overlay opens from
-// inside another, and the queue and subscriptions order that was chosen.
+// TestOverlayStackOrder checks that overlayStack holds each overlay screen
+// once and never the main screen. It also pins the stack order where one
+// overlay opens from inside another, and the queue and subscriptions order
+// that was chosen.
 func TestOverlayStackOrder(t *testing.T) {
+	counts := map[topLevelScreen]int{}
+	for _, spec := range overlayStack {
+		counts[spec.screen]++
+	}
+	if counts[screenMain] != 0 {
+		t.Errorf("overlayStack holds the main screen %d times", counts[screenMain])
+	}
+	for screen := screenMain + 1; screen <= screenFullVisualizer; screen++ {
+		if counts[screen] != 1 {
+			t.Errorf("overlayStack holds screen %d %d times, want 1", screen, counts[screen])
+		}
+	}
+
 	index := func(screen topLevelScreen) int {
 		t.Helper()
 		i := slices.IndexFunc(overlayStack, func(s overlaySpec) bool { return s.screen == screen })

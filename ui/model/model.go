@@ -217,6 +217,8 @@ const (
 	screenURLInput
 	screenLyrics
 	screenJump
+	// screenFullVisualizer stays last. TestOverlayStackOrder checks that
+	// overlayStack holds each screen up to it.
 	screenFullVisualizer
 )
 
