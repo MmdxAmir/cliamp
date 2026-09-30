@@ -452,7 +452,6 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *Model) plMgrLoadAndPlay(startIdx int) tea.Cmd {
 	m.stopPlayback()
 	m.player.ClearPreload()
-	m.resetYTDLBatch()
 	m.retireTracksPaging()
 	m.replacePlaylist(m.plManager.tracks)
 	m.setHeaderStateFromTracks(m.plManager.tracks)

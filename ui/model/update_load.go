@@ -136,7 +136,6 @@ func (m *Model) handleFBTracksResolved(msg fbTracksResolvedMsg) tea.Cmd {
 	if msg.replace {
 		m.stopPlayback()
 		m.player.ClearPreload()
-		m.resetYTDLBatch()
 		m.retireTracksPaging()
 		m.replacePlaylist(msg.tracks)
 		m.clearLoadedPlaylist()

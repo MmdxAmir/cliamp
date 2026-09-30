@@ -21,10 +21,13 @@ const (
 )
 
 // replacePlaylist replaces the queue. It advances the queue generation, so a
-// feed or file browser replace that is still resolving is dropped. The undo
-// of the last queue edit goes, because it restores the old queue.
+// feed or file browser replace that is still resolving is dropped. It ends
+// the batch load of a YouTube radio playlist, so no batch appends to the new
+// queue. The undo of the last queue edit goes, because it restores the old
+// queue.
 func (m *Model) replacePlaylist(tracks []playlist.Track) {
 	nextRequest(&m.requests.queue)
+	m.resetYTDLBatch()
 	m.playlistUndo = playlistUndo{}
 	if m.resumeSaver != nil {
 		tracks = playlist.WithPlaybackContext(tracks)

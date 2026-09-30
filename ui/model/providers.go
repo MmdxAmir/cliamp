@@ -244,7 +244,6 @@ func (m *Model) replacePlayerPlaylist(tracks []playlist.Track) {
 		m.player.ClearPreload()
 		m.clearPlaybackTrack()
 	}
-	m.resetYTDLBatch()
 	m.replacePlaylist(tracks)
 	m.setHeaderStateFromTracks(tracks)
 	m.clearLoadedPlaylist()

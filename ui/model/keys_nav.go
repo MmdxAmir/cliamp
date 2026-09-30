@@ -630,7 +630,6 @@ func (m *Model) replacePlaylistFromNav() tea.Cmd {
 	}
 	m.stopPlayback()
 	m.player.ClearPreload()
-	m.resetYTDLBatch()
 	m.retireTracksPaging()
 	m.replacePlaylist(tracks)
 	m.clearLoadedPlaylist()
