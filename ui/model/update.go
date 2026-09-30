@@ -234,24 +234,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case netSearchResultsMsg:
-		if msg.gen != m.requests.netSearch || !m.netSearch.active || msg.query != m.netSearch.request {
-			return m, nil
-		}
-		m.netSearch.loading = false
-		m.netSearch.cursor = 0
-		m.netSearch.scroll = 0
-		if msg.err != nil {
-			m.netSearch.err = msg.err.Error()
-			return m, nil
-		}
-		m.netSearch.results = msg.tracks
-		m.netSearch.cursor = 0
-		m.netSearch.screen = netSearchResults
-		if len(msg.tracks) == 0 {
-			m.netSearch.err = "No results found"
-		}
-		m.applyHeightMode()
-		m.clampActiveScrollState()
+		m.handleNetSearchResults(msg)
 		return m, nil
 
 	case lyricsLoadedMsg:
@@ -347,97 +330,23 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spotSearchResultsMsg:
-		if !m.isCurrentSpotRequest(msg.gen, msg.providerName) || m.spotSearch.query != msg.query {
-			return m, nil
-		}
-		m.cancelSpotRequest()
-		m.spotSearch.loading = false
-		m.spotSearch.cursor = 0
-		m.spotSearch.scroll = 0
-		if msg.err != nil {
-			m.setSpotSearchError(msg.err.Error())
-			return m, nil
-		}
-		m.spotSearch.results = msg.tracks
-		m.spotSearch.cursor = 0
-		m.spotSearch.screen = spotSearchResults
-		m.applyHeightMode()
-		m.clampActiveScrollState()
+		m.handleSpotSearchResults(msg)
 		return m, nil
 
 	case spotAlbumTracksMsg:
-		if msg.gen != m.requests.spotAlbum {
-			return m, nil
-		}
-		m.cancelSpotRequest()
-		m.spotSearch.albumLoading = false
-		if msg.err != nil {
-			m.setSpotSearchError(msg.err.Error())
-			return m, nil
-		}
-		if len(msg.tracks) == 0 {
-			m.setSpotSearchError("That album has no tracks available here.")
-			return m, nil
-		}
-		album := msg.album
-		tracks := msg.tracks
-		m.closeSpotSearch()
-		switch msg.action {
-		case spotAlbumAppend:
-			cmd := m.appendAlbum(album, tracks)
-			return m, cmd
-		case spotAlbumQueueNext:
-			cmd := m.queueAlbumNext(album, tracks)
-			return m, cmd
-		default:
-			cmd := m.playAlbumImmediate(album, tracks)
-			return m, cmd
-		}
+		cmd := m.handleSpotAlbumTracks(msg)
+		return m, cmd
 
 	case spotPlaylistsMsg:
-		if !m.isCurrentSpotListRequest(msg.gen, msg.providerName) {
-			return m, nil
-		}
-		m.spotSearch.loading = false
-		m.spotSearch.cursor = 0
-		m.spotSearch.scroll = 0
-		if msg.err != nil {
-			m.setSpotSearchError(msg.err.Error())
-			return m, nil
-		}
-		m.spotSearch.playlists = msg.playlists
-		m.spotSearch.cursor = 0
-		m.spotSearch.screen = spotSearchPlaylist
-		m.applyHeightMode()
-		m.clampActiveScrollState()
+		m.handleSpotPlaylists(msg)
 		return m, nil
 
 	case spotAddedMsg:
-		if !m.isCurrentSpotMutation(msg.gen, msg.providerName) {
-			return m, nil
-		}
-		m.cancelSpotRequest()
-		m.spotSearch.loading = false
-		if msg.err != nil {
-			m.setSpotSearchError("Add failed: " + msg.err.Error())
-			return m, nil
-		}
-		m.status.Showf(statusTTLDefault, "Added to %q", msg.name)
-		m.closeSpotSearch()
+		m.handleSpotAdded(msg)
 		return m, nil
 
 	case spotCreatedMsg:
-		if !m.isCurrentSpotMutation(msg.gen, msg.providerName) {
-			return m, nil
-		}
-		m.cancelSpotRequest()
-		m.spotSearch.loading = false
-		if msg.err != nil {
-			m.setSpotSearchError("Create failed: " + msg.err.Error())
-			return m, nil
-		}
-		m.status.Showf(statusTTLDefault, "Created %q & added track", msg.name)
-		m.closeSpotSearch()
+		m.handleSpotCreated(msg)
 		return m, nil
 
 	case provAuthDoneMsg:
