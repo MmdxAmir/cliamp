@@ -171,6 +171,41 @@ func (m *Model) fetchProviderTracks(playlistID string) tea.Cmd {
 	return fetchTracksCmd(m.provider, playlistID, gen)
 }
 
+// refreshesInPlace reports whether the active provider keeps the ID of the
+// open provider playlist valid across Refresh, such as the Yandex "Моя волна"
+// session. Positional IDs, such as radio catalog indexes, do not stay valid.
+func (m *Model) refreshesInPlace() bool {
+	id := m.activeProviderPlaylistID
+	pr, ok := m.provider.(playlist.RefreshablePlaylist)
+	return ok && id != "" && pr.CanRefreshPlaylist(id)
+}
+
+// refreshActiveProvider drops the cached data of the active provider and
+// reloads it. It reopens the open provider playlist when refreshesInPlace
+// allows it. Otherwise it reloads the playlist list, or with tracksOnly it
+// reloads nothing. It does nothing while the provider loads.
+func (m *Model) refreshActiveProvider(tracksOnly bool) tea.Cmd {
+	if m.provider == nil || m.provLoading {
+		return nil
+	}
+	inPlace := m.refreshesInPlace()
+	if tracksOnly && !inPlace {
+		return nil
+	}
+	if r, ok := m.provider.(playlist.Refresher); ok {
+		r.Refresh()
+	}
+	nextRequest(&m.requests.catalog)
+	m.catalogBatch = catalogBatchState{}
+	m.provLoading = true
+	m.status.Activityf(statusTTLShort, "Refreshing %s…", m.provider.Name())
+	if inPlace {
+		return m.fetchProviderTracks(m.activeProviderPlaylistID)
+	}
+	m.activeProviderPlaylistID = ""
+	return m.fetchProviderPlaylists()
+}
+
 // applyTracksResume positions the cursor on the in-progress track and arms the
 // seek when the provider reported a stored listening position.
 func (m *Model) applyTracksResume(msg tracksLoadedMsg) {
