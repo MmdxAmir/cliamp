@@ -142,16 +142,10 @@ func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 			continue
 		}
 		fileName := e.Name()
-		// Migrate a physical Favorites.toml to a safe name before the
-		// virtual Favorites playlist reserves it; once migrated the
-		// renamed file is listed like any other playlist. A file that
-		// did not move stays hidden, and an existing legacy file is
-		// listed from its own entry.
-		if fileName == "Favorites.toml" {
-			if !p.migrateFavoritesToml() {
-				continue
-			}
-			fileName = favoritesLegacyName + ".toml"
+		// The virtual Favorites playlist reserves the name. A Favorites.toml
+		// that MigrateFavoritesFile could not move stays hidden.
+		if fileName == favoritesFileName {
+			continue
 		}
 		name := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 		doc, err := p.loadDoc(filepath.Join(p.dir, fileName))
@@ -174,22 +168,45 @@ func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 	return lists, nil
 }
 
-const favoritesLegacyName = "Favorites (Local)"
+// favoritesFileName is the playlist file that the virtual Favorites
+// playlist hides. favoritesLegacyName is the name it moves to.
+const (
+	favoritesFileName   = favorites.PlaylistName + ".toml"
+	favoritesLegacyName = "Favorites (Local)"
+)
 
-// migrateFavoritesToml renames a physical Favorites.toml playlist to a safe
-// name so the virtual Favorites playlist can reserve it, and reports whether
-// the file moved. The rename is best-effort: if the destination already
-// exists the source is left in place.
-func (p *Provider) migrateFavoritesToml() bool {
-	src := filepath.Join(p.dir, "Favorites.toml")
+// MigrateFavoritesFile renames a playlist file named Favorites.toml to
+// "Favorites (Local).toml", because the virtual Favorites playlist reserves
+// the name. It keeps both files when the new name is taken. Call it once at
+// startup, before MigrateBookmarks.
+func (p *Provider) MigrateFavoritesFile() error {
+	if p == nil {
+		return nil
+	}
+	src := filepath.Join(p.dir, favoritesFileName)
+	if _, err := os.Stat(src); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if _, err := os.Stat(src); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("check %s: %w", favoritesFileName, err)
+	}
 	dst := filepath.Join(p.dir, favoritesLegacyName+".toml")
-	if _, err := os.Stat(src); err != nil {
-		return false
+	if _, err := os.Lstat(dst); err == nil {
+		return nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("check %s.toml: %w", favoritesLegacyName, err)
 	}
-	if _, err := os.Stat(dst); err == nil {
-		return false
+	if err := os.Rename(src, dst); err != nil {
+		return fmt.Errorf("move %s: %w", favoritesFileName, err)
 	}
-	return os.Rename(src, dst) == nil
+	return nil
 }
 
 // historyInfo returns the synthetic PlaylistInfo entry for "Recently Played",

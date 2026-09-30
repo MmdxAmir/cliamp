@@ -964,5 +964,8 @@ func newProviderWith(favs *favorites.Store) (*local.Provider, error) {
 	if p == nil {
 		return nil, fmt.Errorf("failed to initialize local playlist provider")
 	}
+	if err := p.MigrateFavoritesFile(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+	}
 	return p, nil
 }

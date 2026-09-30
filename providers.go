@@ -140,7 +140,11 @@ func buildProviders(cfg config.Config, interactive bool) *providerSet {
 	})
 	s.favorites, s.history = favorites.New(), history.New()
 	s.local = local.New(s.favorites, s.history)
-	// Bookmarks became favorites. Copy the old bookmarks one time.
+	// The virtual Favorites playlist reserves the name of a Favorites.toml
+	// playlist. Bookmarks became favorites. Copy the old bookmarks one time.
+	if err := s.local.MigrateFavoritesFile(); err != nil {
+		applog.Warn("favorites playlist migration: %v", err)
+	}
 	if added, err := s.local.MigrateBookmarks(); err != nil {
 		applog.Warn("bookmark migration: %v", err)
 	} else if added > 0 {

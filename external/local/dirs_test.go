@@ -1008,66 +1008,44 @@ func TestRestorePlaylistDocumentRejectsHistory(t *testing.T) {
 	}
 }
 
-func TestPlaylistsMigratesLegacyFavoritesToml(t *testing.T) {
-	p := newTestProvider(t)
-	src := filepath.Join(p.dir, "Favorites.toml")
-	if err := os.WriteFile(src, []byte("[[track]]\npath = \"/a.mp3\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	lists, err := p.Playlists()
-	if err != nil {
-		t.Fatalf("Playlists: %v", err)
-	}
-
-	// Original must be gone.
-	if _, err := os.Stat(src); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatal("Favorites.toml should have been migrated away")
-	}
-
-	// Renamed file must appear.
-	dst := filepath.Join(p.dir, favoritesLegacyName+".toml")
-	if _, err := os.Stat(dst); err != nil {
-		t.Fatalf("migrated file missing: %v", err)
-	}
-
-	found := false
-	for _, l := range lists {
-		if l.ID == favoritesLegacyName {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("migrated playlist not listed; got %v", lists)
-	}
-}
-
-// A physical Favorites.toml is listed under the legacy name only when it
-// moved there. Otherwise the legacy file is listed once, from its own entry.
-func TestPlaylistsListsLegacyFavoritesOnce(t *testing.T) {
+// MigrateFavoritesFile moves a playlist file named Favorites.toml to the
+// legacy name, because the virtual Favorites playlist reserves the name. It
+// keeps a legacy file that exists. Playlists never renames a file. It lists
+// the legacy file once, from its own entry, and hides Favorites.toml.
+func TestMigrateFavoritesFile(t *testing.T) {
 	const two = "[[track]]\npath = \"/a.mp3\"\n\n[[track]]\npath = \"/b.mp3\"\n"
 	const one = "[[track]]\npath = \"/c.mp3\"\n"
 	tests := []struct {
 		name       string
-		legacy     string // content of the legacy file before the listing, if any
-		wantTracks int    // track count of the listed legacy playlist
+		source     bool   // Favorites.toml exists before the migration
+		legacy     string // content of the legacy file before the migration, if any
+		migrate    bool   // MigrateFavoritesFile runs before the listing
+		wantTracks int    // track count of the listed legacy playlist, -1 when not listed
 		wantSource bool   // Favorites.toml is still on disk after the listing
 	}{
-		{name: "only Favorites.toml", wantTracks: 2},
-		{name: "both files", legacy: one, wantTracks: 1, wantSource: true},
+		{name: "only Favorites.toml", source: true, migrate: true, wantTracks: 2},
+		{name: "both files", source: true, legacy: one, migrate: true, wantTracks: 1, wantSource: true},
+		{name: "no Favorites.toml", migrate: true, wantTracks: -1},
+		{name: "listing without the migration", source: true, wantTracks: -1, wantSource: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := newTestProvider(t)
 			src := filepath.Join(p.dir, "Favorites.toml")
-			if err := os.WriteFile(src, []byte(two), 0o644); err != nil {
-				t.Fatal(err)
+			if tt.source {
+				if err := os.WriteFile(src, []byte(two), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if tt.legacy != "" {
 				dst := filepath.Join(p.dir, favoritesLegacyName+".toml")
 				if err := os.WriteFile(dst, []byte(tt.legacy), 0o644); err != nil {
 					t.Fatal(err)
+				}
+			}
+			if tt.migrate {
+				if err := p.MigrateFavoritesFile(); err != nil {
+					t.Fatalf("MigrateFavoritesFile: %v", err)
 				}
 			}
 
@@ -1077,39 +1055,29 @@ func TestPlaylistsListsLegacyFavoritesOnce(t *testing.T) {
 			}
 			var legacy []playlist.PlaylistInfo
 			for _, l := range lists {
+				if l.ID == favorites.PlaylistName {
+					t.Fatalf("Favorites.toml listed under the reserved name: %+v", lists)
+				}
 				if l.ID == favoritesLegacyName {
 					legacy = append(legacy, l)
 				}
 			}
-			if len(legacy) != 1 {
+			switch {
+			case tt.wantTracks < 0 && len(legacy) != 0:
+				t.Fatalf("legacy playlist listed: %+v", lists)
+			case tt.wantTracks >= 0 && len(legacy) != 1:
 				t.Fatalf("legacy playlist listed %d times, want 1: %+v", len(legacy), lists)
-			}
-			if legacy[0].TrackCount != tt.wantTracks {
+			case tt.wantTracks >= 0 && legacy[0].TrackCount != tt.wantTracks:
 				t.Errorf("legacy TrackCount = %d, want %d", legacy[0].TrackCount, tt.wantTracks)
 			}
 			if _, err := os.Stat(src); (err == nil) != tt.wantSource {
 				t.Errorf("Favorites.toml on disk = %v, want %v", err == nil, tt.wantSource)
 			}
+			if !tt.source {
+				if _, err := os.Stat(p.dir + ".lock"); !errors.Is(err, fs.ErrNotExist) {
+					t.Errorf("the migration took the playlist lock with no file to move: %v", err)
+				}
+			}
 		})
-	}
-}
-
-func TestPlaylistsSkipsMigrationWhenDestExists(t *testing.T) {
-	p := newTestProvider(t)
-	src := filepath.Join(p.dir, "Favorites.toml")
-	dst := filepath.Join(p.dir, favoritesLegacyName+".toml")
-	if err := os.WriteFile(src, []byte("[[track]]\npath = \"/a.mp3\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(dst, []byte("[[track]]\npath = \"/b.mp3\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := p.Playlists(); err != nil {
-		t.Fatalf("Playlists: %v", err)
-	}
-	// Source must NOT be clobbered when destination already exists.
-	if _, err := os.Stat(src); err != nil {
-		t.Fatalf("Favorites.toml should remain when dest already exists: %v", err)
 	}
 }
