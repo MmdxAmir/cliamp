@@ -12,8 +12,9 @@ import (
 	"github.com/bjarneo/cliamp/luaplugin"
 )
 
-// newKeyTestPlugin loads a plugin that reports the key it was given.
-func newKeyTestPlugin(t *testing.T, key string) (*luaplugin.Manager, <-chan string) {
+// newKeyTestPlugin loads a plugin that reports the key it was given. The
+// returned func closes the plugins after it runs the queued key calls.
+func newKeyTestPlugin(t *testing.T, key string) (*luaplugin.Manager, <-chan string, func()) {
 	t.Helper()
 	configDir := t.TempDir()
 	t.Setenv("CLIAMP_CONFIG_DIR", configDir)
@@ -36,7 +37,8 @@ p:bind("` + key + `", "spy", function() cliamp.message("pressed") end)
 	if err != nil {
 		t.Fatalf("loading plugins: %v", err)
 	}
-	t.Cleanup(sync.OnceFunc(mgr.Close))
+	closePlugins := sync.OnceFunc(mgr.Close)
+	t.Cleanup(closePlugins)
 
 	pressed := make(chan string, 4)
 	ctx := t.Context()
@@ -48,7 +50,7 @@ p:bind("` + key + `", "spy", function() cliamp.message("pressed") end)
 			}
 		},
 	})
-	return mgr, pressed
+	return mgr, pressed, closePlugins
 }
 
 // The full-screen visualizer is where a plugin visualizer is actually
@@ -56,7 +58,7 @@ p:bind("` + key + `", "spy", function() cliamp.message("pressed") end)
 func TestFullVisualizerForwardsUnhandledKeysToPlugins(t *testing.T) {
 	// Bare letters are not plugin keys: lowercase belongs to the core and
 	// uppercase to providers (#547). Use a key a plugin can own.
-	mgr, pressed := newKeyTestPlugin(t, "alt+h")
+	mgr, pressed, _ := newKeyTestPlugin(t, "alt+h")
 	m := Model{luaMgr: mgr}
 
 	m.handleFullVisualizerKey(tea.KeyPressMsg{Code: 'h', Mod: tea.ModAlt})

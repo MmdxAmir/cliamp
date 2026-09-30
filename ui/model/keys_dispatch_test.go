@@ -108,6 +108,8 @@ func TestCtrlRRefreshesTheActiveProvider(t *testing.T) {
 		wantRefreshes int
 		// wantID is activeProviderPlaylistID after the key.
 		wantID string
+		// wantForward is whether a plugin that binds ctrl+r gets the key.
+		wantForward bool
 	}{
 		{name: "pane reopens a stable playlist", focus: focusProvider, kind: "stable", playlistID: "wave", want: tracks, wantRefreshes: 1, wantID: "wave"},
 		{name: "pane reloads the lists for a positional ID", focus: focusProvider, kind: "stable", playlistID: "station-3", want: lists, wantRefreshes: 1},
@@ -116,9 +118,9 @@ func TestCtrlRRefreshesTheActiveProvider(t *testing.T) {
 		{name: "pane reloads a provider with no cache", focus: focusProvider, kind: "plain", playlistID: "wave", want: lists},
 		{name: "pane waits while the provider loads", focus: focusProvider, kind: "stable", playlistID: "wave", loading: true, want: none, wantID: "wave"},
 		{name: "playlist reopens a stable playlist", focus: focusPlaylist, kind: "stable", playlistID: "wave", want: tracks, wantRefreshes: 1, wantID: "wave"},
-		{name: "playlist skips a positional ID", focus: focusPlaylist, kind: "stable", playlistID: "station-3", want: none, wantID: "station-3"},
+		{name: "playlist skips a positional ID", focus: focusPlaylist, kind: "stable", playlistID: "station-3", want: none, wantID: "station-3", wantForward: true},
 		{name: "playlist skips with no open playlist", focus: focusPlaylist, kind: "stable", want: none},
-		{name: "playlist skips a provider with no stable IDs", focus: focusPlaylist, kind: "refresher", playlistID: "wave", want: none, wantID: "wave"},
+		{name: "playlist skips a provider with no stable IDs", focus: focusPlaylist, kind: "refresher", playlistID: "wave", want: none, wantID: "wave", wantForward: true},
 		{name: "playlist waits while the provider loads", focus: focusPlaylist, kind: "stable", playlistID: "wave", loading: true, want: none, wantID: "wave"},
 	}
 	for _, tt := range tests {
@@ -132,7 +134,9 @@ func TestCtrlRRefreshesTheActiveProvider(t *testing.T) {
 			case "refresher":
 				prov = refresherOnlyProvider{commandsTestProvider: base, refreshes: &refreshes}
 			}
+			mgr, pressed, closePlugins := newKeyTestPlugin(t, "ctrl+r")
 			m := keybindingTestModel()
+			m.luaMgr = mgr
 			m.provider = prov
 			m.playlist.Add(playlist.Track{Title: "Song"})
 			m.focus = tt.focus
@@ -142,6 +146,11 @@ func TestCtrlRRefreshesTheActiveProvider(t *testing.T) {
 
 			cmd := m.handleKey(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
 
+			// Close runs the queued key calls, so pressed holds every call.
+			closePlugins()
+			if forwarded := len(pressed) > 0; forwarded != tt.wantForward {
+				t.Errorf("plugin got ctrl+r = %v, want %v", forwarded, tt.wantForward)
+			}
 			if refreshes != tt.wantRefreshes {
 				t.Errorf("Refresh calls = %d, want %d", refreshes, tt.wantRefreshes)
 			}
