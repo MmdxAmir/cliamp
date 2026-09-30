@@ -32,9 +32,7 @@ func (m *Model) appendTracksToPlaylist(tracks []playlist.Track, what string) tea
 		m.plCursor = 0
 		m.playlist.SetIndex(0)
 		m.adjustScroll()
-		cmd := m.playCurrentTrack()
-		m.notifyPlayback()
-		return cmd
+		return m.playCurrentTrack()
 	}
 	m.adjustScroll()
 	return m.rearmStalePreload()

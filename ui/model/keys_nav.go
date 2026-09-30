@@ -553,9 +553,7 @@ func (m *Model) handleNavTrackListKey(msg tea.KeyPressMsg) tea.Cmd {
 			} else {
 				m.status.Showf(statusTTLMedium, "Playing: %s", toAdd[0].DisplayName())
 			}
-			cmd := m.playCurrentTrack()
-			m.notifyPlayback()
-			return cmd
+			return m.playCurrentTrack()
 		}
 	case "R":
 		if m.playlist.Len() > 0 {
@@ -572,9 +570,7 @@ func (m *Model) handleNavTrackListKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.status.Showf(statusTTLMedium, "Added %d tracks", len(tracks))
 			if wasEmpty || !m.player.IsPlaying() {
 				m.playlist.SetIndex(0)
-				cmd := m.playCurrentTrack()
-				m.notifyPlayback()
-				return cmd
+				return m.playCurrentTrack()
 			}
 		}
 	case "q":
@@ -590,9 +586,7 @@ func (m *Model) handleNavTrackListKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.normalizeQueueOverlay()
 			m.status.Showf(statusTTLMedium, "Queued: %s", t.DisplayName())
 			if !m.player.IsPlaying() {
-				cmd := m.nextTrack()
-				m.notifyPlayback()
-				return cmd
+				return m.nextTrack()
 			}
 			return m.rearmPreload()
 		}
@@ -658,9 +652,7 @@ func (m *Model) replacePlaylistFromNav() tea.Cmd {
 	m.focus = focusPlaylist
 	m.navBrowser.visible = false
 	m.status.Successf(statusTTLDefault, "Replaced queue with %d tracks", len(tracks))
-	cmd := m.playCurrentTrack()
-	m.notifyPlayback()
-	return cmd
+	return m.playCurrentTrack()
 }
 
 // handleNavSearchKey handles key input while the nav search bar is open.

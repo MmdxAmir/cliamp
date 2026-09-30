@@ -627,13 +627,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 
 	case "space":
-		cmd := m.togglePlayPause()
-		m.notifyPlayback()
-		return cmd
+		return m.togglePlayPause()
 
 	case "s":
 		m.stopByUser()
-		m.notifyPlayback()
 		return nil
 
 	case ">", ".":
@@ -964,9 +961,7 @@ func (m *Model) handleFullVisualizerKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "esc", "backspace", "b", "V":
 		m.exitFullVisualizer()
 	case "space":
-		cmd := m.togglePlayPause()
-		m.notifyPlayback()
-		return cmd
+		return m.togglePlayPause()
 	case ">", ".":
 		return m.skipNext()
 	case "<", ",":
@@ -2107,9 +2102,7 @@ func (m *Model) plMgrLoadAndPlay(startIdx int) tea.Cmd {
 	m.plManager.visible = false
 	m.plMgrResetFilter()
 	m.focus = focusPlaylist
-	cmd := m.playCurrentTrack()
-	m.notifyPlayback()
-	return cmd
+	return m.playCurrentTrack()
 }
 
 // handlePlMgrDirsKey handles keys on the directory-sources screen. The screen

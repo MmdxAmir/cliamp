@@ -9,32 +9,27 @@ import (
 // This file holds one action verb for each user intent that more than one
 // entry point starts. The keys, the full-screen visualizer keys, the
 // playback messages from media controls and Lua, the Lua queue calls and V2
-// IPC call the same verb. So each intent gets the same notification, config
-// save and preload rearm, whatever starts it. The scrobble of a track that
-// is left comes from playTrack and stopPlayback.
+// IPC call the same verb. So each intent gets the same config save and
+// preload rearm, whatever starts it. The scrobble of a track that is left
+// comes from playTrack and stopPlayback, and Update tells the media controls
+// and plugins about each change.
 
 // skipNext starts the next track. playTrack or stopPlayback scrobbles the
 // track that it leaves.
 func (m *Model) skipNext() tea.Cmd {
-	cmd := m.nextTrack()
-	m.notifyAll()
-	return cmd
+	return m.nextTrack()
 }
 
 // skipPrev goes to the previous track. Past 3 seconds into a track, it
 // restarts that track instead. A restart also scrobbles the track.
 func (m *Model) skipPrev() tea.Cmd {
-	cmd := m.prevTrack()
-	m.notifyAll()
-	return cmd
+	return m.prevTrack()
 }
 
 // playIndex starts the track at idx. An unplayable track is skipped forward.
 func (m *Model) playIndex(idx int) tea.Cmd {
 	m.playlist.SetIndex(idx)
-	cmd := m.playCurrentTrack()
-	m.notifyAll()
-	return cmd
+	return m.playCurrentTrack()
 }
 
 // setShuffle turns shuffle on or off, saves the mode and re-arms the preload
@@ -66,11 +61,9 @@ func (m *Model) cycleVisualizer() error {
 	return m.saveVisualizerChoice()
 }
 
-// setVolume sets the volume in dB and tells the media controls and plugins.
-// The player clamps db to its range.
+// setVolume sets the volume in dB. The player clamps db to its range.
 func (m *Model) setVolume(db float64) {
 	m.player.SetVolume(db)
-	m.notifyAll()
 }
 
 // adjustVolume changes the volume by delta dB. See setVolume.

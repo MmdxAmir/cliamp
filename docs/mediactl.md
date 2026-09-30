@@ -172,6 +172,9 @@ Platform-specific `Service` implementations:
 - `mediactl/service_stub.go`: no-op implementation for unsupported platforms.
 
 The model sends playback state through the playback notifier when state changes.
+After each message, it compares the state with the last state that it sent. It
+compares the position in whole seconds, so a playing track sends a new state
+once per second. A seek sends the state and then the MPRIS `Seeked` signal.
 On Linux, `mediactl` uses `SetMust`, not `Set`, to bypass property-library
 writable checks and callback triggers. These checks and triggers apply to
 external D-Bus writes. For writable properties such as Volume, `mediactl`

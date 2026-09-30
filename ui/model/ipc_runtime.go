@@ -132,24 +132,20 @@ func (m *Model) handleV2Request(msg V2RequestMsg) tea.Cmd {
 		if !m.player.IsPlaying() || m.player.IsPaused() {
 			cmd = m.togglePlayPause()
 		}
-		m.notifyAll()
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
 		return cmd
 	case "pause":
 		if m.player.IsPlaying() && !m.player.IsPaused() {
 			m.togglePlayerPause()
-			m.notifyAll()
 		}
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
 		return nil
 	case "toggle":
 		cmd := m.togglePlayPause()
-		m.notifyAll()
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
 		return cmd
 	case "stop":
 		m.stopByUser()
-		m.notifyAll()
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
 		return nil
 	case "next":

@@ -14,30 +14,82 @@ import (
 	"github.com/bjarneo/cliamp/provider"
 )
 
-// notifyAll sends the current playback state to both OS media controls and Lua plugins.
-func (m *Model) notifyAll() {
-	m.notifyPlayback()
-	m.notifyPlugins()
+// playbackNotice is the playback state that the media controls and the
+// playback.state plugin event got last. Its position is in whole seconds.
+type playbackNotice struct {
+	sent  bool
+	state playback.State
 }
 
+// attachNotifier sets the media controls notifier. Update then sends it the
+// current state.
 func (m *Model) attachNotifier(notifier playback.Notifier) {
 	m.notifier = notifier
-	m.notifyAll()
+	m.notice.sent = false
 }
 
-// notifyPlugins emits a playback state event to Lua plugins.
-func (m *Model) notifyPlugins() {
-	if m.luaMgr == nil || !m.luaMgr.HasHook(luaplugin.EventPlaybackState) {
+// notifyPlaybackChange sends the playback state to the media controls and
+// to the playback.state plugin event when it differs from the state they
+// got last. Update calls it once after each message, so no path that
+// changes playback has to call it. The comparison uses the position in
+// whole seconds, so a playing track sends one state per second. Plugins and
+// the MPRIS Position property use that as a heartbeat.
+func (m *Model) notifyPlaybackChange() {
+	hook := m.luaMgr != nil && m.luaMgr.HasHook(luaplugin.EventPlaybackState)
+	if m.player == nil || m.playlist == nil || (m.notifier == nil && !hook) {
 		return
+	}
+	track, state := m.playbackState()
+	key := state
+	key.Position = key.Position.Truncate(time.Second)
+	if m.notice.sent && key == m.notice.state {
+		return
+	}
+	m.notice = playbackNotice{sent: true, state: key}
+	if m.notifier != nil {
+		m.notifier.Update(state)
+	}
+	if hook {
+		data := trackToMap(track)
+		data["status"] = m.playerStatus()
+		data["title"] = state.Track.Title
+		data["artist"] = state.Track.Artist
+		data["position"] = state.Position.Seconds()
+		m.emitPlugin(luaplugin.EventPlaybackState, data)
+	}
+}
+
+// playbackState returns the track that plays and the state that the media
+// controls show for it.
+func (m *Model) playbackState() (playlist.Track, playback.State) {
+	status := playback.StatusStopped
+	if m.player.IsPlaying() {
+		if m.player.IsPaused() {
+			status = playback.StatusPaused
+		} else {
+			status = playback.StatusPlaying
+		}
 	}
 	track, _ := m.currentPlaybackTrack()
 	artist, title := m.resolveTrackDisplay(track)
-	data := trackToMap(track)
-	data["status"] = m.playerStatus()
-	data["title"] = title
-	data["artist"] = artist
-	data["position"] = m.player.Position().Seconds()
-	m.emitPlugin(luaplugin.EventPlaybackState, data)
+	position, duration := m.player.PositionAndDuration()
+	return track, playback.State{
+		Status: status,
+		Track: playback.Track{
+			Title:       title,
+			Artist:      artist,
+			Album:       track.Album,
+			Genre:       track.Genre,
+			TrackNumber: track.TrackNumber,
+			URL:         track.Path,
+			ArtURL:      track.AlbumArtURL,
+			Duration:    duration,
+		},
+		VolumeDB:    m.player.Volume(),
+		VolumeMinDB: m.player.VolumeMin(),
+		Position:    position,
+		Seekable:    m.player.Seekable(),
+	}
 }
 
 // playerStatus returns the player state that Lua plugins see: "playing",
@@ -108,39 +160,6 @@ func pluginTrack(track playlist.Track) luaplugin.Track {
 		Duration: track.DurationSecs,
 		Stream:   track.Stream,
 	}
-}
-
-func (m *Model) notifyPlayback() {
-	if m.notifier == nil {
-		return
-	}
-	status := playback.StatusStopped
-	if m.player.IsPlaying() {
-		if m.player.IsPaused() {
-			status = playback.StatusPaused
-		} else {
-			status = playback.StatusPlaying
-		}
-	}
-	track, _ := m.currentPlaybackTrack()
-	artist, title := m.resolveTrackDisplay(track)
-	m.notifier.Update(playback.State{
-		Status: status,
-		Track: playback.Track{
-			Title:       title,
-			Artist:      artist,
-			Album:       track.Album,
-			Genre:       track.Genre,
-			TrackNumber: track.TrackNumber,
-			URL:         track.Path,
-			ArtURL:      track.AlbumArtURL,
-			Duration:    m.player.Duration(),
-		},
-		VolumeDB:    m.player.Volume(),
-		VolumeMinDB: m.player.VolumeMin(),
-		Position:    m.player.Position(),
-		Seekable:    m.player.Seekable(),
-	})
 }
 
 // stopByUser is an explicit stop from a key, IPC, or media controls. Besides

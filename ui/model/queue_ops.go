@@ -131,7 +131,6 @@ func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 	} else {
 		m.status.Showf(statusTTLDefault, "Removed from queue: %s%s", track.DisplayName(), undoHint)
 	}
-	m.notifyPlayback()
 	return m.rearmStalePreload(), nil
 }
 

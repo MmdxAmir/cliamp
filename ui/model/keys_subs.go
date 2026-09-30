@@ -220,9 +220,7 @@ func (m *Model) appendSubscriptionTracks(tracks []playlist.Track, mode subsLoadM
 		m.playlist.SetIndex(start)
 		m.plCursor = start
 		m.adjustScroll()
-		cmd := m.playCurrentTrack()
-		m.notifyPlayback()
-		return cmd
+		return m.playCurrentTrack()
 	}
 	m.normalizeQueueOverlay()
 	return m.rearmPreload()

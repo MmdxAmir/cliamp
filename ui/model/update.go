@@ -27,7 +27,9 @@ func (m *Model) scheduleReconnect(now time.Time) {
 }
 
 // Update handles messages: key presses, ticks, and window resizes. After each
-// message it drops a gapless preload that no longer matches the next track.
+// message it drops a gapless preload that no longer matches the next track,
+// and it tells the media controls and plugins when the playback state
+// changed.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(spinnerTickMsg); ok {
 		m.spinnerTicking = m.spinnerVisible()
@@ -40,6 +42,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm.dropStalePreload()
+		nm.notifyPlaybackChange()
 		// A load that starts now gets its own redraws at once. The main tick
 		// can still wait up to ui.TickIdle before it runs at the spinner rate.
 		if !spinning && !nm.spinnerTicking && nm.spinnerVisible() {
@@ -89,7 +92,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case autoPlayMsg:
 		if m.playlist.Len() > 0 && !m.player.IsPlaying() {
 			cmd := m.playCurrentTrack()
-			m.notifyAll()
 			return m, cmd
 		}
 		return m, nil
@@ -143,7 +145,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.status.Warningf(statusTTLMedium, "Seek failed; playback continues from the previous position: %s", msg.err)
 			}
-			m.notifyAll()
 			cmd := m.preloadNext()
 			return m, cmd
 		}
@@ -166,7 +167,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.pausedAt = time.Time{}
 		}
-		m.notifyAll()
 		return m, nil
 
 	case tickMsg:
@@ -241,7 +241,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resetTitleScroll()
 			m.applyHeightMode()
 			m.adjustScroll()
-			m.notifyAll()
 			// Auto-fetch lyrics when the stream song changes and lyrics overlay is open.
 			if m.lyrics.visible && !m.lyrics.loading {
 				if artist, song, ok := splitStreamTitle(title); ok {
@@ -260,9 +259,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.network.sampleFor += dt
 		if m.network.sampleFor >= time.Second {
 			downloaded, _ := m.player.StreamBytes()
-			if downloaded > 0 || m.player.IsPlaying() {
-				m.notifyAll()
-			}
 			delta := downloaded - m.network.lastBytes
 			if delta > 0 {
 				// Exponential moving average for smooth display.
@@ -337,7 +333,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if !ok {
 				m.endQueue()
-				m.notifyAll()
 				cmds = append(cmds, tickCmdAt(m.tickInterval()))
 				return m, tea.Batch(cmds...)
 			}
@@ -359,7 +354,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Gapless advances without calling playTrack(), so emit now-playing here.
 			m.nowPlaying(newTrack)
 			cmds = append(cmds, m.preloadNext())
-			m.notifyAll()
 		}
 		m.tickResumeSave(now)
 		// Check if gapless drained (end of playlist, no preloaded next).
@@ -388,7 +382,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.player.Stop()
 				cmds = append(cmds, m.nextTrack())
 			}
-			m.notifyAll()
 		}
 		m.advanceTitleScroll(now)
 		// Retry deferred stream preload: preloadNext() returns nil (defers) when
@@ -490,7 +483,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.next > 0 {
 			m.adjustScroll()
-			m.notifyAll()
 			if pager, ok := m.provider.(provider.TrackPager); ok {
 				return m, fetchTracksPageCmd(pager, msg.providerName, msg.playlistID, msg.next, msg.gen)
 			}
@@ -500,7 +492,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.applyTracksResume(msg)
 		m.adjustScroll()
-		m.notifyAll()
 		return m, nil
 
 	case navArtistsLoadedMsg:
@@ -586,7 +577,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.navBrowser.visible = false
 			m.status.Successf(statusTTLDefault, "Replaced queue with %d tracks", len(msg.tracks))
-			m.notifyAll()
 			return m, nil
 		}
 		m.navBrowser.tracks = msg.tracks
@@ -684,7 +674,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.adjustScroll()
 		m.status.Showf(statusTTLDefault, "Loaded %d episode(s)", len(msg.tracks))
 		playCmd := m.playCurrentTrack()
-		m.notifyAll()
 		return m, playCmd
 
 	case subsEpisodesMsg:
@@ -715,7 +704,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			batchCmd := m.initYTDLBatch(msg.urls)
 			if msg.autoPlay && m.playlist.Len() > 0 && !m.player.IsPlaying() {
 				playCmd := m.playCurrentTrack()
-				m.notifyAll()
 				if batchCmd != nil {
 					return m, tea.Batch(playCmd, batchCmd)
 				}
@@ -816,7 +804,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.playlist.SetIndex(0)
 			}
 			cmd := m.playCurrentTrack()
-			m.notifyAll()
 			return m, cmd
 		}
 		return m, nil
@@ -837,12 +824,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.reconnect.attempts < ytdlLiveDrainRestarts {
 				m.scheduleReconnect(time.Now())
 				m.reconnect.ytdlLiveDrain = true
-				m.notifyAll()
 				return m, nil
 			}
 			m.reconnect.attempts = 0
 			cmd := m.nextTrack()
-			m.notifyAll()
 			return m, cmd
 		}
 		var resumeCmd tea.Cmd
@@ -865,7 +850,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			resumeCmd = m.applyResume()
 			m.nowPlaying(track)
 		}
-		m.notifyAll()
 		preloadCmd := m.preloadNext()
 		return m, tea.Batch(resumeCmd, preloadCmd)
 
@@ -1042,13 +1026,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case playback.PlayPauseMsg:
 		cmd := m.togglePlayPause()
-		m.notifyAll()
 		return m, cmd
 
 	case playback.PlayMsg:
 		if !m.player.IsPlaying() || m.player.IsPaused() {
 			cmd := m.togglePlayPause()
-			m.notifyAll()
 			return m, cmd
 		}
 		return m, nil
@@ -1056,7 +1038,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case playback.PauseMsg:
 		if m.player.IsPlaying() && !m.player.IsPaused() {
 			m.togglePlayerPause()
-			m.notifyAll()
 		}
 		return m, nil
 
@@ -1090,7 +1071,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case playback.StopMsg:
 		m.stopByUser()
-		m.notifyAll()
 		return m, nil
 
 	case playback.QuitMsg:

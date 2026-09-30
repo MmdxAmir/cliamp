@@ -119,8 +119,13 @@ func (m *Model) queueSeekTarget(target time.Duration, debounceTicks int) tea.Cmd
 	return m.commitPendingSeek()
 }
 
+// finishSeek tells the media controls and plugins that a seek landed. The
+// media controls get the new state before the MPRIS Seeked signal, also for
+// a seek within the same second, so a client that reads Position on the
+// signal sees the new value.
 func (m *Model) finishSeek() {
-	m.notifyAll()
+	m.notice.sent = false
+	m.notifyPlaybackChange()
 	if m.notifier != nil {
 		m.notifier.Seeked(m.player.Position())
 	}

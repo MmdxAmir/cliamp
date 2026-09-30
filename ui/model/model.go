@@ -482,6 +482,9 @@ type Model struct {
 	playingProvider string
 
 	notifier playback.Notifier
+	// notice is the playback state that the notifier and the playback.state
+	// plugin event got last. Update keeps it in the Model that it returns.
+	notice playbackNotice
 
 	// Lua plugin manager (nil if no plugins loaded)
 	luaMgr *luaplugin.Manager

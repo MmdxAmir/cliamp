@@ -952,7 +952,8 @@ func TestYTDLLiveStreamRestartThatSucceedsStaysOnStream(t *testing.T) {
 	}
 }
 
-// When the ended stream was the last track nothing else will report the stop.
+// When the ended stream was the last track nothing else will report the
+// stop, so the media controls must already show it.
 func TestYTDLLiveStreamThatEndsTheQueueNotifiesStopped(t *testing.T) {
 	player := &playbackFakeEngine{playing: true, drained: true}
 	m := newYTDLLiveDrainModel(player)
@@ -965,17 +966,19 @@ func TestYTDLLiveStreamThatEndsTheQueueNotifiesStopped(t *testing.T) {
 	updated, _ := m.Update(tickMsg(time.Now()))
 	m = updated.(Model)
 	player.drained = false
-	for i := 0; i < ytdlLiveDrainRestarts-1; i++ {
+	for i := 0; i < ytdlLiveDrainRestarts; i++ {
 		m = failYTDLLiveRestart(t, m, livePath)
 	}
-	before := len(notifier.updates)
-	m = failYTDLLiveRestart(t, m, livePath)
 
-	if len(notifier.updates) == before {
+	if len(notifier.updates) == 0 {
 		t.Fatal("no playback notification after the last restart failed and the queue ended")
 	}
-	if last := notifier.updates[len(notifier.updates)-1]; last.Status != playback.StatusStopped {
+	last := notifier.updates[len(notifier.updates)-1]
+	if last.Status != playback.StatusStopped {
 		t.Fatalf("last notified status = %v, want stopped", last.Status)
+	}
+	if _, now := m.playbackState(); last.Track != now.Track {
+		t.Fatalf("last notified track = %+v, want the current %+v", last.Track, now.Track)
 	}
 }
 

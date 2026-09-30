@@ -272,7 +272,8 @@ func TestSettingsFocusActions(t *testing.T) {
 				saver := &recordingSaver{}
 				m.player, m.notifier, m.configSaver, m.focus = p, notifier, saver, focus
 				m.plCursor = 2
-				cmd := m.handleKey(key)
+				next, cmd := m.Update(key)
+				m = next.(Model)
 				s := key.String()
 				back := slices.Contains([]string{"left", "down", "h", "j"}, s)
 				arrow := back || slices.Contains([]string{"right", "up", "l", "k"}, s)

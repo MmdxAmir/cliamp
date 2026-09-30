@@ -185,9 +185,7 @@ func (m *Model) playTrackImmediate(track playlist.Track) tea.Cmd {
 	m.plCursor = idx
 	m.adjustScroll()
 	m.status.Showf(statusTTLMedium, "Playing: %s", track.DisplayName())
-	cmd := m.playCurrentTrack()
-	m.notifyPlayback()
-	return cmd
+	return m.playCurrentTrack()
 }
 
 // appendTrack appends a track to the playlist; auto-plays if nothing is playing.
@@ -199,9 +197,7 @@ func (m *Model) appendTrack(track playlist.Track) tea.Cmd {
 		m.playlist.SetIndex(idx)
 		m.plCursor = idx
 		m.adjustScroll()
-		cmd := m.playCurrentTrack()
-		m.notifyPlayback()
-		return cmd
+		return m.playCurrentTrack()
 	}
 	return nil
 }
@@ -217,9 +213,7 @@ func (m *Model) playAlbumImmediate(album playlist.Track, tracks []playlist.Track
 	m.plCursor = idx
 	m.adjustScroll()
 	m.status.Showf(statusTTLMedium, "Playing album: %s (%d tracks)", album.Title, len(tracks))
-	cmd := m.playCurrentTrack()
-	m.notifyPlayback()
-	return cmd
+	return m.playCurrentTrack()
 }
 
 // appendAlbum appends an expanded album to the queue; auto-plays from its first
@@ -232,9 +226,7 @@ func (m *Model) appendAlbum(album playlist.Track, tracks []playlist.Track) tea.C
 		m.playlist.SetIndex(idx)
 		m.plCursor = idx
 		m.adjustScroll()
-		cmd := m.playCurrentTrack()
-		m.notifyPlayback()
-		return cmd
+		return m.playCurrentTrack()
 	}
 	return nil
 }
@@ -248,9 +240,7 @@ func (m *Model) queueAlbumNext(album playlist.Track, tracks []playlist.Track) te
 	}
 	m.status.Showf(statusTTLMedium, "Queued album: %s (%d tracks)", album.Title, len(tracks))
 	if !m.player.IsPlaying() {
-		cmd := m.nextTrack()
-		m.notifyPlayback()
-		return cmd
+		return m.nextTrack()
 	}
 	return m.rearmPreload()
 }
@@ -301,9 +291,7 @@ func (m *Model) queueTrackNext(track playlist.Track) tea.Cmd {
 	m.normalizeQueueOverlay()
 	m.status.Showf(statusTTLMedium, "Queued: %s", track.DisplayName())
 	if !m.player.IsPlaying() {
-		cmd := m.nextTrack()
-		m.notifyPlayback()
-		return cmd
+		return m.nextTrack()
 	}
 	return m.rearmPreload()
 }

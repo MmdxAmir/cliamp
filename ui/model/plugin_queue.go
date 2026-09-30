@@ -61,7 +61,6 @@ func (m *Model) appendPluginTracks(tracks ...playlist.Track) tea.Cmd {
 		return nil
 	}
 	m.appendTracks(tracks...)
-	m.notifyPlayback()
 	return m.rearmStalePreload()
 }
 

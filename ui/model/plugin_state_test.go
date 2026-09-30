@@ -215,7 +215,7 @@ func TestPluginHookReadsTheChangeOfItsEvent(t *testing.T) {
 		}, "B|B"},
 		{luaplugin.EventPlaybackState, `ev.status .. "|" .. cliamp.player.state()`, func(m *Model, engine *playbackFakeEngine) {
 			engine.paused = true
-			m.notifyAll()
+			m.notifyPlaybackChange()
 		}, "paused|paused"},
 		{luaplugin.EventQueueChange, `ev.count .. "|" .. cliamp.queue.count()`, func(m *Model, _ *playbackFakeEngine) {
 			m.playlist.Add(playlist.Track{Title: "C", Path: "c.mp3"})
