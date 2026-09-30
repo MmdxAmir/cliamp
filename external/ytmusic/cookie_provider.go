@@ -32,7 +32,7 @@ const (
 type cookieBase struct {
 	browser     string
 	fetchFn     func(browser string) ([]playlist.PlaylistInfo, error)
-	resolveFn   func(ctx context.Context, pageURL string, start, count int, browser ...string) ([]playlist.Track, int, error)
+	resolveFn   func(ctx context.Context, pageURL string, start, count int, browser string) ([]playlist.Track, int, error)
 	mu          sync.Mutex
 	playlists   []playlist.PlaylistInfo
 	trackCache  map[string][]playlist.Track

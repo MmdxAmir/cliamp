@@ -662,16 +662,16 @@ func resolveYouTube(ctx context.Context, pageURL string) ([]playlist.Track, erro
 const ytdlTimeout = 30 * time.Second
 
 // ResolveYTDLBatch is ResolveYTDLBatchContext with a 30 s limit.
-func ResolveYTDLBatch(pageURL string, start, count int, browser ...string) ([]playlist.Track, error) {
+func ResolveYTDLBatch(pageURL string, start, count int, browser string) ([]playlist.Track, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), ytdlTimeout)
 	defer cancel()
-	return ResolveYTDLBatchContext(ctx, pageURL, start, count, browser...)
+	return ResolveYTDLBatchContext(ctx, pageURL, start, count, browser)
 }
 
 // ResolveYTDLBatchContext is ResolveYTDLBatchPageContext without the count of
 // source entries.
-func ResolveYTDLBatchContext(ctx context.Context, pageURL string, start, count int, browser ...string) ([]playlist.Track, error) {
-	tracks, _, err := ResolveYTDLBatchPageContext(ctx, pageURL, start, count, browser...)
+func ResolveYTDLBatchContext(ctx context.Context, pageURL string, start, count int, browser string) ([]playlist.Track, error) {
+	tracks, _, err := ResolveYTDLBatchPageContext(ctx, pageURL, start, count, browser)
 	return tracks, err
 }
 
@@ -682,16 +682,13 @@ func ResolveYTDLBatchContext(ctx context.Context, pageURL string, start, count i
 // yt-dlp emitted, which includes entries that give no track. A non-empty
 // browser supplies the cookies. Otherwise the cookie source configured for the
 // host of pageURL applies.
-func ResolveYTDLBatchPageContext(ctx context.Context, pageURL string, start, count int, browser ...string) ([]playlist.Track, int, error) {
+func ResolveYTDLBatchPageContext(ctx context.Context, pageURL string, start, count int, browser string) ([]playlist.Track, int, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return nil, 0, fmt.Errorf("yt-dlp not found in PATH — see https://github.com/yt-dlp/yt-dlp#installation")
 	}
 
 	args := []string{"--flat-playlist", "-j", "--socket-timeout", "15"}
-	b := ""
-	if len(browser) > 0 {
-		b = strings.TrimSpace(browser[0])
-	}
+	b := strings.TrimSpace(browser)
 	if b == "" {
 		b = ytdlcookies.ForURL(pageURL)
 	}
@@ -732,7 +729,7 @@ func ResolveYTDLBatchPageContext(ctx context.Context, pageURL string, start, cou
 func resolveYTDL(ctx context.Context, pageURL string, maxItems int) ([]playlist.Track, error) {
 	ctx, cancel := context.WithTimeout(ctx, ytdlTimeout)
 	defer cancel()
-	return ResolveYTDLBatchContext(ctx, pageURL, 0, maxItems)
+	return ResolveYTDLBatchContext(ctx, pageURL, 0, maxItems, "")
 }
 
 func parseYTDLTracks(r io.Reader) ([]playlist.Track, int, error) {

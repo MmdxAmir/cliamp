@@ -226,7 +226,7 @@ func fetchPlaylistsCmd(prov playlist.Provider, gen uint64) tea.Cmd {
 
 func fetchYTDLBatchCmd(gen uint64, pageURL string, start, count int) tea.Cmd {
 	return func() tea.Msg {
-		tracks, err := resolve.ResolveYTDLBatch(pageURL, start, count)
+		tracks, err := resolve.ResolveYTDLBatch(pageURL, start, count, "")
 		return ytdlBatchMsg{gen: gen, tracks: tracks, err: err}
 	}
 }

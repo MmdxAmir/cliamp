@@ -294,7 +294,7 @@ func TestResolveYTDLBatchCookieSelection(t *testing.T) {
 
 	// 1. Fall back to cookies configured for the URL's host.
 	SetYTDLCookiesForHost("example.com", "firefox")
-	_, _ = ResolveYTDLBatch("https://example.com/playlist", 0, 0)
+	_, _ = ResolveYTDLBatch("https://example.com/playlist", 0, 0, "")
 
 	logged, err := os.ReadFile(logFile)
 	if err != nil {
@@ -340,12 +340,12 @@ func TestYTDLRangeFlags(t *testing.T) {
 		run  func() ([]playlist.Track, error)
 		want string
 	}{
-		{"batch all", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 0, 0) }, ""},
-		{"batch first 5", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 0, 5) }, "--playlist-end 5"},
-		{"batch from 20", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 20, 0) }, "--playlist-start 21"},
-		{"batch 20 to 30", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 20, 10) }, "--playlist-start 21 --playlist-end 30"},
+		{"batch all", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 0, 0, "") }, ""},
+		{"batch first 5", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 0, 5, "") }, "--playlist-end 5"},
+		{"batch from 20", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 20, 0, "") }, "--playlist-start 21"},
+		{"batch 20 to 30", func() ([]playlist.Track, error) { return ResolveYTDLBatch(page, 20, 10, "") }, "--playlist-start 21 --playlist-end 30"},
 		{"page context", func() ([]playlist.Track, error) {
-			tracks, entries, err := ResolveYTDLBatchPageContext(t.Context(), page, 2, 3)
+			tracks, entries, err := ResolveYTDLBatchPageContext(t.Context(), page, 2, 3, "")
 			if err == nil && entries != 2 {
 				err = fmt.Errorf("entries = %d, want 2", entries)
 			}
