@@ -961,27 +961,7 @@ func visCommand() *cli.Command {
 }
 
 func shuffleCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "shuffle",
-		Usage:     "toggle or set shuffle mode",
-		ArgsUsage: "[on|off|toggle]",
-		Action: func(ctx context.Context, c *cli.Command) error {
-			name := "toggle"
-			if c.Args().Len() > 0 {
-				name = strings.ToLower(c.Args().First())
-			}
-			resp, err := ipcSend("shuffle", ipc.Request{Name: name})
-			if err != nil {
-				return err
-			}
-			if resp.Shuffle != nil && *resp.Shuffle {
-				fmt.Println("Shuffle: on")
-			} else {
-				fmt.Println("Shuffle: off")
-			}
-			return nil
-		},
-	}
+	return switchCommand("shuffle", "toggle or set shuffle mode", "Shuffle", func(r ipc.Response) *bool { return r.Shuffle })
 }
 
 func repeatCommand() *cli.Command {
@@ -1005,23 +985,29 @@ func repeatCommand() *cli.Command {
 }
 
 func monoCommand() *cli.Command {
+	return switchCommand("mono", "toggle or set mono output", "Mono", func(r ipc.Response) *bool { return r.Mono })
+}
+
+// switchCommand builds a command that toggles an on and off setting, or sets
+// it to on or off. It prints the new state from the result.
+func switchCommand(name, usage, label string, state func(ipc.Response) *bool) *cli.Command {
 	return &cli.Command{
-		Name:      "mono",
-		Usage:     "toggle or set mono output",
+		Name:      name,
+		Usage:     usage,
 		ArgsUsage: "[on|off|toggle]",
 		Action: func(ctx context.Context, c *cli.Command) error {
-			name := "toggle"
+			value := "toggle"
 			if c.Args().Len() > 0 {
-				name = strings.ToLower(c.Args().First())
+				value = strings.ToLower(c.Args().First())
 			}
-			resp, err := ipcSend("mono", ipc.Request{Name: name})
+			resp, err := ipcSend(name, ipc.Request{Name: value})
 			if err != nil {
 				return err
 			}
-			if resp.Mono != nil && *resp.Mono {
-				fmt.Println("Mono: on")
+			if on := state(resp); on != nil && *on {
+				fmt.Printf("%s: on\n", label)
 			} else {
-				fmt.Println("Mono: off")
+				fmt.Printf("%s: off\n", label)
 			}
 			return nil
 		},

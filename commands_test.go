@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	cli "github.com/urfave/cli/v3"
@@ -238,5 +240,42 @@ func TestThemeListCommand(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "skip broken.toml") {
 		t.Errorf("stderr = %q, want the skipped broken.toml", stderr)
+	}
+}
+
+// cliamp shuffle and cliamp mono toggle by default and pass on, off or
+// toggle in lower case.
+func TestSwitchCommands(t *testing.T) {
+	var got []string
+	var mu sync.Mutex
+	startTestIPC(t, ipc.RuntimeSnapshot{}, func(jobs *ipc.JobStore, id string, request ipc.V2Request) {
+		var params ipc.Request
+		_ = json.Unmarshal(request.Params, &params)
+		mu.Lock()
+		got = append(got, request.Operation+" "+params.Name)
+		mu.Unlock()
+		_, _ = jobs.Start(id)
+		_ = jobs.Succeed(id, json.RawMessage(`{"ok":true,"shuffle":true,"mono":false}`))
+	})
+
+	for _, args := range [][]string{{"shuffle"}, {"shuffle", "OFF"}, {"mono"}, {"mono", "on"}} {
+		stdout, _ := captureOutput(t, func() {
+			if err := buildApp().Run(t.Context(), append([]string{"cliamp"}, args...)); err != nil {
+				t.Errorf("cliamp %v: %v", args, err)
+			}
+		})
+		want := "Shuffle: on\n"
+		if args[0] == "mono" {
+			want = "Mono: off\n"
+		}
+		if stdout != want {
+			t.Errorf("cliamp %v printed %q, want %q", args, stdout, want)
+		}
+	}
+	want := []string{"shuffle toggle", "shuffle off", "mono toggle", "mono on"}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(got, want) {
+		t.Fatalf("operations = %q, want %q", got, want)
 	}
 }
