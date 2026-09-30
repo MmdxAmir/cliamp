@@ -180,41 +180,64 @@ func TestV2ResponseError(t *testing.T) {
 }
 
 // cliamp vis list prints the modes of the running cliamp, with its Lua
-// visualizers. When cliamp does not run, or has no vis operation as in
-// headless mode, it prints the built-in modes.
+// visualizers, and marks the row of the active mode. When cliamp does not
+// run, or has no vis operation as in headless mode, it prints the built-in
+// modes.
 func TestVisModes(t *testing.T) {
 	builtIn := ui.VisModeNames()
 	withLua := append(slices.Clone(builtIn), "plugin-vis")
+	withLuaBars := append(slices.Clone(builtIn), "Bars")
+	luaRow := len(builtIn)
 	tests := []struct {
 		name        string
 		serve       bool
-		visFails    bool
+		active      string        // the visualizer of the snapshot
+		list        *ipc.Response // the vis list result; nil fails the job
 		wantNames   []string
-		wantActive  string
+		wantActive  int
 		wantRunning bool
 	}{
-		{name: "running", serve: true, wantNames: withLua, wantActive: "plugin-vis", wantRunning: true},
-		{name: "headless", serve: true, visFails: true, wantNames: builtIn, wantActive: "plugin-vis", wantRunning: true},
-		{name: "not running", wantNames: builtIn},
+		{
+			name: "running", serve: true, active: "plugin-vis",
+			list:      &ipc.Response{OK: true, Items: withLua, Visualizer: "plugin-vis", Index: luaRow},
+			wantNames: withLua, wantActive: luaRow, wantRunning: true,
+		},
+		{
+			name: "Lua mode with a built-in name", serve: true, active: "Bars",
+			list:      &ipc.Response{OK: true, Items: withLuaBars, Visualizer: "Bars", Index: luaRow},
+			wantNames: withLuaBars, wantActive: luaRow, wantRunning: true,
+		},
+		{
+			name: "built-in mode with a Lua namesake", serve: true, active: "Bars",
+			list:      &ipc.Response{OK: true, Items: withLuaBars, Visualizer: "Bars", Index: 0},
+			wantNames: withLuaBars, wantActive: 0, wantRunning: true,
+		},
+		{
+			name: "list without the active mode", serve: true, active: "plugin-vis",
+			list:      &ipc.Response{OK: true, Items: withLua},
+			wantNames: withLua, wantActive: luaRow, wantRunning: true,
+		},
+		{name: "headless", serve: true, wantNames: builtIn, wantActive: -1, wantRunning: true},
+		{name: "not running", wantNames: builtIn, wantActive: -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.serve {
-				startTestIPC(t, ipc.RuntimeSnapshot{Visualizer: "plugin-vis"}, func(jobs *ipc.JobStore, id string, _ ipc.V2Request) {
+				startTestIPC(t, ipc.RuntimeSnapshot{Visualizer: tt.active}, func(jobs *ipc.JobStore, id string, _ ipc.V2Request) {
 					_, _ = jobs.Start(id)
-					if tt.visFails {
+					if tt.list == nil {
 						_ = jobs.Fail(id, ipc.V2Error{Code: ipc.V2ErrorCodeUnavailable, Message: ipc.V2MessageUnavailable})
 						return
 					}
-					items, _ := json.Marshal(ipc.Response{OK: true, Items: withLua})
-					_ = jobs.Succeed(id, items)
+					result, _ := json.Marshal(tt.list)
+					_ = jobs.Succeed(id, result)
 				})
 			} else {
 				t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
 			}
 			names, active, running := visModes()
 			if !slices.Equal(names, tt.wantNames) || active != tt.wantActive || running != tt.wantRunning {
-				t.Fatalf("visModes() = %v, %q, %v; want %v, %q, %v", names, active, running, tt.wantNames, tt.wantActive, tt.wantRunning)
+				t.Fatalf("visModes() = %v, %d, %v; want %v, %d, %v", names, active, running, tt.wantNames, tt.wantActive, tt.wantRunning)
 			}
 		})
 	}

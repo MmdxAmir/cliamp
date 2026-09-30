@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -925,19 +926,26 @@ func visStreamCommand() *cli.Command {
 	}
 }
 
-// visModes returns the modes that cliamp vis list prints and the active
-// mode. A running cliamp lists its Lua visualizers too. With no running
-// cliamp, or in headless mode, it lists the built-in modes.
-func visModes() (names []string, active string, running bool) {
+// visModes returns the modes that cliamp vis list prints and the row of the
+// active mode, or -1. A running cliamp lists its Lua visualizers too and
+// gives the active row, because a Lua mode can have the name of a built-in
+// mode. A cliamp that gives no row marks the first row with the active
+// name. With no running cliamp, or in headless mode, it lists the built-in
+// modes.
+func visModes() (names []string, active int, running bool) {
 	names = ui.VisModeNames()
 	snapshot, err := ipcState()
 	if err != nil {
-		return names, "", false
+		return names, -1, false
 	}
 	if resp, err := ipcSend("vis", ipc.Request{Name: "list"}); err == nil && len(resp.Items) > 0 {
 		names = resp.Items
+		if resp.Visualizer != "" && resp.Index >= 0 && resp.Index < len(names) {
+			return names, resp.Index, true
+		}
 	}
-	return names, snapshot.Visualizer, true
+	active = slices.IndexFunc(names, func(name string) bool { return strings.EqualFold(name, snapshot.Visualizer) })
+	return names, active, true
 }
 
 func visCommand() *cli.Command {
@@ -954,9 +962,9 @@ func visCommand() *cli.Command {
 				if !running {
 					fmt.Fprintln(os.Stderr, "(cliamp not running — active marker unavailable)")
 				}
-				for _, name := range names {
+				for i, name := range names {
 					marker := "  "
-					if strings.EqualFold(name, active) {
+					if i == active {
 						marker = "* "
 					}
 					fmt.Printf("%s%s\n", marker, name)

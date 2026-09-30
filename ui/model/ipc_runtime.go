@@ -365,11 +365,15 @@ func (m *Model) handleV2Theme(jobs *ipc.JobStore, jobID string, request ipc.Requ
 
 func (m *Model) handleV2Visualizer(jobs *ipc.JobStore, jobID string, request ipc.Request) tea.Cmd {
 	if strings.EqualFold(request.Name, "list") {
-		names := ui.VisModeNames()
+		resp := ipc.Response{OK: true, Items: ui.VisModeNames()}
 		if m.vis != nil {
-			names = m.vis.AllModeNames()
+			// A Lua mode can have the name of a built-in mode, so the
+			// index names the active row.
+			resp.Items = m.vis.AllModeNames()
+			resp.Visualizer = m.vis.ModeName()
+			resp.Index = int(m.vis.Mode)
 		}
-		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Items: names})
+		m.completeV2Job(jobs, jobID, resp)
 		return nil
 	}
 	if m.vis == nil {

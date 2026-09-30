@@ -128,6 +128,15 @@ play-next list. They use separate zero-based indexes.
 cycle: the built-in modes, then the visualizers of Lua plugins. `cliamp vis
 list` prints the same list when cliamp runs.
 
+The `list` result also names the active mode in `visualizer` and gives its
+zero-based position in `items` as `index`. The result leaves out `index` when
+it is 0. A Lua visualizer can have the name of a built-in mode, so use `index`
+to find the active mode. `cliamp vis list` marks only that row.
+
+```sh
+cliamp remote call vis --params '{"name":"list"}' --wait
+```
+
 `theme list` and `cliamp theme list` return `Default - Terminal colors` as
 the first item. `theme` accepts that name or `default` to select the terminal
 colors.

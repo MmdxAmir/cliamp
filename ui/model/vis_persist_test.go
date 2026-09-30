@@ -96,22 +96,38 @@ func TestVisualizerListDoesNotPersist(t *testing.T) {
 }
 
 // The list names every mode that a client can select by name, the Lua
-// visualizers too.
+// visualizers too. It also names the active mode and gives its row, because
+// a Lua visualizer can have the name of a built-in mode.
 func TestVisualizerListIncludesLuaModes(t *testing.T) {
-	m := visTestModel(&recordingSaver{})
-	m.RegisterLuaVisualizers([]string{"plugin-vis"}, nil)
-	t.Cleanup(func() { m.RegisterLuaVisualizers(nil, nil) })
-	jobs, id := newVisJob(t)
-
-	m.handleV2Visualizer(jobs, id, ipc.Request{Cmd: "vis", Name: "list"})
-
-	job, _ := jobs.Get(id)
-	var response ipc.Response
-	if err := json.Unmarshal(job.Result, &response); err != nil {
-		t.Fatalf("result %s: %v", job.Result, err)
+	tests := []struct {
+		name string
+		mode ui.VisMode
+	}{
+		{"built-in Bars", ui.VisBars},
+		{"Lua Bars", ui.VisCount},
 	}
-	if want := append(ui.VisModeNames(), "plugin-vis"); !slices.Equal(response.Items, want) {
-		t.Fatalf("items = %v, want %v", response.Items, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := visTestModel(&recordingSaver{})
+			m.RegisterLuaVisualizers([]string{"Bars"}, nil)
+			t.Cleanup(func() { m.RegisterLuaVisualizers(nil, nil) })
+			m.vis.SetMode(tt.mode)
+			jobs, id := newVisJob(t)
+
+			m.handleV2Visualizer(jobs, id, ipc.Request{Cmd: "vis", Name: "list"})
+
+			job, _ := jobs.Get(id)
+			var response ipc.Response
+			if err := json.Unmarshal(job.Result, &response); err != nil {
+				t.Fatalf("result %s: %v", job.Result, err)
+			}
+			if want := append(ui.VisModeNames(), "Bars"); !slices.Equal(response.Items, want) {
+				t.Fatalf("items = %v, want %v", response.Items, want)
+			}
+			if response.Visualizer != "Bars" || response.Index != int(tt.mode) {
+				t.Fatalf("visualizer, index = %q, %d; want Bars, %d", response.Visualizer, response.Index, tt.mode)
+			}
+		})
 	}
 }
 
