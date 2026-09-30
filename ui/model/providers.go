@@ -259,8 +259,8 @@ func (m Model) isActiveProvider(name string) bool {
 	return m.provider != nil && m.provider.Name() == name
 }
 
-// Provider keys of the sources that have their own UI rules. main.go
-// registers the providers under these keys.
+// Provider keys of the sources that have their own UI rules. buildProviders
+// in the main package registers the providers under these keys.
 const (
 	providerKeyLocal = "local"
 	providerKeyRadio = "radio"
