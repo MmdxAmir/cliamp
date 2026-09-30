@@ -779,15 +779,9 @@ func parseYTDLTracks(r io.Reader) ([]playlist.Track, int, error) {
 	return tracks, entries, scanner.Err()
 }
 
-// DownloadYTDL downloads a single track via yt-dlp to the given directory
-// and returns the output file path. Uses yt-dlp's default naming template.
-func DownloadYTDL(pageURL, saveDir string) (string, error) {
-	return DownloadYTDLContext(context.Background(), pageURL, saveDir)
-}
-
-// DownloadYTDLContext is DownloadYTDL with caller-controlled cancellation. A
-// cancel stops yt-dlp. It sets no time limit of its own, because a download
-// can take minutes.
+// DownloadYTDLContext downloads a single track via yt-dlp to saveDir and
+// returns the output file path. A cancel of ctx stops yt-dlp. It sets no time
+// limit of its own, because a download can take minutes.
 func DownloadYTDLContext(ctx context.Context, pageURL, saveDir string) (string, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return "", fmt.Errorf("yt-dlp not found in PATH")

@@ -13,11 +13,6 @@ import (
 	"github.com/bjarneo/cliamp/resolve"
 )
 
-// Save downloads or copies track into ~/Music/cliamp and returns its path.
-func Save(track playlist.Track) (string, error) {
-	return SaveTo(context.Background(), track, "")
-}
-
 // Directory resolves the configured directory, falling back to ~/Music/cliamp.
 func Directory(directory string) (string, error) {
 	if directory != "" {
