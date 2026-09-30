@@ -149,7 +149,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	if luaMgr != nil {
 		luaMgr.SetStateProvider(luaStateProvider(p, m.LoadPluginState))
 		if names := luaMgr.Visualizers(); len(names) > 0 {
-			m.RegisterLuaVisualizers(names, luaMgr.RenderVis)
+			m.RegisterLuaVisualizers(names, luaMgr)
 		}
 	}
 	m.SetPendingURLs(resolved.Pending)

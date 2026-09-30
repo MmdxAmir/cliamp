@@ -584,8 +584,8 @@ func TestTerrainTickSkipsAnalyzeUnderOverlay(t *testing.T) {
 	}
 }
 
-// The stateful spectrum drivers and the Lua driver take their analysis spec,
-// cadence and OnLeave from spectrumDriverBase.
+// The stateful spectrum drivers and the Lua driver take their analysis spec
+// and cadence from spectrumDriverBase.
 func TestSpectrumDriverBaseDefaults(t *testing.T) {
 	v := NewVisualizer(44100)
 	v.RegisterLuaVisualizers([]string{"plugin"}, nil)

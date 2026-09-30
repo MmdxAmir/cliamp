@@ -237,8 +237,8 @@ func (m *Model) VisualizerName() string {
 }
 
 // RegisterLuaVisualizers adds Lua visualizer plugins to the visualizer cycle.
-func (m *Model) RegisterLuaVisualizers(names []string, renderer ui.LuaVisRenderer) {
-	m.vis.RegisterLuaVisualizers(names, renderer)
+func (m *Model) RegisterLuaVisualizers(names []string, host ui.LuaVisHost) {
+	m.vis.RegisterLuaVisualizers(names, host)
 }
 
 // SetResume registers a path+position to seek to when that track first plays.

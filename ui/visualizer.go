@@ -45,7 +45,7 @@ type Visualizer struct {
 	activeModeSet   bool
 	refreshPending  bool
 	luaVisNames     []string
-	luaRender       LuaVisRenderer
+	luaHost         LuaVisHost
 	luaDriverCache  map[int]visModeDriver
 	pulseCoordCache *pulseCoords
 	dotMask         []bool      // per-frame Braille dots, see dotMaskFor

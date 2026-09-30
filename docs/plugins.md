@@ -672,6 +672,8 @@ end
 | `p:init(rows, cols)` | Setup when selected | No |
 | `p:destroy()` | Cleanup when deselected | No |
 
+cliamp calls `init` before the first frame after you select the visualizer, with the size of that frame. It calls `destroy` when you select another visualizer after `init` ran. It calls neither when you leave the visualizer before it draws a frame, and it does not call `destroy` when cliamp quits. Use the `app.quit` event for cleanup at exit.
+
 `render` has a 50 ms limit for each frame. If it runs longer or fails, cliamp shows the previous frame. cliamp also shows the previous frame while another callback of the same plugin runs, so a slow hook does not delay the UI. cliamp runs `init` and `destroy` in order with the events of the plugin, and `render` shows the previous frame until `init` has run.
 
 ## Sandbox

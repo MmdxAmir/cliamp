@@ -2,14 +2,21 @@ package ui
 
 import "strings"
 
-// LuaVisRenderer is the callback type for rendering a Lua visualizer frame.
-type LuaVisRenderer func(name string, bands [DefaultSpectrumBands]float64, rows, cols int, frame uint64) string
+// LuaVisHost runs the Lua visualizers. *luaplugin.Manager implements it.
+// The Visualizer calls it on the UI goroutine, so no method may wait for a
+// plugin.
+type LuaVisHost interface {
+	RenderVis(name string, bands [DefaultSpectrumBands]float64, rows, cols int, frame uint64) string
+	InitVis(name string, rows, cols int)
+	DestroyVis(name string)
+}
 
 // RegisterLuaVisualizers adds Lua visualizer names so they can be cycled
-// through with the v key. renderer is called when a Lua visualizer is active.
-func (v *Visualizer) RegisterLuaVisualizers(names []string, renderer LuaVisRenderer) {
+// through with the v key. host renders the active Lua visualizer, and it
+// runs init and destroy when a Lua mode is selected and deselected.
+func (v *Visualizer) RegisterLuaVisualizers(names []string, host LuaVisHost) {
 	v.luaVisNames = names
-	v.luaRender = renderer
+	v.luaHost = host
 	clear(v.luaDriverCache)
 	// Add to name map for StringToVisModeExact lookups.
 	for i, name := range names {
@@ -17,23 +24,56 @@ func (v *Visualizer) RegisterLuaVisualizers(names []string, renderer LuaVisRende
 	}
 }
 
+// luaModeDriver draws a Lua visualizer. It runs the init of the plugin
+// before the first render after the mode is selected, when the size is
+// known, and the destroy when the mode is left after an init.
 type luaModeDriver struct {
 	spectrumDriverBase
-	index int
+	index       int
+	initPending bool // the mode was selected, and init has not run
+	initialized bool // init ran, so the mode needs a destroy when it is left
+}
+
+// name returns the plugin name of the driver, or false when the host or the
+// name is missing.
+func (d *luaModeDriver) name(v *Visualizer) (string, bool) {
+	if v == nil || d.index < 0 || d.index >= len(v.luaVisNames) || v.luaHost == nil {
+		return "", false
+	}
+	return v.luaVisNames[d.index], true
 }
 
 func (d *luaModeDriver) Render(v *Visualizer) string {
-	if v == nil || d.index < 0 || d.index >= len(v.luaVisNames) || v.luaRender == nil {
+	name, ok := d.name(v)
+	if !ok {
 		return ""
 	}
-	return v.luaRender(v.luaVisNames[d.index], luaBands(v.bands), v.Rows, v.columns(), v.frame)
+	if d.initPending {
+		d.initPending = false
+		d.initialized = true
+		v.luaHost.InitVis(name, v.Rows, v.columns())
+	}
+	return v.luaHost.RenderVis(name, luaBands(v.bands), v.Rows, v.columns(), v.frame)
 }
 
 func (d *luaModeDriver) Tick(v *Visualizer, ctx VisTickContext) {
 	defaultDriverTick(v, ctx, d.AnalysisSpec(v))
 }
 
-func (*luaModeDriver) OnEnter(*Visualizer) {}
+func (d *luaModeDriver) OnEnter(*Visualizer) {
+	d.initPending = true
+}
+
+func (d *luaModeDriver) OnLeave(v *Visualizer) {
+	d.initPending = false
+	if !d.initialized {
+		return
+	}
+	d.initialized = false
+	if name, ok := d.name(v); ok {
+		v.luaHost.DestroyVis(name)
+	}
+}
 
 func luaBands(src []float64) [DefaultSpectrumBands]float64 {
 	var bands [DefaultSpectrumBands]float64
