@@ -675,16 +675,8 @@ func (p *Player) IsYTDLSeek() bool {
 func (p *Player) Position() time.Duration {
 	speaker.Lock()
 	defer speaker.Unlock()
-	p.mu.Lock()
-	cur := p.current
-	p.mu.Unlock()
-	if cur == nil {
-		return 0
-	}
-	if cur.livePrefetch != nil {
-		return cur.livePrefetch.Position() + cur.streamOffset
-	}
-	return cur.format.SampleRate.D(cur.decoder.Position()) + cur.streamOffset
+	pos, _ := p.positionAndDurationLocked()
+	return pos
 }
 
 // Duration returns the total duration of the current track.
@@ -694,22 +686,8 @@ func (p *Player) Position() time.Duration {
 func (p *Player) Duration() time.Duration {
 	speaker.Lock()
 	defer speaker.Unlock()
-	p.mu.Lock()
-	cur := p.current
-	p.mu.Unlock()
-	if cur == nil {
-		return 0
-	}
-	if cur.livePrefetch != nil {
-		if cur.knownDuration > 0 {
-			return cur.knownDuration
-		}
-		return cur.decodedDuration
-	}
-	if n := cur.decoder.Len(); n > 0 {
-		return cur.format.SampleRate.D(n)
-	}
-	return cur.knownDuration
+	_, dur := p.positionAndDurationLocked()
+	return dur
 }
 
 // PositionAndDuration returns both position and duration under a single
@@ -717,6 +695,15 @@ func (p *Player) Duration() time.Duration {
 func (p *Player) PositionAndDuration() (time.Duration, time.Duration) {
 	speaker.Lock()
 	defer speaker.Unlock()
+	return p.positionAndDurationLocked()
+}
+
+// positionAndDurationLocked is the rule of Position, Duration and
+// PositionAndDuration. The caller holds the speaker lock, so the audio
+// goroutine cannot move the decoder during the read. A live prefetch reports
+// the audio that the speaker took from it, and the duration that the decoder
+// had before the prefetch started when no metadata duration is known.
+func (p *Player) positionAndDurationLocked() (time.Duration, time.Duration) {
 	p.mu.Lock()
 	cur := p.current
 	p.mu.Unlock()
@@ -731,13 +718,10 @@ func (p *Player) PositionAndDuration() (time.Duration, time.Duration) {
 		return cur.livePrefetch.Position() + cur.streamOffset, dur
 	}
 	pos := cur.format.SampleRate.D(cur.decoder.Position()) + cur.streamOffset
-	var dur time.Duration
 	if n := cur.decoder.Len(); n > 0 {
-		dur = cur.format.SampleRate.D(n)
-	} else {
-		dur = cur.knownDuration
+		return pos, cur.format.SampleRate.D(n)
 	}
-	return pos, dur
+	return pos, cur.knownDuration
 }
 
 // SetVolumeMin sets the minimum volume floor in dB, clamped to [-90, 0].

@@ -818,3 +818,68 @@ func TestAudioOutputHint(t *testing.T) {
 		}
 	}
 }
+
+// frameDecoder reports a fixed position and length in frames.
+type frameDecoder struct {
+	playbackTestDecoder
+	pos, n int
+}
+
+func (d *frameDecoder) Position() int { return d.pos }
+func (d *frameDecoder) Len() int      { return d.n }
+
+// TestPositionAndDurationRule checks that Position, Duration and
+// PositionAndDuration report the same values for each pipeline shape.
+func TestPositionAndDurationRule(t *testing.T) {
+	format := beep.Format{SampleRate: 1000, NumChannels: 2, Precision: 2}
+	prefetch := newLivePrefetchStreamer(&gatedLiveStreamer{}, format.SampleRate)
+	defer prefetch.Close()
+	tests := []struct {
+		name    string
+		current *trackPipeline
+		wantPos time.Duration
+		wantDur time.Duration
+	}{
+		{name: "no track"},
+		{
+			name:    "decoder length wins over metadata",
+			current: &trackPipeline{decoder: &frameDecoder{pos: 500, n: 2000}, format: format, knownDuration: time.Minute},
+			wantPos: 500 * time.Millisecond,
+			wantDur: 2 * time.Second,
+		},
+		{
+			name:    "metadata when the decoder has no length",
+			current: &trackPipeline{decoder: &frameDecoder{pos: 1000}, format: format, knownDuration: time.Minute},
+			wantPos: time.Second,
+			wantDur: time.Minute,
+		},
+		{
+			name:    "yt-dlp restart adds its offset",
+			current: &trackPipeline{decoder: &frameDecoder{pos: 1000}, format: format, streamOffset: 30 * time.Second, knownDuration: time.Hour},
+			wantPos: 31 * time.Second,
+			wantDur: time.Hour,
+		},
+		{
+			name:    "live prefetch with metadata",
+			current: &trackPipeline{decoder: &frameDecoder{pos: 9000, n: 9000}, format: format, livePrefetch: prefetch, knownDuration: 2 * time.Minute, decodedDuration: time.Minute},
+			wantDur: 2 * time.Minute,
+		},
+		{
+			name:    "live prefetch falls back to the decoded length",
+			current: &trackPipeline{decoder: &frameDecoder{pos: 9000, n: 9000}, format: format, livePrefetch: prefetch, streamOffset: time.Second, decodedDuration: time.Minute},
+			wantPos: time.Second,
+			wantDur: time.Minute,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Player{current: tt.current}
+			pos, dur := p.PositionAndDuration()
+			got := fmt.Sprintf("Position=%v Duration=%v PositionAndDuration=%v,%v", p.Position(), p.Duration(), pos, dur)
+			want := fmt.Sprintf("Position=%v Duration=%v PositionAndDuration=%v,%v", tt.wantPos, tt.wantDur, tt.wantPos, tt.wantDur)
+			if got != want {
+				t.Fatalf("got %s\nwant %s", got, want)
+			}
+		})
+	}
+}
