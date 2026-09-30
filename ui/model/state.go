@@ -81,31 +81,21 @@ type seekState struct {
 	graceFor  time.Duration
 }
 
-// themePickerState holds state for the theme picker overlay.
+// themePickerState holds state for the theme picker overlay. The raw rows
+// are [Default, themes...].
 type themePickerState struct {
-	visible     bool
-	cursor      int // view index into filtered when filter != "", otherwise raw theme index
-	scroll      int
-	savedName   string // theme name before opening picker, for cancel/restore after reload
-	filtering   bool
-	filter      string
-	filtered    []int // raw indices into [Default, themes...]
-	savedCursor int
-	savedScroll int
+	filterList
+	visible   bool
+	savedName string // theme name before opening picker, for cancel/restore after reload
 }
 
-// visPickerState holds state for the visualizer picker overlay.
+// visPickerState holds state for the visualizer picker overlay. The raw rows
+// are the modes.
 type visPickerState struct {
-	visible     bool
-	cursor      int // view index into filtered when filter != "", otherwise raw visualizer mode
-	scroll      int
-	savedMode   int      // vis.Mode before opening, for cancel/restore
-	modes       []string // mode names captured at open (stable while open)
-	filtering   bool
-	filter      string
-	filtered    []int // raw indices into modes
-	savedCursor int
-	savedScroll int
+	filterList
+	visible   bool
+	savedMode int      // vis.Mode before opening, for cancel/restore
+	modes     []string // mode names captured at open (stable while open)
 }
 
 // lyricsState holds state for the lyrics display overlay.
@@ -119,17 +109,12 @@ type lyricsState struct {
 	offset  time.Duration // synced-lyrics timestamp adjustment (persisted as lyrics_offset_ms)
 }
 
-// keymapOverlay holds state for the keybindings overlay.
+// keymapOverlay holds state for the keybindings overlay. The raw rows are the
+// entries.
 type keymapOverlay struct {
-	visible     bool
-	cursor      int
-	scroll      int
-	savedCursor int
-	savedScroll int
-	searching   bool
-	search      string
-	filtered    []int         // indices into entries
-	entries     []keymapEntry // core keys + plugin keys, rebuilt on openKeymap
+	filterList
+	visible bool
+	entries []keymapEntry // core keys + plugin keys, rebuilt on openKeymap
 }
 
 // queueOverlay holds state for the queue manager overlay.
@@ -223,20 +208,15 @@ type playlistPickerState struct {
 	inputErr  string
 }
 
-// fileBrowserState holds state for the file browser overlay.
+// fileBrowserState holds state for the file browser overlay. The raw rows
+// are the entries.
 type fileBrowserState struct {
+	filterList
 	visible        bool
 	dir            string
 	entries        []fbEntry
-	cursor         int
-	scroll         int
-	savedCursor    int
-	savedScroll    int
 	selected       map[string]bool
 	err            string
-	searching      bool
-	search         string
-	filtered       []int // indices into entries
 	targetPlaylist string
 	confirmReplace bool
 }

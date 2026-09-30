@@ -29,7 +29,7 @@ func TestSearchInputsShowModeAndExitKey(t *testing.T) {
 		},
 		{
 			name:   "file browser filter",
-			setup:  func(m *Model) { m.fileBrowser.searching = true; m.fileBrowser.search = "mp3" },
+			setup:  func(m *Model) { m.fileBrowser.filtering = true; m.fileBrowser.filter = "mp3" },
 			header: (*Model).fbHeaderLine,
 			want:   "[Filter: Files] mp3_",
 		},

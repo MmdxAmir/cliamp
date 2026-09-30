@@ -3,40 +3,9 @@ package model
 import tea "charm.land/bubbletea/v2"
 
 func (m *Model) handleThemeFilterKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch msg.String() {
-	case "esc":
-		m.themePicker.filtering = false
-		m.themePicker.filter = ""
-		m.themePicker.filtered = nil
-		m.themePicker.cursor = m.themePicker.savedCursor
-		m.themePicker.scroll = m.themePicker.savedScroll
-		return nil
-	case "enter":
-		m.themePicker.filtering = false
-		if m.themePicker.filter == "" {
-			m.themePicker.cursor = m.themePicker.savedCursor
-			m.themePicker.scroll = m.themePicker.savedScroll
-		}
-		return nil
-	case "down":
-		m.themePicker.filtering = false
-		if m.themePickerViewCount() > 0 {
-			m.themePicker.cursor = 0
-			m.themePickerApply()
-			m.themePickerMaybeAdjustScroll(m.effectivePlaylistVisible())
-		}
-		return nil
-	case "backspace":
-		if m.themePicker.filter == "" {
-			m.themePicker.filtering = false
-			m.themePicker.cursor = m.themePicker.savedCursor
-			m.themePicker.scroll = m.themePicker.savedScroll
-			return nil
-		}
-	}
-
-	if m.editText("theme-picker-filter", &m.themePicker.filter, msg) {
-		m.themePickerRecomputeFilter()
+	if m.filterKey(&m.themePicker.filterList, "theme-picker-filter", msg, m.themeCount(), m.themePickerRecomputeFilter) {
+		m.themePickerApply()
+		m.themePickerMaybeAdjustScroll(m.effectivePlaylistVisible())
 	}
 	return nil
 }
@@ -103,10 +72,7 @@ func (m *Model) handleThemeKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.themePickerSelect()
 
 	case "/":
-		m.themePicker.savedCursor = m.themePicker.cursor
-		m.themePicker.savedScroll = m.themePicker.scroll
-		m.themePicker.filtering = true
-		m.themePicker.filter = ""
+		m.themePicker.beginFilter()
 		m.themePickerRecomputeFilter()
 		return nil
 
@@ -117,40 +83,9 @@ func (m *Model) handleThemeKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (m *Model) handleVisPickerFilterKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch msg.String() {
-	case "esc":
-		m.visPicker.filtering = false
-		m.visPicker.filter = ""
-		m.visPicker.filtered = nil
-		m.visPicker.cursor = m.visPicker.savedCursor
-		m.visPicker.scroll = m.visPicker.savedScroll
-		return nil
-	case "enter":
-		m.visPicker.filtering = false
-		if m.visPicker.filter == "" {
-			m.visPicker.cursor = m.visPicker.savedCursor
-			m.visPicker.scroll = m.visPicker.savedScroll
-		}
-		return nil
-	case "down":
-		m.visPicker.filtering = false
-		if m.visPickerViewCount() > 0 {
-			m.visPicker.cursor = 0
-			m.visPickerApply()
-			m.visPickerMaybeAdjustScroll(m.effectivePlaylistVisible())
-		}
-		return nil
-	case "backspace":
-		if m.visPicker.filter == "" {
-			m.visPicker.filtering = false
-			m.visPicker.cursor = m.visPicker.savedCursor
-			m.visPicker.scroll = m.visPicker.savedScroll
-			return nil
-		}
-	}
-
-	if m.editText("visualizer-picker-filter", &m.visPicker.filter, msg) {
-		m.visPickerRecomputeFilter()
+	if m.filterKey(&m.visPicker.filterList, "visualizer-picker-filter", msg, len(m.visPicker.modes), m.visPickerRecomputeFilter) {
+		m.visPickerApply()
+		m.visPickerMaybeAdjustScroll(m.effectivePlaylistVisible())
 	}
 	return nil
 }
@@ -217,10 +152,7 @@ func (m *Model) handleVisPickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.visPickerSelect()
 
 	case "/":
-		m.visPicker.savedCursor = m.visPicker.cursor
-		m.visPicker.savedScroll = m.visPicker.scroll
-		m.visPicker.filtering = true
-		m.visPicker.filter = ""
+		m.visPicker.beginFilter()
 		m.visPickerRecomputeFilter()
 		return nil
 

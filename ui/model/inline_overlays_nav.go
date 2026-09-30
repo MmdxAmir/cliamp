@@ -203,8 +203,8 @@ func (m Model) fbHeaderLine() string {
 	if m.fileBrowser.confirmReplace {
 		return sepHeader("Replace current queue?")
 	}
-	if m.fileBrowser.searching {
-		return m.filterHeader("Filter: Files", "file-browser-search", m.fileBrowser.search, "")
+	if m.fileBrowser.filtering {
+		return m.filterHeader("Filter: Files", "file-browser-search", m.fileBrowser.filter, "")
 	}
 	label := "Files: " + m.fileBrowser.dir
 	if n := len(m.fileBrowser.selected); n > 0 {
@@ -229,7 +229,7 @@ func (m Model) renderFileBrowserBody() string {
 
 	count := m.fbCount()
 	if count == 0 {
-		if m.fileBrowser.search != "" {
+		if m.fileBrowser.filter != "" {
 			lines = append(lines, dimStyle.Render("  No matches"))
 		} else {
 			lines = append(lines, dimStyle.Render("  (empty)"))
@@ -254,7 +254,7 @@ func (m Model) renderFileBrowserBody() string {
 		label := truncate(check+e.name+suffix, max(1, ui.PanelWidth-2))
 
 		switch {
-		case m.fileBrowser.searching:
+		case m.fileBrowser.filtering:
 			lines = append(lines, dimStyle.Render("  "+label))
 		case i == m.fileBrowser.cursor:
 			lines = append(lines, playlistSelectedStyle.Render("> "+label))

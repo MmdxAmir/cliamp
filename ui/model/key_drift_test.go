@@ -166,6 +166,36 @@ func handlerCalls(fd *ast.FuncDecl) []string {
 	return names
 }
 
+// keyHelpers take keys on behalf of the handler that calls them, in the mode
+// of that handler. Their keys count as keys of the caller.
+var keyHelpers = []string{"filterKey"}
+
+// helperCalls returns the names of the keyHelpers that fd calls, as methods
+// on m or as plain functions.
+func helperCalls(fd *ast.FuncDecl) []string {
+	var names []string
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		var name string
+		switch fun := call.Fun.(type) {
+		case *ast.Ident:
+			name = fun.Name
+		case *ast.SelectorExpr:
+			if recv, ok := fun.X.(*ast.Ident); ok && recv.Name == "m" {
+				name = fun.Sel.Name
+			}
+		}
+		if slices.Contains(keyHelpers, name) && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+		return true
+	})
+	return names
+}
+
 // methodCalls returns the names of the methods that fd calls on m.
 func methodCalls(fd *ast.FuncDecl) []string {
 	var names []string
@@ -421,6 +451,15 @@ func TestKeyHandlersMatchCommandRegistry(t *testing.T) {
 		fd := lookupFunc(t, funcs, name)
 		keys := handlerKeys(t, fd)
 		calls := methodCalls(fd)
+		for _, helper := range helperCalls(fd) {
+			hd := lookupFunc(t, funcs, helper)
+			for _, key := range handlerKeys(t, hd) {
+				if !slices.Contains(keys, key) {
+					keys = append(keys, key)
+				}
+			}
+			calls = append(calls, methodCalls(hd)...)
+		}
 		for _, key := range shortcutKeys(t, funcs, calls) {
 			if !slices.Contains(keys, key) {
 				keys = append(keys, key)

@@ -17,11 +17,7 @@ func (m *Model) openThemePicker() {
 	m.themes = theme.LoadAll()
 	m.themePicker.visible = true
 	m.themePicker.savedName = savedName
-	m.themePicker.filtering = false
-	m.themePicker.filter = ""
-	m.themePicker.filtered = nil
-	m.themePicker.savedCursor = 0
-	m.themePicker.savedScroll = 0
+	m.themePicker.filterList = filterList{}
 	m.themeIdx = -1
 	for i, t := range m.themes {
 		if strings.EqualFold(t.Name, savedName) {
@@ -32,7 +28,6 @@ func (m *Model) openThemePicker() {
 	// Position cursor on the currently active theme.
 	// Picker list: 0 = Default, 1..N = themes[0..N-1]
 	m.themePicker.cursor = m.themeIdx + 1
-	m.themePicker.scroll = 0
 	m.themePickerMaybeAdjustScroll(m.effectivePlaylistVisible())
 }
 
@@ -63,9 +58,7 @@ func (m *Model) themePickerSelect() {
 	}
 	_ = m.saveConfigString("theme", themeName)
 	m.themePicker.visible = false
-	m.themePicker.filtering = false
-	m.themePicker.filter = ""
-	m.themePicker.filtered = nil
+	m.themePicker.clearFilter()
 }
 
 // themePickerCancel restores the theme from before the picker was opened.
@@ -75,9 +68,7 @@ func (m *Model) themePickerCancel() {
 		applyThemeAll(theme.Default())
 	}
 	m.themePicker.visible = false
-	m.themePicker.filtering = false
-	m.themePicker.filter = ""
-	m.themePicker.filtered = nil
+	m.themePicker.clearFilter()
 }
 
 func (m *Model) themePickerMaybeAdjustScroll(visible int) {
@@ -85,23 +76,11 @@ func (m *Model) themePickerMaybeAdjustScroll(visible int) {
 }
 
 func (m Model) themePickerViewCount() int {
-	if m.themePicker.filter != "" {
-		return len(m.themePicker.filtered)
-	}
-	return m.themeCount()
+	return m.themePicker.viewCount(m.themeCount())
 }
 
 func (m Model) themePickerRawIndex(viewIdx int) (int, bool) {
-	if m.themePicker.filter != "" {
-		if viewIdx < 0 || viewIdx >= len(m.themePicker.filtered) {
-			return 0, false
-		}
-		return m.themePicker.filtered[viewIdx], true
-	}
-	if viewIdx < 0 || viewIdx >= m.themeCount() {
-		return 0, false
-	}
-	return viewIdx, true
+	return m.themePicker.rawIndex(viewIdx, m.themeCount())
 }
 
 func (m Model) themePickerName(rawIdx int) string {
@@ -115,18 +94,10 @@ func (m Model) themePickerName(rawIdx int) string {
 }
 
 func (m *Model) themePickerRecomputeFilter() {
-	m.themePicker.filtered = nil
-	m.themePicker.cursor = 0
-	m.themePicker.scroll = 0
-	if m.themePicker.filter == "" {
-		return
-	}
 	query := strings.ToLower(m.themePicker.filter)
-	for rawIdx := range m.themeCount() {
-		if strings.Contains(strings.ToLower(m.themePickerName(rawIdx)), query) {
-			m.themePicker.filtered = append(m.themePicker.filtered, rawIdx)
-		}
-	}
+	m.themePicker.recompute(m.themeCount(), func(rawIdx int) bool {
+		return strings.Contains(strings.ToLower(m.themePickerName(rawIdx)), query)
+	})
 }
 
 // openVisPicker opens the visualizer picker, which renders the mode list in the
@@ -135,13 +106,7 @@ func (m *Model) themePickerRecomputeFilter() {
 func (m *Model) openVisPicker() {
 	m.visPicker.visible = true
 	m.visPicker.savedMode = int(m.vis.Mode)
-	m.visPicker.cursor = int(m.vis.Mode)
-	m.visPicker.scroll = 0
-	m.visPicker.filtering = false
-	m.visPicker.filter = ""
-	m.visPicker.filtered = nil
-	m.visPicker.savedCursor = 0
-	m.visPicker.savedScroll = 0
+	m.visPicker.filterList = filterList{cursor: int(m.vis.Mode)}
 	// Capture the mode list once; it is stable while the picker is open (Lua
 	// visualizers are registered at startup), so callers avoid re-allocating it.
 	m.visPicker.modes = m.vis.AllModeNames()
@@ -174,9 +139,7 @@ func (m *Model) visPickerApply() bool {
 func (m *Model) visPickerClose() {
 	m.visPicker.visible = false
 	m.visPicker.modes = nil
-	m.visPicker.filtering = false
-	m.visPicker.filter = ""
-	m.visPicker.filtered = nil
+	m.visPicker.clearFilter()
 	m.refreshChrome()
 	m.applyHeightMode()
 	m.adjustScroll()
@@ -202,38 +165,18 @@ func (m *Model) visPickerMaybeAdjustScroll(visible int) {
 }
 
 func (m Model) visPickerViewCount() int {
-	if m.visPicker.filter != "" {
-		return len(m.visPicker.filtered)
-	}
-	return len(m.visPicker.modes)
+	return m.visPicker.viewCount(len(m.visPicker.modes))
 }
 
 func (m Model) visPickerRawIndex(viewIdx int) (int, bool) {
-	if m.visPicker.filter != "" {
-		if viewIdx < 0 || viewIdx >= len(m.visPicker.filtered) {
-			return 0, false
-		}
-		return m.visPicker.filtered[viewIdx], true
-	}
-	if viewIdx < 0 || viewIdx >= len(m.visPicker.modes) {
-		return 0, false
-	}
-	return viewIdx, true
+	return m.visPicker.rawIndex(viewIdx, len(m.visPicker.modes))
 }
 
 func (m *Model) visPickerRecomputeFilter() {
-	m.visPicker.filtered = nil
-	m.visPicker.cursor = 0
-	m.visPicker.scroll = 0
-	if m.visPicker.filter == "" {
-		return
-	}
 	query := strings.ToLower(m.visPicker.filter)
-	for rawIdx, name := range m.visPicker.modes {
-		if strings.Contains(strings.ToLower(name), query) {
-			m.visPicker.filtered = append(m.visPicker.filtered, rawIdx)
-		}
-	}
+	m.visPicker.recompute(len(m.visPicker.modes), func(rawIdx int) bool {
+		return strings.Contains(strings.ToLower(m.visPicker.modes[rawIdx]), query)
+	})
 }
 
 // closeSearchLayout restores playlist sizing after the inline search header and

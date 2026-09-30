@@ -176,18 +176,15 @@ func (m Model) commandContext() (commandMode, string) {
 }
 
 func (m *Model) keymapCount() int {
-	if m.keymap.searching || m.keymap.search != "" {
-		return len(m.keymap.filtered)
-	}
-	return len(m.keymap.entries)
+	return m.keymap.viewCount(len(m.keymap.entries))
 }
 
 // keymapHeaderLine renders the keymap's single-line header for the playlist
 // region: the filter prompt while searching/filtered, otherwise a labeled
 // separator with the match count.
 func (m Model) keymapHeaderLine() string {
-	if m.keymap.searching || m.keymap.search != "" {
-		return m.filterHeader("Filter: Keymap", "keymap", m.keymap.search, fmt.Sprintf("%d/%d", m.keymapCount(), len(m.keymap.entries)))
+	if m.keymap.isFiltered() {
+		return m.filterHeader("Filter: Keymap", "keymap", m.keymap.filter, fmt.Sprintf("%d/%d", m.keymapCount(), len(m.keymap.entries)))
 	}
 	return sepHeaderN("Keymap", m.keymap.cursor+1, len(m.keymap.entries))
 }
@@ -200,11 +197,7 @@ func (m *Model) keymapMaybeAdjustScroll(visible int) {
 // openKeymap resets the keymap state and shows it. Snapshots plugin bindings
 // once so the render/navigation code doesn't re-query the plugin manager.
 func (m *Model) openKeymap() {
-	m.keymap.searching = false
-	m.keymap.search = ""
-	m.keymap.filtered = nil
-	m.keymap.cursor = 0
-	m.keymap.scroll = 0
+	m.keymap.filterList = filterList{}
 	m.keymap.entries = m.buildKeymapEntries()
 	m.keymap.visible = true
 	// The keymap now renders in the playlist region; recompute chrome so its
@@ -218,55 +211,22 @@ func (m *Model) openKeymap() {
 // sizing after the inline header and help line are dismissed.
 func (m *Model) closeKeymap() {
 	m.keymap.visible = false
-	m.keymap.searching = false
-	m.keymap.search = ""
-	m.keymap.filtered = nil
+	m.keymap.clearFilter()
 	m.refreshChrome()
 	m.applyHeightMode()
 	m.adjustScroll()
 }
 
 func (m *Model) handleKeymapSearchKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch msg.String() {
-	case "esc":
-		m.keymap.searching = false
-		m.keymap.search = ""
-		m.keymap.filtered = nil
-		m.keymap.cursor = m.keymap.savedCursor
-		m.keymap.scroll = m.keymap.savedScroll
-		return nil
-	case "enter":
-		m.keymap.searching = false
-		if m.keymap.search == "" {
-			m.keymap.cursor = m.keymap.savedCursor
-			m.keymap.scroll = m.keymap.savedScroll
-		}
-		return nil
-	case "down":
-		m.keymap.searching = false
-		if m.keymapCount() > 0 {
-			m.keymap.cursor = 0
-			m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
-		}
-		return nil
-	case "backspace":
-		if m.keymap.search == "" {
-			m.keymap.searching = false
-			m.keymap.cursor = m.keymap.savedCursor
-			m.keymap.scroll = m.keymap.savedScroll
-			return nil
-		}
-	}
-
-	if m.editText("keymap", &m.keymap.search, msg) {
-		m.updateKeymapFilter()
+	if m.filterKey(&m.keymap.filterList, "keymap", msg, len(m.keymap.entries), m.updateKeymapFilter) {
+		m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
 	}
 	return nil
 }
 
 // handleKeymapKey processes key presses while the keymap overlay is open.
 func (m *Model) handleKeymapKey(msg tea.KeyPressMsg) tea.Cmd {
-	if m.keymap.searching {
+	if m.keymap.filtering {
 		return m.handleKeymapSearchKey(msg)
 	}
 
@@ -275,16 +235,13 @@ func (m *Model) handleKeymapKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.closeKeymap()
 
 	case "/":
-		m.keymap.savedCursor = m.keymap.cursor
-		m.keymap.savedScroll = m.keymap.scroll
-		m.keymap.searching = true
-		m.keymap.search = ""
+		m.keymap.beginFilter()
 		m.updateKeymapFilter()
 		return nil
 
 	case "up", "k":
-		if m.keymap.search != "" && m.keymap.cursor == 0 {
-			m.keymap.searching = true
+		if m.keymap.filter != "" && m.keymap.cursor == 0 {
+			m.keymap.filtering = true
 			return nil
 		}
 		count := m.keymapCount()
@@ -335,8 +292,8 @@ func (m *Model) handleKeymapKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
 
 	case "backspace", "h":
-		if m.keymap.search != "" {
-			m.keymap.search = ""
+		if m.keymap.filter != "" {
+			m.keymap.filter = ""
 			m.updateKeymapFilter()
 		} else {
 			m.closeKeymap()
@@ -351,14 +308,8 @@ func (m *Model) handleKeymapKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // selectedKeymapEntry returns the entry under the keymap cursor.
 func (m *Model) selectedKeymapEntry() (keymapEntry, bool) {
-	idx := m.keymap.cursor
-	if m.keymap.search != "" {
-		if idx < 0 || idx >= len(m.keymap.filtered) {
-			return keymapEntry{}, false
-		}
-		idx = m.keymap.filtered[idx]
-	}
-	if idx < 0 || idx >= len(m.keymap.entries) {
+	idx, ok := m.keymap.rawIndex(m.keymap.cursor, len(m.keymap.entries))
+	if !ok {
 		return keymapEntry{}, false
 	}
 	return m.keymap.entries[idx], true
@@ -386,24 +337,18 @@ func (m *Model) runKeymapEntry() tea.Cmd {
 	return m.handleKey(msg)
 }
 
-// updateKeymapFilter rebuilds the filtered indices and clamps the cursor.
+// updateKeymapFilter rebuilds the filtered indices and clamps the cursor. An
+// empty query keeps every entry. A query skips the section dividers.
 func (m *Model) updateKeymapFilter() {
-	m.keymap.filtered = nil
-	m.keymap.cursor = 0
-	m.keymap.scroll = 0
-	if m.keymap.search == "" {
-		return
-	}
-	query := strings.ToLower(m.keymap.search)
-	for i, e := range m.keymap.entries {
-		if e.divider {
-			continue
+	query := strings.ToLower(m.keymap.filter)
+	m.keymap.recompute(len(m.keymap.entries), func(i int) bool {
+		e := m.keymap.entries[i]
+		if query == "" {
+			return true
 		}
-		if strings.Contains(strings.ToLower(e.key), query) ||
-			strings.Contains(strings.ToLower(e.action), query) {
-			m.keymap.filtered = append(m.keymap.filtered, i)
-		}
-	}
+		return !e.divider && (strings.Contains(strings.ToLower(e.key), query) ||
+			strings.Contains(strings.ToLower(e.action), query))
+	})
 }
 
 // renderKeymapList renders the keymap entries for the playlist region while the
@@ -417,7 +362,7 @@ func (m Model) renderKeymapList() string {
 
 	entries := m.keymap.entries
 	var visible []keymapEntry
-	if m.keymap.search != "" {
+	if m.keymap.filter != "" {
 		for _, i := range m.keymap.filtered {
 			visible = append(visible, entries[i])
 		}
@@ -427,7 +372,7 @@ func (m Model) renderKeymapList() string {
 
 	if len(visible) == 0 {
 		msg := "(empty)"
-		if m.keymap.search != "" {
+		if m.keymap.filter != "" {
 			msg = "No matches"
 		}
 		return strings.Join(fitLines([]string{dimStyle.Render("  " + msg)}, budget), "\n")
@@ -441,7 +386,7 @@ func (m Model) renderKeymapList() string {
 			continue
 		}
 		line := fmt.Sprintf("%-10s %s", entry.key, entry.action)
-		if m.keymap.searching {
+		if m.keymap.filtering {
 			lines = append(lines, dimStyle.Render("  "+line))
 		} else {
 			lines = append(lines, cursorLine(line, i == m.keymap.cursor))

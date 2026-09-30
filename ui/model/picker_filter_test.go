@@ -15,7 +15,7 @@ func TestThemePickerFilterPreservesRawThemeIndex(t *testing.T) {
 			{Name: "Ayu", Accent: "#000000", BrightFG: "#ffffff", FG: "#111111", Green: "#00ff00", Yellow: "#ffff00", Red: "#ff0000"},
 			{Name: "Midnight", Accent: "#000000", BrightFG: "#ffffff", FG: "#111111", Green: "#00ff00", Yellow: "#ffff00", Red: "#ff0000"},
 		},
-		themePicker: themePickerState{filter: "mid"},
+		themePicker: themePickerState{filterList: filterList{filter: "mid"}},
 	}
 	m.themePickerRecomputeFilter()
 
@@ -44,7 +44,7 @@ func TestThemePickerSelectPersistsSelectedTheme(t *testing.T) {
 		themes: []theme.Theme{
 			{Name: "Ayu", Accent: "#000000", BrightFG: "#ffffff", FG: "#111111", Green: "#00ff00", Yellow: "#ffff00", Red: "#ff0000"},
 		},
-		themePicker: themePickerState{visible: true, cursor: 1},
+		themePicker: themePickerState{visible: true, filterList: filterList{cursor: 1}},
 		configSaver: saver,
 	}
 
@@ -62,7 +62,7 @@ func TestThemePickerSelectPersistsDefaultAsEmptyValue(t *testing.T) {
 	saver := &recordingSaver{}
 	m := Model{
 		themes:      []theme.Theme{{Name: "Ayu"}},
-		themePicker: themePickerState{visible: true, cursor: 0},
+		themePicker: themePickerState{visible: true},
 		configSaver: saver,
 	}
 
@@ -77,8 +77,8 @@ func TestVisualizerPickerFilterPreservesModeIndex(t *testing.T) {
 	m := Model{
 		vis: ui.NewVisualizer(44_100),
 		visPicker: visPickerState{
-			modes:  []string{"None", "Bars", "Wave"},
-			filter: "wa",
+			modes:      []string{"None", "Bars", "Wave"},
+			filterList: filterList{filter: "wa"},
 		},
 	}
 	m.visPickerRecomputeFilter()
@@ -92,7 +92,7 @@ func TestVisualizerPickerFilterPreservesModeIndex(t *testing.T) {
 }
 
 func TestPickerFilterHelpDescribesFilterInput(t *testing.T) {
-	m := Model{themePicker: themePickerState{visible: true, filtering: true}}
+	m := Model{themePicker: themePickerState{visible: true, filterList: filterList{filtering: true}}}
 	plain := ansi.Strip(m.renderHelp())
 	if !strings.Contains(plain, "Cancel filter") || !strings.Contains(plain, "Finish filter") {
 		t.Fatalf("theme filter help = %q, want filter actions", plain)

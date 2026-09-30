@@ -51,11 +51,11 @@ func init() {
 			screen: screenKeymap,
 			key:    (*Model).handleKeymapKey,
 			paste: func(m *Model, s string) {
-				m.insertText("keymap", &m.keymap.search, s)
+				m.insertText("keymap", &m.keymap.filter, s)
 				m.updateKeymapFilter()
 			},
 			context: func(m *Model) (commandMode, string) {
-				if m.keymap.searching {
+				if m.keymap.filtering {
 					return commandModeKeymapSearch, "Keymap Filter"
 				}
 				return commandModeKeymap, "Keymap"
@@ -89,13 +89,13 @@ func init() {
 			screen: screenFileBrowser,
 			key:    (*Model).handleFileBrowserKey,
 			paste: func(m *Model, s string) {
-				if m.fileBrowser.searching {
-					m.insertText("file-browser-search", &m.fileBrowser.search, s)
+				if m.fileBrowser.filtering {
+					m.insertText("file-browser-search", &m.fileBrowser.filter, s)
 					m.fbUpdateFilter()
 				}
 			},
 			context: func(m *Model) (commandMode, string) {
-				if m.fileBrowser.searching {
+				if m.fileBrowser.filtering {
 					return commandModeFileBrowserSearch, "File Filter"
 				}
 				return commandModeFileBrowser, "Files"

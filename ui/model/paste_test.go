@@ -21,8 +21,8 @@ func TestHandlePasteRoutesToActiveInput(t *testing.T) {
 			model:   Model{keymap: keymapOverlay{visible: true}},
 			content: "ctrl",
 			check: func(t *testing.T, m *Model) {
-				if m.keymap.search != "ctrl" {
-					t.Fatalf("keymap.search = %q, want %q", m.keymap.search, "ctrl")
+				if m.keymap.filter != "ctrl" {
+					t.Fatalf("keymap.filter = %q, want %q", m.keymap.filter, "ctrl")
 				}
 			},
 		},
@@ -135,7 +135,7 @@ func TestHandlePasteRoutesToActiveInput(t *testing.T) {
 		},
 		{
 			name:    "theme picker filter",
-			model:   Model{themePicker: themePickerState{visible: true, filtering: true}},
+			model:   Model{themePicker: themePickerState{visible: true, filterList: filterList{filtering: true}}},
 			content: "dark",
 			check: func(t *testing.T, m *Model) {
 				if m.themePicker.filter != "dark" {
@@ -155,7 +155,7 @@ func TestHandlePasteRoutesToActiveInput(t *testing.T) {
 		},
 		{
 			name:    "visualizer picker filter",
-			model:   Model{visPicker: visPickerState{visible: true, filtering: true}},
+			model:   Model{visPicker: visPickerState{visible: true, filterList: filterList{filtering: true}}},
 			content: "bars",
 			check: func(t *testing.T, m *Model) {
 				if m.visPicker.filter != "bars" {
@@ -175,11 +175,11 @@ func TestHandlePasteRoutesToActiveInput(t *testing.T) {
 		},
 		{
 			name:    "file browser search",
-			model:   Model{fileBrowser: fileBrowserState{visible: true, searching: true}},
+			model:   Model{fileBrowser: fileBrowserState{visible: true, filterList: filterList{filtering: true}}},
 			content: "flac",
 			check: func(t *testing.T, m *Model) {
-				if m.fileBrowser.search != "flac" {
-					t.Fatalf("fileBrowser.search = %q, want %q", m.fileBrowser.search, "flac")
+				if m.fileBrowser.filter != "flac" {
+					t.Fatalf("fileBrowser.filter = %q, want %q", m.fileBrowser.filter, "flac")
 				}
 			},
 		},
