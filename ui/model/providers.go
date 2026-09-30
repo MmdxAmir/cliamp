@@ -272,9 +272,8 @@ func (m *Model) fetchCatalogBatch(loader provider.CatalogLoader) tea.Cmd {
 }
 
 // quickSwitchProvider closes any browser overlays and jumps to the provider
-// matched by key. Use the same Shift+letter shortcuts that switch providers
-// from the main pane (S, N, P, J, E, B, Y, C, X, M, Q, T, R, L, O). Returns nil when the key doesn't
-// match a known provider.
+// matched by key. It takes every key of providerKeyForShortcut, N included.
+// Returns nil when the key doesn't match a known provider.
 func (m *Model) quickSwitchProvider(key string) tea.Cmd {
 	provKey := providerKeyForShortcut(key)
 	if provKey == "" {
@@ -286,6 +285,20 @@ func (m *Model) quickSwitchProvider(key string) tea.Cmd {
 	m.plManager.visible = false
 	m.fileBrowser.visible = false
 	return m.switchToProvider(provKey)
+}
+
+// providerShortcut switches to the provider that a Shift+letter shortcut
+// names. The playlist and the provider pane use N to browse, so N is no
+// shortcut there. ok is false when key is no shortcut.
+func (m *Model) providerShortcut(key string) (cmd tea.Cmd, ok bool) {
+	if key == "N" {
+		return nil, false
+	}
+	provKey := providerKeyForShortcut(key)
+	if provKey == "" {
+		return nil, false
+	}
+	return m.switchToProvider(provKey), true
 }
 
 // providerKeyForShortcut maps the Shift+letter provider shortcuts to the

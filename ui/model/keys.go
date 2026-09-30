@@ -238,6 +238,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 
+		if cmd, ok := m.providerShortcut(msg.String()); ok {
+			return cmd
+		}
 		switch msg.String() {
 		case "q":
 			return m.quit()
@@ -342,34 +345,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.maybeLoadCatalogBatch()
 		case "ctrl+j":
 			m.openJumpMode()
-		case "J":
-			return m.switchToProvider("jellyfin")
-		case "E":
-			return m.switchToProvider("emby")
-		case "B":
-			return m.switchToProvider("audiobookshelf")
-		case "S":
-			return m.switchToProvider("spotify")
-		case "P":
-			return m.switchToProvider("plex")
-		case "Y":
-			return m.switchToProvider("yt")
-		case "C":
-			return m.switchToProvider("soundcloud")
-		case "X":
-			return m.switchToProvider("mixcloud")
-		case "M":
-			return m.switchToProvider("netease")
-		case "Q":
-			return m.switchToProvider("qobuz")
-		case "T":
-			return m.switchToProvider("tidal")
-		case "L":
-			return m.switchToProvider("local")
-		case "R":
-			return m.switchToProvider("radio")
-		case "O":
-			return m.switchToProvider("podcast")
 		case "ctrl+x":
 			m.toggleExpandedView()
 		case "ctrl+f":
@@ -455,6 +430,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 
+	if cmd, ok := m.providerShortcut(key); ok {
+		return cmd
+	}
 	switch key {
 	case "q":
 		return m.quit()
@@ -661,8 +639,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case "ctrl+s":
 		return m.saveTrack()
-	case "S":
-		return m.switchToProvider("spotify")
 
 	case "m":
 		m.player.ToggleMono()
@@ -685,12 +661,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case "ctrl+j":
 		m.openJumpMode()
-	case "J":
-		return m.switchToProvider("jellyfin")
-	case "E":
-		return m.switchToProvider("emby")
-	case "B":
-		return m.switchToProvider("audiobookshelf")
 	case "p":
 		if m.localProvider != nil {
 			m.openPlaylistManager()
@@ -720,27 +690,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		if providerSupportsBrowse(m.provider) {
 			m.openNavBrowserWith(m.provider)
 		}
-
-	case "L":
-		return m.switchToProvider("local")
-	case "R":
-		return m.switchToProvider("radio")
-	case "O":
-		return m.switchToProvider("podcast")
-	case "P":
-		return m.switchToProvider("plex")
-	case "Y":
-		return m.switchToProvider("yt")
-	case "C":
-		return m.switchToProvider("soundcloud")
-	case "X":
-		return m.switchToProvider("mixcloud")
-	case "M":
-		return m.switchToProvider("netease")
-	case "Q":
-		return m.switchToProvider("qobuz")
-	case "T":
-		return m.switchToProvider("tidal")
 
 	case "ctrl+h":
 		m.toggleAlbumHeadersManual()
