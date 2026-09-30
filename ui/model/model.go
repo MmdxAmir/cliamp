@@ -508,6 +508,9 @@ type Model struct {
 	// favSync orders the calls that copy favorite changes to providers. It
 	// is created on first use and shared across Model value copies.
 	favSync *favorites.SyncQueue
+	// reports orders the now-playing, progress and scrobble reports to
+	// providers. It is shared across Model value copies.
+	reports *reportQueue
 
 	// Local station favorites. A directory radio station row shows these
 	// instead of the track favorites in favSet.

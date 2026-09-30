@@ -51,6 +51,7 @@ func New(p player.Engine, pl *playlist.Playlist, providers []provider.Entry, def
 		historyStore:     hist,
 		favStore:         favs,
 		showAlbumHeaders: false,
+		reports:          &reportQueue{},
 	}
 	m.refreshFavSet()
 	if luaMgr != nil {

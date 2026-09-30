@@ -164,11 +164,20 @@ func (m *Model) nowPlaying(track playlist.Track) {
 	}
 	canSeek := m.player.Seekable()
 	position := m.player.Position()
-	go func() {
+	m.queueReport(func() {
 		if err := reporter.ReportNowPlaying(track, position, canSeek); err != nil {
 			applog.Warn("now-playing report failed for %q: %v", track.Title, err)
 		}
-	}()
+	})
+}
+
+// queueReport runs report on the report queue, after the reports that
+// Update added before it.
+func (m *Model) queueReport(report func()) {
+	if m.reports == nil {
+		m.reports = &reportQueue{}
+	}
+	m.reports.add(report)
 }
 
 // recordListenedTrack adds a starting track to local history and refreshes
@@ -230,11 +239,11 @@ func (m *Model) maybeScrobble(track playlist.Track, elapsed, duration time.Durat
 		return refresh // less than 50% played
 	}
 	canSeek := m.player.Seekable()
-	go func() {
+	m.queueReport(func() {
 		if err := reporter.ReportScrobble(track, elapsed, duration, canSeek); err != nil {
 			applog.Warn("scrobble failed for %q: %v", track.Title, err)
 		}
-	}()
+	})
 	return refresh
 }
 
@@ -314,11 +323,11 @@ func (m *Model) tickProgressReport(now time.Time) {
 	}
 	m.lastProgressReport = now
 	position := m.player.Position()
-	go func() {
+	m.queueReport(func() {
 		if err := reporter.ReportProgress(track, position); err != nil {
 			applog.Warn("progress report failed for %q: %v", track.Title, err)
 		}
-	}()
+	})
 }
 
 // hasPlaybackState reports whether any provider stores local listening state,
