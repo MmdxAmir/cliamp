@@ -1,6 +1,10 @@
 package model
 
-import "github.com/bjarneo/cliamp/ui"
+import (
+	"charm.land/lipgloss/v2"
+
+	"github.com/bjarneo/cliamp/ui"
+)
 
 type layoutTier int
 
@@ -93,6 +97,11 @@ func fullChromeRows() int { return fullBaseRows + ui.DefaultVisRows }
 
 func (l frameLayout) tooSmall() bool {
 	return l.tier == layoutTooSmall
+}
+
+// frameStyle pads the frame and gives it the terminal width.
+func (l frameLayout) frameStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Padding(l.paddingV, l.paddingH).Width(l.frameWidth)
 }
 
 // recomputeLayout picks the layout tier for the current terminal size and
@@ -216,7 +225,6 @@ func (m *Model) recomputeLayout() {
 	}
 
 	m.layout = layout
-	ui.FrameStyle = ui.FrameStyle.Padding(paddingV, paddingH).Width(width)
 	if m.vis != nil {
 		m.vis.Cols = layout.panelWidth
 		if m.simplified {

@@ -72,8 +72,6 @@ func (p countingProvider) Playlists() ([]playlist.PlaylistInfo, error) {
 func newHeadlessModel(t *testing.T, engine player.Engine, providers []provider.Entry, tracks ...playlist.Track) Model {
 	t.Helper()
 	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
-	style, width := ui.FrameStyle, ui.PanelWidth
-	t.Cleanup(func() { ui.FrameStyle, ui.PanelWidth = style, width })
 	pl := playlist.New()
 	pl.Add(tracks...)
 	m := New(engine, pl, providers, "", nil, nil, history.New(), nil, nil, nil)

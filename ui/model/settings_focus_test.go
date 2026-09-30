@@ -81,13 +81,9 @@ func TestSettingsFocusMatchesShedRows(t *testing.T) {
 }
 
 func TestSettingsFocusMatchesHeaderWithPadding(t *testing.T) {
-	previousStyle, previousWidth := ui.FrameStyle, ui.PanelWidth
 	previousH, previousV := ui.PaddingH, ui.VerticalPadding()
 	ui.SetPadding(8, 1)
-	t.Cleanup(func() {
-		ui.SetPadding(previousH, previousV)
-		ui.FrameStyle, ui.PanelWidth = previousStyle, previousWidth
-	})
+	t.Cleanup(func() { ui.SetPadding(previousH, previousV) })
 
 	// At 41 columns Repeat fits only while unfocused; at 42 it must remain
 	// reachable even from Shuffle, whose expanded badge temporarily hides it.

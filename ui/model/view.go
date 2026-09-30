@@ -200,7 +200,7 @@ func (m Model) View() tea.View {
 
 	// Every screen now renders within the main frame, so frame and center
 	// uniformly.
-	rendered := m.centerFrame(ui.FrameStyle.Render(content))
+	rendered := m.centerFrame(m.layout.frameStyle().Render(content))
 	rendered = ui.FitRect(rendered, m.layout.frameWidth, max(1, m.height))
 
 	view := tea.NewView(rendered)

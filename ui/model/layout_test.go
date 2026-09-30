@@ -204,7 +204,7 @@ func TestCollapsedPlaylistCentersFrameVertically(t *testing.T) {
 	m := newLayoutTestModel(80, 50)
 	body := ui.FitRect(m.renderMainBody(), m.layout.panelWidth, m.layout.bodyRows)
 	content := strings.Join(m.mainSections(body, true, false), "\n")
-	frameHeight := lipgloss.Height(ui.FrameStyle.Render(content))
+	frameHeight := lipgloss.Height(m.layout.frameStyle().Render(content))
 	wantTopPadding := (m.height - frameHeight) / 2
 
 	out := m.View().Content
@@ -432,16 +432,10 @@ func TestAsyncSearchResultLayoutUsesContentFirstRows(t *testing.T) {
 }
 
 func TestLayoutClampsConfiguredPadding(t *testing.T) {
-	previousStyle := ui.FrameStyle
-	previousPanelWidth := ui.PanelWidth
 	previousPaddingH := ui.PaddingH
 	previousPaddingV := ui.VerticalPadding()
 	ui.SetPadding(10, 5)
-	t.Cleanup(func() {
-		ui.SetPadding(previousPaddingH, previousPaddingV)
-		ui.FrameStyle = previousStyle
-		ui.PanelWidth = previousPanelWidth
-	})
+	t.Cleanup(func() { ui.SetPadding(previousPaddingH, previousPaddingV) })
 
 	m := newLayoutTestModel(40, 10)
 	if m.layout.panelWidth <= 0 {
@@ -453,15 +447,9 @@ func TestLayoutClampsConfiguredPadding(t *testing.T) {
 }
 
 func TestViewsFitConfiguredPaddingExtremes(t *testing.T) {
-	previousStyle := ui.FrameStyle
-	previousPanelWidth := ui.PanelWidth
 	previousPaddingH := ui.PaddingH
 	previousPaddingV := ui.VerticalPadding()
-	t.Cleanup(func() {
-		ui.SetPadding(previousPaddingH, previousPaddingV)
-		ui.FrameStyle = previousStyle
-		ui.PanelWidth = previousPanelWidth
-	})
+	t.Cleanup(func() { ui.SetPadding(previousPaddingH, previousPaddingV) })
 
 	for _, tt := range []struct {
 		name     string
