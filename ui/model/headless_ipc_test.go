@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bjarneo/cliamp/external/local"
 	"github.com/bjarneo/cliamp/external/radio"
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/playback"
@@ -728,5 +729,36 @@ func TestHeadlessClearsHistory(t *testing.T) {
 	}
 	if entries, err := store.Recent(0); err != nil || len(entries) != 0 {
 		t.Fatalf("history after clear = %+v, err %v", entries, err)
+	}
+}
+
+// IPC history.clear refreshes the surfaces that list Recently Played, as a
+// history write does: the playlist manager rows and its open track list.
+func TestIPCHistoryClearRefreshesTheManager(t *testing.T) {
+	m := newHeadlessModel(t, &headlessEngine{}, nil)
+	store := history.New()
+	for _, path := range []string{"/one.flac", "/two.flac"} {
+		if err := store.Record(playlist.Track{Path: path}, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lp := local.New(nil, store)
+	m.localProvider, m.historyStore = lp, store
+	m.openPlaylistManager()
+	m.plMgrEnterTrackList(history.PlaylistName)
+	if len(m.plManager.tracks) != 2 {
+		t.Fatalf("manager tracks = %d, want 2 before the clear", len(m.plManager.tracks))
+	}
+
+	if response := runV2(t, &m, "history.clear", ipc.Request{}); !response.OK {
+		t.Fatalf("history.clear = %+v", response)
+	}
+	if len(m.plManager.tracks) != 0 {
+		t.Fatalf("manager tracks = %d after the clear, want 0", len(m.plManager.tracks))
+	}
+	for _, pl := range m.plManager.playlists {
+		if pl.Name == history.PlaylistName && pl.TrackCount != 0 {
+			t.Fatalf("manager row %q counts %d tracks after the clear, want 0", pl.Name, pl.TrackCount)
+		}
 	}
 }

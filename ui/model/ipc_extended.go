@@ -82,6 +82,12 @@ type ipcPlaylistRenamedMsg struct {
 	reply            chan ipc.Response
 }
 
+// ipcHistoryClearedMsg tells Update that IPC history.clear emptied the
+// history. Update refreshes the views of it, then replies.
+type ipcHistoryClearedMsg struct {
+	reply chan ipc.Response
+}
+
 type ipcURLLoadResult struct {
 	request ipcURLRequest
 	tracks  []playlist.Track
@@ -641,8 +647,11 @@ func (m *Model) handleIPCHistory(request ipcHistoryRequest) tea.Cmd {
 			return nil
 		}
 		if request.Op == "history.clear" {
-			request.Reply <- ipcResponseError(m.historyStore.Clear())
-			return nil
+			if err := m.historyStore.Clear(); err != nil {
+				request.Reply <- ipcResponseError(err)
+				return nil
+			}
+			return ipcHistoryClearedMsg{reply: request.Reply}
 		}
 		entries, err := m.historyStore.Recent(request.Limit)
 		if err != nil {
@@ -656,6 +665,14 @@ func (m *Model) handleIPCHistory(request ipcHistoryRequest) tea.Cmd {
 		request.Reply <- ipc.Response{OK: true, History: items}
 		return nil
 	}
+}
+
+// handleIPCHistoryCleared refreshes the views of the emptied history, as a
+// history write does, then replies to history.clear.
+func (m *Model) handleIPCHistoryCleared(msg ipcHistoryClearedMsg) tea.Cmd {
+	cmd := m.refreshHistoryViews()
+	msg.reply <- ipc.Response{OK: true}
+	return cmd
 }
 
 func (m *Model) ipcProvider(key string) (provider.Entry, bool) {

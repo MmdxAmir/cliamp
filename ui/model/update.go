@@ -356,6 +356,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleIPCPlaylistRenamed(msg)
 		return m, nil
 
+	case ipcHistoryClearedMsg:
+		cmd := m.handleIPCHistoryCleared(msg)
+		return m, cmd
+
 	case ipcFeedLoadResult:
 		cmd := m.handleIPCFeedLoad(msg)
 		return m, cmd

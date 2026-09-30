@@ -227,6 +227,12 @@ func (m *Model) recordListenedTrack(track playlist.Track) tea.Cmd {
 		applog.Warn("history record failed for %q: %v", track.Path, err)
 		return nil
 	}
+	return m.refreshHistoryViews()
+}
+
+// refreshHistoryViews reloads the surfaces that list Recently Played after
+// a history write: the playlist manager and the provider pane.
+func (m *Model) refreshHistoryViews() tea.Cmd {
 	if m.plManager.visible {
 		m.plMgrRefreshList()
 		if m.plManager.screen == plMgrScreenTracks && m.plManager.selPlaylist == history.PlaylistName {
