@@ -1,9 +1,7 @@
 package model
 
 import (
-	"os"
-	"path/filepath"
-	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,48 +10,48 @@ import (
 	"github.com/bjarneo/cliamp/playlist"
 )
 
-// TestReservedKeysCoversHandleKey is a drift guard: every `case "..."` clause in
-// the main handleKey switch (keys.go) must be represented in commandRegistry.
+// mainKeyPath lists the functions of the main key path: handleKey without
+// the overlays and the focused areas that own a command mode. The path ends
+// in the plugin forward of handleMainKey.
+var mainKeyPath = []string{"handleKey", "handleGlobalKey", "handleMainKey", "providerKeyForShortcut"}
+
+// focusKeyHandlers maps the handlers that handleKey calls for a focused area
+// to the command mode of that area.
+var focusKeyHandlers = map[string]commandMode{
+	"handleProvSearchKey":   commandModeProviderSearch,
+	"handleProviderPaneKey": commandModeProvider,
+	"handleSpeedKey":        commandModeSpeed,
+	"handleProvPillKey":     commandModeProviderPill,
+}
+
+// TestReservedKeysCoversHandleKey is a drift guard. Every key that the main
+// key path handles must be in commandRegistry, so a plugin cannot bind a key
+// that cliamp takes before the plugin forward.
 func TestReservedKeysCoversHandleKey(t *testing.T) {
-	path := filepath.Join("keys.go")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Find every `case "X", "Y", ...:` clause in keys.go. We intentionally
-	// over-collect (subhandler switches too) and then filter to the main
-	// handler's section between "func (m *Model) handleKey" and its close.
-	src := string(data)
-	// The main dispatch switch is anchored by its comment header; overlays
-	// and subhandlers have their own switches with different anchors.
-	start := strings.Index(src, "// Vim-style count prefix")
-	if start < 0 {
-		t.Fatal("could not locate main dispatch anchor in keys.go")
-	}
-	// Bound at the next top-level function declaration to avoid scanning
-	// into helper functions below handleKey.
-	body := src[start:]
-	if end := strings.Index(body, "\nfunc "); end > 0 {
-		body = body[:end]
-	}
-
-	caseRe := regexp.MustCompile(`case ("[^"]+"(?:, "[^"]+")*):`)
-	tokenRe := regexp.MustCompile(`"([^"]+)"`)
+	funcs := modelFuncs(t)
 	reserved := ReservedKeys()
-
-	var missing []string
-	for _, m := range caseRe.FindAllStringSubmatch(body, -1) {
-		for _, tok := range tokenRe.FindAllStringSubmatch(m[1], -1) {
-			key := tok[1]
+	for _, name := range mainKeyPath {
+		keys := handlerKeys(t, lookupFunc(t, funcs, name))
+		if len(keys) == 0 {
+			t.Errorf("%s handles no keys. The walker cannot read it.", name)
+		}
+		var missing []string
+		for _, key := range keys {
 			if !reserved[key] {
 				missing = append(missing, key)
 			}
 		}
+		if len(missing) > 0 {
+			t.Errorf("%s handles keys that commandRegistry does not list: %q\nAdd them to command_registry.go so plugin binds cannot shadow them.", name, missing)
+		}
 	}
 
-	if len(missing) > 0 {
-		t.Fatalf("handleKey has case clauses not covered by coreReservedKeys: %v\nAdd these to keymap.go so plugin binds can't shadow them.", missing)
+	// Each handler that handleKey calls is on the main key path or owns the
+	// command mode of a focused area.
+	for _, callee := range handlerCalls(lookupFunc(t, funcs, "handleKey")) {
+		if !slices.Contains(mainKeyPath, callee) && focusKeyHandlers[callee] == 0 {
+			t.Errorf("handleKey calls %s. Add it to mainKeyPath or focusKeyHandlers.", callee)
+		}
 	}
 }
 
