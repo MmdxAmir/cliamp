@@ -60,10 +60,12 @@ func (m *Model) moveTrack(from, to int) (tea.Cmd, error) {
 }
 
 // removeTrack removes the track at idx. When the queue mirrors a writable
-// saved playlist, the track leaves that file too, and Ctrl+Z restores both.
-// A track from a directory source is refused, because the file cannot drop
-// it. Removing the track that plays stops playback.
-func (m *Model) removeTrack(idx int) (tea.Cmd, error) {
+// saved playlist, the track leaves that file too. With recordUndo, Ctrl+Z
+// restores both. Only the x key records an undo, so a remote or plugin
+// removal keeps the undo of the last key edit. A track from a directory
+// source is refused, because the file cannot drop it. Removing the track
+// that plays stops playback.
+func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 	track, ok := m.playlist.Track(idx)
 	if !ok {
 		return nil, errQueueIndex
@@ -104,7 +106,11 @@ func (m *Model) removeTrack(idx int) (tea.Cmd, error) {
 		return nil, errQueueIndex
 	}
 	m.normalizeQueueOverlay()
-	m.playlistUndo = playlistUndo{active: true, snapshot: snapshot, loaded: loaded, saved: saved, persisted: persisted}
+	undoHint := ""
+	if recordUndo {
+		m.playlistUndo = playlistUndo{active: true, snapshot: snapshot, loaded: loaded, saved: saved, persisted: persisted}
+		undoHint = " (Ctrl+Z to undo)"
+	}
 	if wasActive {
 		m.stopPlayback()
 		m.player.ClearPreload()
@@ -120,9 +126,9 @@ func (m *Model) removeTrack(idx int) (tea.Cmd, error) {
 	m.recountHeaderState(m.playlist.Tracks())
 	m.adjustScroll()
 	if persisted {
-		m.status.Showf(statusTTLDefault, "Removed from %q: %s (Ctrl+Z to undo)", loaded, track.DisplayName())
+		m.status.Showf(statusTTLDefault, "Removed from %q: %s%s", loaded, track.DisplayName(), undoHint)
 	} else {
-		m.status.Showf(statusTTLDefault, "Removed from queue: %s (Ctrl+Z to undo)", track.DisplayName())
+		m.status.Showf(statusTTLDefault, "Removed from queue: %s%s", track.DisplayName(), undoHint)
 	}
 	m.notifyPlayback()
 	return m.rearmStalePreload(), nil

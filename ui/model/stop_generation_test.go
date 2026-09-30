@@ -26,7 +26,7 @@ func TestStopRefusesPendingStreamStart(t *testing.T) {
 			return updated.(Model)
 		}},
 		{name: "remove the playing track from the playlist", stop: func(_ *testing.T, m Model) Model {
-			m.removeTrack(0)
+			m.removeTrack(0, true)
 			return m
 		}},
 		{name: "plugin removes the playing track", stop: func(_ *testing.T, m Model) Model {

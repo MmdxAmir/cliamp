@@ -43,7 +43,7 @@ func (m *Model) handlePluginQueue(msg PluginQueueMsg) tea.Cmd {
 		return m.playIndex(msg.Index)
 
 	case "remove":
-		cmd, _ := m.removeTrack(msg.Index)
+		cmd, _ := m.removeTrack(msg.Index, false)
 		return cmd
 
 	case "move":

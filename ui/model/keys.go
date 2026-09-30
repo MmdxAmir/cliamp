@@ -934,7 +934,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "x":
 		if m.focus == focusPlaylist {
 			var cmd tea.Cmd
-			m.keepPlCursorRow(func() { cmd, _ = m.removeTrack(m.plCursor) })
+			m.keepPlCursorRow(func() { cmd, _ = m.removeTrack(m.plCursor, true) })
 			return cmd
 		}
 

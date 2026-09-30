@@ -275,7 +275,7 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 		var cmd tea.Cmd
 		var err error
 		if request.Cmd == "queue.remove" {
-			cmd, err = m.removeTrack(request.Index)
+			cmd, err = m.removeTrack(request.Index, false)
 		} else {
 			cmd, err = m.moveTrack(request.Index, request.To)
 		}

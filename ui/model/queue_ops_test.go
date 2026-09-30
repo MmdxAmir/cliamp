@@ -23,7 +23,9 @@ type queueOpState struct {
 	loaded         string
 	headers        bool
 	headerSegments int
-	undo           bool
+	// undo is true when the edit records a Ctrl+Z undo, and undoHint when
+	// the status line offers it.
+	undo, undoHint bool
 	stops          int
 	// preload is true when an armed or loading preload holds the track that
 	// plays next.
@@ -32,7 +34,8 @@ type queueOpState struct {
 
 // A queue edit follows one rule, whether a key, IPC or a Lua plugin starts
 // it. Each row runs one edit through a key press, runV2 and PluginQueueMsg
-// and expects the same end state.
+// and expects the same end state. Only the x key records an undo. A remote
+// or plugin removal records none, so it keeps the undo of the last key edit.
 func TestQueueEditsFollowOneRule(t *testing.T) {
 	d := playlist.Track{Path: "/music/d.mp3"}
 	for _, tc := range []struct {
@@ -80,7 +83,7 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 			v2Op:   "queue.remove", v2: ipc.Request{Index: 1},
 			plugin: PluginQueueMsg{Op: "remove", Index: 1},
 			want: func(s queueOpState) bool {
-				return s.queue == "a c" && s.saved == "a c" && s.cursor == 1 && s.loaded == "Mix" && s.undo && s.headerSegments == 2 && s.preload
+				return s.queue == "a c" && s.saved == "a c" && s.cursor == 1 && s.loaded == "Mix" && s.undo && s.undoHint && s.headerSegments == 2 && s.preload
 			},
 		},
 		{
@@ -108,7 +111,7 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 			v2Op:   "queue.remove", v2: ipc.Request{Index: 1},
 			plugin: PluginQueueMsg{Op: "remove", Index: 1},
 			want: func(s queueOpState) bool {
-				return s.queue == "a c" && s.saved == "a b c" && s.loaded == favorites.PlaylistName && s.undo && s.preload
+				return s.queue == "a c" && s.saved == "a b c" && s.loaded == favorites.PlaylistName && s.undo && s.undoHint && s.preload
 			},
 		},
 		{
@@ -118,7 +121,7 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 			v2Op:   "queue.remove", v2: ipc.Request{Index: 0},
 			plugin: PluginQueueMsg{Op: "remove", Index: 0},
 			want: func(s queueOpState) bool {
-				return s.queue == "b c" && s.saved == "b c" && s.stops == 1 && s.undo && !s.preload
+				return s.queue == "b c" && s.saved == "b c" && s.stops == 1 && s.undo && s.undoHint && !s.preload
 			},
 		},
 		{
@@ -163,8 +166,12 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 				t.Fatalf("key state = %+v, want the edit done by the rule", want)
 			}
 			for entry, got := range states {
-				if got != want {
-					t.Errorf("%s: state = %+v, want the key state %+v", entry, got, want)
+				wantEntry := want
+				if entry != "key" {
+					wantEntry.undo, wantEntry.undoHint = false, false
+				}
+				if got != wantEntry {
+					t.Errorf("%s: state = %+v, want %+v", entry, got, wantEntry)
 				}
 			}
 		})
@@ -225,6 +232,7 @@ func queueOpStateOf(t *testing.T, m Model, lp *local.Provider, engine *playbackF
 		headers:        m.showAlbumHeaders,
 		headerSegments: m.headerSegments,
 		undo:           m.playlistUndo.active,
+		undoHint:       strings.Contains(m.status.text, "Ctrl+Z"),
 		stops:          engine.stopCalls,
 	}
 	if next, ok := m.preloadTarget(); ok && (m.preloading || engine.hasPreload) {

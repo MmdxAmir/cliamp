@@ -132,9 +132,10 @@ follow the same rules:
   it fails with `conflict` and changes nothing.
 - When the live playlist mirrors a saved local playlist, `queue.move` saves
   the new order to that playlist. `queue.remove` removes the track from it
-  too, and `Ctrl+Z` in the TUI restores the track. Favorites is not a
-  playlist file, so an edit of a loaded Favorites list changes only the
-  live playlist.
+  too. Favorites is not a playlist file, so an edit of a loaded Favorites
+  list changes only the live playlist.
+- `queue.remove` records no undo, so it keeps the `Ctrl+Z` undo of the last
+  TUI edit.
 - `queue.remove` fails with `conflict` for a track that a directory source
   supplies. A removal of the playing track stops playback.
 - `queue` appends a track. The live playlist then mirrors no saved playlist.
