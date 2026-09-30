@@ -98,3 +98,49 @@ func TestPickerFilterHelpDescribesFilterInput(t *testing.T) {
 		t.Fatalf("theme filter help = %q, want filter actions", plain)
 	}
 }
+
+// TestPickerListsWindowTheShownRows checks that the theme and visualizer
+// pickers draw the rows the filter shows, from the scroll offset, with the
+// cursor on the view row. The theme picker draws theme.DefaultName in row 0,
+// so the test reads it as None. The filters do not match that name.
+func TestPickerListsWindowTheShownRows(t *testing.T) {
+	tests := []struct {
+		name      string
+		filtering bool
+		filter    string
+		cursor    int
+		scroll    int
+		want      []string
+	}{
+		{name: "all rows", cursor: 1, want: []string{"  None", "> Bars"}},
+		{name: "scrolled", cursor: 3, scroll: 2, want: []string{"  Bricks", "> Scope"}},
+		{name: "empty filter field", filtering: true, cursor: 1, want: []string{"  None", "> Bars"}},
+		{name: "filtered", filter: "b", cursor: 1, want: []string{"  Bars", "> Bricks"}},
+		{name: "no match", filter: "zzz", want: []string{"  No matches.", ""}},
+	}
+	names := []string{"None", "Bars", "Bricks", "Scope"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			list := filterList{filtering: tt.filtering, filter: tt.filter}
+
+			vis := Model{vis: ui.NewVisualizer(44_100), plVisible: 2}
+			vis.visPicker = visPickerState{modes: names, filterList: list}
+			vis.visPickerRecomputeFilter()
+			vis.visPicker.cursor, vis.visPicker.scroll = tt.cursor, tt.scroll
+
+			themes := Model{plVisible: 2, themePicker: themePickerState{filterList: list}}
+			for _, name := range names[1:] {
+				themes.themes = append(themes.themes, theme.Theme{Name: name})
+			}
+			themes.themePickerRecomputeFilter()
+			themes.themePicker.cursor, themes.themePicker.scroll = tt.cursor, tt.scroll
+
+			for picker, body := range map[string]string{"visualizer": vis.renderVisPickerList(), "theme": themes.renderThemeBody()} {
+				got := strings.Split(strings.ReplaceAll(ansi.Strip(body), theme.DefaultName, "None"), "\n")
+				if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+					t.Errorf("%s picker rows = %q, want %q", picker, got, tt.want)
+				}
+			}
+		})
+	}
+}

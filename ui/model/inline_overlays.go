@@ -191,7 +191,7 @@ func (m Model) searchHeaderLine() string {
 func (m Model) themeCount() int { return len(m.themes) + 1 }
 
 func (m Model) themePickerHeaderLine() string {
-	if m.themePicker.filtering || m.themePicker.filter != "" {
+	if m.themePicker.isFiltered() {
 		return m.filterHeader("Filter: Themes", "theme-picker-filter", m.themePicker.filter, fmt.Sprintf("%d/%d", m.themePickerViewCount(), m.themeCount()))
 	}
 	return sepHeaderN("Themes", m.themePicker.cursor+1, m.themePickerViewCount(), m.layout.panelWidth)
@@ -199,20 +199,12 @@ func (m Model) themePickerHeaderLine() string {
 
 func (m Model) renderThemeBody() string {
 	budget := m.effectivePlaylistVisible()
-	items := make([]string, 0, m.themeCount())
-	items = append(items, theme.DefaultName)
+	names := make([]string, 0, m.themeCount())
+	names = append(names, theme.DefaultName)
 	for _, t := range m.themes {
-		items = append(items, t.Name)
+		names = append(names, t.Name)
 	}
-	if m.themePicker.filter != "" {
-		filtered := make([]string, 0, len(m.themePicker.filtered))
-		for _, rawIdx := range m.themePicker.filtered {
-			if rawIdx >= 0 && rawIdx < len(items) {
-				filtered = append(filtered, items[rawIdx])
-			}
-		}
-		items = filtered
-	}
+	items := shownRows(&m.themePicker.filterList, names)
 	if len(items) == 0 {
 		return bodyMessage("No matches.", budget)
 	}

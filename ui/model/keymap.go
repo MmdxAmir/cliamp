@@ -322,16 +322,7 @@ func (m Model) renderKeymapList() string {
 		return ""
 	}
 
-	entries := m.keymap.entries
-	var visible []keymapEntry
-	if m.keymap.filter != "" {
-		for _, i := range m.keymap.filtered {
-			visible = append(visible, entries[i])
-		}
-	} else {
-		visible = entries
-	}
-
+	visible := shownRows(&m.keymap.filterList, m.keymap.entries)
 	if len(visible) == 0 {
 		msg := "(empty)"
 		if m.keymap.filter != "" {

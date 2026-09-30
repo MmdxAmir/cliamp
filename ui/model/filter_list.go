@@ -45,6 +45,20 @@ func (l *filterList) rawIndex(view, n int) (int, bool) {
 	return view, true
 }
 
+// shownRows returns the rows of items that l shows, in view order.
+func shownRows[T any](l *filterList, items []T) []T {
+	if !l.isFiltered() {
+		return items
+	}
+	rows := make([]T, 0, len(l.filtered))
+	for _, raw := range l.filtered {
+		if raw >= 0 && raw < len(items) {
+			rows = append(rows, items[raw])
+		}
+	}
+	return rows
+}
+
 // recompute keeps the raw rows below n that match, in order, and moves the
 // cursor to the first of them.
 func (l *filterList) recompute(n int, match func(raw int) bool) {

@@ -35,6 +35,19 @@ func TestFilterListViewCountAndRawIndex(t *testing.T) {
 			if ok != tt.wantOK || (ok && raw != tt.wantRaw) {
 				t.Errorf("rawIndex(%d, %d) = %d, %t; want %d, %t", tt.view, tt.n, raw, ok, tt.wantRaw, tt.wantOK)
 			}
+			items := make([]int, tt.n)
+			for i := range items {
+				items[i] = i
+			}
+			rows := shownRows(&tt.list, items)
+			if len(rows) != tt.wantCount {
+				t.Errorf("shownRows = %v, want %d rows", rows, tt.wantCount)
+			}
+			for view, row := range rows {
+				if raw, ok := tt.list.rawIndex(view, tt.n); !ok || raw != row {
+					t.Errorf("shownRows[%d] = %d, rawIndex = %d, %t", view, row, raw, ok)
+				}
+			}
 		})
 	}
 }
