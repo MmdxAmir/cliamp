@@ -271,12 +271,8 @@ func (m Model) renderQueueBody() string {
 	// not cloned on every frame.
 	windowStart := max(0, scroll-1)
 	tracks := m.playlist.QueueWindow(windowStart, 2*budget+2)
-	localScroll, localCursor := scroll-windowStart, m.queue.cursor-windowStart
-	// clampedScroll counts tracks, but album headers take rows too. Advance
-	// past headers until the rows from scroll through the cursor fit.
-	for localScroll < localCursor && m.albumSeparatorRows(tracks, localScroll, localCursor, m.showAlbumHeaders) > budget {
-		localScroll++
-	}
+	// clampedScroll counts tracks, but album headers take rows too.
+	localScroll := m.fitHeaderScroll(tracks, scroll-windowStart, m.queue.cursor-windowStart, budget, m.showAlbumHeaders)
 
 	lines := make([]string, 0, budget)
 	for row := range m.playlistRows(tracks, localScroll, m.showAlbumHeaders) {

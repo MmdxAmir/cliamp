@@ -179,6 +179,32 @@ func fullSpanPlaylistScroll(m Model, tracks []playlist.Track, visible int) int {
 	return scroll
 }
 
+func TestFitHeaderScroll(t *testing.T) {
+	// With headers, the rows are: A header, 0, 1, 2, B header, 3, 4.
+	tracks := []playlist.Track{{Album: "A"}, {Album: "A"}, {Album: "A"}, {Album: "B"}, {Album: "B"}}
+	tests := []struct {
+		name        string
+		scroll      int
+		visible     int
+		showHeaders bool
+		want        int
+	}{
+		{name: "every row fits", visible: 7, showHeaders: true, want: 0},
+		{name: "sticky header takes a row", visible: 5, showHeaders: true, want: 2},
+		{name: "skips to the album boundary", visible: 4, showHeaders: true, want: 3},
+		{name: "stops at the cursor", visible: 1, showHeaders: true, want: 4},
+		{name: "no headers counts tracks", visible: 3, want: 2},
+		{name: "keeps a scroll that fits", scroll: 3, visible: 4, showHeaders: true, want: 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (Model{}).fitHeaderScroll(tracks, tt.scroll, 4, tt.visible, tt.showHeaders); got != tt.want {
+				t.Fatalf("fitHeaderScroll(scroll %d, visible %d) = %d, want %d", tt.scroll, tt.visible, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestStepListCursor(t *testing.T) {
 	tests := []struct {
 		key         string

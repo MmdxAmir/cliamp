@@ -215,9 +215,7 @@ func (m *Model) plMgrTracksMaybeAdjustScroll(visible int) {
 	if m.plManager.cursor < m.plManager.scroll {
 		m.plManager.scroll = m.plManager.cursor
 	}
-	for m.plManager.scroll < m.plManager.cursor && m.albumSeparatorRows(tracks, m.plManager.scroll, m.plManager.cursor, true) > visible {
-		m.plManager.scroll++
-	}
+	m.plManager.scroll = m.fitHeaderScroll(tracks, m.plManager.scroll, m.plManager.cursor, visible, true)
 }
 
 // openPlaylistManager loads playlist metadata and opens the manager overlay.

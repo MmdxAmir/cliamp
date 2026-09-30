@@ -1,5 +1,7 @@
 package model
 
+import "github.com/bjarneo/cliamp/playlist"
+
 // clampScroll keeps cursor inside [0, count) and adjusts scroll so that
 // the cursor sits within the visible window of `visible` rows.
 func clampScroll(cursor, scroll *int, count, visible int) {
@@ -111,12 +113,16 @@ func (m Model) playlistScroll(visible int) int {
 	scroll = max(scroll, cursor-visible+1)
 	start := max(0, scroll-1)
 	_, tracks := m.playlist.OrderWindow(start, cursor-start+1)
-	localScroll := scroll - start
-	localCursor := cursor - start
-	for localScroll < localCursor && m.albumSeparatorRows(tracks, localScroll, localCursor, m.showAlbumHeaders) > visible {
-		localScroll++
+	return start + m.fitHeaderScroll(tracks, scroll-start, cursor-start, visible, m.showAlbumHeaders)
+}
+
+// fitHeaderScroll moves scroll down until the rows from scroll through cursor
+// fit in visible rows. The album headers of tracks count as rows.
+func (m Model) fitHeaderScroll(tracks []playlist.Track, scroll, cursor, visible int, showHeaders bool) int {
+	for scroll < cursor && m.albumSeparatorRows(tracks, scroll, cursor, showHeaders) > visible {
+		scroll++
 	}
-	return start + localScroll
+	return scroll
 }
 
 func (m Model) mainFrameFixedLines(includeTransient bool) int {
