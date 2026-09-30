@@ -328,9 +328,26 @@ func (f *ffmpegPipe) waitForInitialAudio(timeout time.Duration) error {
 }
 
 func (f *ffmpegPipe) waitForAudioBytes(n int, timeout time.Duration) error {
+	stop := func() { _ = f.stop() }
+	return peekWithTimeout(f.reader, n, timeout, stop, func(err error) error {
+		if f.input != nil {
+			_ = f.input.Close()
+		}
+		if waitErr := f.proc.wait(); waitErr != nil {
+			return waitErr
+		}
+		return fmt.Errorf("waiting for audio data: %w", err)
+	})
+}
+
+// peekWithTimeout waits until reader holds n bytes. When timeout passes
+// first, it calls stop, which must unblock the read, and returns a timeout
+// error. When the pipe closes first, it returns closed for the read error,
+// so the caller can report why its process ended.
+func peekWithTimeout(reader *bufio.Reader, n int, timeout time.Duration, stop func(), closed func(error) error) error {
 	peekErr := make(chan error, 1)
 	go func() {
-		_, err := f.reader.Peek(n)
+		_, err := reader.Peek(n)
 		peekErr <- err
 	}()
 
@@ -340,17 +357,11 @@ func (f *ffmpegPipe) waitForAudioBytes(n int, timeout time.Duration) error {
 	select {
 	case err := <-peekErr:
 		if err != nil {
-			if f.input != nil {
-				_ = f.input.Close()
-			}
-			if waitErr := f.proc.wait(); waitErr != nil {
-				return waitErr
-			}
-			return fmt.Errorf("waiting for audio data: %w", err)
+			return closed(err)
 		}
 		return nil
 	case <-timer.C:
-		_ = f.stop()
+		stop()
 		<-peekErr // drain after stop unblocks the pipe reader
 		return fmt.Errorf("timed out waiting for audio data (%v)", timeout)
 	}

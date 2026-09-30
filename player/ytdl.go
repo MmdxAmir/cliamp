@@ -469,31 +469,19 @@ func prefillYTDLPipe(decoder *ytdlPipeStreamer) error {
 	// speaker goroutine won't block on an empty pipe and hold its lock
 	// (which would freeze the UI). A 30s timeout prevents hanging when
 	// yt-dlp is slow to produce output.
-	peekErr := make(chan error, 1)
-	go func() {
-		_, err := decoder.reader.Peek(1)
-		peekErr <- err
-	}()
-	select {
-	case err := <-peekErr:
-		if err != nil {
-			// The audio pipe closed before producing a byte. Prefer the real
-			// cause from yt-dlp (e.g. "Sign in to confirm you're not a bot",
-			// "HTTP Error 404", DRM, region block) or ffmpeg over the opaque
-			// EOF — the pipe only tells us the upstream closed, not why.
-			cause := decoder.waitCause(ytdlCauseGrace)
-			decoder.Close()
-			if cause != nil {
-				return cause
-			}
-			return fmt.Errorf("waiting for audio data: %w", err)
-		}
-	case <-time.After(ytdlPipeTimeout):
+	stop := func() { decoder.Close() }
+	return peekWithTimeout(decoder.reader, 1, ytdlPipeTimeout, stop, func(err error) error {
+		// The audio pipe closed before producing a byte. Prefer the real
+		// cause from yt-dlp (e.g. "Sign in to confirm you're not a bot",
+		// "HTTP Error 404", DRM, region block) or ffmpeg over the opaque
+		// EOF — the pipe only tells us the upstream closed, not why.
+		cause := decoder.waitCause(ytdlCauseGrace)
 		decoder.Close()
-		<-peekErr // drain goroutine after Close() unblocks the pipe
-		return fmt.Errorf("timed out waiting for audio data (%v)", ytdlPipeTimeout)
-	}
-	return nil
+		if cause != nil {
+			return cause
+		}
+		return fmt.Errorf("waiting for audio data: %w", err)
+	})
 }
 
 func isTransientYTDL403(err error) bool {

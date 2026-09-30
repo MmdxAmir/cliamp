@@ -866,3 +866,71 @@ func TestProbeFrames(t *testing.T) {
 		})
 	}
 }
+
+// TestPeekWithTimeout checks the three ends of an initial audio wait: audio
+// arrives, the pipe closes, or the timeout passes.
+func TestPeekWithTimeout(t *testing.T) {
+	processEnded := errors.New("process ended")
+	tests := []struct {
+		name       string
+		feed       func(w *io.PipeWriter)
+		timeout    time.Duration
+		wantErr    error
+		wantText   string
+		wantStop   bool
+		wantClosed error
+	}{
+		{
+			name:    "audio arrives",
+			feed:    func(w *io.PipeWriter) { _, _ = w.Write([]byte{1, 2, 3, 4}) },
+			timeout: 5 * time.Second,
+		},
+		{
+			name:       "pipe closes",
+			feed:       func(w *io.PipeWriter) { _ = w.Close() },
+			timeout:    5 * time.Second,
+			wantErr:    processEnded,
+			wantClosed: io.EOF,
+		},
+		{
+			name:     "timeout",
+			feed:     func(*io.PipeWriter) {},
+			timeout:  20 * time.Millisecond,
+			wantText: "timed out waiting for audio data (20ms)",
+			wantStop: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, w := io.Pipe()
+			defer w.Close()
+			go tt.feed(w)
+			stopped := false
+			var closedWith error
+			stop := func() {
+				stopped = true
+				_ = r.Close()
+			}
+			closed := func(err error) error {
+				closedWith = err
+				return processEnded
+			}
+
+			err := peekWithTimeout(bufio.NewReader(r), 4, tt.timeout, stop, closed)
+			switch {
+			case tt.wantText != "":
+				if err == nil || err.Error() != tt.wantText {
+					t.Fatalf("error = %v, want %q", err, tt.wantText)
+				}
+			case !errors.Is(err, tt.wantErr):
+				t.Fatalf("error = %v, want %v", err, tt.wantErr)
+			}
+			if stopped != tt.wantStop {
+				t.Fatalf("stop called = %v, want %v", stopped, tt.wantStop)
+			}
+			if !errors.Is(closedWith, tt.wantClosed) {
+				t.Fatalf("closed called with %v, want %v", closedWith, tt.wantClosed)
+			}
+		})
+	}
+}
