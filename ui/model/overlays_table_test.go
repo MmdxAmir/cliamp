@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/bjarneo/cliamp/playlist"
 )
 
 // overlayOpeners sets the flag that opens each overlay in overlayStack.
@@ -174,6 +176,7 @@ func TestOverlayStackOrder(t *testing.T) {
 		{"playlist picker over file browser", screenPlaylistPicker, screenFileBrowser},
 		{"file browser over playlist manager", screenFileBrowser, screenPlaylistManager},
 		{"provider search over nav browser", screenSpotSearch, screenNavBrowser},
+		{"YouTube search over nav browser", screenNetSearch, screenNavBrowser},
 		{"queue over subscriptions", screenQueue, screenSubs},
 	}
 	for _, tc := range above {
@@ -186,5 +189,31 @@ func TestOverlayStackOrder(t *testing.T) {
 	if overlayStack[0].screen != screenFullVisualizer || overlayStack[1].screen != screenKeymap {
 		t.Errorf("overlayStack starts with screens %d and %d, want the full-screen visualizer and the keymap",
 			overlayStack[0].screen, overlayStack[1].screen)
+	}
+}
+
+// TestNavBrowserSearchFallbackOpensOnTop presses Ctrl+F in the nav browser of
+// a provider with no search. The YouTube search opens over the browser, as
+// provider search does, and Esc returns to the browser.
+func TestNavBrowserSearchFallbackOpensOnTop(t *testing.T) {
+	p := &readOnlyGenreProvider{}
+	m := Model{provider: p, playlist: playlist.New(), plVisible: 10}
+	m.openNavBrowserWith(p)
+
+	m.handleKey(tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl})
+	if !m.netSearch.active {
+		t.Fatal("Ctrl+F did not open the YouTube search")
+	}
+	if got := m.activeScreen(); got != screenNetSearch {
+		t.Fatalf("activeScreen() = %d, want the YouTube search %d", got, screenNetSearch)
+	}
+	m.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	if m.netSearch.query != "a" {
+		t.Fatalf("netSearch.query = %q, want %q", m.netSearch.query, "a")
+	}
+
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if got := m.activeScreen(); got != screenNavBrowser {
+		t.Fatalf("activeScreen() after Esc = %d, want the nav browser %d", got, screenNavBrowser)
 	}
 }

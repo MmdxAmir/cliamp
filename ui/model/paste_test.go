@@ -250,8 +250,8 @@ func TestHandlePasteNoInputActiveIsNoop(t *testing.T) {
 }
 
 func TestHandlePastePriorityOrder(t *testing.T) {
-	// When multiple input states are active, the highest-priority one wins.
-	// Nav browser search has higher priority than net search.
+	// When multiple input states are active, the top overlay wins. The
+	// YouTube search opens over the nav browser, so it gets the paste.
 	m := Model{
 		navBrowser: navBrowserState{
 			visible:   true,
@@ -263,11 +263,11 @@ func TestHandlePastePriorityOrder(t *testing.T) {
 
 	m.handlePaste("test")
 
-	if m.navBrowser.search != "test" {
-		t.Fatalf("navBrowser.search = %q, want %q", m.navBrowser.search, "test")
+	if m.netSearch.query != "test" {
+		t.Fatalf("netSearch.query = %q, want %q", m.netSearch.query, "test")
 	}
-	if m.netSearch.query != "" {
-		t.Fatalf("netSearch.query = %q, want empty (lower priority)", m.netSearch.query)
+	if m.navBrowser.search != "" {
+		t.Fatalf("navBrowser.search = %q, want empty (lower overlay)", m.navBrowser.search)
 	}
 }
 
