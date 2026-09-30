@@ -262,6 +262,55 @@ func TestV2DispatcherJobs(t *testing.T) {
 	}
 }
 
+// Each finished job reaches the subscribers of runtime.job until the server
+// shuts down.
+func TestPublishV2JobEvents(t *testing.T) {
+	broker := ipc.NewBroker()
+	t.Cleanup(broker.Close)
+	subscription, err := broker.Subscribe([]string{"runtime.job"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	jobs := ipc.NewJobStore()
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		publishV2JobEvents(done, jobs, broker)
+		close(stopped)
+	}()
+
+	job, err := jobs.Create("next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := jobs.Start(job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := jobs.Succeed(job.ID, json.RawMessage(`{"ok":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-subscription.Events():
+		var got ipc.JobEvent
+		if err := json.Unmarshal(event.Data, &got); err != nil {
+			t.Fatal(err)
+		}
+		if event.Event != "runtime.job" || got.Job.ID != job.ID || got.Job.State != ipc.JobSucceeded {
+			t.Fatalf("event %s = %+v, want job %s succeeded", event.Event, got, job.ID)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no runtime.job event")
+	}
+
+	close(done)
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the publisher did not stop with the server")
+	}
+}
+
 // captureStderr returns what fn writes to os.Stderr.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
