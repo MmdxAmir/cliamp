@@ -85,9 +85,8 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 			name:   "move when the save fails",
 			cursor: 1,
 			setup: func(m *Model) {
-				if err := m.localProvider.(*local.Provider).DeletePlaylist("Mix"); err != nil {
-					panic(err)
-				}
+				// want checks that Mix is gone.
+				_ = m.localProvider.(*local.Provider).DeletePlaylist("Mix")
 			},
 			key:  func(*Model) tea.Msg { return tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift} },
 			v2Op: "queue.move", v2: ipc.Request{Index: 1, To: 2},
