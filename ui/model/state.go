@@ -317,7 +317,7 @@ type spotSearchState struct {
 	// albumLoading is separate from loading so the results screen can say an
 	// album is being expanded without claiming so during the playlist fetch.
 	albumLoading bool
-	playlists    []playlist.PlaylistInfo // user's Spotify playlists for picker
+	playlists    []playlist.PlaylistInfo // playlists of the searched provider for the picker
 	selTrack     playlist.Track          // track selected to add
 	newName      string                  // new playlist name input
 	err          string
