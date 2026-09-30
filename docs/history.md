@@ -25,7 +25,9 @@ cliamp history clear          # wipe the history file
 ```
 
 The relative timestamp, such as `3m ago` or `yesterday`, uses local time. The
-JSON output uses `played_at` in RFC 3339 UTC for portability.
+JSON output uses `played_at` in RFC 3339 UTC for portability. A JSON entry also
+holds a `provider_meta` object when the track has provider keys, such as
+`navidrome.id`.
 
 ## File format
 

@@ -30,15 +30,16 @@ func HistoryShow(limit int, jsonOutput bool) error {
 func writeHistory(w io.Writer, entries []history.Entry, jsonOutput bool, now time.Time) error {
 	if jsonOutput {
 		type jsonEntry struct {
-			PlayedAt     string `json:"played_at"`
-			Path         string `json:"path"`
-			Title        string `json:"title"`
-			Artist       string `json:"artist,omitempty"`
-			Album        string `json:"album,omitempty"`
-			Genre        string `json:"genre,omitempty"`
-			Year         int    `json:"year,omitempty"`
-			TrackNumber  int    `json:"track_number,omitempty"`
-			DurationSecs int    `json:"duration_secs,omitempty"`
+			PlayedAt     string            `json:"played_at"`
+			Path         string            `json:"path"`
+			Title        string            `json:"title"`
+			Artist       string            `json:"artist,omitempty"`
+			Album        string            `json:"album,omitempty"`
+			Genre        string            `json:"genre,omitempty"`
+			Year         int               `json:"year,omitempty"`
+			TrackNumber  int               `json:"track_number,omitempty"`
+			DurationSecs int               `json:"duration_secs,omitempty"`
+			ProviderMeta map[string]string `json:"provider_meta,omitempty"`
 		}
 		out := make([]jsonEntry, len(entries))
 		for i, e := range entries {
@@ -52,6 +53,7 @@ func writeHistory(w io.Writer, entries []history.Entry, jsonOutput bool, now tim
 				Year:         e.Track.Year,
 				TrackNumber:  e.Track.TrackNumber,
 				DurationSecs: e.Track.DurationSecs,
+				ProviderMeta: e.Track.ProviderMeta,
 			}
 		}
 		enc := json.NewEncoder(w)
