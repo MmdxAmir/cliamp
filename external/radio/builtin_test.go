@@ -1,4 +1,4 @@
-package main
+package radio_test
 
 import (
 	"testing"
