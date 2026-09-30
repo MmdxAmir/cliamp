@@ -36,7 +36,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// update is Update without the stale preload check.
+// update handles one message. Update then lays out the frame, drops a stale
+// preload, tells the media controls and plugins about a playback change and
+// starts the spinner tick.
 func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	wasScreen := m.activeScreen()
 	wasVisualizerVisible := m.visualizerVisible()
