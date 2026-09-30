@@ -2,11 +2,13 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/bjarneo/cliamp/external/radio"
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/ipc"
@@ -408,6 +410,38 @@ func TestIPCStationSearchKeepsThePaneSearch(t *testing.T) {
 	}
 	if m.provSearch.query != "rock" || len(m.providerLists) != 1 || m.providerLists[0].ID != "s:0" {
 		t.Fatalf("pane state = %q %+v, want the rock search rows", m.provSearch.query, m.providerLists)
+	}
+}
+
+// The IPC search of the radio provider must take the SearchStations path. A
+// changed method set would fall back to the catalog path without an error.
+var _ stationSearcher = (*radio.Provider)(nil)
+
+// An IPC search on the radio provider runs SearchStations under the request
+// context and keeps the pane search rows. The context is cancelled, so no
+// request leaves the process. The catalog path ignores the context, and the
+// proxy makes that path fail with a dial error.
+func TestIPCRadioSearchKeepsThePaneSearch(t *testing.T) {
+	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+	for _, key := range []string{"HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(key, "http://127.0.0.1:1")
+	}
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
+	prov := radio.New(radio.Options{Country: radio.CountryDeclined})
+	prov.SetSearchResults([]radio.CatalogStation{{Name: "Rock FM", URL: "https://rock.example/stream"}})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := ipcSearchProvider(ctx, prov, "jazz", 5); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ipcSearchProvider error = %v, want the cancelled request context", err)
+	}
+	lists, err := prov.Playlists()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !prov.IsSearching() || len(lists) != 1 || lists[0].Name != "Rock FM" {
+		t.Fatalf("pane rows = %+v, searching %v; want the Rock FM search row", lists, prov.IsSearching())
 	}
 }
 
