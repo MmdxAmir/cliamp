@@ -59,26 +59,7 @@ func (m *Model) toggleTrackFavorite(track playlist.Track) (tea.Cmd, error) {
 // findTrackFavoriter returns the first registered provider that owns track
 // and keeps its own favorite state, and the name to show for it.
 func (m *Model) findTrackFavoriter(track playlist.Track) (provider.TrackFavoriter, string) {
-	match := func(p playlist.Provider) provider.TrackFavoriter {
-		fav, ok := p.(provider.TrackFavoriter)
-		if !ok || !fav.CanFavoriteTrack(track) {
-			return nil
-		}
-		return fav
-	}
-
-	if fav := match(m.provider); fav != nil {
-		return fav, m.provider.Name()
-	}
-	for _, pe := range m.providers {
-		if pe.Provider == nil {
-			continue
-		}
-		if fav := match(pe.Provider); fav != nil {
-			return fav, pe.Name
-		}
-	}
-	return nil, ""
+	return findCapable(m, func(f provider.TrackFavoriter) bool { return f.CanFavoriteTrack(track) })
 }
 
 // syncTrackFavoriteCmd copies a favorite change to the provider that owns

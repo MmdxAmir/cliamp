@@ -272,54 +272,15 @@ func (m *Model) leaveTrack(elapsed, dur time.Duration) {
 // findTrackPosition returns the provider that can report track's saved
 // position, independent of whether it also reports playback.
 func (m *Model) findTrackPosition(track playlist.Track) provider.TrackPosition {
-	match := func(p playlist.Provider) provider.TrackPosition {
-		tp, ok := p.(provider.TrackPosition)
-		if !ok {
-			return nil
-		}
-		if !tp.CanTrackPosition(track) {
-			return nil
-		}
-		return tp
-	}
-
-	if tp := match(m.provider); tp != nil {
-		return tp
-	}
-	for _, pe := range m.providers {
-		if pe.Provider == nil {
-			continue
-		}
-		if tp := match(pe.Provider); tp != nil {
-			return tp
-		}
-	}
-	return nil
+	tp, _ := findCapable(m, func(tp provider.TrackPosition) bool { return tp.CanTrackPosition(track) })
+	return tp
 }
 
 // findPlaybackReporter returns the first registered provider that can report
 // playback for the given track.
 func (m *Model) findPlaybackReporter(track playlist.Track) provider.PlaybackReporter {
-	match := func(p playlist.Provider) provider.PlaybackReporter {
-		reporter, ok := p.(provider.PlaybackReporter)
-		if !ok || !reporter.CanReportPlayback(track) {
-			return nil
-		}
-		return reporter
-	}
-
-	if reporter := match(m.provider); reporter != nil {
-		return reporter
-	}
-	for _, pe := range m.providers {
-		if pe.Provider == nil {
-			continue
-		}
-		if reporter := match(pe.Provider); reporter != nil {
-			return reporter
-		}
-	}
-	return nil
+	reporter, _ := findCapable(m, func(r provider.PlaybackReporter) bool { return r.CanReportPlayback(track) })
+	return reporter
 }
 
 // progressReportInterval bounds how often interim listening positions are

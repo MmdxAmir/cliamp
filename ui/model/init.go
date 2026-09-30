@@ -113,6 +113,22 @@ func (m *Model) findProviderWith(check func(playlist.Provider) bool) playlist.Pr
 	return nil
 }
 
+// findCapable returns the first provider that is a T and that ok accepts,
+// with the name to show for it. Like findProviderWith, it prefers the active
+// provider. With no match, it returns the zero T.
+func findCapable[T any](m *Model, ok func(T) bool) (T, string) {
+	if c, is := m.provider.(T); is && ok(c) {
+		return c, m.provider.Name()
+	}
+	for _, pe := range m.providers {
+		if c, is := pe.Provider.(T); is && ok(c) {
+			return c, pe.Name
+		}
+	}
+	var zero T
+	return zero, ""
+}
+
 // SetAutoPlay makes the player start playback immediately on Init.
 func (m *Model) SetAutoPlay(v bool) { m.autoPlay = v }
 
