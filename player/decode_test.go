@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/playlist"
 )
 
@@ -67,6 +68,9 @@ func TestOpenSourceClassifiesHTTPResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.UserAgent(); got != httpclient.UserAgent {
+					t.Errorf("User-Agent = %q, want %q", got, httpclient.UserAgent)
+				}
 				w.Header().Set("Content-Type", "audio/mpeg")
 				if tt.icy {
 					w.Header().Set("Icy-Name", "Test Radio")
