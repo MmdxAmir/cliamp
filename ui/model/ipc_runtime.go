@@ -365,7 +365,11 @@ func (m *Model) handleV2Theme(jobs *ipc.JobStore, jobID string, request ipc.Requ
 
 func (m *Model) handleV2Visualizer(jobs *ipc.JobStore, jobID string, request ipc.Request) tea.Cmd {
 	if strings.EqualFold(request.Name, "list") {
-		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Items: ui.VisModeNames()})
+		names := ui.VisModeNames()
+		if m.vis != nil {
+			names = m.vis.AllModeNames()
+		}
+		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Items: names})
 		return nil
 	}
 	if m.vis == nil {

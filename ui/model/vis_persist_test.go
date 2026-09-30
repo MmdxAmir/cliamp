@@ -1,7 +1,9 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/bjarneo/cliamp/ipc"
@@ -90,6 +92,26 @@ func TestVisualizerListDoesNotPersist(t *testing.T) {
 
 	if _, ok := saver.saved["visualizer"]; ok {
 		t.Error("listing the modes wrote to the config")
+	}
+}
+
+// The list names every mode that a client can select by name, the Lua
+// visualizers too.
+func TestVisualizerListIncludesLuaModes(t *testing.T) {
+	m := visTestModel(&recordingSaver{})
+	m.RegisterLuaVisualizers([]string{"plugin-vis"}, nil)
+	t.Cleanup(func() { m.RegisterLuaVisualizers(nil, nil) })
+	jobs, id := newVisJob(t)
+
+	m.handleV2Visualizer(jobs, id, ipc.Request{Cmd: "vis", Name: "list"})
+
+	job, _ := jobs.Get(id)
+	var response ipc.Response
+	if err := json.Unmarshal(job.Result, &response); err != nil {
+		t.Fatalf("result %s: %v", job.Result, err)
+	}
+	if want := append(ui.VisModeNames(), "plugin-vis"); !slices.Equal(response.Items, want) {
+		t.Fatalf("items = %v, want %v", response.Items, want)
 	}
 }
 

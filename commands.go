@@ -925,6 +925,21 @@ func visStreamCommand() *cli.Command {
 	}
 }
 
+// visModes returns the modes that cliamp vis list prints and the active
+// mode. A running cliamp lists its Lua visualizers too. With no running
+// cliamp, or in headless mode, it lists the built-in modes.
+func visModes() (names []string, active string, running bool) {
+	names = ui.VisModeNames()
+	snapshot, err := ipcState()
+	if err != nil {
+		return names, "", false
+	}
+	if resp, err := ipcSend("vis", ipc.Request{Name: "list"}); err == nil && len(resp.Items) > 0 {
+		names = resp.Items
+	}
+	return names, snapshot.Visualizer, true
+}
+
 func visCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "vis",
@@ -935,13 +950,11 @@ func visCommand() *cli.Command {
 				return fmt.Errorf("usage: cliamp vis <name|next|list>")
 			}
 			if strings.EqualFold(c.Args().First(), "list") {
-				var active string
-				if snapshot, err := ipcState(); err == nil {
-					active = snapshot.Visualizer
-				} else {
+				names, active, running := visModes()
+				if !running {
 					fmt.Fprintln(os.Stderr, "(cliamp not running — active marker unavailable)")
 				}
-				for _, name := range ui.VisModeNames() {
+				for _, name := range names {
 					marker := "  "
 					if strings.EqualFold(name, active) {
 						marker = "* "

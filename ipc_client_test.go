@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/bjarneo/cliamp/ipc"
+	"github.com/bjarneo/cliamp/ui"
 )
 
 // startTestIPC serves the default socket of a new config directory. It
@@ -172,6 +174,47 @@ func TestV2ResponseError(t *testing.T) {
 			}
 			if err == nil || err.Error() != tt.want {
 				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+// cliamp vis list prints the modes of the running cliamp, with its Lua
+// visualizers. When cliamp does not run, or has no vis operation as in
+// headless mode, it prints the built-in modes.
+func TestVisModes(t *testing.T) {
+	builtIn := ui.VisModeNames()
+	withLua := append(slices.Clone(builtIn), "plugin-vis")
+	tests := []struct {
+		name        string
+		serve       bool
+		visFails    bool
+		wantNames   []string
+		wantActive  string
+		wantRunning bool
+	}{
+		{name: "running", serve: true, wantNames: withLua, wantActive: "plugin-vis", wantRunning: true},
+		{name: "headless", serve: true, visFails: true, wantNames: builtIn, wantActive: "plugin-vis", wantRunning: true},
+		{name: "not running", wantNames: builtIn},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.serve {
+				startTestIPC(t, ipc.RuntimeSnapshot{Visualizer: "plugin-vis"}, func(jobs *ipc.JobStore, id string, _ ipc.V2Request) {
+					_, _ = jobs.Start(id)
+					if tt.visFails {
+						_ = jobs.Fail(id, ipc.V2Error{Code: ipc.V2ErrorCodeUnavailable, Message: ipc.V2MessageUnavailable})
+						return
+					}
+					items, _ := json.Marshal(ipc.Response{OK: true, Items: withLua})
+					_ = jobs.Succeed(id, items)
+				})
+			} else {
+				t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+			}
+			names, active, running := visModes()
+			if !slices.Equal(names, tt.wantNames) || active != tt.wantActive || running != tt.wantRunning {
+				t.Fatalf("visModes() = %v, %q, %v; want %v, %q, %v", names, active, running, tt.wantNames, tt.wantActive, tt.wantRunning)
 			}
 		})
 	}

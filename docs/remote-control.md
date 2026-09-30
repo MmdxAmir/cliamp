@@ -124,6 +124,10 @@ Run `cliamp remote capabilities` to get the current machine-readable list.
 `queue.*` applies to the live playlist. `playnext.*` applies only to the
 play-next list. They use separate zero-based indexes.
 
+`vis` with the name `list` returns every mode in the order of the `v` key
+cycle: the built-in modes, then the visualizers of Lua plugins. `cliamp vis
+list` prints the same list when cliamp runs.
+
 `theme list` and `cliamp theme list` return `Default - Terminal colors` as
 the first item. `theme` accepts that name or `default` to select the terminal
 colors.
