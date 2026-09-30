@@ -52,8 +52,9 @@ Metadata is read-only and never a separate Tab stop.
 
 In the minimal (`40x10`) and simplified layouts, `Tab` and `Shift+Tab` keep
 playback focus on the playlist, even though simplified mode hides the list.
-`Esc` still opens the separate provider-list view. Below `40x10`, only a resize
-message is shown.
+`Esc` still opens the separate provider-list view. In the minimal layout, the
+hint bar then shows the provider keys. Below `40x10`, only a resize message is
+shown.
 
 ### Focused Settings
 

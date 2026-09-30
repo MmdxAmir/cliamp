@@ -341,7 +341,7 @@ func (m Model) mainSections(playlist string, includeTransient, contentFirst bool
 		sections = append(sections, "")
 	}
 	if !m.hideHelpBar {
-		sections = append(sections, m.renderTierHelp())
+		sections = append(sections, m.renderHelp())
 	}
 	// The two-column pane carries speed and the download counters, and the
 	// closed layout deliberately shows neither.
@@ -435,14 +435,6 @@ func (m *Model) advanceTitleScroll(now time.Time) {
 	}
 	m.titleLastScroll = now
 	m.titleOff++
-}
-
-func (m Model) renderTierHelp() string {
-	// The minimal tier shows the main hints unless an overlay is open.
-	if m.layout.tier == layoutMinimal && m.activeScreen() == screenMain {
-		return m.commandHelp(commandModeMain)
-	}
-	return m.renderHelp()
 }
 
 func (m Model) renderTransient() string {
