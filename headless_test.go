@@ -331,7 +331,7 @@ func TestStartIPCServesTheModel(t *testing.T) {
 		{name: "TUI"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+			t.Setenv("CLIAMP_CONFIG_DIR", socketDir(t))
 			send := func(msg tea.Msg) {
 				if request, ok := msg.(model.V2RequestMsg); ok && request.Reply != nil {
 					request.Reply <- model.V2RequestResult{Result: ipc.V2Result{Snapshot: &ipc.RuntimeSnapshot{State: "paused"}}}

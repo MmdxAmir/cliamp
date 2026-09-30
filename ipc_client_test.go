@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"reflect"
+	"runtime"
 	"slices"
 	"testing"
 	"time"
@@ -12,12 +14,28 @@ import (
 	"github.com/bjarneo/cliamp/ui"
 )
 
+// socketDir returns a new config directory for a test that binds the
+// socket. On macOS t.TempDir is deep enough that a long test name pushes the
+// socket path past the 104-byte limit, so the directory goes in /tmp there.
+func socketDir(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS != "darwin" {
+		return t.TempDir()
+	}
+	dir, err := os.MkdirTemp("/tmp", "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 // startTestIPC serves the default socket of a new config directory. It
 // answers state.get with snapshot and hands each submitted job to finish.
 // finish runs on its own goroutine, as the Model finishes a job later.
 func startTestIPC(t *testing.T, snapshot ipc.RuntimeSnapshot, finish func(jobs *ipc.JobStore, id string, request ipc.V2Request)) {
 	t.Helper()
-	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+	t.Setenv("CLIAMP_CONFIG_DIR", socketDir(t))
 	srv, err := ipc.NewServer(ipc.DefaultSocketPath())
 	if err != nil {
 		t.Fatal(err)
