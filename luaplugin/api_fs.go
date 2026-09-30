@@ -40,8 +40,12 @@ func loadWriteRules() writeRules {
 	if configErr == nil {
 		add(&r.allow, configDir)
 	}
+	// The data dir holds the cliamp.store files, so it comes from the same
+	// resolver as newPluginStore.
+	if dataDir, err := appdir.DataDir(); err == nil {
+		add(&r.allow, dataDir)
+	}
 	if home, err := os.UserHomeDir(); err == nil {
-		add(&r.allow, filepath.Join(home, ".local", "share", "cliamp"))
 		add(&r.allow, filepath.Join(home, "Music", "cliamp"))
 	}
 
