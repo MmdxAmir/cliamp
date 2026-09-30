@@ -40,11 +40,7 @@ func (m *Model) handlePluginQueue(msg PluginQueueMsg) tea.Cmd {
 		if msg.Index < 0 || msg.Index >= m.playlist.Len() {
 			return nil
 		}
-		refresh := m.scrobbleCurrent()
-		m.playlist.SetIndex(msg.Index)
-		cmd := m.playCurrentTrack()
-		m.notifyPlayback()
-		return tea.Batch(refresh, cmd)
+		return m.playIndex(msg.Index)
 
 	case "remove":
 		cmd, _ := m.removeTrack(msg.Index)

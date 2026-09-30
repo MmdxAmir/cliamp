@@ -208,7 +208,9 @@ type verbState struct {
 // controls or Lua, and a V2 request.
 func TestVerbEntryPointsReachTheSameState(t *testing.T) {
 	key := func(text string) tea.Msg { return tea.KeyPressMsg{Text: text} }
-	fullVis := func(text string) tea.Msg { return fullVisKey{tea.KeyPressMsg{Text: text}} }
+	fullVis := func(text string) tea.Msg {
+		return withSetup{func(m *Model) { m.fullVis = true; m.recomputeLayout() }, tea.KeyPressMsg{Text: text}}
+	}
 	v2 := func(op string, params ipc.Request) tea.Msg { return v2Request(t, op, params) }
 	for _, verb := range []struct {
 		name string
@@ -231,6 +233,12 @@ func TestVerbEntryPointsReachTheSameState(t *testing.T) {
 			"key": key("<"), "full-screen key": fullVis("<"),
 			"playback message": playback.PrevMsg{}, "V2": v2("prev", ipc.Request{}),
 		}, done: func(s verbState) bool { return s.index == 0 && s.scrobbled == "a.mp3" }},
+		{name: "playIndex", skips: true, notifies: true, entries: map[string]tea.Msg{
+			"key":        withSetup{func(m *Model) { m.plCursor = 2 }, tea.KeyPressMsg{Code: tea.KeyEnter}},
+			"search key": withSetup{func(m *Model) { m.search = searchState{active: true, results: []int{2}} }, tea.KeyPressMsg{Code: tea.KeyEnter}},
+			"plugin":     PluginQueueMsg{Op: "jump", Index: 2},
+			"V2":         v2("queue.play", ipc.Request{Index: 2}),
+		}, done: func(s verbState) bool { return s.index == 2 && s.cursor == 2 && s.scrobbled == "a.mp3" }},
 		{name: "setShuffle", entries: map[string]tea.Msg{
 			"key": key("z"), "V2": v2("shuffle", ipc.Request{Name: "on"}), "V2 toggle": v2("shuffle", ipc.Request{}),
 		}, done: func(s verbState) bool {
@@ -273,9 +281,12 @@ func TestVerbEntryPointsReachTheSameState(t *testing.T) {
 	}
 }
 
-// fullVisKey is a key press that runVerbEntry sends while the full-screen
-// visualizer is open.
-type fullVisKey struct{ tea.KeyPressMsg }
+// withSetup is a message that runVerbEntry sends after setup prepares the
+// Model, for example to open the full-screen visualizer.
+type withSetup struct {
+	setup func(m *Model)
+	msg   tea.Msg
+}
 
 // runVerbEntry sends msg to a Model that plays a.mp3 near its end, with
 // b.mp3 armed next, and returns the state that msg leaves.
@@ -299,10 +310,9 @@ func runVerbEntry(t *testing.T, msg tea.Msg, skips, notifies bool) verbState {
 	m.preloadFor = "b.mp3"
 
 	switch msg := msg.(type) {
-	case fullVisKey:
-		m.fullVis = true
-		m.recomputeLayout()
-		next, _ := m.Update(msg.KeyPressMsg)
+	case withSetup:
+		msg.setup(&m)
+		next, _ := m.Update(msg.msg)
 		m = next.(Model)
 	case V2RequestMsg:
 		next, _ := m.Update(msg)

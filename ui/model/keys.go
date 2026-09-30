@@ -744,11 +744,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			if m.buffering && m.plCursor == m.playlist.Index() {
 				break
 			}
-			refresh := m.scrobbleCurrent()
-			m.playlist.SetIndex(m.plCursor)
-			cmd := m.playCurrentTrack()
-			m.notifyPlayback()
-			return tea.Batch(refresh, cmd)
+			return m.playIndex(m.plCursor)
 		}
 
 	case "+", "=":
@@ -1475,11 +1471,7 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEnter:
 		var cmd tea.Cmd
 		if len(m.search.results) > 0 {
-			idx := m.search.results[m.search.cursor]
-			m.playlist.SetIndex(idx)
-			m.plCursor = idx
-			cmd = m.playCurrentTrack()
-			m.notifyPlayback()
+			cmd = m.playIndex(m.search.results[m.search.cursor])
 		}
 		m.search.active = false
 		m.focus = focusPlaylist

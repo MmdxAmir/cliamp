@@ -8,9 +8,9 @@ import (
 
 // This file holds one action verb for each user intent that more than one
 // entry point starts. The keys, the full-screen visualizer keys, the
-// playback messages from media controls and Lua, and V2 IPC call the same
-// verb. So each intent gets the same scrobble, notification, config save
-// and preload rearm, whatever starts it.
+// playback messages from media controls and Lua, the Lua queue calls and V2
+// IPC call the same verb. So each intent gets the same scrobble,
+// notification, config save and preload rearm, whatever starts it.
 
 // skipNext scrobbles the track that plays and starts the next track.
 func (m *Model) skipNext() tea.Cmd {
@@ -25,6 +25,16 @@ func (m *Model) skipNext() tea.Cmd {
 func (m *Model) skipPrev() tea.Cmd {
 	refresh := m.scrobbleCurrent()
 	cmd := m.prevTrack()
+	m.notifyAll()
+	return tea.Batch(refresh, cmd)
+}
+
+// playIndex scrobbles the track that plays and starts the track at idx. An
+// unplayable track is skipped forward.
+func (m *Model) playIndex(idx int) tea.Cmd {
+	refresh := m.scrobbleCurrent()
+	m.playlist.SetIndex(idx)
+	cmd := m.playCurrentTrack()
 	m.notifyAll()
 	return tea.Batch(refresh, cmd)
 }

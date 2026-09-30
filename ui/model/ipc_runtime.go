@@ -259,9 +259,7 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 			m.failV2Job(jobs, jobID, v2InvalidParamsError())
 			return nil
 		}
-		m.playlist.SetIndex(request.Index)
-		m.plCursor = request.Index
-		cmd := m.playCurrentTrack()
+		cmd := m.playIndex(request.Index)
 		m.completeV2Job(jobs, jobID, m.v2PlaylistResponse())
 		return cmd
 	case "queue.enqueue":
