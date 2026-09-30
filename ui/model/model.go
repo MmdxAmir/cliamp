@@ -466,12 +466,13 @@ type Model struct {
 	ipcRuntime *ipcRuntimeState
 
 	// historyStore records Recently Played. It is nil when the config
-	// directory is unavailable. main.go shares it with the local provider.
+	// directory is unavailable. buildProviders in package main shares it with
+	// the local provider.
 	historyStore *history.Store
 
 	// favStore holds the ♥ favorites. It is nil when the config directory is
-	// unavailable. main.go shares it with the local provider, which lists it
-	// as the Favorites playlist.
+	// unavailable. buildProviders in package main shares it with the local
+	// provider, which lists it as the Favorites playlist.
 	favStore *favorites.Store
 	// favSync orders the calls that copy favorite changes to providers. It
 	// is created on first use and shared across Model value copies.
