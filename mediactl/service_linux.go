@@ -40,6 +40,13 @@ type Service struct {
 	// takes that lock.
 	volFloor atomic.Uint64
 
+	// volSet is set by the Volume callback. godbus then holds the value
+	// that the client sent, which can differ from the engine volume, for
+	// example below the floor. Update and republishVolume publish Volume
+	// again when it is set. The callback sets it without mu, for the same
+	// reason that it reads volFloor without mu.
+	volSet atomic.Bool
+
 	lastStatus  playback.Status
 	lastTrack   playback.Track
 	lastVol     float64
@@ -239,6 +246,7 @@ func newService(conn *dbus.Conn, send func(tea.Msg)) (*Service, error) {
 				// deadlock the TUI. dispatch only queues the message. The queue
 				// is filled under the lock, so it keeps the order of the changes.
 				floor := math.Float64frombits(svc.volFloor.Load())
+				svc.volSet.Store(true)
 				svc.dispatch(playback.SetVolumeMsg{VolumeDB: linearToDb(v, floor)})
 				return nil
 			}},
@@ -292,8 +300,28 @@ func (s *Service) forwardMessages() {
 		s.queueMu.Unlock()
 		for _, msg := range msgs {
 			s.send(msg)
+			if vol, ok := msg.(playback.SetVolumeMsg); ok {
+				s.republishVolume(vol.VolumeDB)
+			}
 		}
 	}
+}
+
+// republishVolume publishes Volume again after send delivered a Volume Set
+// that leaves the engine at the published volume. The model then sends no
+// Update, because its state does not change.
+func (s *Service) republishVolume(db float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	select {
+	case <-s.done:
+		return
+	default:
+	}
+	if dbToLinear(db, math.Float64frombits(s.volFloor.Load())) != s.lastVol || !s.volSet.Swap(false) {
+		return
+	}
+	s.props.SetMust("org.mpris.MediaPlayer2.Player", "Volume", s.lastVol)
 }
 
 func (s *Service) Update(state playback.State) {
@@ -322,7 +350,7 @@ func (s *Service) Update(state playback.State) {
 
 	s.volFloor.Store(math.Float64bits(state.VolumeMinDB))
 	vol := dbToLinear(state.VolumeDB, state.VolumeMinDB)
-	if vol != s.lastVol {
+	if s.volSet.Swap(false) || vol != s.lastVol {
 		s.props.SetMust(iface, "Volume", vol)
 		s.lastVol = vol
 	}
@@ -356,6 +384,10 @@ func (s *Service) Close() {
 		return
 	}
 	s.closeOnce.Do(func() { close(s.done) })
+	// republishVolume checks done under mu, so the connection does not
+	// close while it publishes.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.conn != nil {
 		s.conn.Close()
 	}

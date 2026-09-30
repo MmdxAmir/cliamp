@@ -237,3 +237,63 @@ func TestServiceVolumeUsesStateFloor(t *testing.T) {
 		})
 	}
 }
+
+// TestServiceRepublishesClampedVolume checks that a Volume Set that clamps
+// to the published volume publishes that volume again. godbus stores the
+// value that the client sent, so without a new publish it keeps reporting
+// that value. The model sends no Update when its state does not change, so
+// the service publishes after send. An Update also publishes.
+func TestServiceRepublishesClampedVolume(t *testing.T) {
+	const playerName = "org.mpris.MediaPlayer2.Player"
+	tests := []struct {
+		name  string
+		state playback.State
+		set   float64
+		want  float64
+	}{
+		{name: "below the floor", state: playback.State{VolumeDB: -50, VolumeMinDB: -50}, set: 0.001, want: 0},
+		{name: "below 0 at the floor", state: playback.State{VolumeDB: -50, VolumeMinDB: -50}, set: -0.5, want: 0},
+		{name: "above 1 at full volume", state: playback.State{VolumeDB: 6, VolumeMinDB: -50}, set: 1.5, want: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name+" without Update", func(t *testing.T) {
+			got := make(chan tea.Msg, 1)
+			svc := newTestService(t, func(msg tea.Msg) { got <- msg })
+			svc.Update(tt.state)
+
+			if err := svc.props.Set(playerName, "Volume", dbus.MakeVariant(tt.set)); err != nil {
+				t.Fatalf("Set Volume error = %v", err)
+			}
+			select {
+			case <-got:
+			case <-time.After(2 * time.Second):
+				t.Fatal("Set Volume sent no message")
+			}
+			deadline := time.Now().Add(2 * time.Second)
+			for svc.props.GetMust(playerName, "Volume") != tt.want {
+				if time.Now().After(deadline) {
+					t.Fatalf("Volume = %v, want %v", svc.props.GetMust(playerName, "Volume"), tt.want)
+				}
+				time.Sleep(time.Millisecond)
+			}
+		})
+		t.Run(tt.name+" with Update", func(t *testing.T) {
+			// send blocks, so only Update can publish.
+			release := make(chan struct{})
+			svc := newTestService(t, func(tea.Msg) { <-release })
+			t.Cleanup(func() { close(release) })
+			svc.Update(tt.state)
+
+			if err := svc.props.Set(playerName, "Volume", dbus.MakeVariant(tt.set)); err != nil {
+				t.Fatalf("Set Volume error = %v", err)
+			}
+			if got := svc.props.GetMust(playerName, "Volume"); got != tt.set {
+				t.Fatalf("Volume before Update = %v, want the client value %v", got, tt.set)
+			}
+			svc.Update(tt.state)
+			if got := svc.props.GetMust(playerName, "Volume"); got != tt.want {
+				t.Errorf("Volume = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
