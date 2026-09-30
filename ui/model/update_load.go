@@ -37,9 +37,13 @@ func (m *Model) handleYTDLBatch(msg ytdlBatchMsg) tea.Cmd {
 }
 
 // handleFeedTrackResolved replaces the queue with the episodes of a feed
-// and plays the first one.
+// and plays the first one. It drops the episodes when a track started or
+// stopped, or another queue replace started, after the feed resolve began.
 func (m *Model) handleFeedTrackResolved(msg feedTrackResolvedMsg) tea.Cmd {
 	m.feedLoading = false
+	if msg.gen != m.requests.stream || msg.queue != m.requests.queue {
+		return nil
+	}
 	if msg.err != nil {
 		m.err = msg.err
 		return nil
@@ -95,8 +99,12 @@ func (m *Model) handleFeedsLoaded(msg feedsLoadedMsg) tea.Cmd {
 }
 
 // handleFBTracksResolved adds the tracks that the file browser picked to a
-// playlist file, to the playlist picker or to the queue.
+// playlist file, to the playlist picker or to the queue. It drops a replace
+// when another queue replace started after the walk began.
 func (m *Model) handleFBTracksResolved(msg fbTracksResolvedMsg) tea.Cmd {
+	if msg.replace && msg.queue != m.requests.queue {
+		return nil
+	}
 	if msg.err != nil {
 		m.err = msg.err
 		return nil

@@ -29,7 +29,7 @@ func TestResolveFailureClearsOnlyItsOwnLoadingFlag(t *testing.T) {
 	}{
 		{
 			name: "feed track",
-			cmd:  func(*Model) tea.Cmd { return resolveFeedTrackCmd("http://127.0.0.1:1/feed.m3u") },
+			cmd:  func(*Model) tea.Cmd { return resolveFeedTrackCmd("http://127.0.0.1:1/feed.m3u", 0, 0) },
 		},
 		{
 			name: "startup urls",

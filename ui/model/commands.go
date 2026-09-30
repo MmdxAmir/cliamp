@@ -81,10 +81,13 @@ type feedsLoadedMsg struct {
 	err      error
 }
 
-// feedTrackResolvedMsg carries episodes resolved from a feed track in the playlist.
+// feedTrackResolvedMsg carries episodes resolved from a feed track in the
+// playlist. gen and queue hold the stream and queue generations at the start.
 type feedTrackResolvedMsg struct {
 	tracks []playlist.Track
 	err    error
+	gen    uint64
+	queue  uint64
 }
 
 // lyricsLoadedMsg carries parsed LRC output.
@@ -231,10 +234,10 @@ func fetchYTDLBatchCmd(gen uint64, pageURL string, start, count int) tea.Cmd {
 	}
 }
 
-func resolveFeedTrackCmd(feedURL string) tea.Cmd {
+func resolveFeedTrackCmd(feedURL string, gen, queue uint64) tea.Cmd {
 	return func() tea.Msg {
 		tracks, err := resolve.Remote([]string{feedURL})
-		return feedTrackResolvedMsg{tracks: tracks, err: err}
+		return feedTrackResolvedMsg{tracks: tracks, err: err, gen: gen, queue: queue}
 	}
 }
 

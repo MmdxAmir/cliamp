@@ -19,7 +19,10 @@ const (
 	resumeSaveInterval          = 2 * time.Second
 )
 
+// replacePlaylist replaces the queue. It advances the queue generation, so a
+// feed or file browser replace that is still resolving is dropped.
 func (m *Model) replacePlaylist(tracks []playlist.Track) {
+	nextRequest(&m.requests.queue)
 	if m.resumeSaver != nil {
 		tracks = playlist.WithPlaybackContext(tracks)
 	}
@@ -359,7 +362,7 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 	if track.Feed || playlist.IsFeed(track.Path) {
 		m.feedLoading = true
 		m.status.Activity("Loading feed...", statusTTLLong)
-		return resolveFeedTrackCmd(track.Path)
+		return resolveFeedTrackCmd(track.Path, m.requests.stream, nextRequest(&m.requests.queue))
 	}
 	// The track that plays now is left, so it can scrobble before the
 	// engine moves on.

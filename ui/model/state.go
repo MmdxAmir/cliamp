@@ -303,6 +303,7 @@ type requestState struct {
 	catalog               uint64
 	stream                uint64
 	preload               uint64
+	queue                 uint64
 }
 
 func nextRequest(gen *uint64) uint64 {
