@@ -5,6 +5,7 @@
 package radio
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -507,6 +508,27 @@ func (p *Provider) SearchCatalog(query string) (int, error) {
 
 // searchLimit caps how many results one catalog search returns.
 const searchLimit = 200
+
+// SearchStations returns up to limit stations that match query, most votes
+// first, as playable tracks. A limit of 0 or less returns up to searchLimit
+// stations. It runs the same directory query as SearchCatalog but keeps no
+// state, so the pane search stays as it is. ctx cancels the directory
+// request.
+func (p *Provider) SearchStations(ctx context.Context, query string, limit int) ([]playlist.Track, error) {
+	stations, err := stationsContext(ctx, StationQuery{Name: query, Order: SortVotes, Limit: searchLimit})
+	if err != nil {
+		return nil, err
+	}
+	stations = streamableStations(stations)
+	if limit > 0 && len(stations) > limit {
+		stations = stations[:limit]
+	}
+	tracks := make([]playlist.Track, len(stations))
+	for i, s := range stations {
+		tracks[i] = stationTrack(s)
+	}
+	return tracks, nil
+}
 
 // SectionTitle names the pane section for an ID prefix. The provider owns this
 // wording because only it knows what its prefixes mean.

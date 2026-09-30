@@ -126,8 +126,13 @@ func (q StationQuery) values() url.Values {
 // endpoint subsumes the directory's /topvote and /byname shortcuts: with no
 // name and no country it returns the same top-voted feed, in the same order.
 func Stations(q StationQuery) ([]CatalogStation, error) {
+	return stationsContext(context.Background(), q)
+}
+
+// stationsContext is Stations with caller-controlled cancellation.
+func stationsContext(ctx context.Context, q StationQuery) ([]CatalogStation, error) {
 	var stations []CatalogStation
-	if err := fetchJSON(radioBrowserBase+"/stations/search?"+q.values().Encode(), &stations); err != nil {
+	if err := fetchJSON(ctx, radioBrowserBase+"/stations/search?"+q.values().Encode(), &stations); err != nil {
 		return nil, err
 	}
 	return stations, nil
@@ -138,7 +143,7 @@ func Stations(q StationQuery) ([]CatalogStation, error) {
 // of lowercase duplicates ("de" beside "DE") are folded into one another.
 func FetchCountries() ([]Country, error) {
 	var raw []Country
-	if err := fetchJSON(radioBrowserBase+"/countries", &raw); err != nil {
+	if err := fetchJSON(context.Background(), radioBrowserBase+"/countries", &raw); err != nil {
 		return nil, err
 	}
 
@@ -178,7 +183,7 @@ func FetchStates(country string) ([]State, error) {
 		return nil, nil
 	}
 	var raw []State
-	if err := fetchJSON(radioBrowserBase+"/states/"+url.PathEscape(country)+"/", &raw); err != nil {
+	if err := fetchJSON(context.Background(), radioBrowserBase+"/states/"+url.PathEscape(country)+"/", &raw); err != nil {
 		return nil, err
 	}
 
@@ -225,7 +230,7 @@ func FetchTags() ([]Tag, error) {
 	v.Set("limit", "100000")
 
 	var raw []Tag
-	if err := fetchJSON(radioBrowserBase+"/tags?"+v.Encode(), &raw); err != nil {
+	if err := fetchJSON(context.Background(), radioBrowserBase+"/tags?"+v.Encode(), &raw); err != nil {
 		return nil, fmt.Errorf("fetch tags: %w", err)
 	}
 
@@ -253,18 +258,18 @@ func FetchTags() ([]Tag, error) {
 	return tags, nil
 }
 
-// fetchJSON reads a JSON document from the Radio Browser API.
-func fetchJSON(u string, out any) error {
-	if err := getJSON(catalogClient, u, out); err != nil {
+// fetchJSON reads a JSON document from the Radio Browser API under ctx.
+func fetchJSON(ctx context.Context, u string, out any) error {
+	if err := getJSON(ctx, catalogClient, u, out); err != nil {
 		return fmt.Errorf("radio-browser: %w", err)
 	}
 	return nil
 }
 
-// getJSON performs one GET and decodes the response body. Callers wrap the
-// error with the name of the service they were talking to.
-func getJSON(client *http.Client, u string, out any) error {
-	resp, err := get(context.Background(), client, u)
+// getJSON performs one GET under ctx and decodes the response body. Callers
+// wrap the error with the name of the service they were talking to.
+func getJSON(ctx context.Context, client *http.Client, u string, out any) error {
+	resp, err := get(ctx, client, u)
 	if err != nil {
 		return err
 	}
