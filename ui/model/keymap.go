@@ -137,64 +137,19 @@ func (m Model) buildKeymapEntries() []keymapEntry {
 	return out
 }
 
+// keymapContext returns the command context that the keymap lists: the one
+// under the keymap itself.
 func (m Model) keymapContext() (commandMode, string) {
-	switch m.activeScreen() {
-	case screenDevicePicker:
-		return commandModeDevicePicker, "Audio Device"
-	case screenPlaylistPicker:
-		if m.plPicker.screen == plPickerNewName {
-			return commandModePlaylistPickerInput, "Playlist Name"
-		}
-		return commandModePlaylistPicker, "Save to Playlist"
-	case screenFileBrowser:
-		if m.fileBrowser.searching {
-			return commandModeFileBrowserSearch, "File Filter"
-		}
-		return commandModeFileBrowser, "Files"
-	case screenSpotSearch:
-		return commandModeSpotSearch, "Provider Search"
-	case screenNavBrowser:
-		if m.navBrowser.searching {
-			return commandModeNavSearch, "Browser Filter"
-		}
-		return commandModeNavBrowser, "Browse"
-	case screenThemePicker:
-		if m.themePicker.filtering {
-			return commandModeThemePickerFilter, "Theme Filter"
-		}
-		return commandModeThemePicker, "Themes"
-	case screenVisPicker:
-		if m.visPicker.filtering {
-			return commandModeVisPickerFilter, "Visualizer Filter"
-		}
-		return commandModeVisPicker, "Visualizers"
-	case screenPlaylistManager:
-		switch m.plManager.screen {
-		case plMgrScreenNewName, plMgrScreenRename:
-			return commandModePlaylistManagerInput, "Playlist Name"
-		case plMgrScreenDirs:
-			return commandModePlaylistManagerDirs, "Directory Sources"
-		}
-		return commandModePlaylistManager, "Playlists"
-	case screenQueue:
-		return commandModeQueue, "Queue"
-	case screenSubs:
-		if m.subs.filtering {
-			return commandModeSubsFilter, "Subscription Filter"
-		}
-		return commandModeSubs, "Subscriptions"
-	case screenInfo:
-		return commandModeInfo, "Track Info"
-	case screenSearch:
-		return commandModeSearch, "Playlist Filter"
-	case screenNetSearch:
-		return commandModeNetSearch, "Online Search"
-	case screenURLInput:
-		return commandModeURL, "Load URL"
-	case screenLyrics:
-		return commandModeLyrics, "Lyrics"
-	case screenJump:
-		return commandModeJump, "Jump to Time"
+	m.keymap.visible = false
+	return m.commandContext()
+}
+
+// commandContext returns the command mode and the screen name of what owns
+// the keys: the top overlay, or else the focused control of the main screen.
+// The help line and the keymap both use it.
+func (m Model) commandContext() (commandMode, string) {
+	if spec, ok := m.topOverlay(); ok && spec.context != nil {
+		return spec.context(&m)
 	}
 
 	switch m.focus {
@@ -225,13 +180,6 @@ func (m *Model) keymapCount() int {
 		return len(m.keymap.filtered)
 	}
 	return len(m.keymap.entries)
-}
-
-func (m *Model) keymapHelpLine() string {
-	if m.keymap.searching {
-		return m.commandHelp(commandModeKeymapSearch)
-	}
-	return m.commandHelp(commandModeKeymap)
 }
 
 // keymapHeaderLine renders the keymap's single-line header for the playlist

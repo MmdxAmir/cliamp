@@ -81,13 +81,6 @@ func (m Model) navHeaderLine() string {
 	}
 }
 
-func (m Model) navHelpLine() string {
-	if m.navBrowser.searching {
-		return m.commandHelp(commandModeNavSearch)
-	}
-	return m.commandHelp(commandModeNavBrowser)
-}
-
 // renderNavBody renders the list for the active provider-browser route.
 func (m Model) renderNavBody() string {
 	labels := m.navLabels()

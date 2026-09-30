@@ -80,13 +80,6 @@ func (m *Model) themePickerCancel() {
 	m.themePicker.filtered = nil
 }
 
-func (m *Model) themePickerHelpLine() string {
-	if m.themePicker.filtering {
-		return m.commandHelp(commandModeThemePickerFilter)
-	}
-	return m.commandHelp(commandModeThemePicker)
-}
-
 func (m *Model) themePickerVisible() int {
 	return m.effectivePlaylistVisible()
 }
@@ -208,13 +201,6 @@ func (m *Model) visPickerCancel() {
 	m.visPickerClose()
 }
 
-func (m *Model) visPickerHelpLine() string {
-	if m.visPicker.filtering {
-		return m.commandHelp(commandModeVisPickerFilter)
-	}
-	return m.commandHelp(commandModeVisPicker)
-}
-
 func (m *Model) visPickerVisible() int {
 	return m.effectivePlaylistVisible()
 }
@@ -258,24 +244,12 @@ func (m *Model) visPickerRecomputeFilter() {
 	}
 }
 
-func (m *Model) devicePickerHelpLine() string {
-	return m.commandHelp(commandModeDevicePicker)
-}
-
 func (m *Model) devicePickerVisible() int {
 	return m.effectivePlaylistVisible()
 }
 
-func (m *Model) queueHelpLine() string {
-	return m.commandHelp(commandModeQueue)
-}
-
 func (m *Model) queueVisible() int {
 	return m.effectivePlaylistVisible()
-}
-
-func (m *Model) searchHelpLine() string {
-	return m.commandHelp(commandModeSearch)
 }
 
 func (m *Model) searchVisible() int {
@@ -290,16 +264,8 @@ func (m *Model) closeSearchLayout() {
 	m.adjustScroll()
 }
 
-func (m *Model) netSearchResultsHelpLine() string {
-	return m.commandHelp(commandModeNetSearch)
-}
-
 func (m *Model) netSearchResultsVisible() int {
 	return m.effectivePlaylistVisible()
-}
-
-func (m *Model) spotSearchResultsHelpLine() string {
-	return m.commandHelp(commandModeSpotSearch)
 }
 
 func (m *Model) spotSearchResultsVisible() int {
@@ -308,10 +274,6 @@ func (m *Model) spotSearchResultsVisible() int {
 		visible--
 	}
 	return max(0, visible)
-}
-
-func (m *Model) spotSearchPlaylistHelpLine() string {
-	return m.commandHelp(commandModeSpotSearch)
 }
 
 func (m *Model) spotSearchPlaylistVisible() int {
@@ -324,24 +286,12 @@ func (m *Model) navVisible() int {
 	return m.effectivePlaylistVisible()
 }
 
-func (m *Model) plMgrListHelpLine() string {
-	return m.commandHelp(commandModePlaylistManager)
-}
-
 func (m *Model) plMgrListVisible() int {
 	return m.effectivePlaylistVisible()
 }
 
 func (m *Model) plMgrListMaybeAdjustScroll(visible int) {
 	clampScroll(&m.plManager.cursor, &m.plManager.scroll, m.plMgrListViewCount(), visible)
-}
-
-func (m *Model) plMgrTracksHelpLine() string {
-	return m.commandHelp(commandModePlaylistManager)
-}
-
-func (m *Model) plMgrDirsHelpLine() string {
-	return m.commandHelp(commandModePlaylistManagerDirs)
 }
 
 func (m *Model) plMgrDirsVisible() int {

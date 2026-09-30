@@ -45,13 +45,6 @@ func (m *Model) fbEntry(idx int) fbEntry {
 	return m.fileBrowser.entries[idx]
 }
 
-func (m Model) fbHelpLine() string {
-	if m.fileBrowser.searching {
-		return m.commandHelp(commandModeFileBrowserSearch)
-	}
-	return m.commandHelp(commandModeFileBrowser)
-}
-
 // fbVisible returns the file-browser list height. The browser renders inline in
 // the playlist region, so it shares the playlist's row budget.
 func (m *Model) fbVisible() int {

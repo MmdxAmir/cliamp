@@ -15,13 +15,6 @@ func (m *Model) subsHeaderLine() string {
 	return sepHeaderN("Subscriptions", m.subs.cursor+1, len(m.subsVisibleShows()))
 }
 
-func (m *Model) subsHelpLine() string {
-	if m.subs.filtering {
-		return m.commandHelp(commandModeSubsFilter)
-	}
-	return m.commandHelp(commandModeSubs)
-}
-
 // renderSubsBody lists the subscribed shows, with any loading or error line
 // pinned to the top so a slow feed fetch is visible while the list stays put.
 func (m Model) renderSubsBody() string {

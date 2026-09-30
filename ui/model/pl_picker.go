@@ -80,13 +80,6 @@ func (m Model) plPickerHeaderLine() string {
 	return sepHeaderN("Write to Playlist", m.plPicker.cursor+1, m.plPickerCount())
 }
 
-func (m Model) plPickerHelpLine() string {
-	if m.plPicker.screen == plPickerNewName {
-		return m.commandHelp(commandModePlaylistPickerInput)
-	}
-	return m.commandHelp(commandModePlaylistPicker)
-}
-
 func (m Model) renderPlaylistPickerBody() string {
 	budget := m.effectivePlaylistVisible()
 	if m.plPicker.screen == plPickerNewName {

@@ -31,9 +31,9 @@ var overlayOpeners = map[topLevelScreen]func(*Model){
 }
 
 // probeOverlayStack replaces overlayStack for the test with specs that record
-// which overlay got a key or a paste and that render their screen number.
-// Each probe keeps the screen, and a paste handler only where the real spec
-// has one.
+// which overlay got a key or a paste and that name their screen number. Each
+// probe keeps the screen, and a paste handler, a context and a view only where
+// the real spec has one.
 func probeOverlayStack(t *testing.T) (keys, pastes *[]topLevelScreen) {
 	t.Helper()
 	keys, pastes = new([]topLevelScreen), new([]topLevelScreen)
@@ -50,10 +50,13 @@ func probeOverlayStack(t *testing.T) (keys, pastes *[]topLevelScreen) {
 		if spec.paste != nil {
 			probe.paste = func(*Model, string) { *pastes = append(*pastes, screen) }
 		}
+		if spec.context != nil {
+			mode, _ := spec.context(&Model{})
+			probe.context = func(*Model) (commandMode, string) { return mode, fmt.Sprint("context ", screen) }
+		}
 		if spec.view.body != nil {
 			probe.view = overlayView{
 				header: func(*Model) string { return fmt.Sprint("header ", screen) },
-				help:   func(*Model) string { return fmt.Sprint("help ", screen) },
 				body:   func(*Model) string { return fmt.Sprint("body ", screen) },
 			}
 		}
@@ -79,13 +82,15 @@ func TestOverlayRoutesAgree(t *testing.T) {
 	type combo struct {
 		open []topLevelScreen
 		top  overlaySpec
+		// under is the overlay below the top one, if any.
+		under *overlaySpec
 	}
 	var combos []combo
 	for i, upper := range overlayStack {
-		combos = append(combos, combo{[]topLevelScreen{upper.screen}, upper})
+		combos = append(combos, combo{open: []topLevelScreen{upper.screen}, top: upper})
 		for _, lower := range overlayStack[i+1:] {
 			// Open the lower overlay first, as a user would.
-			combos = append(combos, combo{[]topLevelScreen{lower.screen, upper.screen}, upper})
+			combos = append(combos, combo{[]topLevelScreen{lower.screen, upper.screen}, upper, &lower})
 		}
 	}
 
@@ -107,12 +112,29 @@ func TestOverlayRoutesAgree(t *testing.T) {
 			} else {
 				for name, got := range map[string]string{
 					"header": m.renderPlaylistHeader(),
-					"help":   m.renderHelp(),
 					"body":   m.renderMainBody(),
 				} {
 					if w := fmt.Sprint(name, " ", want); got != w {
 						t.Errorf("%s = %q, want %q", name, got, w)
 					}
+				}
+			}
+
+			// An overlay with no context leaves the main screen context.
+			wantMode, wantName := commandModeMain, "Playlist"
+			if c.top.context != nil {
+				wantMode, wantName = c.top.context(&m)
+			}
+			if mode, name := m.commandContext(); mode != wantMode || name != wantName {
+				t.Errorf("commandContext() = %v %q, want %v %q", mode, name, wantMode, wantName)
+			}
+			if got, w := m.renderHelp(), m.commandHelp(wantMode); got != w {
+				t.Errorf("renderHelp() = %q, want %q", got, w)
+			}
+			// The keymap lists the context under it.
+			if want == screenKeymap && c.under != nil {
+				if _, name := m.keymapContext(); name != fmt.Sprint("context ", c.under.screen) {
+					t.Errorf("keymapContext() name = %q, want the context of screen %d", name, c.under.screen)
 				}
 			}
 

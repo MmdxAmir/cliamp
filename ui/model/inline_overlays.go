@@ -19,9 +19,9 @@ import (
 // three pieces, all the same vertical size as the normal playlist chrome so
 // opening an overlay never shifts the layout height:
 //
-//   - a header line   (via overlayHeaderLine, used by renderPlaylistHeader)
-//   - a body          (via overlayBody, fills effectivePlaylistVisible rows)
-//   - a help line      (via overlayHelpLine, used by renderHelp)
+//   - a header line   (used by renderPlaylistHeader)
+//   - a body          (fills effectivePlaylistVisible rows)
+//   - a help line     (the hints of its command mode, used by renderHelp)
 //
 // overlayStack in overlays_table.go holds these pieces for each overlay, so the
 // header, body, and help always describe the same overlay.
@@ -150,21 +150,20 @@ func (m Model) renderTrackRowsBody(tracks []playlist.Track, cursor, scroll, budg
 
 // — dispatch —
 
-// overlayView bundles the three render pieces of an inline overlay: the header
-// line (shown where the playlist header is), the help line, and the body that
-// fills the playlist region. The pieces are method expressions (func(*Model)),
-// not bound method values, so building an overlayView does not copy the Model
-// onto the heap on the render hot path.
+// overlayView bundles the render pieces of an inline overlay: the header line
+// (shown where the playlist header is) and the body that fills the playlist
+// region. The help line comes from the command mode of the overlay. The pieces
+// are method expressions (func(*Model)), not bound method values, so building
+// an overlayView does not copy the Model onto the heap on the render hot path.
 type overlayView struct {
 	header func(*Model) string
-	help   func(*Model) string
 	body   func(*Model) string
 }
 
 // activeOverlay returns the render pieces of the top overlay. It returns
 // ok=false when no overlay is open, and for the full-screen visualizer, which
-// replaces the whole frame. renderPlaylistHeader, renderHelp, and
-// renderMainBody each call this and invoke the piece they need with &m.
+// replaces the whole frame. renderPlaylistHeader and renderMainBody each call
+// this and invoke the piece they need with &m.
 func (m Model) activeOverlay() (overlayView, bool) {
 	spec, ok := m.topOverlay()
 	if !ok || spec.view.body == nil {
@@ -433,10 +432,6 @@ func (m Model) renderJumpBody() string {
 
 // — lyrics —
 
-func (m Model) lyricsHelpLine() string {
-	return m.commandHelp(commandModeLyrics)
-}
-
 func (m Model) renderLyricsBody() string {
 	visible := m.effectivePlaylistVisible()
 	if visible <= 0 {
@@ -528,13 +523,6 @@ func (m Model) netSearchHeaderLine() string {
 	return m.filterHeader("Search: "+m.netSearchSource(), "net-search", m.netSearch.query, "")
 }
 
-func (m Model) netSearchHelpLine() string {
-	if m.netSearch.screen == netSearchResults {
-		return m.netSearchResultsHelpLine()
-	}
-	return m.commandHelp(commandModeNetSearch)
-}
-
 func (m Model) renderNetSearchBody() string {
 	budget := m.effectivePlaylistVisible()
 	if m.netSearch.screen == netSearchInput {
@@ -575,19 +563,6 @@ func (m Model) spotSearchHeaderLine() string {
 		return m.promptHeader("spot-playlist-name", "New Playlist", m.spotSearch.newName)
 	default:
 		return m.filterHeader("Search: "+providerName(m.spotSearch.prov), "spot-search", m.spotSearch.query, "")
-	}
-}
-
-func (m Model) spotSearchHelpLine() string {
-	switch m.spotSearch.screen {
-	case spotSearchResults:
-		return m.spotSearchResultsHelpLine()
-	case spotSearchPlaylist:
-		return m.spotSearchPlaylistHelpLine()
-	case spotSearchNewName:
-		return m.commandHelp(commandModeSpotSearch)
-	default:
-		return m.commandHelp(commandModeSpotSearch)
 	}
 }
 

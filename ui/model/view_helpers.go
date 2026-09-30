@@ -246,9 +246,9 @@ func helpKey(key, label string) string {
 	return helpKeyStyle.Render(" "+key+" ") + helpStyle.Render(" "+label)
 }
 
-// fitHelpLine keeps a help line to a single panel-wide row. Overlay help lines
-// are fixed strings that can exceed the panel width and wrap to two rows, which
-// would shift the layout height; this clips them (ANSI-aware) to one row.
+// fitHelpLine keeps a hint line to a single panel-wide row. A longer line would
+// wrap to two rows and shift the layout height, so this clips it (ANSI-aware)
+// to one row.
 func fitHelpLine(s string) string {
 	if ui.PanelWidth <= 0 || lipgloss.Width(s) <= ui.PanelWidth {
 		return s

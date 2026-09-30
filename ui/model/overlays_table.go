@@ -3,16 +3,26 @@ package model
 import tea "charm.land/bubbletea/v2"
 
 // overlaySpec describes one overlay: the screen it shows, the handlers that
-// own the keys and pasted text while it is on top, and the pieces it renders.
+// own the keys and pasted text while it is on top, its command mode, and the
+// pieces it renders.
 type overlaySpec struct {
 	screen topLevelScreen
 	key    func(*Model, tea.KeyPressMsg) tea.Cmd
 	// paste takes pasted text. It is nil when the overlay has no text field.
 	// The paste is then dropped.
 	paste func(*Model, string)
+	// context returns the command mode and the screen name for the help line
+	// and the keymap. It is nil for the full-screen visualizer, which draws
+	// its own help.
+	context func(*Model) (commandMode, string)
 	// view is zero for the full-screen visualizer, which replaces the whole
 	// frame instead of the playlist region.
 	view overlayView
+}
+
+// fixedContext returns the context of an overlay that has one command mode.
+func fixedContext(mode commandMode, name string) func(*Model) (commandMode, string) {
+	return func(*Model) (commandMode, string) { return mode, name }
 }
 
 // overlayStack lists the overlays from the top down. The first open overlay
@@ -42,12 +52,19 @@ func init() {
 				m.insertText("keymap", &m.keymap.search, s)
 				m.updateKeymapFilter()
 			},
-			view: overlayView{(*Model).keymapHeaderLine, (*Model).keymapHelpLine, (*Model).renderKeymapList},
+			context: func(m *Model) (commandMode, string) {
+				if m.keymap.searching {
+					return commandModeKeymapSearch, "Keymap Filter"
+				}
+				return commandModeKeymap, "Keymap"
+			},
+			view: overlayView{(*Model).keymapHeaderLine, (*Model).renderKeymapList},
 		},
 		{
-			screen: screenDevicePicker,
-			key:    (*Model).handleDeviceKey,
-			view:   overlayView{(*Model).deviceHeaderLine, (*Model).devicePickerHelpLine, (*Model).renderDeviceBody},
+			screen:  screenDevicePicker,
+			key:     (*Model).handleDeviceKey,
+			context: fixedContext(commandModeDevicePicker, "Audio Device"),
+			view:    overlayView{(*Model).deviceHeaderLine, (*Model).renderDeviceBody},
 		},
 		{
 			screen: screenPlaylistPicker,
@@ -58,7 +75,13 @@ func init() {
 					m.plPicker.inputErr = ""
 				}
 			},
-			view: overlayView{(*Model).plPickerHeaderLine, (*Model).plPickerHelpLine, (*Model).renderPlaylistPickerBody},
+			context: func(m *Model) (commandMode, string) {
+				if m.plPicker.screen == plPickerNewName {
+					return commandModePlaylistPickerInput, "Playlist Name"
+				}
+				return commandModePlaylistPicker, "Save to Playlist"
+			},
+			view: overlayView{(*Model).plPickerHeaderLine, (*Model).renderPlaylistPickerBody},
 		},
 		{
 			screen: screenFileBrowser,
@@ -69,7 +92,13 @@ func init() {
 					m.fbUpdateFilter()
 				}
 			},
-			view: overlayView{(*Model).fbHeaderLine, (*Model).fbHelpLine, (*Model).renderFileBrowserBody},
+			context: func(m *Model) (commandMode, string) {
+				if m.fileBrowser.searching {
+					return commandModeFileBrowserSearch, "File Filter"
+				}
+				return commandModeFileBrowser, "Files"
+			},
+			view: overlayView{(*Model).fbHeaderLine, (*Model).renderFileBrowserBody},
 		},
 		{
 			screen: screenSpotSearch,
@@ -82,7 +111,8 @@ func init() {
 					m.insertText("spot-playlist-name", &m.spotSearch.newName, s)
 				}
 			},
-			view: overlayView{(*Model).spotSearchHeaderLine, (*Model).spotSearchHelpLine, (*Model).renderSpotSearchBody},
+			context: fixedContext(commandModeSpotSearch, "Provider Search"),
+			view:    overlayView{(*Model).spotSearchHeaderLine, (*Model).renderSpotSearchBody},
 		},
 		{
 			screen: screenNavBrowser,
@@ -95,7 +125,13 @@ func init() {
 					m.navUpdateSearch()
 				}
 			},
-			view: overlayView{(*Model).navHeaderLine, (*Model).navHelpLine, (*Model).renderNavBody},
+			context: func(m *Model) (commandMode, string) {
+				if m.navBrowser.searching {
+					return commandModeNavSearch, "Browser Filter"
+				}
+				return commandModeNavBrowser, "Browse"
+			},
+			view: overlayView{(*Model).navHeaderLine, (*Model).renderNavBody},
 		},
 		{
 			screen: screenThemePicker,
@@ -106,7 +142,13 @@ func init() {
 					m.themePickerRecomputeFilter()
 				}
 			},
-			view: overlayView{(*Model).themePickerHeaderLine, (*Model).themePickerHelpLine, (*Model).renderThemeBody},
+			context: func(m *Model) (commandMode, string) {
+				if m.themePicker.filtering {
+					return commandModeThemePickerFilter, "Theme Filter"
+				}
+				return commandModeThemePicker, "Themes"
+			},
+			view: overlayView{(*Model).themePickerHeaderLine, (*Model).renderThemeBody},
 		},
 		{
 			screen: screenVisPicker,
@@ -117,7 +159,13 @@ func init() {
 					m.visPickerRecomputeFilter()
 				}
 			},
-			view: overlayView{(*Model).visPickerHeaderLine, (*Model).visPickerHelpLine, (*Model).renderVisPickerList},
+			context: func(m *Model) (commandMode, string) {
+				if m.visPicker.filtering {
+					return commandModeVisPickerFilter, "Visualizer Filter"
+				}
+				return commandModeVisPicker, "Visualizers"
+			},
+			view: overlayView{(*Model).visPickerHeaderLine, (*Model).renderVisPickerList},
 		},
 		{
 			screen: screenPlaylistManager,
@@ -136,14 +184,24 @@ func init() {
 					m.plMgrRecomputeFilter()
 				}
 			},
-			view: overlayView{(*Model).plMgrHeaderLine, (*Model).plMgrHelpLine, (*Model).renderPlMgrBody},
+			context: func(m *Model) (commandMode, string) {
+				switch m.plManager.screen {
+				case plMgrScreenNewName, plMgrScreenRename:
+					return commandModePlaylistManagerInput, "Playlist Name"
+				case plMgrScreenDirs:
+					return commandModePlaylistManagerDirs, "Directory Sources"
+				}
+				return commandModePlaylistManager, "Playlists"
+			},
+			view: overlayView{(*Model).plMgrHeaderLine, (*Model).renderPlMgrBody},
 		},
 		{
-			screen: screenQueue,
-			key:    (*Model).handleQueueKey,
+			screen:  screenQueue,
+			key:     (*Model).handleQueueKey,
+			context: fixedContext(commandModeQueue, "Queue"),
 			view: overlayView{
 				func(m *Model) string { return sepHeaderN("Queue", m.queue.cursor+1, m.playlist.QueueLen()) },
-				(*Model).queueHelpLine, (*Model).renderQueueBody},
+				(*Model).renderQueueBody},
 		},
 		{
 			screen: screenSubs,
@@ -154,22 +212,25 @@ func init() {
 					m.updateSubsFilter()
 				}
 			},
-			view: overlayView{(*Model).subsHeaderLine, (*Model).subsHelpLine, (*Model).renderSubsBody},
+			context: func(m *Model) (commandMode, string) {
+				if m.subs.filtering {
+					return commandModeSubsFilter, "Subscription Filter"
+				}
+				return commandModeSubs, "Subscriptions"
+			},
+			view: overlayView{(*Model).subsHeaderLine, (*Model).renderSubsBody},
 		},
 		{
-			screen: screenInfo,
-			key:    (*Model).handleInfoKey,
-			view: overlayView{
-				func(*Model) string { return sepHeader("Track Info") },
-				func(m *Model) string { return m.commandHelp(commandModeInfo) },
-				(*Model).renderInfoBody},
+			screen:  screenInfo,
+			key:     (*Model).handleInfoKey,
+			context: fixedContext(commandModeInfo, "Track Info"),
+			view:    overlayView{func(*Model) string { return sepHeader("Track Info") }, (*Model).renderInfoBody},
 		},
 		{
-			screen: screenLyrics,
-			key:    (*Model).handleLyricsKey,
-			view: overlayView{
-				func(*Model) string { return sepHeader("Lyrics") },
-				(*Model).lyricsHelpLine, (*Model).renderLyricsBody},
+			screen:  screenLyrics,
+			key:     (*Model).handleLyricsKey,
+			context: fixedContext(commandModeLyrics, "Lyrics"),
+			view:    overlayView{func(*Model) string { return sepHeader("Lyrics") }, (*Model).renderLyricsBody},
 		},
 		{
 			screen: screenJump,
@@ -178,10 +239,8 @@ func init() {
 				m.insertText("jump", &m.jumpInput, s)
 				m.jumpErr = ""
 			},
-			view: overlayView{
-				func(*Model) string { return sepHeader("Jump to Time") },
-				func(m *Model) string { return m.commandHelp(commandModeJump) },
-				(*Model).renderJumpBody},
+			context: fixedContext(commandModeJump, "Jump to Time"),
+			view:    overlayView{func(*Model) string { return sepHeader("Jump to Time") }, (*Model).renderJumpBody},
 		},
 		{
 			screen: screenURLInput,
@@ -190,9 +249,9 @@ func init() {
 				m.insertText("url", &m.urlInput, s)
 				m.urlErr = ""
 			},
+			context: fixedContext(commandModeURL, "Load URL"),
 			view: overlayView{
 				func(m *Model) string { return m.promptHeader("url", "Load URL", m.urlInput) },
-				func(m *Model) string { return m.commandHelp(commandModeURL) },
 				(*Model).renderURLBody},
 		},
 		{
@@ -202,7 +261,8 @@ func init() {
 				m.insertText("playlist-search", &m.search.query, s)
 				m.updateSearch()
 			},
-			view: overlayView{(*Model).searchHeaderLine, (*Model).searchHelpLine, (*Model).renderSearchList},
+			context: fixedContext(commandModeSearch, "Playlist Filter"),
+			view:    overlayView{(*Model).searchHeaderLine, (*Model).renderSearchList},
 		},
 		{
 			screen: screenNetSearch,
@@ -212,7 +272,8 @@ func init() {
 					m.insertText("net-search", &m.netSearch.query, s)
 				}
 			},
-			view: overlayView{(*Model).netSearchHeaderLine, (*Model).netSearchHelpLine, (*Model).renderNetSearchBody},
+			context: fixedContext(commandModeNetSearch, "Online Search"),
+			view:    overlayView{(*Model).netSearchHeaderLine, (*Model).renderNetSearchBody},
 		},
 	}
 }

@@ -438,13 +438,11 @@ func (m *Model) advanceTitleScroll(now time.Time) {
 }
 
 func (m Model) renderTierHelp() string {
-	if m.layout.tier != layoutMinimal {
-		return m.renderHelp()
+	// The minimal tier shows the main hints unless an overlay is open.
+	if m.layout.tier == layoutMinimal && m.activeScreen() == screenMain {
+		return m.commandHelp(commandModeMain)
 	}
-	if ov, ok := m.activeOverlay(); ok {
-		return fitHelpLine(ov.help(&m))
-	}
-	return m.commandHelp(commandModeMain)
+	return m.renderHelp()
 }
 
 func (m Model) renderTransient() string {
@@ -1223,31 +1221,10 @@ func (m Model) renderPlaylist() string {
 	return strings.Join(padLines(lines, budget, len(lines)), "\n")
 }
 
+// renderHelp renders the key hints of what owns the keys.
 func (m Model) renderHelp() string {
-	if ov, ok := m.activeOverlay(); ok {
-		return fitHelpLine(ov.help(&m))
-	}
-	switch m.focus {
-	case focusProvider:
-		if m.provSearch.active {
-			return m.commandHelp(commandModeProviderSearch)
-		}
-		return m.commandHelp(commandModeProvider)
-	case focusProvPill:
-		return m.commandHelp(commandModeProviderPill)
-	case focusSpeed:
-		return m.commandHelp(commandModeSpeed)
-	case focusEQ:
-		return m.commandHelp(commandModeEQ)
-	case focusVolume:
-		return m.commandHelp(commandModeVolume)
-	case focusShuffle:
-		return m.commandHelp(commandModeShuffle)
-	case focusRepeat:
-		return m.commandHelp(commandModeRepeat)
-	default:
-		return m.commandHelp(commandModeMain)
-	}
+	mode, _ := m.commandContext()
+	return m.commandHelp(mode)
 }
 
 // renderBottomStatus renders the bottom status line: speed (left) and

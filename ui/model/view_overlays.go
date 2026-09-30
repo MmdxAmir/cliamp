@@ -80,21 +80,6 @@ func (m Model) plMgrHeaderLine() string {
 	}
 }
 
-func (m Model) plMgrHelpLine() string {
-	switch m.plManager.screen {
-	case plMgrScreenTracks:
-		return m.plMgrTracksHelpLine()
-	case plMgrScreenDirs:
-		return m.plMgrDirsHelpLine()
-	case plMgrScreenNewName:
-		return m.commandHelp(commandModePlaylistManagerInput)
-	case plMgrScreenRename:
-		return m.commandHelp(commandModePlaylistManagerInput)
-	default:
-		return m.plMgrListHelpLine()
-	}
-}
-
 func (m Model) renderPlMgrBody() string {
 	switch m.plManager.screen {
 	case plMgrScreenTracks:
