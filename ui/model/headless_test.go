@@ -250,8 +250,9 @@ func TestHeadlessSpectrumAnalyzesOnRequest(t *testing.T) {
 	}
 }
 
-// A track start refreshes the provider pane in the TUI. A headless Model has
-// no pane, so it makes no provider call.
+// A track start refreshes the Local pane in the TUI, because it lists
+// Recently Played. A headless Model has no pane, so it makes no provider
+// call.
 func TestHeadlessTrackStartSkipsProviderPaneRefresh(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -263,8 +264,8 @@ func TestHeadlessTrackStartSkipsProviderPaneRefresh(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := &atomic.Int32{}
-			prov := countingProvider{commandsTestProvider{name: "Counting"}, calls}
-			m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "counting", Name: "Counting", Provider: prov}},
+			prov := countingProvider{commandsTestProvider{name: "Local"}, calls}
+			m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: providerKeyLocal, Name: "Local", Provider: prov}},
 				playlist.Track{Path: "/music/one.flac", Title: "One"})
 			m.headless = tc.headless
 

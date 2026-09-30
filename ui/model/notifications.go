@@ -171,7 +171,7 @@ func (m *Model) recordListenedTrack(track playlist.Track) tea.Cmd {
 			m.plMgrReloadTracks(history.PlaylistName)
 		}
 	}
-	return m.fetchProviderPlaylists()
+	return m.refreshPaneAfterLocalWrite()
 }
 
 // maybeScrobble fires a playback-complete report for the given track when it

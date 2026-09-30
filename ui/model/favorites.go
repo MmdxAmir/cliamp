@@ -51,9 +51,9 @@ func (m *Model) toggleTrackFavorite(track playlist.Track) (tea.Cmd, error) {
 		return nil, err
 	}
 	m.refreshFavSet()
-	// The provider pane renders Favorites counts from Playlists(). The
+	// The Local pane renders Favorites counts from Playlists(). The
 	// manager list refreshes itself on open.
-	return tea.Batch(m.syncTrackFavoriteCmd(track, favorite), m.fetchProviderPlaylists()), nil
+	return tea.Batch(m.syncTrackFavoriteCmd(track, favorite), m.refreshPaneAfterLocalWrite()), nil
 }
 
 // findTrackFavoriter returns the first registered provider that owns track

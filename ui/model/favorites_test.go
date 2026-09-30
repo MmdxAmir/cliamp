@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/favorites"
+	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -415,5 +416,88 @@ func TestIPCBookmarkAliasTogglesFavorite(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// countingListsProvider counts the calls to Playlists, the rows of the
+// provider pane.
+type countingListsProvider struct {
+	commandsTestProvider
+	mu    sync.Mutex
+	lists int
+}
+
+func (p *countingListsProvider) Playlists() ([]playlist.PlaylistInfo, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lists++
+	return nil, nil
+}
+
+func (p *countingListsProvider) listCalls() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.lists
+}
+
+// A history record or a favorite toggle writes a local store. Only the Local
+// pane lists these stores, so only an active Local pane reloads its rows. A
+// remote pane gets no provider call.
+func TestLocalStoreWritesRefreshOnlyTheLocalPane(t *testing.T) {
+	track := playlist.Track{Path: "/music/a.mp3", Title: "A"}
+	for _, write := range []struct {
+		name string
+		run  func(m *Model) tea.Cmd
+	}{
+		{name: "history record", run: func(m *Model) tea.Cmd { return m.recordListenedTrack(track) }},
+		{name: "favorite toggle", run: func(m *Model) tea.Cmd {
+			cmd, err := m.toggleTrackFavorite(track)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return cmd
+		}},
+	} {
+		for _, active := range []string{providerKeyLocal, "navidrome"} {
+			t.Run(write.name+"/"+active, func(t *testing.T) {
+				t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+				localProv := &countingListsProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
+				remote := &countingListsProvider{commandsTestProvider: commandsTestProvider{name: "Navidrome"}}
+				m := Model{
+					player:       &playbackFakeEngine{},
+					playlist:     playlist.New(),
+					favStore:     favorites.New(),
+					historyStore: history.New(),
+					providers: []provider.Entry{
+						{Key: providerKeyLocal, Name: "Local", Provider: localProv},
+						{Key: "navidrome", Name: "Navidrome", Provider: remote},
+					},
+				}
+				m.provider, m.provPillIdx = localProv, 0
+				if active != providerKeyLocal {
+					m.provider, m.provPillIdx = remote, 1
+				}
+
+				runCmds(write.run(&m))
+				if got, want := localProv.listCalls(), map[bool]int{true: 1, false: 0}[active == providerKeyLocal]; got != want {
+					t.Fatalf("Local pane loads = %d, want %d", got, want)
+				}
+				if got := remote.listCalls(); got != 0 {
+					t.Fatalf("remote Playlists calls = %d, want 0 after a local write", got)
+				}
+			})
+		}
+	}
+}
+
+// runCmds runs cmd and every command of a batch that it returns.
+func runCmds(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	if batch, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range batch {
+			runCmds(c)
+		}
 	}
 }
