@@ -17,10 +17,10 @@ import (
 
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/config"
-	"github.com/bjarneo/cliamp/external/jellyfin"
 	"github.com/bjarneo/cliamp/external/radio"
 	"github.com/bjarneo/cliamp/internal/appdir"
 	"github.com/bjarneo/cliamp/internal/appmeta"
+	"github.com/bjarneo/cliamp/internal/embyapi"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/internal/resume"
 	"github.com/bjarneo/cliamp/ipc"
@@ -112,15 +112,15 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 	pl.Add(resolved.Tracks...)
 
-	jellyProv := providers.jellyfin()
-	restoredJellyfinChoice := false
-	restoredJellyfinIndex := 0
+	resumeServer := providers.resumeServer(defaultProvider)
+	restoredContext := false
+	restoredIndex := 0
 	restoredResumePath := ""
-	if !daemon && defaultProvider == "jellyfin" && jellyProv != nil && cfg.Playlist == "" && len(positional) == 0 && len(resolved.Pending) == 0 && pl.Len() == 0 {
-		if tracks, index, activePath, ok := restoreJellyfinContext(resumeState, jellyProv); ok {
+	if !daemon && resumeServer != nil && cfg.Playlist == "" && len(positional) == 0 && len(resolved.Pending) == 0 && pl.Len() == 0 {
+		if tracks, index, activePath, ok := restoreServerContext(resumeState, resumeServer); ok {
 			pl.Add(tracks...)
-			restoredJellyfinChoice = true
-			restoredJellyfinIndex = index
+			restoredContext = true
+			restoredIndex = index
 			restoredResumePath = activePath
 		}
 	}
@@ -172,9 +172,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 
 	m := model.New(p, pl, providers.entries, defaultProvider, providers.localPlaylists(), themes, luaMgr, config.SaveFunc{})
 	m.SetRadioFavorites(providers.radioFavorites)
-	if defaultProvider == "jellyfin" && jellyProv != nil {
+	if resumeServer != nil {
 		m.SetResumeSaver(func(track playlist.Track, positionSec int, context []playlist.Track, contextIndex int) {
-			if _, ok := jellyProv.RestoreTrack(track); !ok {
+			if _, ok := resumeServer.RestoreTrack(track); !ok {
 				return
 			}
 			resume.SaveState(resume.State{
@@ -183,8 +183,8 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 			})
 		})
 	}
-	if restoredJellyfinChoice {
-		m.SetInitialTrack(restoredJellyfinIndex)
+	if restoredContext {
+		m.SetInitialTrack(restoredIndex)
 	}
 	m.SetIPCBroker(pluginBroker)
 	m.SetCustomEQBands(cfg.EQ)
@@ -267,7 +267,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	if cfg.Theme != "" {
 		m.SetTheme(cfg.Theme)
 	}
-	if cfg.AutoPlay && !restoredJellyfinChoice {
+	if cfg.AutoPlay && !restoredContext {
 		m.SetAutoPlay(true)
 	}
 	if daemon {
@@ -301,7 +301,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 
 	if resumeState.Path != "" && resumeState.PositionSec > 0 {
-		// Jellyfin resumes the restored context above. Mixcloud is also commonly
+		// Jellyfin and Emby resume the restored context above. Mixcloud is also commonly
 		// opened from its provider browser rather than a positional URL; preserve
 		// cliamp's existing positional-file behavior for other providers.
 		switch {
@@ -410,7 +410,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		}
 
 		if path, secs, playlistName := fm.ResumeState(); path != "" && secs > 0 {
-			if defaultProvider == "jellyfin" && jellyfin.IsStreamURL(path) {
+			if resumeServer != nil && embyapi.IsStreamURL(path) {
 				context, index := fm.ResumeContext()
 				resume.SaveState(resume.State{
 					Path: path, PositionSec: secs, Playlist: playlistName,

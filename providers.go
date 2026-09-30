@@ -29,6 +29,7 @@ import (
 	"github.com/bjarneo/cliamp/external/tidal"
 	"github.com/bjarneo/cliamp/external/yandex"
 	"github.com/bjarneo/cliamp/external/ytmusic"
+	"github.com/bjarneo/cliamp/internal/embyapi"
 	"github.com/bjarneo/cliamp/internal/resume"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
@@ -312,11 +313,20 @@ func (s *providerSet) localPlaylists() playlist.Provider {
 	return s.local
 }
 
-// jellyfin returns the Jellyfin provider, or nil when it is not configured.
-func (s *providerSet) jellyfin() *jellyfin.Provider {
+// resumeServer returns the Jellyfin or Emby provider when key names one that
+// is configured. When such a server is the default provider, cliamp saves
+// the list that a track was played from and restores it at the next start.
+// It returns nil for any other key.
+func (s *providerSet) resumeServer(key string) *embyapi.Provider {
 	for _, e := range s.entries {
-		if p, ok := e.Provider.(*jellyfin.Provider); ok {
-			return p
+		if e.Key != key {
+			continue
+		}
+		switch p := e.Provider.(type) {
+		case *jellyfin.Provider:
+			return p.Provider
+		case *emby.Provider:
+			return p.Provider
 		}
 	}
 	return nil
@@ -325,6 +335,7 @@ func (s *providerSet) jellyfin() *jellyfin.Provider {
 // registerPlayerHooks registers with p the stream factories and source
 // resolvers of the providers, and the rules that pick the pipeline of a URL.
 func (s *providerSet) registerPlayerHooks(p *player.Player) {
+	var servers []*embyapi.Provider
 	for _, e := range s.entries {
 		if cs, ok := e.Provider.(provider.CustomStreamer); ok {
 			for _, scheme := range cs.URISchemes() {
@@ -362,13 +373,25 @@ func (s *providerSet) registerPlayerHooks(p *player.Player) {
 				return player.ResolvedSource{URL: u, Segments: segments}, err
 			})
 		case *jellyfin.Provider:
-			// Refresh restored Jellyfin URLs without changing logical playlist paths.
-			for _, scheme := range []string{"http://", "https://"} {
-				p.RegisterSourceResolver(scheme, func(rawURL string) (player.ResolvedSource, error) {
-					u, err := prov.ResolveSource(rawURL)
+			servers = append(servers, prov.Provider)
+		case *emby.Provider:
+			servers = append(servers, prov.Provider)
+		}
+	}
+	if len(servers) > 0 {
+		// Refresh saved Jellyfin and Emby URLs without changing logical
+		// playlist paths. A server returns the URL of another server as is.
+		refresh := func(rawURL string) (player.ResolvedSource, error) {
+			for _, server := range servers {
+				u, err := server.ResolveSource(rawURL)
+				if err != nil || u != rawURL {
 					return player.ResolvedSource{URL: u}, err
-				})
+				}
 			}
+			return player.ResolvedSource{URL: rawURL}, nil
+		}
+		for _, scheme := range []string{"http://", "https://"} {
+			p.RegisterSourceResolver(scheme, refresh)
 		}
 	}
 
@@ -433,7 +456,10 @@ func (s *providerSet) observeAuthURLs(send func(tea.Msg)) (restore func()) {
 	}
 }
 
-func restoreJellyfinContext(state resume.State, prov *jellyfin.Provider) ([]playlist.Track, int, string, bool) {
+// restoreServerContext rebuilds the saved play context of a Jellyfin or
+// Emby server. It returns the tracks, the index and the path of the track
+// that played. It fails when that track is not from this server.
+func restoreServerContext(state resume.State, prov *embyapi.Provider) ([]playlist.Track, int, string, bool) {
 	if prov == nil || len(state.Context) == 0 {
 		return nil, 0, "", false
 	}

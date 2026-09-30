@@ -44,6 +44,13 @@ func TestBuildProviders(t *testing.T) {
 			want: append(slices.Clone(always), "jellyfin"),
 		},
 		{
+			name: "emby only",
+			cfg: config.Config{Emby: config.EmbyConfig{
+				URL: "https://emby.example.com", Token: "token", UserID: "user-1",
+			}},
+			want: append(slices.Clone(always), "emby"),
+		},
+		{
 			name: "navidrome and plex",
 			cfg: config.Config{
 				Navidrome: config.NavidromeConfig{URL: "https://nd.example.com", User: "user", Password: "secret"},
@@ -73,8 +80,11 @@ func TestBuildProviders(t *testing.T) {
 			if set.local == nil || set.radioFavorites == nil {
 				t.Fatal("the local provider and the radio favorites must be set")
 			}
-			if got, want := set.jellyfin() != nil, slices.Contains(tt.want, "jellyfin"); got != want {
-				t.Errorf("jellyfin() set = %v, want %v", got, want)
+			for _, key := range []string{"jellyfin", "emby", "plex"} {
+				want := key != "plex" && slices.Contains(tt.want, key)
+				if got := set.resumeServer(key) != nil; got != want {
+					t.Errorf("resumeServer(%q) set = %v, want %v", key, got, want)
+				}
 			}
 			for _, e := range set.entries {
 				if nav, ok := e.Provider.(*navidrome.NavidromeClient); ok && nav.SaveSort == nil {

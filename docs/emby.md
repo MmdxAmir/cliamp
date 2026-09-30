@@ -56,6 +56,10 @@ Artist — Album Title (Year)
 
 Select an album to load its tracks. Press `E` to select Emby.
 
+When Emby is the default provider, cliamp remembers the most recently played Emby track, its playback position, and the album or track list it was chosen from. cliamp saves this state when a track starts, every two seconds during confirmed playback, and during a normal exit.
+
+On the next launch with no explicit files, URLs, or playlist, cliamp restores that list with the last track selected. Press `Enter` to continue from the saved position. An `auto_play` setting is ignored for a restored list. Saved stream URLs use the current authentication when playback or preloading starts. This works as it does for [Jellyfin](jellyfin.md#usage).
+
 Press `N` in the Emby pane to open the Emby browser. Select **By Album**, **By Artist**, or **By Artist / Album**. In **By Artist / Album**, the artists are in alphabetical order. Select an artist to open the albums of that artist. Select an album to open its songs.
 
 ## How it works
