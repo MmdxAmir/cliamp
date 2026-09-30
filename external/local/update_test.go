@@ -103,8 +103,8 @@ func TestUpdatePlaylist(t *testing.T) {
 	}
 }
 
-// fn gets the directory tracks in document order, and the save keeps the
-// [[dir]] section. fn cannot write a directory track as an explicit track.
+// fn gets only the explicit tracks, so no directory is scanned while the
+// lock is held, and the save keeps the [[dir]] section.
 func TestUpdatePlaylistKeepsDirSources(t *testing.T) {
 	p := newTestProvider(t)
 	music := t.TempDir()
@@ -126,8 +126,8 @@ func TestUpdatePlaylistKeepsDirSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(seen) != 2 || seen[0].Path != "/a.mp3" || !seen[1].DirSourced {
-		t.Fatalf("fn got %+v, want /a.mp3 and the directory track", seen)
+	if got := paths(seen); !slices.Equal(got, []string{"/a.mp3"}) {
+		t.Fatalf("fn got %v, want only the explicit track /a.mp3", got)
 	}
 	dirs, err := p.DirSources("Mix")
 	if err != nil || len(dirs) != 1 {
@@ -139,5 +139,12 @@ func TestUpdatePlaylistKeepsDirSources(t *testing.T) {
 	}
 	if got := paths(doc.tracks); !slices.Equal(got, []string{"/a.mp3", "/b.mp3"}) {
 		t.Fatalf("explicit tracks = %v, want /a.mp3 and /b.mp3", got)
+	}
+	tracks, err := p.Tracks("Mix")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(tracks); !slices.Equal(got, []string{"/a.mp3", filepath.Join(music, "dir.mp3"), "/b.mp3"}) {
+		t.Fatalf("tracks = %v, want the directory track between /a.mp3 and /b.mp3", got)
 	}
 }

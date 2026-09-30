@@ -902,9 +902,11 @@ func (p *Provider) SavePlaylist(name string, tracks []playlist.Track) error {
 // UpdatePlaylist runs fn on the tracks of the named playlist and saves the
 // tracks that fn returns. The read, fn and the save run under the playlist
 // lock, so no other writer can change the file in between. fn gets the
-// tracks in document order. The tracks from directory sources carry no
-// tags, because the save drops them. When fn returns
-// provider.ErrPlaylistUnchanged, nothing is saved and the result is nil.
+// explicit [[track]] entries in document order and may change the slice.
+// It gets no tracks from directory sources, because the save drops them and
+// a directory scan must not hold the lock. The save keeps the [[dir]]
+// sections. When fn returns provider.ErrPlaylistUnchanged, nothing is saved
+// and the result is nil.
 // Implements provider.PlaylistUpdater.
 func (p *Provider) UpdatePlaylist(name string, fn func([]playlist.Track) ([]playlist.Track, error)) error {
 	if err := writable(name); err != nil {
@@ -919,7 +921,7 @@ func (p *Provider) UpdatePlaylist(name string, fn func([]playlist.Track) ([]play
 	if err != nil {
 		return err
 	}
-	tracks, err := fn(doc.expand(false))
+	tracks, err := fn(doc.tracks)
 	if errors.Is(err, provider.ErrPlaylistUnchanged) {
 		return nil
 	}
