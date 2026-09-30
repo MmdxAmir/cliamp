@@ -49,7 +49,9 @@ type Plugin struct {
 
 // StateProvider supplies read-only access to player/playlist state.
 // Functions are set by the caller after model construction so the Lua API
-// can query live state without importing the ui package.
+// can query state without importing the ui package. main.go reads the state
+// that the Model publishes after each Update. Plugin goroutines call the
+// functions, so each one must be safe for concurrent use.
 type StateProvider struct {
 	PlayerState   func() string  // "playing", "paused", "stopped"
 	Position      func() float64 // seconds
@@ -95,19 +97,20 @@ type QueueEntry struct {
 
 // ControlProvider supplies write access to player controls.
 // Only available to plugins that declare permissions = {"control"}.
+// A plugin calls each func while it holds its lock, so a func must return
+// at once. main.go queues a message for the Update loop in each one, so the
+// Model applies every change and keeps derived state consistent.
 type ControlProvider struct {
-	SetVolume   func(db float64)
-	SetSpeed    func(ratio float64)
-	SetEQBand   func(band int, db float64)
-	ToggleMono  func()
-	TogglePause func()
-	Stop        func()
-	Seek        func(secs float64)
-	SetEQPreset func(name string, bands *[10]float64) // injected via prog.Send
-	Next        func()                                // injected via prog.Send
-	Prev        func()                                // injected via prog.Send
-	// Queue mutators, all injected via prog.Send so the model's Update loop
-	// applies them and keeps derived state (cursor, current index) consistent.
+	SetVolume     func(db float64)
+	SetSpeed      func(ratio float64)
+	SetEQBand     func(band int, db float64)
+	ToggleMono    func()
+	TogglePause   func()
+	Stop          func()
+	Seek          func(secs float64)
+	SetEQPreset   func(name string, bands *[10]float64)
+	Next          func()
+	Prev          func()
 	QueueAdd      func(path string)  // resolve path/URL and append
 	QueueAddTrack func(track Track)  // append a track table as given, without resolving its path
 	QueueJump     func(index int)    // make index current and play it
@@ -116,9 +119,10 @@ type ControlProvider struct {
 }
 
 // UIProvider supplies callbacks that surface plugin output in the TUI.
-// Not permission-gated — these are low-risk, output-only operations.
+// Not permission-gated — these are low-risk, output-only operations. Like
+// the ControlProvider funcs, ShowMessage must return at once.
 type UIProvider struct {
-	ShowMessage func(text string, duration time.Duration) // injected via prog.Send
+	ShowMessage func(text string, duration time.Duration)
 }
 
 // EventPublisher accepts namespaced JSON events emitted by Lua plugins.
