@@ -317,10 +317,11 @@ func configureModel(m *model.Model, cfg config.Config, headless, visualizer60FPS
 func startIPC(send func(tea.Msg), broker *ipc.Broker, plugins *luaplugin.Manager, headless bool) (stop func(), err error) {
 	srv, err := ipc.NewServerWithBroker(ipc.DefaultSocketPath(), broker)
 	if err != nil {
+		// The errors of the ipc package already start with "ipc: ".
 		if headless {
-			return nil, fmt.Errorf("ipc: %w", err)
+			return nil, err
 		}
-		fmt.Fprintf(os.Stderr, "ipc: %v\n", err)
+		fmt.Fprintln(os.Stderr, err)
 		return func() {}, nil
 	}
 	srv.SetV2Dispatcher(newV2Dispatcher(send, srv.JobStore(), plugins))

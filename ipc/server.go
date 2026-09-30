@@ -575,7 +575,7 @@ func cleanStaleSocket(sockPath string) error {
 
 	alive, err := processAlive(pid)
 	if err != nil {
-		return fmt.Errorf("checking process liveness for socket %s: %w", sockPath, err)
+		return fmt.Errorf("ipc: checking process liveness for socket %s: %w", sockPath, err)
 	}
 	if !alive {
 		// Process is dead — clean up stale files.

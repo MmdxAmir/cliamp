@@ -282,7 +282,7 @@ func captureStderr(t *testing.T, fn func()) string {
 
 // When another instance holds the socket, headless mode cannot start, so
 // startIPC returns an error. The TUI prints the error and runs without the
-// socket.
+// socket. The message has one ipc: prefix.
 func TestStartIPCWithTheSocketInUse(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
@@ -309,6 +309,9 @@ func TestStartIPCWithTheSocketInUse(t *testing.T) {
 			}
 			if !strings.Contains(message, "cliamp is already running") {
 				t.Fatalf("message = %q, want the running instance", message)
+			}
+			if !strings.HasPrefix(message, "ipc: ") || strings.Count(message, "ipc:") != 1 {
+				t.Fatalf("message = %q, want one ipc: prefix", message)
 			}
 			if tt.headless && printed != "" {
 				t.Fatalf("stderr = %q, want nothing", printed)
