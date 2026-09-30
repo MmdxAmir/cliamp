@@ -3,7 +3,6 @@ package model
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -13,17 +12,6 @@ import (
 	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
-
-func (m *Model) scheduleReconnect(now time.Time) {
-	if !m.reconnect.at.IsZero() || m.reconnect.attempts >= 5 {
-		return
-	}
-	delay := time.Second << m.reconnect.attempts
-	m.reconnect.at = now.Add(delay)
-	m.reconnect.attempts++
-	m.reconnect.notice = fmt.Errorf("reconnecting in %s", delay)
-	m.err = m.reconnect.notice
-}
 
 // Update handles messages: key presses, ticks, and window resizes. After each
 // message it drops a gapless preload that no longer matches the next track,
@@ -104,70 +92,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case seekTickMsg:
-		// Async seek completed. A completion from a previous track says nothing
-		// about the current one, so it must not clear its state or report on it.
-		if msg.gen != m.seek.gen {
-			return m, nil
-		}
-		m.seek.inFlight = false
-		if m.seek.pending {
-			// Commit the newer target even when this seek failed: the failure
-			// belongs to a position the user has already moved on from.
-			if msg.resume {
-				// The chained seek carries no resume marker, so spend it here
-				// or a later restart seeks back to the resume position.
-				m.resume.path = ""
-				m.resume.secs = 0
-			}
-			// A newer target arrived while this seek was running; land on it
-			// rather than reporting this now-stale position as final.
-			cmd := m.commitPendingSeek()
-			return m, cmd
-		}
-		m.seek.pending = false
-		// Only clear seekActive if no new seek keypresses arrived during loading.
-		if m.seek.timer <= 0 {
-			m.seek.active = false
-		}
-		// Grace period: suppress reconnect for a few ticks after seek completes.
-		m.seek.grace = 10
-		m.seek.graceFor = 0
-		if msg.resume {
-			// A failed resume must not be retried every time the track is opened
-			// during this session. The original pipeline remains playable.
-			m.resume.path = ""
-			m.resume.secs = 0
-		}
-		if msg.err != nil {
-			// A failed rewind plays on as the same play.
-			m.seek.rewind = false
-			if msg.resume {
-				m.status.Warningf(statusTTLLong, "Couldn't resume this track; playing from the previous position: %s", msg.err)
-			} else {
-				m.status.Warningf(statusTTLMedium, "Seek failed; playback continues from the previous position: %s", msg.err)
-			}
-			cmd := m.preloadNext()
-			return m, cmd
-		}
-		if msg.resume {
-			m.status.Showf(statusTTLDefault, "Resumed at %s", formatJumpClock(msg.target))
-		}
-		m.finishSeek()
-		cmd := m.preloadNext()
+		cmd := m.handleSeekTick(msg)
 		return m, cmd
 
 	case ytdlUnpauseReconnectMsg:
-		m.seek.active = false
-		m.seek.timer = 0
-		m.seek.timerFor = 0
-		m.seek.grace = 10
-		m.seek.graceFor = 0
-		if msg.err != nil {
-			m.err = msg.err
-		} else {
-			m.err = nil
-			m.pausedAt = time.Time{}
-		}
+		m.handleYTDLUnpauseReconnect(msg)
 		return m, nil
 
 	case tickMsg:
@@ -582,49 +511,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case streamPlayedMsg:
-		track, _ := m.currentPlaybackTrack()
-		if msg.gen != m.requests.stream || msg.path != track.Path {
-			return m, nil
-		}
-		m.buffering = false
-		ytdlLiveDrain := m.reconnect.ytdlLiveDrain
-		m.reconnect.ytdlLiveDrain = false
-		if msg.err != nil && ytdlLiveDrain {
-			// The drained live stream did not restart. The cause may be a
-			// network outage or the end of the broadcast, so retry with
-			// backoff before giving up on it and advancing.
-			m.player.Stop()
-			if m.reconnect.attempts < ytdlLiveDrainRestarts {
-				m.scheduleReconnect(time.Now())
-				m.reconnect.ytdlLiveDrain = true
-				return m, nil
-			}
-			m.reconnect.attempts = 0
-			cmd := m.nextTrack()
-			return m, cmd
-		}
-		var resumeCmd tea.Cmd
-		if errors.Is(msg.err, playlist.ErrNeedsAuth) {
-			// The provider session went stale, for example after Spotify
-			// rejected the stream keys. Ask for sign-in, not a raw error.
-			m.provSignIn = true
-			m.err = nil
-			m.status.Warningf(statusTTLLong, "Sign-in required to play %s.", track.DisplayName())
-		} else if msg.err != nil {
-			m.err = msg.err
-			applog.Warn("play %q: %v", msg.path, msg.err)
-			if track, idx := m.currentPlaybackTrack(); idx >= 0 {
-				m.status.Errorf(statusTTLLong, "Couldn't play %s — track is gated, restricted, or unavailable.", track.DisplayName())
-			}
-		} else {
-			m.err = nil
-			m.reconnect.attempts = 0
-			m.reconnect.at = time.Time{}
-			resumeCmd = m.applyResume()
-			m.nowPlaying(track)
-		}
-		preloadCmd := m.preloadNext()
-		return m, tea.Batch(resumeCmd, preloadCmd)
+		cmd := m.handleStreamPlayed(msg)
+		return m, cmd
 
 	case streamPreloadedMsg:
 		if msg.gen != m.requests.preload {
@@ -639,17 +527,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case trackSavedMsg:
-		if msg.download {
-			m.save.finishDownload()
-		}
-		switch {
-		case msg.err == nil:
-			m.status.Showf(statusTTLMedium, "Saved to %s", msg.path)
-		case msg.download:
-			m.status.Errorf(statusTTLMedium, "Download failed: %s", msg.err)
-		default:
-			m.status.Errorf(statusTTLShort, "Save failed: %s", msg.err)
-		}
+		m.handleTrackSaved(msg)
 		return m, nil
 
 	case spotSearchResultsMsg:
