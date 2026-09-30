@@ -719,7 +719,8 @@ func (m *Model) clearResume(track playlist.Track) {
 }
 
 // applyResume seeks to the saved resume position if the current track matches.
-// yt-dlp resume is asynchronous because it rebuilds the playback pipeline.
+// A seek that restarts a decoder, as for yt-dlp or a network stream, runs in
+// the returned command so the network never blocks Update.
 func (m *Model) applyResume() tea.Cmd {
 	// secs == 0 is indistinguishable from "never played"; skip resume.
 	if m.resume.path == "" || m.resume.secs <= 0 {
@@ -741,14 +742,16 @@ func (m *Model) applyResume() tea.Cmd {
 		return nil
 	}
 	target := m.clampPosition(time.Duration(m.resume.secs) * time.Second)
-	if m.player.IsYTDLSeek() {
+	if m.needsDebouncedSeek() {
 		m.seek.active = true
 		m.seek.inFlight = true
 		m.seek.pending = false
 		m.seek.targetPos = target
 		m.seek.timer = 0
 		m.seek.timerFor = 0
-		m.player.CancelSeekYTDL()
+		if m.player.IsYTDLSeek() {
+			m.player.CancelSeekYTDL()
+		}
 		m.status.Activityf(statusTTLLong, "Resuming at %s…", formatJumpClock(target))
 		return m.seekCmd(target, true)
 	}

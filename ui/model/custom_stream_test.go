@@ -257,49 +257,72 @@ func TestReloadedResolverTracksStayOffUpdate(t *testing.T) {
 			return tracks[0]
 		}},
 	}
+	// Each action runs on the Model after the async start and returns the
+	// command of the seek. It must not call the player in Update.
+	actions := []struct {
+		name   string
+		resume bool // the startup resume hint names the track
+		act    func(m *Model, played streamPlayedMsg) tea.Cmd
+	}{
+		{name: "seek", act: func(m *Model, _ streamPlayedMsg) tea.Cmd { return m.seekAbsolute(30 * time.Second) }},
+		{name: "resume", resume: true, act: func(m *Model, played streamPlayedMsg) tea.Cmd {
+			updated, cmd := m.Update(played)
+			*m = updated.(Model)
+			return cmd
+		}},
+	}
 	keep := func(string) {}
 	for _, store := range stores {
 		for _, legacy := range []bool{false, true} {
 			for _, prefix := range prefixes {
-				name := fmt.Sprintf("%s/%s/legacy=%v", store.name, prefix, legacy)
-				t.Run(name, func(t *testing.T) {
-					strip := keep
-					if legacy {
-						strip = func(path string) {
-							data, err := os.ReadFile(path)
-							if err != nil {
-								t.Fatal(err)
-							}
-							if err := os.WriteFile(path, []byte(strings.ReplaceAll(string(data), "stream = true\n", "")), 0o644); err != nil {
-								t.Fatal(err)
+				for _, action := range actions {
+					name := fmt.Sprintf("%s/%s/legacy=%v/%s", store.name, prefix, legacy, action.name)
+					t.Run(name, func(t *testing.T) {
+						strip := keep
+						if legacy {
+							strip = func(path string) {
+								data, err := os.ReadFile(path)
+								if err != nil {
+									t.Fatal(err)
+								}
+								if err := os.WriteFile(path, []byte(strings.ReplaceAll(string(data), "stream = true\n", "")), 0o644); err != nil {
+									t.Fatal(err)
+								}
 							}
 						}
-					}
-					saved := playlist.Track{Path: prefix + "1", Title: "Song", Stream: true, DurationSecs: 200}
-					track := store.reload(t, saved, strip)
-					if track.Stream == legacy {
-						t.Fatalf("reloaded Stream = %v, want %v", track.Stream, !legacy)
-					}
+						saved := playlist.Track{Path: prefix + "1", Title: "Song", Stream: true, DurationSecs: 200}
+						track := store.reload(t, saved, strip)
+						if track.Stream == legacy {
+							t.Fatalf("reloaded Stream = %v, want %v", track.Stream, !legacy)
+						}
 
-					player := &playbackFakeEngine{seekable: true, duration: 200 * time.Second}
-					m := newCustomStreamModel(player)
-					m.player = sourceResolverEngine{player, prefixes}
-					m.playlist.Replace([]playlist.Track{track})
-					m.playlist.SetIndex(0)
+						player := &playbackFakeEngine{seekable: true, duration: 200 * time.Second}
+						m := newCustomStreamModel(player)
+						m.player = sourceResolverEngine{player, prefixes}
+						m.playlist.Replace([]playlist.Track{track})
+						m.playlist.SetIndex(0)
+						if action.resume {
+							m.SetResume(track.Path, 30)
+						}
 
-					cmd := m.playTrack(track)
-					if len(player.playCalls) != 0 || !m.buffering {
-						t.Fatalf("playTrack opened the track in Update: play calls %v, buffering %v", player.playCalls, m.buffering)
-					}
-					if msg := streamPlayedFrom(t, cmd); msg.path != track.Path {
-						t.Fatalf("async start = %+v, want %s", msg, track.Path)
-					}
+						cmd := m.playTrack(track)
+						if len(player.playCalls) != 0 || !m.buffering {
+							t.Fatalf("playTrack opened the track in Update: play calls %v, buffering %v", player.playCalls, m.buffering)
+						}
+						played := streamPlayedFrom(t, cmd)
+						if played.path != track.Path {
+							t.Fatalf("async start = %+v, want %s", played, track.Path)
+						}
 
-					seek := m.seekAbsolute(30 * time.Second)
-					if len(player.seekCalls) != 0 || seek == nil {
-						t.Fatalf("the seek ran in Update: seek calls %v, command %v", player.seekCalls, seek != nil)
-					}
-				})
+						seek := action.act(&m, played)
+						if len(player.seekCalls) != 0 || seek == nil {
+							t.Fatalf("the seek ran in Update: seek calls %v, command %v", player.seekCalls, seek != nil)
+						}
+						if action.resume && (!m.seek.inFlight || m.seek.targetPos != 30*time.Second) {
+							t.Fatalf("resume seek in flight %v to %v, want an async seek to 30s", m.seek.inFlight, m.seek.targetPos)
+						}
+					})
+				}
 			}
 		}
 	}
