@@ -77,6 +77,7 @@ func TestInlineOverlaysFitTerminal(t *testing.T) {
 			t.Run(fmt.Sprintf("%s_%dx%d", ov.name, sz.w, sz.h), func(t *testing.T) {
 				m := newInlineOverlayModel(t, sz.w, sz.h)
 				ov.set(&m)
+				m.recomputeLayout()
 
 				out := m.View().Content
 				if got := lipgloss.Height(out); got > sz.h {

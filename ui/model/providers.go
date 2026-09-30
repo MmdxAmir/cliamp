@@ -38,6 +38,7 @@ func (m *Model) StartInProvider() {
 		m.focus = focusProvider
 		m.resetProviderNav()
 		_, m.openDefaultProviderOnce = m.provider.(provider.DefaultBrowseModeProvider)
+		m.recomputeLayout()
 	}
 }
 

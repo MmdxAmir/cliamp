@@ -162,12 +162,12 @@ func playlistLabel(prefix string, p playlist.PlaylistInfo) string {
 	return out
 }
 
-// View renders the full TUI frame. A headless Model renders nothing.
+// View renders the full TUI frame from the layout that Update keeps current.
+// A headless Model renders nothing.
 func (m Model) View() tea.View {
 	if m.quitting || m.headless {
 		return tea.NewView("")
 	}
-	m.recomputeLayout()
 	if m.layout.tooSmall() {
 		content := fmt.Sprintf("Terminal too small. Resize to at least 40x10 (current: %dx%d).", m.width, m.height)
 		view := tea.NewView(ui.FitRect(content, max(1, m.width), max(1, m.height)))

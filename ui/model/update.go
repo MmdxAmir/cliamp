@@ -8,9 +8,9 @@ import (
 )
 
 // Update handles messages: key presses, ticks, and window resizes. After each
-// message it drops a gapless preload that no longer matches the next track,
-// and it tells the media controls and plugins when the playback state
-// changed.
+// message it lays out the frame for View, drops a gapless preload that no
+// longer matches the next track, and it tells the media controls and plugins
+// when the playback state changed.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(spinnerTickMsg); ok {
 		m.spinnerTicking = m.spinnerVisible()
@@ -22,6 +22,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	spinning := m.spinnerVisible()
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
+		nm.recomputeLayout()
 		nm.dropStalePreload()
 		nm.notifyPlaybackChange()
 		// A load that starts now gets its own redraws at once. The main tick

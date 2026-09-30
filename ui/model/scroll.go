@@ -120,9 +120,6 @@ func (m Model) playlistScroll(visible int) int {
 }
 
 func (m Model) mainFrameFixedLines(includeTransient bool) int {
-	if m.layout.frameWidth == 0 {
-		m.recomputeLayout()
-	}
 	fixed := 2*m.layout.paddingV + m.layout.fixedRows
 	if includeTransient {
 		fixed += m.layout.footerRows

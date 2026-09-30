@@ -12,7 +12,6 @@ import (
 )
 
 func TestPlaylistStateMarkersStayVisibleWithoutColor(t *testing.T) {
-
 	p := playlist.New()
 	p.Add(
 		playlist.Track{Path: "/playing.mp3", Title: "Playing"},
@@ -46,7 +45,6 @@ func TestPlaylistStateMarkersStayVisibleWithoutColor(t *testing.T) {
 }
 
 func TestPlaylistShowsKnownTrackDuration(t *testing.T) {
-
 	p := playlist.New()
 	p.Add(playlist.Track{Title: "Timed", DurationSecs: 222})
 	m := Model{

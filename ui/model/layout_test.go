@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -543,6 +544,7 @@ func TestInlineOverlaysFitResponsiveTerminal(t *testing.T) {
 			t.Run(fmt.Sprintf("%s_%dx%d", overlay.name, size.width, size.height), func(t *testing.T) {
 				m := newLayoutTestModel(size.width, size.height)
 				overlay.set(&m)
+				m.recomputeLayout()
 				assertViewFits(t, m.View().Content, size.width, size.height)
 			})
 		}
@@ -639,5 +641,61 @@ func TestSetExpandedIsInertOnTheSimplifiedPlaybackScreen(t *testing.T) {
 	m.SetExpanded(true)
 	if m.plVisible != 0 {
 		t.Fatalf("simplified playback playlist rows = %d, want 0", m.plVisible)
+	}
+}
+
+// TestUpdateKeepsLayoutCurrent checks that the layout that View reads is the
+// one the state asks for after every message, so that View does not have to
+// lay out the frame itself.
+func TestUpdateKeepsLayoutCurrent(t *testing.T) {
+	m := newLayoutTestModel(80, 24)
+	openDevicePicker := func(m *Model) {
+		m.devicePicker.visible, m.devicePicker.loading = true, true
+		m.recomputeLayout()
+	}
+	msgs := []struct {
+		name   string
+		before func(*Model)
+		msg    tea.Msg
+	}{
+		{name: "resize to the compact tier", msg: tea.WindowSizeMsg{Width: 60, Height: 18}},
+		{name: "resize to the full tier", msg: tea.WindowSizeMsg{Width: 120, Height: 40}},
+		{name: "open the keymap", msg: tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}},
+		{name: "close the keymap", msg: tea.KeyPressMsg{Code: tea.KeyEscape}},
+		{name: "full-screen visualizer", msg: tea.KeyPressMsg{Code: 'V', Text: "V"}},
+		{name: "leave the full-screen visualizer", msg: tea.KeyPressMsg{Code: tea.KeyEscape}},
+		{name: "status message", msg: ShowStatusMsg{Text: "Saved"}},
+		// A failed device list closes the picker outside the key path.
+		{name: "device list failed", before: openDevicePicker, msg: devicesListedMsg{err: errors.New("no devices")}},
+		{name: "resize to the minimal tier", msg: tea.WindowSizeMsg{Width: 45, Height: 12}},
+	}
+	for _, step := range msgs {
+		if step.before != nil {
+			step.before(&m)
+		}
+		updated, _ := m.Update(step.msg)
+		m = updated.(Model)
+		want := m
+		want.recomputeLayout()
+		if m.layout != want.layout || m.plVisible != want.plVisible {
+			t.Fatalf("after %s: layout = %+v, plVisible %d; want %+v, plVisible %d", step.name, m.layout, m.plVisible, want.layout, want.plVisible)
+		}
+	}
+}
+
+// TestViewLeavesLayoutState checks that View reads the layout and the
+// visualizer size and never writes them.
+func TestViewLeavesLayoutState(t *testing.T) {
+	m := newLayoutTestModel(100, 30)
+	layout := m.layout
+	m.vis.Cols, m.vis.Rows = 7, 3
+
+	m.View()
+
+	if m.vis.Cols != 7 || m.vis.Rows != 3 {
+		t.Fatalf("visualizer size after View = %dx%d, want 7x3", m.vis.Cols, m.vis.Rows)
+	}
+	if m.layout != layout {
+		t.Fatalf("layout after View = %+v, want %+v", m.layout, layout)
 	}
 }
