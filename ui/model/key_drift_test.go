@@ -186,6 +186,22 @@ func methodCalls(fd *ast.FuncDecl) []string {
 	return names
 }
 
+// shortcutKeys returns the provider shortcut keys that a handler takes
+// through the helpers in calls. quickSwitchProvider takes every key of
+// providerKeyForShortcut. providerShortcut takes every key but N.
+func shortcutKeys(t *testing.T, funcs map[string]*ast.FuncDecl, calls []string) []string {
+	t.Helper()
+	quick := slices.Contains(calls, "quickSwitchProvider")
+	if !quick && !slices.Contains(calls, "providerShortcut") {
+		return nil
+	}
+	keys := handlerKeys(t, lookupFunc(t, funcs, "providerKeyForShortcut"))
+	if !quick {
+		keys = slices.DeleteFunc(keys, func(key string) bool { return key == "N" })
+	}
+	return keys
+}
+
 // isMsgString reports whether e is msg.String().
 func isMsgString(e ast.Expr) bool {
 	call, ok := e.(*ast.CallExpr)
@@ -263,6 +279,28 @@ func shortcut(key string) string {
 	}
 }
 
+func TestShortcutKeysFollowsTheShortcutHelpers(t *testing.T) {
+	funcs := modelFuncs(t)
+	tests := []struct {
+		name  string
+		calls []string
+		want  []string
+	}{
+		{name: "quick switch takes N", calls: []string{"editText", "quickSwitchProvider"},
+			want: []string{"S", "N", "P", "J", "E", "B", "Y", "C", "X", "M", "Q", "T", "L", "R", "O"}},
+		{name: "shortcut leaves N", calls: []string{"providerShortcut"},
+			want: []string{"S", "P", "J", "E", "B", "Y", "C", "X", "M", "Q", "T", "L", "R", "O"}},
+		{name: "other calls take none", calls: []string{"editText", "switchToProvider"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shortcutKeys(t, funcs, tt.calls); !slices.Equal(got, tt.want) {
+				t.Errorf("shortcutKeys = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // subKeyHandlers maps the handlers that serve another command mode than
 // the handler that calls them, such as the text field of an overlay. Any
 // other handler serves the mode of its caller.
@@ -286,6 +324,7 @@ var listKeys = []string{"up", "down", "k", "j", "pgup", "pgdown", "ctrl+u", "ctr
 // unlistedKeys holds the keys that a handler takes but that commandRegistry
 // does not list for the mode of the handler. The keymap and the help line do
 // not show them. Most are second keys for Esc or Enter, such as q, h and l.
+// The provider shortcuts, such as S and T, have rows only in the main mode.
 // The others are actions with no row yet. When a key gets a registry row,
 // delete it here.
 var unlistedKeys = map[string][]string{
@@ -296,7 +335,7 @@ var unlistedKeys = map[string][]string{
 	"handleLyricsKey":            {"y"},
 	"handleNavAlbumListKey":      {"l", "right", "s", "h", "left", "backspace"},
 	"handleNavArtistListKey":     {"l", "right", "h", "left", "backspace"},
-	"handleNavBrowserKey":        {"N", "ctrl+f"},
+	"handleNavBrowserKey":        {"N", "ctrl+f", "S", "P", "J", "E", "B", "Y", "C", "X", "M", "Q", "T", "L", "O"},
 	"handleNavGenreListKey":      {"l", "right", "h", "left", "backspace"},
 	"handleNavGenreSortKey":      {"l", "right", "h", "left", "backspace"},
 	"handleNavMenuKey":           {"l", "right", "N", "backspace", "b"},
@@ -306,10 +345,11 @@ var unlistedKeys = map[string][]string{
 	"handlePlMgrFilterKey":       {"backspace"},
 	"handlePlMgrListKey":         {"y", "Y", "/", "l", "right", "w", "r", "d", "u", "p"},
 	"handlePlMgrTracksKey":       {"ctrl+h", "/", "p", "space", "s", "w", "o", "d", "u", "backspace", "h", "left"},
+	"handlePlaylistManagerKey":   {"S", "N", "P", "J", "E", "B", "Y", "C", "X", "M", "Q", "T", "L", "R", "O"},
 	"handlePlaylistPickerKey":    {"backspace", "q"},
 	"handleProvPillKey":          {"left", "h", "right", "l", "space"},
 	"handleProvSearchKey":        {"ctrl+n", "ctrl+p"},
-	"handleProviderPaneKey":      {"y", "Y", "n", "space", "/", "o", "ctrl+j", "ctrl+f"},
+	"handleProviderPaneKey":      {"y", "Y", "n", "space", "/", "o", "ctrl+j", "ctrl+f", "S", "P", "J", "E", "B", "C", "X", "M", "Q", "T", "L", "R", "O"},
 	"handleQueueKey":             {"?", "shift+up", "shift+down", "A"},
 	"handleSearchKey":            {"ctrl+n", "ctrl+p", "tab"},
 	"handleSpeedKey":             {"l", "h", "esc", "backspace"},
@@ -365,8 +405,9 @@ func keyHandlerModes(t *testing.T, funcs map[string]*ast.FuncDecl) map[string]co
 // TestKeyHandlersMatchCommandRegistry is a drift guard for the overlays and
 // for the focused areas with their own command mode. Each key that a handler
 // takes needs a registry row in the mode of the handler, or an entry in
-// unlistedKeys. Each key that a registry row offers in such a mode needs a
-// handler of that mode. The keymap runs a row by sending its key.
+// unlistedKeys. The keys of shortcutKeys count as keys of the handler. Each
+// key that a registry row offers in such a mode needs a handler of that
+// mode. The keymap runs a row by sending its key.
 func TestKeyHandlersMatchCommandRegistry(t *testing.T) {
 	funcs := modelFuncs(t)
 	modes := keyHandlerModes(t, funcs)
@@ -379,9 +420,15 @@ func TestKeyHandlersMatchCommandRegistry(t *testing.T) {
 		mode := modes[name]
 		fd := lookupFunc(t, funcs, name)
 		keys := handlerKeys(t, fd)
+		calls := methodCalls(fd)
+		for _, key := range shortcutKeys(t, funcs, calls) {
+			if !slices.Contains(keys, key) {
+				keys = append(keys, key)
+			}
+		}
 		handlers[mode] = append(handlers[mode], name)
 		taken[mode] = append(taken[mode], keys...)
-		if slices.Contains(methodCalls(fd), "editText") {
+		if slices.Contains(calls, "editText") {
 			taken[mode] = append(taken[mode], editorKeys...)
 		}
 		for _, key := range keys {
