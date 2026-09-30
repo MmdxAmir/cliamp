@@ -13,6 +13,7 @@ import (
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
+	"github.com/bjarneo/cliamp/ui/model"
 )
 
 // isolateProviderEnv points every config and credential lookup at a new
@@ -73,6 +74,29 @@ func TestBuildProviders(t *testing.T) {
 			}
 		})
 	}
+}
+
+// With no HOME, XDG_CONFIG_HOME or CLIAMP_CONFIG_DIR, cliamp has no config
+// directory and no local provider. The Model then starts without one and
+// does not panic.
+func TestBuildProvidersWithoutConfigDir(t *testing.T) {
+	for _, name := range []string{"HOME", "CLIAMP_CONFIG_DIR", "XDG_CONFIG_HOME", "NAVIDROME_URL", "LYRION_URL"} {
+		t.Setenv(name, "")
+	}
+	set := buildProviders(config.Config{}, false)
+	t.Cleanup(set.Close)
+	if set.local != nil {
+		t.Fatal("local provider set without a config directory")
+	}
+	for _, e := range set.entries {
+		if e.Key == "local" {
+			t.Fatal("the provider list has a local entry without a config directory")
+		}
+	}
+	if lp := set.localPlaylists(); lp != nil {
+		t.Fatalf("localPlaylists() = %#v, want a nil interface", lp)
+	}
+	model.New(&player.Player{}, playlist.New(), set.entries, "cliamp", set.localPlaylists(), nil, nil, config.SaveFunc{})
 }
 
 // fakeStreamer decodes fake: URIs, as Spotify decodes spotify: URIs, and

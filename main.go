@@ -170,7 +170,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		defer luaMgr.Close()
 	}
 
-	m := model.New(p, pl, providers.entries, defaultProvider, providers.local, themes, luaMgr, config.SaveFunc{})
+	m := model.New(p, pl, providers.entries, defaultProvider, providers.localPlaylists(), themes, luaMgr, config.SaveFunc{})
 	m.SetRadioFavorites(providers.radioFavorites)
 	if defaultProvider == "jellyfin" && jellyProv != nil {
 		m.SetResumeSaver(func(track playlist.Track, positionSec int, context []playlist.Track, contextIndex int) {

@@ -222,6 +222,16 @@ func (s *providerSet) Close() {
 	}
 }
 
+// localPlaylists returns the local provider for model.New. With no config
+// directory it returns a nil interface. A nil *local.Provider in the
+// interface would look set to the Model, which then calls it and panics.
+func (s *providerSet) localPlaylists() playlist.Provider {
+	if s.local == nil {
+		return nil
+	}
+	return s.local
+}
+
 // jellyfin returns the Jellyfin provider, or nil when it is not configured.
 func (s *providerSet) jellyfin() *jellyfin.Provider {
 	for _, e := range s.entries {
