@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -276,7 +278,7 @@ func youTubeEntries(cfg config.Config, interactive bool) []provider.Entry {
 		fmt.Fprintf(os.Stderr, "Install command: %s\n\n", player.YtdlpInstallHint())
 		if offerYTDLPInstall(interactive, os.Stdin, os.Stderr) {
 			fmt.Fprintf(os.Stderr, "Installing yt-dlp...\n")
-			if err := player.InstallYTDLP(); err != nil {
+			if err := installYTDLP(); err != nil {
 				fmt.Fprintf(os.Stderr, "Installation failed: %v\n", err)
 				fmt.Fprintf(os.Stderr, "YouTube providers disabled. Install manually and restart.\n\n")
 			} else {
@@ -556,6 +558,49 @@ func offerYTDLPInstall(interactive bool, in io.Reader, out io.Writer) bool {
 	}
 	fmt.Fprint(out, "Skipped. YouTube providers are disabled.\n\n")
 	return false
+}
+
+// installYTDLP attempts to install yt-dlp using the system package manager.
+// Returns nil on success. The caller should re-check player.YTDLPAvailable()
+// after.
+func installYTDLP() error {
+	switch runtime.GOOS {
+	case "darwin":
+		if _, err := exec.LookPath("brew"); err == nil {
+			cmd := exec.Command("brew", "install", "yt-dlp")
+			cmd.Stdout = os.Stderr
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		}
+		// Fall through to pip
+	case "linux":
+		if _, err := exec.LookPath("apt-get"); err == nil {
+			cmd := exec.Command("sudo", "apt-get", "install", "-y", "yt-dlp")
+			cmd.Stdout = os.Stderr
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		}
+		if _, err := exec.LookPath("pacman"); err == nil {
+			cmd := exec.Command("sudo", "pacman", "-S", "--noconfirm", "yt-dlp")
+			cmd.Stdout = os.Stderr
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		}
+	}
+	// Fallback: pip/pipx
+	if path, err := exec.LookPath("pipx"); err == nil {
+		cmd := exec.Command(path, "install", "yt-dlp")
+		cmd.Stdout = os.Stderr
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+	if path, err := exec.LookPath("pip3"); err == nil {
+		cmd := exec.Command(path, "install", "yt-dlp")
+		cmd.Stdout = os.Stderr
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+	return fmt.Errorf("no supported package manager found — install manually: https://github.com/yt-dlp/yt-dlp#installation")
 }
 
 // isCharDevice reports whether f is a character device, such as a terminal.
