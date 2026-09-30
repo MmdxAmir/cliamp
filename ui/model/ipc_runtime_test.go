@@ -328,7 +328,7 @@ func TestV2DeviceResponseRecordsDevice(t *testing.T) {
 		wantSaved  map[string]string
 	}{
 		{name: "list", response: deviceListResponse(devices), wantDevice: "headphones"},
-		{name: "switch", response: ipc.Response{OK: true, Device: "usb"}, wantDevice: "usb", wantSaved: map[string]string{"audio_device": "usb"}},
+		{name: "switch", response: ipc.Response{OK: true, Device: "usb"}, wantDevice: "usb", wantSaved: map[string]string{"audio_device": `"usb"`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			saver := &recordingSaver{}

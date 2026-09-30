@@ -18,25 +18,56 @@ import (
 	"github.com/bjarneo/cliamp/ui"
 )
 
-// ConfigSaver persists individual config key-value pairs.
+// ConfigSaver persists top-level config keys with typed values.
 // Satisfied by config.SaveFunc (the default) or a test stub.
 type ConfigSaver interface {
-	Save(key, value string) error
+	SaveString(key, value string) error
+	SaveBool(key string, value bool) error
+	SaveFloat(key string, value float64, prec int) error
+	SaveFloats(key string, values []float64) error
 }
 
 // ResumeSaver persists the active track, timeline position, and source context.
 type ResumeSaver func(track playlist.Track, positionSec int, context []playlist.Track, contextIndex int)
 
-// saveConfigKey persists a top-level config key, surfacing a write failure in
-// the status line. It is a no-op when no saver is wired, so headless callers
-// and tests can toggle settings without touching the config file.
-func (m *Model) saveConfigKey(key, value string) {
+// The saveConfig* helpers persist a top-level config key and show a write
+// failure in the status line. They return the error, so an IPC job can fail
+// too. They do nothing when no saver is wired, so tests can change settings
+// without touching the config file.
+
+func (m *Model) saveConfigString(key, value string) error {
 	if m.configSaver == nil {
-		return
+		return nil
 	}
-	if err := m.configSaver.Save(key, value); err != nil {
+	return m.reportConfigSave(m.configSaver.SaveString(key, value))
+}
+
+func (m *Model) saveConfigBool(key string, value bool) error {
+	if m.configSaver == nil {
+		return nil
+	}
+	return m.reportConfigSave(m.configSaver.SaveBool(key, value))
+}
+
+func (m *Model) saveConfigFloat(key string, value float64, prec int) error {
+	if m.configSaver == nil {
+		return nil
+	}
+	return m.reportConfigSave(m.configSaver.SaveFloat(key, value, prec))
+}
+
+func (m *Model) saveConfigFloats(key string, values []float64) error {
+	if m.configSaver == nil {
+		return nil
+	}
+	return m.reportConfigSave(m.configSaver.SaveFloats(key, values))
+}
+
+func (m *Model) reportConfigSave(err error) error {
+	if err != nil {
 		m.status.Errorf(statusTTLDefault, "Config save failed: %s", err)
 	}
+	return err
 }
 
 type focusArea int

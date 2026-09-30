@@ -268,7 +268,7 @@ func (m *Model) toggleAlbumHeadersManual() {
 // listener left it on the next launch.
 func (m *Model) toggleHelpBar() {
 	m.SetHideHelpBar(!m.hideHelpBar)
-	m.saveConfigKey("hide_help_bar", fmt.Sprintf("%v", m.hideHelpBar))
+	_ = m.saveConfigBool("hide_help_bar", m.hideHelpBar)
 }
 
 // toggleSettingsPane opens or closes the settings pane beside the playlist and
@@ -277,7 +277,7 @@ func (m *Model) toggleHelpBar() {
 // and keeps a source and volume row above it.
 func (m *Model) toggleSettingsPane() {
 	m.SetHideSettingsPane(!m.hideSettings)
-	m.saveConfigKey("hide_settings_pane", fmt.Sprintf("%v", m.hideSettings))
+	_ = m.saveConfigBool("hide_settings_pane", m.hideSettings)
 }
 
 // minTracksPerAlbum is the threshold at which a list is considered cohesive

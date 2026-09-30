@@ -118,17 +118,17 @@ func TestToggleHelpBar(t *testing.T) {
 // TestToggleHelpBarPersists checks that the runtime toggle writes the choice to
 // the config, so the hint bar comes back the way it was left.
 func TestToggleHelpBarPersists(t *testing.T) {
-	saver := &recordingConfigSaver{}
+	saver := &recordingSaver{}
 	m := newColumnTestModel(80, 24)
 	m.configSaver = saver
 
 	m.toggleHelpBar()
-	if got := saver.values["hide_help_bar"]; got != "true" {
+	if got := saver.saved["hide_help_bar"]; got != "true" {
 		t.Fatalf("saved hide_help_bar = %q, want %q", got, "true")
 	}
 
 	m.toggleHelpBar()
-	if got := saver.values["hide_help_bar"]; got != "false" {
+	if got := saver.saved["hide_help_bar"]; got != "false" {
 		t.Fatalf("saved hide_help_bar = %q, want %q", got, "false")
 	}
 }

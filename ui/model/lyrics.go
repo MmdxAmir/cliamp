@@ -3,7 +3,6 @@ package model
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -159,7 +158,7 @@ func (m *Model) nudgeLyricsOffset(delta time.Duration) tea.Cmd {
 	}
 	m.lyrics.offset = offset
 	m.status.Warningf(statusTTLDefault, "Lyrics offset: %s", formatLyricsOffset(offset))
-	m.saveConfigKey("lyrics_offset_ms", strconv.Itoa(int(offset.Milliseconds())))
+	_ = m.saveConfigFloat("lyrics_offset_ms", float64(offset.Milliseconds()), 0)
 	return nil
 }
 

@@ -1044,12 +1044,12 @@ func (c *Config) setTopLevel(key, val string) {
 	}
 }
 
-// Save updates only the given key in the existing config file, preserving
+// save updates only the given key in the existing config file, preserving
 // all other content, comments, and formatting. If the key doesn't exist,
 // it is appended. If no config file exists, one is created with just that key.
-// value is the TOML text of the value. SaveString, SaveBool and SaveFloat
-// format it for you.
-func Save(key, value string) error {
+// value is the TOML text of the value. The typed savers SaveString, SaveBool,
+// SaveFloat and SaveFloats format it.
+func save(key, value string) error {
 	if strings.ContainsAny(key+value, "\r\n") {
 		return fmt.Errorf("save %s: a key or value holds a line break", key)
 	}

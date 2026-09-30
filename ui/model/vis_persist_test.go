@@ -4,20 +4,26 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/ui"
 )
 
 // recordingSaver captures config writes so a test can assert what was
-// persisted without touching the real config file.
+// persisted without touching the real config file. saved holds the TOML
+// text that config.SaveFunc writes for each key.
 type recordingSaver struct {
 	saved map[string]string
 	err   error
 }
 
-func (s *recordingSaver) Save(key, value string) error {
+func (s *recordingSaver) record(key, value string) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -26,6 +32,26 @@ func (s *recordingSaver) Save(key, value string) error {
 	}
 	s.saved[key] = value
 	return nil
+}
+
+func (s *recordingSaver) SaveString(key, value string) error {
+	return s.record(key, config.QuoteString(value))
+}
+
+func (s *recordingSaver) SaveBool(key string, value bool) error {
+	return s.record(key, strconv.FormatBool(value))
+}
+
+func (s *recordingSaver) SaveFloat(key string, value float64, prec int) error {
+	return s.record(key, strconv.FormatFloat(value, 'f', prec, 64))
+}
+
+func (s *recordingSaver) SaveFloats(key string, values []float64) error {
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	return s.record(key, "["+strings.Join(parts, ", ")+"]")
 }
 
 func visTestModel(saver ConfigSaver) *Model {
@@ -157,5 +183,45 @@ func TestVisualizerSaveFailureFailsTheJob(t *testing.T) {
 	}
 	if job.State != ipc.JobFailed {
 		t.Errorf("job state = %v, want failed when the config write fails", job.State)
+	}
+}
+
+// Each config write of the Model goes through a typed saver. A string such
+// as an audio device name is quoted, a failed write shows in the status
+// line, and a Model with no saver writes nothing.
+func TestConfigWritesUseTypedSavers(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		run       func(m *Model)
+		key, want string
+	}{
+		{name: "v key", run: func(m *Model) { m.handleKey(tea.KeyPressMsg{Text: "v"}) }, key: "visualizer", want: `"BarsDot"`},
+		{name: "device switch", run: func(m *Model) {
+			next, _ := m.Update(deviceSwitchedMsg{name: `USB "Pro" #2`})
+			*m = next.(Model)
+		}, key: "audio_device", want: `"USB \"Pro\" #2"`},
+		{name: "V2 device switch", run: func(m *Model) { m.applyV2DeviceResponse(ipc.Response{OK: true, Device: "usb"}) }, key: "audio_device", want: `"usb"`},
+		{name: "help bar", run: func(m *Model) { m.toggleHelpBar() }, key: "hide_help_bar", want: "true"},
+		{name: "speed", run: func(m *Model) { m.player.SetSpeed(1.25); m.saveSpeed() }, key: "speed", want: "1.25"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			saver := &recordingSaver{}
+			m := newColumnTestModel(100, 30)
+			m.configSaver = saver
+			tc.run(&m)
+			if got := saver.saved[tc.key]; got != tc.want {
+				t.Fatalf("saved %s = %q, want %q", tc.key, got, tc.want)
+			}
+
+			m = newColumnTestModel(100, 30)
+			m.configSaver = &recordingSaver{err: errors.New("disk full")}
+			tc.run(&m)
+			if !strings.Contains(m.status.text, "Config save failed: disk full") {
+				t.Fatalf("status = %q, want the config save error", m.status.text)
+			}
+
+			m = newColumnTestModel(100, 30)
+			tc.run(&m)
+		})
 	}
 }

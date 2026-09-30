@@ -26,7 +26,7 @@ func readConfig(t *testing.T, home string) string {
 func TestSaveCreatesConfigFile(t *testing.T) {
 	home := withHome(t)
 
-	if err := Save("volume", "-6"); err != nil {
+	if err := save("volume", "-6"); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -47,7 +47,7 @@ func TestSaveReplacesExistingKey(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	if err := Save("volume", "-3"); err != nil {
+	if err := save("volume", "-3"); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -74,7 +74,7 @@ func TestSaveInsertsBeforeFirstSection(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	if err := Save("volume", "-6"); err != nil {
+	if err := save("volume", "-6"); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -103,7 +103,7 @@ func TestSaveDoesNotMatchKeyInSection(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	if err := Save("volume", "-6"); err != nil {
+	if err := save("volume", "-6"); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -185,20 +185,6 @@ func TestSaveNavidromeSortAppendsKeyInExistingSection(t *testing.T) {
 	}
 }
 
-func TestSaveFuncDelegates(t *testing.T) {
-	home := withHome(t)
-
-	var f SaveFunc
-	if err := f.Save("test_key", "123"); err != nil {
-		t.Fatalf("SaveFunc.Save: %v", err)
-	}
-
-	got := readConfig(t, home)
-	if !strings.Contains(got, "test_key = 123") {
-		t.Errorf("config should contain 'test_key = 123':\n%s", got)
-	}
-}
-
 func TestSaveMixcloudStylesReplacesOnlyMixcloudStyles(t *testing.T) {
 	home := withHome(t)
 	dir := filepath.Join(home, ".config", "cliamp")
@@ -258,7 +244,7 @@ func TestSaveWithCommentedSectionHeaders(t *testing.T) {
 		{
 			name:    "top-level key inserted before the header",
 			initial: "[radio] # home\nvolume = 1\n",
-			save:    func() error { return Save("volume", "-6") },
+			save:    func() error { return save("volume", "-6") },
 			want:    "volume = -6\n[radio] # home\nvolume = 1\n",
 		},
 	}
@@ -328,6 +314,13 @@ func TestTypedSavers(t *testing.T) {
 			want:     -6.0,
 		},
 		{
+			name:     "floats",
+			save:     func() error { return SaveFloats("eq", []float64{6, 4.5, -2, 0, 0, 0, 0, 0, 0, -12}) },
+			wantLine: "eq = [6, 4.5, -2, 0, 0, 0, 0, 0, 0, -12]",
+			got:      func(c Config) any { return c.EQ },
+			want:     [10]float64{6, 4.5, -2, 0, 0, 0, 0, 0, 0, -12},
+		},
+		{
 			name:     "SaveFunc string",
 			save:     func() error { return SaveFunc{}.SaveString("theme", `a "b" \ c`) },
 			wantLine: `theme = "a \"b\" \\ c"`,
@@ -347,6 +340,13 @@ func TestTypedSavers(t *testing.T) {
 			wantLine: "speed = 0.75",
 			got:      func(c Config) any { return c.Speed },
 			want:     0.75,
+		},
+		{
+			name:     "SaveFunc floats",
+			save:     func() error { return SaveFunc{}.SaveFloats("eq", []float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) },
+			wantLine: "eq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]",
+			got:      func(c Config) any { return c.EQ },
+			want:     [10]float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 		},
 	}
 	for _, tt := range tests {
@@ -375,8 +375,8 @@ func TestSaveRejectsLineBreaks(t *testing.T) {
 		save func() error
 	}{
 		{"newline in string", func() error { return SaveString("theme", "a\nshuffle = true") }},
-		{"carriage return in raw value", func() error { return Save("theme", "\"a\"\r") }},
-		{"newline in key", func() error { return Save("theme\n[plex]", `"a"`) }},
+		{"carriage return in raw value", func() error { return save("theme", "\"a\"\r") }},
+		{"newline in key", func() error { return save("theme\n[plex]", `"a"`) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

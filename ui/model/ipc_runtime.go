@@ -3,7 +3,6 @@ package model
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -355,7 +354,7 @@ func (m *Model) handleV2Theme(jobs *ipc.JobStore, jobID string, request ipc.Requ
 	if theme.IsDefaultName(themeName) {
 		themeName = ""
 	}
-	if err := m.configSaver.Save("theme", fmt.Sprintf("%q", themeName)); err != nil {
+	if err := m.saveConfigString("theme", themeName); err != nil {
 		m.failV2Job(jobs, jobID, v2InternalError())
 		return nil
 	}
@@ -408,13 +407,7 @@ func (m *Model) handleV2Visualizer(jobs *ipc.JobStore, jobID string, request ipc
 // player and was then lost on the next launch, unlike the theme operation
 // beside it, which has always persisted its choice.
 func (m *Model) saveVisualizerChoice() error {
-	if m.configSaver == nil {
-		return nil
-	}
-	if err := m.configSaver.Save("visualizer", fmt.Sprintf("%q", m.vis.ModeName())); err != nil {
-		return fmt.Errorf("saving visualizer %q: %w", m.vis.ModeName(), err)
-	}
-	return nil
+	return m.saveConfigString("visualizer", m.vis.ModeName())
 }
 
 func (m *Model) handleV2Device(jobs *ipc.JobStore, jobID string, request ipc.Request) tea.Cmd {
@@ -466,7 +459,7 @@ func (m *Model) applyV2DeviceResponse(response ipc.Response) {
 	}
 	if response.Device != "" {
 		m.audioDevice = response.Device
-		_ = m.configSaver.Save("audio_device", response.Device)
+		_ = m.saveConfigString("audio_device", response.Device)
 		m.devicePicker.devices = nil
 	}
 }
@@ -503,7 +496,7 @@ func (m *Model) handleV2Mode(jobs *ipc.JobStore, jobID string, request ipc.Reque
 			m.playlist.ToggleShuffle()
 		}
 		value := m.playlist.Shuffled()
-		m.saveConfigKey("shuffle", fmt.Sprintf("%v", value))
+		_ = m.saveConfigBool("shuffle", value)
 		cmd := m.rearmPreload()
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Shuffle: &value})
 		return cmd
@@ -518,7 +511,7 @@ func (m *Model) handleV2Mode(jobs *ipc.JobStore, jobID string, request ipc.Reque
 		default:
 			m.playlist.CycleRepeat()
 		}
-		m.saveConfigKey("repeat", fmt.Sprintf("%q", m.playlist.Repeat().String()))
+		_ = m.saveConfigString("repeat", m.playlist.Repeat().String())
 		cmd := m.rearmPreload()
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Repeat: m.playlist.Repeat().String()})
 		return cmd

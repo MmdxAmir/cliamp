@@ -102,7 +102,7 @@ func TestMetadataFollowsSelectionWithoutFetching(t *testing.T) {
 	}
 	m.plCursor = 1
 	m.SetShowMetadata(true)
-	saver := &recordingConfigSaver{}
+	saver := &recordingSaver{}
 	m.configSaver = saver
 	tracks := m.playlist.Tracks()
 
@@ -114,8 +114,8 @@ func TestMetadataFollowsSelectionWithoutFetching(t *testing.T) {
 			}
 			m.View()
 		}
-		if !m.showMetadata || m.showInfo || len(saver.values) != 0 || p.fetches != 0 {
-			t.Fatalf("render changed metadata state or performed I/O: shown=%v info=%v saves=%v fetches=%d", m.showMetadata, m.showInfo, saver.values, p.fetches)
+		if !m.showMetadata || m.showInfo || len(saver.saved) != 0 || p.fetches != 0 {
+			t.Fatalf("render changed metadata state or performed I/O: shown=%v info=%v saves=%v fetches=%d", m.showMetadata, m.showInfo, saver.saved, p.fetches)
 		}
 		if got, _ := m.currentPlaybackTrack(); got.Path != playing.Path {
 			t.Fatalf("inspection changed playback to %q", got.Path)
@@ -200,7 +200,7 @@ func TestMetadataMissingSelectionAndPathPrivacy(t *testing.T) {
 
 func TestMetadataToggleDefaultsAndPersistence(t *testing.T) {
 	m := newColumnTestModel(80, 24)
-	saver := &recordingConfigSaver{}
+	saver := &recordingSaver{}
 	m.configSaver = saver
 	before := m.layout
 	if m.showMetadata || m.metadataPaneRows(20) != 0 || strings.Contains(ansi.Strip(m.View().Content), "Metadata [Ctrl+I]") {
@@ -212,8 +212,8 @@ func TestMetadataToggleDefaultsAndPersistence(t *testing.T) {
 		if cmd != nil || m.showMetadata != want || m.showInfo {
 			t.Fatalf("toggle: shown=%v info=%v command=%v, want shown=%v without overlay or command", m.showMetadata, m.showInfo, cmd != nil, want)
 		}
-		if len(saver.values) != 1 || saver.values["show_metadata"] != strconv.FormatBool(want) {
-			t.Fatalf("saved config = %v, want only show_metadata=%v", saver.values, want)
+		if len(saver.saved) != 1 || saver.saved["show_metadata"] != strconv.FormatBool(want) {
+			t.Fatalf("saved config = %v, want only show_metadata=%v", saver.saved, want)
 		}
 		if got := strings.Contains(ansi.Strip(m.View().Content), "Metadata [Ctrl+I]"); got != want {
 			t.Fatalf("metadata header visible = %v, want %v", got, want)
@@ -244,12 +244,12 @@ func TestMetadataShortcutLeavesTabNavigationIntact(t *testing.T) {
 	} {
 		t.Run(tt.key.String(), func(t *testing.T) {
 			m := newColumnTestModel(80, 24)
-			saver := &recordingConfigSaver{}
+			saver := &recordingSaver{}
 			m.configSaver = saver
 			updated, _ := m.Update(tt.key)
 			m = updated.(Model)
-			if m.focus != tt.want || m.showMetadata || m.showInfo || len(saver.values) != 0 {
-				t.Fatalf("%s: focus=%s metadata=%v info=%v saves=%v", tt.key.String(), m.focus.label(), m.showMetadata, m.showInfo, saver.values)
+			if m.focus != tt.want || m.showMetadata || m.showInfo || len(saver.saved) != 0 {
+				t.Fatalf("%s: focus=%s metadata=%v info=%v saves=%v", tt.key.String(), m.focus.label(), m.showMetadata, m.showInfo, saver.saved)
 			}
 		})
 	}
@@ -268,7 +268,7 @@ func TestMetadataLayoutAndFocusBudget(t *testing.T) {
 			m.playlist.SetTrack(0, playlist.Track{Title: strings.Repeat("\u754ce\u0301", 40), Artist: "Artist", Album: "Album",
 				Genre: "Genre", Year: 2026, TrackNumber: 7, DurationSecs: 245})
 			before, visible := m.layout, m.plVisible
-			saver := &recordingConfigSaver{}
+			saver := &recordingSaver{}
 			m.configSaver = saver
 			m.SetShowMetadata(true)
 			if !m.layout.twoColumn || m.showInfo || m.visRows != tt.visRows || m.vis.Rows < 1 {
@@ -310,7 +310,7 @@ func TestMetadataLayoutAndFocusBudget(t *testing.T) {
 				}
 			}
 			m.SetShowMetadata(false)
-			if m.layout != before || m.plVisible != visible || m.vis.Rows != before.visualizerRows || m.visRows != tt.visRows || len(saver.values) != 0 {
+			if m.layout != before || m.plVisible != visible || m.vis.Rows != before.visualizerRows || m.visRows != tt.visRows || len(saver.saved) != 0 {
 				t.Fatal("SetShowMetadata did not restore configured layout without saving")
 			}
 		})
@@ -368,19 +368,19 @@ func TestMetadataFallbackAndPreference(t *testing.T) {
 			m.SetVisRows(12)
 			tt.setup(&m)
 			before := m.layout
-			saver := &recordingConfigSaver{}
+			saver := &recordingSaver{}
 			m.configSaver = saver
 			for _, want := range []bool{true, false, true} {
 				updated, _ := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModCtrl})
 				m = updated.(Model)
-				if m.showMetadata != want || m.showInfo != want || saver.values["show_metadata"] != strconv.FormatBool(want) {
-					t.Fatalf("fallback toggle: metadata=%v info=%v saved=%v, want %v", m.showMetadata, m.showInfo, saver.values, want)
+				if m.showMetadata != want || m.showInfo != want || saver.saved["show_metadata"] != strconv.FormatBool(want) {
+					t.Fatalf("fallback toggle: metadata=%v info=%v saved=%v, want %v", m.showMetadata, m.showInfo, saver.saved, want)
 				}
 				assertViewFits(t, m.View().Content, tt.width, tt.height)
 			}
 			updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 			m = updated.(Model)
-			if m.showInfo || !m.showMetadata || saver.values["show_metadata"] != "true" || m.layout != before || m.visRows != 12 {
+			if m.showInfo || !m.showMetadata || saver.saved["show_metadata"] != "true" || m.layout != before || m.visRows != 12 {
 				t.Fatal("Esc did not retain preference and restore the non-sidebar layout")
 			}
 			if strings.Contains(ansi.Strip(m.View().Content), "Metadata [Ctrl+I]") {
@@ -464,7 +464,7 @@ func TestMetadataKeyStaysLiteralInTextInputs(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m := keybindingTestModel()
-			saver := &recordingConfigSaver{}
+			saver := &recordingSaver{}
 			m.configSaver = saver
 			input := tt.open(&m)
 			for _, key := range []tea.KeyPressMsg{{Text: "I"}, {Code: 'i', ShiftedCode: 'I', Mod: tea.ModShift}} {
@@ -473,8 +473,8 @@ func TestMetadataKeyStaysLiteralInTextInputs(t *testing.T) {
 				}
 			}
 			m.handleKey(tea.KeyPressMsg{Code: 'i', Mod: tea.ModCtrl})
-			if *input != "II" || m.showMetadata || m.showInfo || len(saver.values) != 0 {
-				t.Fatalf("input=%q metadata=%v info=%v saves=%v", *input, m.showMetadata, m.showInfo, saver.values)
+			if *input != "II" || m.showMetadata || m.showInfo || len(saver.saved) != 0 {
+				t.Fatalf("input=%q metadata=%v info=%v saves=%v", *input, m.showMetadata, m.showInfo, saver.saved)
 			}
 		})
 	}

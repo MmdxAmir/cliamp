@@ -1040,7 +1040,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.status.Showf(statusTTLDefault, "Audio output: %s", msg.name)
 			m.audioDevice = msg.name
-			_ = m.configSaver.Save("audio_device", msg.name)
+			_ = m.saveConfigString("audio_device", msg.name)
 		}
 		// Invalidate cached list so the next open refreshes Active markers.
 		m.devicePicker.devices = nil

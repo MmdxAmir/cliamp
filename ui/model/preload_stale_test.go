@@ -27,7 +27,7 @@ func armedModel() (Model, *playbackFakeEngine) {
 		player:      player,
 		playlist:    p,
 		focus:       focusPlaylist,
-		configSaver: &recordingConfigSaver{},
+		configSaver: &recordingSaver{},
 		preloadFor:  "b.mp3",
 	}
 	return m, player

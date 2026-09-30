@@ -782,13 +782,13 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "r":
 		const repeatModes = playlist.RepeatOne + 1
 		m.playlist.SetRepeat((m.playlist.Repeat() + repeatStep + repeatModes) % repeatModes)
-		m.saveConfigKey("repeat", fmt.Sprintf("%q", m.playlist.Repeat().String()))
+		_ = m.saveConfigString("repeat", m.playlist.Repeat().String())
 		return m.rearmPreload()
 
 	case "z":
 		m.playlist.ToggleShuffle()
 		m.adjustScroll()
-		m.saveConfigKey("shuffle", fmt.Sprintf("%v", m.playlist.Shuffled()))
+		_ = m.saveConfigBool("shuffle", m.playlist.Shuffled())
 		return m.rearmPreload()
 
 	case "tab":
@@ -947,9 +947,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.refreshChrome()
 		m.applyHeightMode()
 		m.adjustScroll()
-		if err := m.configSaver.Save("visualizer", fmt.Sprintf("%q", m.vis.ModeName())); err != nil {
-			m.status.Errorf(statusTTLDefault, "Config save failed: %s", err)
-		}
+		_ = m.saveConfigString("visualizer", m.vis.ModeName())
 
 	case "ctrl+v":
 		if m.simplified {

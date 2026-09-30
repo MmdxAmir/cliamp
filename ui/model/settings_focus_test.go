@@ -269,7 +269,7 @@ func TestSettingsFocusActions(t *testing.T) {
 				m := newColumnTestModel(100, 30)
 				p := &settingsFocusEngine{}
 				notifier := &fakeNotifier{}
-				saver := &recordingConfigSaver{}
+				saver := &recordingSaver{}
 				m.player, m.notifier, m.configSaver, m.focus = p, notifier, saver, focus
 				m.plCursor = 2
 				cmd := m.handleKey(key)
@@ -288,8 +288,8 @@ func TestSettingsFocusActions(t *testing.T) {
 					}
 				case s == "z" || focus == focusShuffle && (arrow || s == "enter"):
 					modeChanged = true
-					if !m.playlist.Shuffled() || saver.values["shuffle"] != "true" {
-						t.Fatalf("shuffle was not toggled and persisted: %v", saver.values)
+					if !m.playlist.Shuffled() || saver.saved["shuffle"] != "true" {
+						t.Fatalf("shuffle was not toggled and persisted: %v", saver.saved)
 					}
 				case s == "r" || focus == focusRepeat && (arrow || s == "enter"):
 					modeChanged = true
@@ -297,8 +297,8 @@ func TestSettingsFocusActions(t *testing.T) {
 					if back {
 						want = playlist.RepeatOne
 					}
-					if m.playlist.Repeat() != want || saver.values["repeat"] != fmt.Sprintf("%q", want.String()) {
-						t.Fatalf("repeat = %s, saved = %v, want %s", m.playlist.Repeat(), saver.values, want)
+					if m.playlist.Repeat() != want || saver.saved["repeat"] != fmt.Sprintf("%q", want.String()) {
+						t.Fatalf("repeat = %s, saved = %v, want %s", m.playlist.Repeat(), saver.saved, want)
 					}
 				case s == "m":
 					if !p.mono {

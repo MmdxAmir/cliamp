@@ -39,7 +39,7 @@ func TestThemePickerCancelHandlesRemovedTheme(t *testing.T) {
 }
 
 func TestThemePickerSelectPersistsSelectedTheme(t *testing.T) {
-	saver := &recordingConfigSaver{}
+	saver := &recordingSaver{}
 	m := Model{
 		themes: []theme.Theme{
 			{Name: "Ayu", Accent: "#000000", BrightFG: "#ffffff", FG: "#111111", Green: "#00ff00", Yellow: "#ffff00", Red: "#ff0000"},
@@ -50,7 +50,7 @@ func TestThemePickerSelectPersistsSelectedTheme(t *testing.T) {
 
 	m.themePickerSelect()
 
-	if got := saver.values["theme"]; got != `"Ayu"` {
+	if got := saver.saved["theme"]; got != `"Ayu"` {
 		t.Fatalf("saved theme = %q, want %q", got, `"Ayu"`)
 	}
 	if m.themePicker.visible {
@@ -59,7 +59,7 @@ func TestThemePickerSelectPersistsSelectedTheme(t *testing.T) {
 }
 
 func TestThemePickerSelectPersistsDefaultAsEmptyValue(t *testing.T) {
-	saver := &recordingConfigSaver{}
+	saver := &recordingSaver{}
 	m := Model{
 		themes:      []theme.Theme{{Name: "Ayu"}},
 		themePicker: themePickerState{visible: true, cursor: 0},
@@ -68,7 +68,7 @@ func TestThemePickerSelectPersistsDefaultAsEmptyValue(t *testing.T) {
 
 	m.themePickerSelect()
 
-	if got := saver.values["theme"]; got != `""` {
+	if got := saver.saved["theme"]; got != `""` {
 		t.Fatalf("saved default theme = %q, want %q", got, `""`)
 	}
 }

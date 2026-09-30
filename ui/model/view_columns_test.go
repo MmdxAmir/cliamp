@@ -487,7 +487,7 @@ func TestSettingsPaneShedsRankGroupsWhole(t *testing.T) {
 // through the main key path and that it round-trips the layout.
 func TestSettingsPaneToggleClosesAndReopens(t *testing.T) {
 	m := newColumnTestModel(80, 24)
-	m.configSaver = &recordingConfigSaver{}
+	m.configSaver = &recordingSaver{}
 	if !m.layout.twoColumn {
 		t.Fatal("expected the pane open at 80x24")
 	}
@@ -505,16 +505,16 @@ func TestSettingsPaneToggleClosesAndReopens(t *testing.T) {
 // TestSettingsPaneTogglePersists checks that the choice is written to config so
 // the pane comes back the way it was left.
 func TestSettingsPaneTogglePersists(t *testing.T) {
-	saver := &recordingConfigSaver{}
+	saver := &recordingSaver{}
 	m := newColumnTestModel(80, 24)
 	m.configSaver = saver
 
 	m.toggleSettingsPane()
-	if got := saver.values["hide_settings_pane"]; got != "true" {
+	if got := saver.saved["hide_settings_pane"]; got != "true" {
 		t.Fatalf("saved hide_settings_pane = %q, want %q", got, "true")
 	}
 	m.toggleSettingsPane()
-	if got := saver.values["hide_settings_pane"]; got != "false" {
+	if got := saver.saved["hide_settings_pane"]; got != "false" {
 		t.Fatalf("saved hide_settings_pane = %q, want %q", got, "false")
 	}
 }

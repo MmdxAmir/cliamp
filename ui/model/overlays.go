@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -62,7 +61,7 @@ func (m *Model) themePickerSelect() {
 	if theme.IsDefaultName(themeName) {
 		themeName = ""
 	}
-	m.saveConfigKey("theme", fmt.Sprintf("%q", themeName))
+	_ = m.saveConfigString("theme", themeName)
 	m.themePicker.visible = false
 	m.themePicker.filtering = false
 	m.themePicker.filter = ""
@@ -199,9 +198,7 @@ func (m *Model) visPickerSelect() {
 	if !m.visPickerApply() {
 		return
 	}
-	if err := m.configSaver.Save("visualizer", fmt.Sprintf("%q", m.vis.ModeName())); err != nil {
-		m.status.Errorf(statusTTLDefault, "Config save failed: %s", err)
-	}
+	_ = m.saveConfigString("visualizer", m.vis.ModeName())
 	m.visPickerClose()
 }
 
