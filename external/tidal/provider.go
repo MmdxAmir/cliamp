@@ -44,7 +44,7 @@ const favoriteTracksLimit = 500
 // TrackURIPrefix is the custom URI scheme for Tidal tracks. Track paths are
 // "tidal://track/<id>"; the player resolves them to a fresh signed URL (or
 // DASH segment list) at play time via the SourceResolver registered in
-// main.go, so queue entries never hold expirable URLs.
+// providers.go, so queue entries never hold expirable URLs.
 const TrackURIPrefix = "tidal://track/"
 
 // albumSortTypes is the static sort list for Tidal album browsing. The private
@@ -493,7 +493,8 @@ func trackFromAPI(t apiTrack, albumFallback *apiAlbum) playlist.Track {
 // playback starts: a direct CDN URL for BTS (AAC) deliveries, or the DASH
 // segment list for FLAC. Resolving at play time keeps signed URLs fresh no
 // matter how long the track sat in a queue, and reports server-side quality
-// downgrades. It is registered as the player's SourceResolver in main.go.
+// downgrades. It is registered as the player's SourceResolver in
+// providers.go.
 func (p *TidalProvider) ResolveSource(uri string) (streamURL string, segments []string, err error) {
 	trackID := strings.TrimPrefix(uri, TrackURIPrefix)
 	if trackID == "" || trackID == uri {
@@ -528,7 +529,6 @@ func (p *TidalProvider) ResolveSource(uri string) (streamURL string, segments []
 		return "", src.segments, nil
 	}
 	applog.Info("tidal: track %s delivered %s via direct URL (AAC)", trackID, src.quality)
-	streamURLs.register(trackID, src.url)
 	return src.url, nil, nil
 }
 

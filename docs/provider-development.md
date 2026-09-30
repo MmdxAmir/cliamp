@@ -176,6 +176,13 @@ the provider list:
 
 If the provider resolves its own URI scheme when playback starts, such as
 Qobuz `qobuz://` URIs, add a case to `registerPlayerHooks` in `providers.go`.
+When the resolved URL is a finite file, set `Buffered` in the
+`player.ResolvedSource` that the resolver returns. The player then buffers the
+file for seeking, and no URL matcher is necessary:
+
+```go
+return player.ResolvedSource{URL: u, Buffered: true}, err
+```
 
 If the provider needs the buffered download pipeline for stream URLs, such as
 Navidrome Subsonic endpoints, add its URL matcher to `isBufferedProviderURL` in

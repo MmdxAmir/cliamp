@@ -368,17 +368,19 @@ func (s *providerSet) registerPlayerHooks(p *player.Player) {
 			})
 		case *qobuz.QobuzProvider:
 			// Qobuz tracks carry qobuz:// URIs. The provider resolves them to a
-			// fresh signed URL when playback starts.
+			// fresh signed URL when playback starts. The URL is a finite file
+			// that buffers for seeking.
 			p.RegisterSourceResolver(qobuz.TrackURIPrefix, func(uri string) (player.ResolvedSource, error) {
 				u, err := prov.ResolveSource(uri)
-				return player.ResolvedSource{URL: u}, err
+				return player.ResolvedSource{URL: u, Buffered: true}, err
 			})
 		case *tidal.TidalProvider:
 			// Tidal tracks carry tidal:// URIs; the provider resolves them to a
-			// fresh signed URL or DASH segment list when playback starts.
+			// fresh signed URL or DASH segment list when playback starts. The
+			// URL is a finite file that buffers for seeking.
 			p.RegisterSourceResolver(tidal.TrackURIPrefix, func(uri string) (player.ResolvedSource, error) {
 				u, segments, err := prov.ResolveSource(uri)
-				return player.ResolvedSource{URL: u, Segments: segments}, err
+				return player.ResolvedSource{URL: u, Segments: segments, Buffered: true}, err
 			})
 		case *lyrion.Client:
 			p.RegisterSourceResolver(lyrion.TrackURIPrefix, func(uri string) (player.ResolvedSource, error) {
@@ -425,8 +427,6 @@ func isBufferedProviderURL(u string) bool {
 		jellyfin.IsStreamURL(u) ||
 		emby.IsStreamURL(u) ||
 		plex.IsStreamURL(u) ||
-		qobuz.IsStreamURL(u) ||
-		tidal.IsStreamURL(u) ||
 		audiobookshelf.IsStreamURL(u) ||
 		lyrion.IsStreamURL(u) ||
 		yandex.IsStreamURL(u)

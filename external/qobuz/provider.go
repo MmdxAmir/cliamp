@@ -48,7 +48,7 @@ const randomTracksLimit = 500
 
 // TrackURIPrefix is the custom URI scheme for Qobuz tracks. Track paths are
 // "qobuz://track/<id>". The player resolves them to a fresh signed URL at
-// play time through the SourceResolver registered in main.go, so queue
+// play time through the SourceResolver registered in providers.go, so queue
 // entries never hold expirable URLs.
 const TrackURIPrefix = "qobuz://track/"
 
@@ -504,7 +504,7 @@ func trackFromAPI(t apiTrack, albumFallback *apiAlbum) playlist.Track {
 // ResolveSource turns a qobuz://track/<id> URI into a signed stream URL when
 // playback starts. Resolving at play time keeps the URL fresh no matter how
 // long the track sat in a queue. It is registered as the player's
-// SourceResolver in main.go.
+// SourceResolver in providers.go.
 func (p *QobuzProvider) ResolveSource(uri string) (string, error) {
 	trackID, ok := strings.CutPrefix(uri, TrackURIPrefix)
 	if !ok || trackID == "" || strings.ContainsAny(trackID, "/?#") {
@@ -525,7 +525,6 @@ func (p *QobuzProvider) ResolveSource(uri string) (string, error) {
 	if file.URL == "" {
 		return "", fmt.Errorf("qobuz: no stream URL for track %s", trackID)
 	}
-	streamURLs.register(trackID, file.URL)
 	return file.URL, nil
 }
 

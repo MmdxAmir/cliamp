@@ -1042,10 +1042,13 @@ func (p *Player) RegisterYTDLMatcher(match func(string) bool) {
 // ResolvedSource is a playable source produced by a SourceResolver at play
 // time: either a direct HTTP URL, or an ordered list of media segment URLs
 // whose concatenated bytes form one progressive stream (e.g. unencrypted
-// DASH fMP4 segments).
+// DASH fMP4 segments). Buffered sends URL to the buffered download and
+// ffmpeg pipeline, for a finite file at a signed URL that no buffered-URL
+// matcher can recognize.
 type ResolvedSource struct {
 	URL      string
 	Segments []string
+	Buffered bool
 }
 
 // SourceResolver turns a custom URI (e.g. "tidal://track/123") into a

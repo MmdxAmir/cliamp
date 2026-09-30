@@ -234,7 +234,9 @@ func (p *Player) buildPipeline(path string) (*trackPipeline, error) {
 	// Custom URIs with a registered SourceResolver (e.g. tidal://track/123)
 	// resolve to their actual bytes at play time, so short-lived signed URLs
 	// are always fresh. Segment lists get a concatenating navBuffer; direct
-	// URLs fall through to the normal HTTP handling below.
+	// URLs fall through to the normal HTTP handling below. A Buffered URL
+	// takes the buffered route there without a URL matcher.
+	buffered := false
 	if resolver := p.matchSourceResolver(path); resolver != nil {
 		src, err := resolver(path)
 		if err != nil {
@@ -251,13 +253,14 @@ func (p *Player) buildPipeline(path string) (*trackPipeline, error) {
 			return nil, fmt.Errorf("resolve source: empty result for %s", path)
 		}
 		path = src.URL
+		buffered = src.Buffered
 	}
 
 	remote := isURL(path)
 
 	// Buffered HTTP tracks (e.g. Subsonic streams) download in the background
 	// while they play.
-	if remote && p.isBufferedURL(path) {
+	if remote && (buffered || p.isBufferedURL(path)) {
 		nb, contentLen, err := newNavBuffer(path)
 		if err != nil {
 			return nil, fmt.Errorf("buffer source: %w", err)

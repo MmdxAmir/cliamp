@@ -436,9 +436,6 @@ func TestResolveSource(t *testing.T) {
 			if got != tt.wantURL {
 				t.Errorf("ResolveSource() = %q, want %q", got, tt.wantURL)
 			}
-			if tt.wantURL != "" && !IsStreamURL(tt.wantURL) {
-				t.Error("resolved URL is not registered for the buffered pipeline")
-			}
 			if n := calls.Load(); n != tt.wantCalls {
 				t.Errorf("API calls = %d, want %d", n, tt.wantCalls)
 			}

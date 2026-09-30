@@ -188,6 +188,20 @@ func TestBuildPipelineRoutes(t *testing.T) {
 			wantLength:  -1,
 		},
 		{
+			name: "source resolver buffered url",
+			path: "buf://track/1",
+			register: func(p *Player) {
+				p.RegisterSourceResolver("buf://", func(string) (ResolvedSource, error) {
+					return ResolvedSource{URL: srv.URL + "/buffered", Buffered: true}, nil
+				})
+			},
+			wantDecoder: "*player.navFFmpegStreamer",
+			wantPath:    srv.URL + "/buffered",
+			seekable:    true,
+			counted:     true,
+			wantLength:  -1,
+		},
+		{
 			name: "buffered url matcher",
 			path: srv.URL + "/buffered",
 			register: func(p *Player) {
