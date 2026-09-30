@@ -148,9 +148,8 @@ func TestQueueRemoveUpdatesTheLoadedPlaylistFile(t *testing.T) {
 		wantUndo  []string
 	}{
 		{name: "only this writer", wantMix: []string{a.Path}, wantUndo: []string{a.Path, b.Path}},
-		// The undo save keeps the file order of the tracks it finds and
-		// puts the removed track after them.
-		{name: "another writer added a track", otherAdds: true, wantMix: []string{a.Path, added.Path}, wantUndo: []string{a.Path, added.Path, b.Path}},
+		// The undo puts the removed track back at its place in the file.
+		{name: "another writer added a track", otherAdds: true, wantMix: []string{a.Path, added.Path}, wantUndo: []string{a.Path, b.Path, added.Path}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())

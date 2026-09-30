@@ -33,6 +33,14 @@ func TestUpdatePlaylist(t *testing.T) {
 			wantPaths: []string{"/a.mp3"},
 		},
 		{
+			name: "fn inserts a track between two",
+			list: "Mix",
+			fn: func(tracks []playlist.Track) ([]playlist.Track, error) {
+				return slices.Insert(tracks, 1, playlist.Track{Path: "/c.mp3"}), nil
+			},
+			wantPaths: []string{"/a.mp3", "/c.mp3", "/b.mp3"},
+		},
+		{
 			name: "fn reports no change",
 			list: "Mix",
 			fn: func([]playlist.Track) ([]playlist.Track, error) {

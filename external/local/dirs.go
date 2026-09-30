@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/bjarneo/cliamp/internal/tomlutil"
@@ -140,7 +141,8 @@ type playlistSection struct {
 // slot — additions and bookmark materializations — are inserted directly
 // before the directory section that would otherwise supply them, so a
 // materialized track keeps its position among the directory's tracks; tracks
-// no directory provides are appended at the end.
+// no directory provides go before the next caller track that kept its slot,
+// or at the end when none follows.
 func rebuildDoc(existing *playlistDoc, explicit []playlist.Track) (tracks []playlist.Track, dirs []playlist.DirSource, order []uint8) {
 	origPaths := make([]string, len(existing.tracks))
 	for i, t := range existing.tracks {
@@ -237,11 +239,33 @@ func rebuildDoc(existing *playlistDoc, explicit []playlist.Track) (tracks []play
 				}
 			}
 		}
-		// Leftovers no directory supplies are appended in caller order.
-		for _, t := range leftovers {
-			if _, ok := supplierOf(t.Path); !ok {
-				sections = append(sections, playlistSection{kind: itemTrack, track: t})
+		// A leftover that no directory supplies goes directly before the
+		// next track in caller order that kept its slot, so a track put
+		// between saved tracks stays there. Without such a track, it is
+		// appended in caller order.
+		following := make(map[string]string, len(leftovers))
+		next := ""
+		for i := len(explicit) - 1; i >= 0; i-- {
+			if _, ok := placed[explicit[i].Path]; ok {
+				next = explicit[i].Path
+			} else {
+				following[explicit[i].Path] = next
 			}
+		}
+		for _, t := range leftovers {
+			if _, ok := supplierOf(t.Path); ok {
+				continue
+			}
+			pos := -1
+			if next := following[t.Path]; next != "" {
+				pos = slices.IndexFunc(sections, func(sec playlistSection) bool {
+					return sec.kind == itemTrack && sec.track.Path == next
+				})
+			}
+			if pos < 0 {
+				pos = len(sections)
+			}
+			sections = slices.Insert(sections, pos, playlistSection{kind: itemTrack, track: t})
 		}
 	}
 
