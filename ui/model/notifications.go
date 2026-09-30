@@ -72,7 +72,7 @@ func (m *Model) playbackState() (playlist.Track, playback.State) {
 	}
 	track, _ := m.currentPlaybackTrack()
 	artist, title := m.resolveTrackDisplay(track)
-	position, duration := m.player.PositionAndDuration()
+	position, duration := m.playbackClock()
 	return track, playback.State{
 		Status: status,
 		Track: playback.Track{

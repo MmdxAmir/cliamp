@@ -358,14 +358,24 @@ func (m *Model) handleTick(msg tickMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// playbackClock returns the position and duration of the track that plays.
+// While a track buffers, the engine still holds the old pipeline, so the
+// position is 0 and the duration comes from the track metadata. The TUI
+// clock, the media controls and the runtime state all use this rule.
+func (m *Model) playbackClock() (time.Duration, time.Duration) {
+	if m.buffering {
+		track, _ := m.currentPlaybackTrack()
+		return 0, time.Duration(track.DurationSecs) * time.Second
+	}
+	return m.player.PositionAndDuration()
+}
+
 // tickSampleClock caches the position and duration once per tick, so that
 // the View render functions do not take speaker.Lock() several times.
 // PositionAndDuration() batches both reads under one speaker lock.
 func (m *Model) tickSampleClock() {
 	if m.buffering {
-		track, _ := m.currentPlaybackTrack()
-		m.cachedDur = time.Duration(track.DurationSecs) * time.Second
-		m.cachedPos = 0
+		m.cachedPos, m.cachedDur = m.playbackClock()
 		return
 	}
 	if m.seek.active {

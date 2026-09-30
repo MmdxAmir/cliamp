@@ -58,6 +58,11 @@ type ipcRuntimeFingerprint struct {
 	theme            string
 	streamTitle      string
 	streamError      string
+	// buffering, durationSecs and seekable change when a buffering track
+	// starts, so the new clock gets its own event.
+	buffering    bool
+	durationSecs int64
+	seekable     bool
 }
 
 // SetIPCBroker enables GUI-facing V2 state events. It must be called before
@@ -639,7 +644,7 @@ func (m *Model) runtimeSnapshot() ipc.RuntimeSnapshot {
 		snapshot.Track = &info
 	}
 	snapshot.PlaybackDetached = m.playbackDetached
-	position, duration := m.player.PositionAndDuration()
+	position, duration := m.playbackClock()
 	snapshot.Position = position.Seconds()
 	snapshot.Duration = duration.Seconds()
 	snapshot.Seekable = m.player.Seekable()
@@ -701,6 +706,10 @@ func (m *Model) runtimeFingerprint() ipcRuntimeFingerprint {
 	fingerprint.eqPreset = m.EQPresetName()
 	fingerprint.detached = m.playbackDetached
 	fingerprint.streamTitle = m.streamTitle
+	fingerprint.buffering = m.buffering
+	_, duration := m.playbackClock()
+	fingerprint.durationSecs = int64(duration / time.Second)
+	fingerprint.seekable = m.player.Seekable()
 	if m.player.IsPlaying() && !m.player.IsPaused() {
 		fingerprint.state = "playing"
 	} else if m.player.IsPaused() {

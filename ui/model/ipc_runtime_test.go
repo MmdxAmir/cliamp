@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
@@ -457,5 +458,45 @@ func TestNormalizeV2OperationCoversRegistryAliases(t *testing.T) {
 	}
 	if response := runV2(t, &m, "runtime.volume", ipc.Request{Value: -3}); !response.OK || engine.volume != -3 {
 		t.Fatalf("runtime.volume = %+v, volume %v; want -3", response, engine.volume)
+	}
+}
+
+// While a skipped-to stream buffers, the runtime state reports its start
+// and the duration of its metadata, not the clock of the old pipeline. The
+// start of the stream then publishes a new revision with the new clock.
+func TestRuntimeStateFollowsAStreamStart(t *testing.T) {
+	engine := &playbackFakeEngine{playing: true, seekable: true, position: 30 * time.Second, duration: 180 * time.Second}
+	pl := playlist.New()
+	pl.Add(
+		playlist.Track{Path: "/music/a.mp3", Title: "A", DurationSecs: 180},
+		playlist.Track{Path: "https://radio.example/show.mp3", Title: "Show", Stream: true, DurationSecs: 240},
+	)
+	pl.SetIndex(0)
+	m := Model{player: engine, playlist: pl, vis: ui.NewVisualizer(float64(engine.SampleRate()))}
+	m.SetIPCBroker(ipc.NewBroker())
+
+	updated, _ := m.Update(playback.NextMsg{})
+	m = updated.(Model)
+	if !m.buffering {
+		t.Fatal("the stream does not buffer after next")
+	}
+	snapshot := m.runtimeSnapshot()
+	if snapshot.Position != 0 || snapshot.Duration != 240 {
+		t.Fatalf("buffering snapshot clock = %v/%v, want 0/240", snapshot.Position, snapshot.Duration)
+	}
+	if _, state := m.playbackState(); state.Position != 0 || state.Track.Duration != 240*time.Second {
+		t.Fatalf("buffering playback state clock = %v/%v, want 0/4m0s", state.Position, state.Track.Duration)
+	}
+	buffered := snapshot.Revision
+
+	engine.position, engine.duration, engine.seekable = 0, 300*time.Second, false
+	updated, _ = m.Update(streamPlayedMsg{path: "https://radio.example/show.mp3", gen: m.requests.stream})
+	m = updated.(Model)
+	snapshot = m.runtimeSnapshot()
+	if snapshot.Revision == buffered {
+		t.Fatalf("revision = %d after the stream start, want a new one", snapshot.Revision)
+	}
+	if snapshot.Duration != 300 || snapshot.Seekable {
+		t.Fatalf("started snapshot = duration %v, seekable %v, want 300, false", snapshot.Duration, snapshot.Seekable)
 	}
 }
