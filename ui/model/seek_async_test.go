@@ -217,3 +217,51 @@ func TestYTDLRelativeSeeksAccumulate(t *testing.T) {
 		})
 	}
 }
+
+// A second previous while the rewind of a yt-dlp track still runs goes to
+// the previous track. The rewind has not moved Position yet, so previous
+// reads the pending seek target, as the TUI clock does.
+func TestPreviousDuringRewindGoesBack(t *testing.T) {
+	prevMsg := func(t *testing.T, m *Model) {
+		updated, _ := m.Update(playback.PrevMsg{})
+		*m = updated.(Model)
+	}
+	prevKey := func(t *testing.T, m *Model) {
+		updated, _ := m.Update(tea.KeyPressMsg{Code: '<', Text: "<"})
+		*m = updated.(Model)
+	}
+	v2Prev := func(t *testing.T, m *Model) {
+		updated, _ := m.Update(v2Request(t, "prev", ipc.Request{}))
+		*m = updated.(Model)
+	}
+	for _, tc := range []struct {
+		name    string
+		presses []func(*testing.T, *Model)
+	}{
+		{name: "two prev messages", presses: []func(*testing.T, *Model){prevMsg, prevMsg}},
+		{name: "two prev keys", presses: []func(*testing.T, *Model){prevKey, prevKey}},
+		{name: "prev key then V2 prev", presses: []func(*testing.T, *Model){prevKey, v2Prev}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			first := playlist.Track{Title: "First", Path: "/music/first.mp3"}
+			video := playlist.Track{Title: "Video", Path: "https://www.youtube.com/watch?v=abc", Stream: true, DurationSecs: 3600}
+			eng := &playbackFakeEngine{playing: true, ytdlSeek: true, seekable: true, position: time.Minute, duration: time.Hour}
+			pl := playlist.New()
+			pl.Add(first, video)
+			pl.SetIndex(1)
+			m := Model{player: eng, playlist: pl, playingTrack: video, playingTrackActive: true, playingTrackStarted: true}
+
+			tc.presses[0](t, &m)
+			if !m.seek.active || pl.Index() != 1 {
+				t.Fatalf("first previous: seek active %v, index %d, want a rewind of index 1", m.seek.active, pl.Index())
+			}
+			tc.presses[1](t, &m)
+			if pl.Index() != 0 || len(eng.playCalls) != 1 || eng.playCalls[0] != first.Path {
+				t.Fatalf("second previous: index %d, plays %v, want %s", pl.Index(), eng.playCalls, first.Path)
+			}
+			if m.seek.active || m.seek.pending {
+				t.Fatalf("seek state after the track change = active %v, pending %v", m.seek.active, m.seek.pending)
+			}
+		})
+	}
+}

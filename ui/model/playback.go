@@ -148,7 +148,13 @@ func (m *Model) advanceToNext() (playlist.Track, bool) {
 // prevTrack goes to the previous track, or restarts if >3s into the current one.
 // Unplayable tracks are skipped automatically.
 func (m *Model) prevTrack() tea.Cmd {
-	if m.player.Position() > 3*time.Second {
+	// A pending or running seek has not moved Position yet, so a rewind that
+	// is still on its way counts as done.
+	pos := m.player.Position()
+	if m.seek.active {
+		pos = m.seek.targetPos
+	}
+	if pos > 3*time.Second {
 		if m.player.Seekable() {
 			// Seekable media rewinds in place; non-seekable streams must be restarted.
 			// The rewind ends the play so far. finishSeek reports that play
