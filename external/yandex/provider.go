@@ -352,7 +352,8 @@ func waveKeyFor(keys []string, id string) string {
 }
 
 // ResolveSource resolves a yandex:track: URI to a fresh signed stream URL at
-// play time. Registered as a player.SourceResolver in main.go.
+// play time. registerPlayerHooks in providers.go registers it as the
+// player's SourceResolver.
 func (p *Provider) ResolveSource(uri string) (string, error) {
 	id, ok := strings.CutPrefix(uri, TrackURIPrefix)
 	if !ok || id == "" || strings.ContainsAny(id, "/?#") {
