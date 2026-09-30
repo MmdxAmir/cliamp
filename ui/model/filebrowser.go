@@ -9,7 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/internal/fuzzy"
-	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/resolve"
 )
@@ -151,7 +150,7 @@ func (m *Model) loadFBDir() {
 		if e.IsDir() {
 			dirType = "/"
 		} else if !e.Type().IsRegular() {
-			if e.Type()&os.ModeSymlink != 0 && !player.SupportedExts[strings.ToLower(filepath.Ext(name))] {
+			if e.Type()&os.ModeSymlink != 0 && !playlist.IsAudioFile(name) {
 				// Treat symlink as a directory unless it points to media file.
 				// os.DirEntry has no option to test the type of object symlink points to.
 				dirType = "@"
@@ -176,7 +175,7 @@ func (m *Model) loadFBDir() {
 			files = append(files, fbEntry{
 				name:    name,
 				path:    filepath.Join(m.fileBrowser.dir, name),
-				isAudio: player.SupportedExts[strings.ToLower(filepath.Ext(name))],
+				isAudio: playlist.IsAudioFile(name),
 			})
 		}
 	}

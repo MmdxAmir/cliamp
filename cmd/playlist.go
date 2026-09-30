@@ -16,7 +16,6 @@ import (
 	"github.com/bjarneo/cliamp/external/local"
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/internal/sshurl"
-	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/resolve"
 )
@@ -921,7 +920,7 @@ func sshFindAudio(host string, paths []string) ([]string, error) {
 
 	var nameArgs []string
 	first := true
-	for ext := range player.SupportedExts {
+	for _, ext := range playlist.AudioExtensions() {
 		if !first {
 			nameArgs = append(nameArgs, "-o")
 		}

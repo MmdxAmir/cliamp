@@ -16,6 +16,8 @@ import (
 	"github.com/gopxl/beep/v2"
 	"github.com/gopxl/beep/v2/generators"
 	"github.com/gopxl/beep/v2/wav"
+
+	"github.com/bjarneo/cliamp/playlist"
 )
 
 // installPipelineRouteFixtures puts fake ffmpeg, ffprobe and ssh binaries
@@ -350,7 +352,7 @@ func TestBuildPipelineSendsFFmpegFormatsPastNativeDecoders(t *testing.T) {
 	fixtures := installPipelineRouteFixtures(t)
 	srv := routeServer(t, nil)
 
-	for ext := range SupportedExts {
+	for _, ext := range playlist.AudioExtensions() {
 		if !needsFFmpeg(ext) {
 			continue
 		}

@@ -24,7 +24,6 @@ import (
 
 	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/internal/ytdlcookies"
-	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 
 	"github.com/kkdai/youtube/v2"
@@ -314,7 +313,7 @@ func sniffFeedURL(rawURL string) bool {
 	// network round-trip to avoid misclassification when CDNs return
 	// unexpected Content-Types for HEAD requests.
 	if u, err := url.Parse(rawURL); err == nil {
-		if player.SupportedExts[strings.ToLower(filepath.Ext(u.Path))] {
+		if playlist.IsAudioFile(u.Path) {
 			return false
 		}
 	}
@@ -350,7 +349,7 @@ func AudioFiles(dir string, recursive bool) ([]string, error) {
 		return nil, fmt.Errorf("stat audio path %q: %w", dir, err)
 	}
 	if !info.IsDir() {
-		if player.SupportedExts[strings.ToLower(filepath.Ext(dir))] {
+		if playlist.IsAudioFile(dir) {
 			return []string{dir}, nil
 		}
 		return nil, nil
@@ -367,7 +366,7 @@ func AudioFiles(dir string, recursive bool) ([]string, error) {
 				}
 				return nil
 			}
-			if !d.IsDir() && player.SupportedExts[strings.ToLower(filepath.Ext(p))] {
+			if !d.IsDir() && playlist.IsAudioFile(p) {
 				files = append(files, p)
 			}
 			return nil
@@ -390,7 +389,7 @@ func AudioFiles(dir string, recursive bool) ([]string, error) {
 			continue
 		}
 		p := filepath.Join(dir, e.Name())
-		if player.SupportedExts[strings.ToLower(filepath.Ext(p))] {
+		if playlist.IsAudioFile(p) {
 			files = append(files, p)
 		}
 	}
@@ -839,8 +838,8 @@ func parseItunesDuration(s string) int {
 // A trailing known audio extension (e.g. "track.mp3") is dropped so it doesn't
 // leak into the title; non-media suffixes (e.g. "3.5-remix") are left intact.
 func humanizeBasename(s string) string {
-	if ext := filepath.Ext(s); ext != "" && player.SupportedExts[strings.ToLower(ext)] {
-		s = strings.TrimSuffix(s, ext)
+	if playlist.IsAudioFile(s) {
+		s = strings.TrimSuffix(s, filepath.Ext(s))
 	}
 	return strings.ReplaceAll(s, "-", " ")
 }

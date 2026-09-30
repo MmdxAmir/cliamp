@@ -24,22 +24,6 @@ import (
 	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
-// SupportedExts is the set of file extensions the player can decode.
-var SupportedExts = map[string]bool{
-	".mp3":  true,
-	".wav":  true,
-	".flac": true,
-	".ogg":  true,
-	".m4a":  true,
-	".aac":  true,
-	".aacp": true,
-	".m4b":  true,
-	".alac": true,
-	".wma":  true,
-	".opus": true,
-	".webm": true,
-}
-
 // httpClient is the shared streaming HTTP client. See internal/httpclient
 // for configuration rationale (no overall timeout, HTTP/2 disabled for Icecast).
 var httpClient = httpclient.Streaming

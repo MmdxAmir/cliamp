@@ -3,7 +3,10 @@ package player
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
+
+	"github.com/bjarneo/cliamp/playlist"
 )
 
 func TestIsHLS(t *testing.T) {
@@ -36,9 +39,15 @@ func TestNeedsFFmpeg(t *testing.T) {
 	}
 }
 
-func TestSupportedExtsIncludesAACP(t *testing.T) {
-	if !SupportedExts[".aacp"] {
-		t.Fatal("SupportedExts[.aacp] = false, want true")
+// TestAudioExtensionsHaveADecoder checks that each extension that the
+// playlist package accepts has a decoder route: a native decoder in
+// decodeWithExt or the ffmpeg route in needsFFmpeg.
+func TestAudioExtensionsHaveADecoder(t *testing.T) {
+	native := []string{".mp3", ".wav", ".flac", ".ogg"}
+	for _, ext := range playlist.AudioExtensions() {
+		if !needsFFmpeg(ext) && !slices.Contains(native, ext) {
+			t.Errorf("%s has no decoder route: add it to needsFFmpeg or decodeWithExt", ext)
+		}
 	}
 }
 

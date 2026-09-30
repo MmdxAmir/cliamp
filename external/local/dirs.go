@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/bjarneo/cliamp/internal/tomlutil"
-	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/resolve"
 )
@@ -291,7 +290,7 @@ func validateDirSource(dir string) error {
 // path-only so save-time rewrites do not repeat the filesystem walk done at
 // load.
 func dirSuppliesFile(dir playlist.DirSource, file string) bool {
-	if !player.SupportedExts[strings.ToLower(filepath.Ext(file))] {
+	if !playlist.IsAudioFile(file) {
 		return false
 	}
 	root := ExpandPath(dir.Path)
