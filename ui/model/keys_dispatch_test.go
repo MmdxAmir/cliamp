@@ -145,6 +145,10 @@ func TestOverlayProviderShortcuts(t *testing.T) {
 			}
 		}
 	}
+	navPrompt := func(m *Model) {
+		nav(navBrowseModeByAlbum, navBrowseScreenTracks)(m)
+		m.navBrowser.confirmReplace = true
+	}
 	manager := func(screen plMgrScreenType) func(*Model) {
 		return func(m *Model) {
 			m.plManager = plManagerState{visible: true, screen: screen, selPlaylist: "music"}
@@ -164,6 +168,8 @@ func TestOverlayProviderShortcuts(t *testing.T) {
 		{name: "nav album list R switches to Radio", open: nav(navBrowseModeByAlbum, navBrowseScreenList), key: "R", wantProvider: "radio"},
 		{name: "nav track screen R asks to replace", open: nav(navBrowseModeByAlbum, navBrowseScreenTracks), key: "R", wantProvider: "Other", wantOpen: true, wantReplace: true},
 		{name: "nav S without Spotify", open: nav(navBrowseModeByAlbum, navBrowseScreenList), key: "S", drop: "spotify", wantProvider: "Other"},
+		{name: "nav replace prompt keeps S", open: navPrompt, key: "S", wantProvider: "Other", wantOpen: true, wantReplace: true},
+		{name: "nav replace prompt keeps S without Spotify", open: navPrompt, key: "S", drop: "spotify", wantProvider: "Other", wantOpen: true, wantReplace: true},
 		{name: "manager list R switches to Radio", open: manager(plMgrScreenList), key: "R", wantProvider: "radio"},
 		{name: "manager tracks S without Spotify", open: manager(plMgrScreenTracks), key: "S", drop: "spotify", wantProvider: "Other"},
 	}
@@ -188,6 +194,57 @@ func TestOverlayProviderShortcuts(t *testing.T) {
 			}
 			if m.navBrowser.confirmReplace != tt.wantReplace {
 				t.Errorf("confirmReplace = %v, want %v", m.navBrowser.confirmReplace, tt.wantReplace)
+			}
+		})
+	}
+}
+
+// defaultModeTestProvider opens the provider browser on a preferred route,
+// so N chooses the browse mode instead of switching to Navidrome.
+type defaultModeTestProvider struct{ commandsTestProvider }
+
+func (defaultModeTestProvider) DefaultBrowseMode() provider.BrowseMode { return provider.BrowseAlbums }
+
+// The replace prompt of the provider browser owns the keys until it is
+// answered, as the delete prompt of the playlist manager does. Keys that the
+// browser handles before its screens leave the prompt and the browser alone.
+func TestNavReplacePromptOwnsTheKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		key  tea.KeyPressMsg
+		prov playlist.Provider
+	}{
+		{name: "expanded view", key: tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl}},
+		{name: "filter", key: tea.KeyPressMsg{Code: '/', Text: "/"}},
+		{name: "provider search", key: tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}},
+		{name: "mode chooser", key: tea.KeyPressMsg{Code: 'N', Text: "N"}, prov: defaultModeTestProvider{commandsTestProvider{name: "Browse"}}},
+		{name: "provider shortcut", key: tea.KeyPressMsg{Code: 'T', Text: "T"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := shortcutTestModel()
+			m.playlist.Add(playlist.Track{Path: "existing.mp3"})
+			prov := tt.prov
+			if prov == nil {
+				prov = commandsTestProvider{name: "Browse"}
+			}
+			m.navBrowser = navBrowserState{
+				prov: prov, visible: true, mode: navBrowseModeByAlbum, screen: navBrowseScreenTracks,
+				tracks: []playlist.Track{{Path: "replacement.mp3"}}, confirmReplace: true,
+			}
+
+			m.handleNavBrowserKey(tt.key)
+
+			if !m.navBrowser.visible || !m.navBrowser.confirmReplace || m.navBrowser.mode != navBrowseModeByAlbum {
+				t.Fatalf("browser visible %v prompt %v mode %v, want the prompt still open",
+					m.navBrowser.visible, m.navBrowser.confirmReplace, m.navBrowser.mode)
+			}
+			if m.navBrowser.searching || m.heightExpanded || m.searchOverlay.visible || m.netSearch.active {
+				t.Fatalf("searching %v expanded %v search overlay %v net search %v, want no change behind the prompt",
+					m.navBrowser.searching, m.heightExpanded, m.searchOverlay.visible, m.netSearch.active)
+			}
+			if got := m.provider.Name(); got != "Other" {
+				t.Fatalf("provider = %q, want Other", got)
 			}
 		})
 	}

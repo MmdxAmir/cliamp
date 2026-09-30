@@ -16,6 +16,11 @@ func (m *Model) handleNavBrowserKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.navBrowser.visible = false
 		return nil
 	}
+	// The replace prompt owns the keys until it is answered, like the delete
+	// prompt of the playlist manager.
+	if m.navBrowser.confirmReplace {
+		return m.handleNavReplacePromptKey(msg)
+	}
 
 	key := msg.String()
 
@@ -474,19 +479,21 @@ func (m *Model) handleNavAlbumListKey(msg tea.KeyPressMsg, artistAlbums bool) te
 	return nil
 }
 
+// handleNavReplacePromptKey answers the "Replace current queue?" prompt.
+// Enter replaces the queue, Esc or R cancels, and other keys do nothing.
+func (m *Model) handleNavReplacePromptKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "enter":
+		m.navBrowser.confirmReplace = false
+		return m.replacePlaylistFromNav()
+	case "esc", "R":
+		m.navBrowser.confirmReplace = false
+	}
+	return nil
+}
+
 // handleNavTrackListKey handles the final track-list screen (used by all modes).
 func (m *Model) handleNavTrackListKey(msg tea.KeyPressMsg) tea.Cmd {
-	if m.navBrowser.confirmReplace {
-		switch msg.String() {
-		case "enter":
-			m.navBrowser.confirmReplace = false
-			return m.replacePlaylistFromNav()
-		case "esc", "R":
-			m.navBrowser.confirmReplace = false
-		}
-		return nil
-	}
-
 	// Determine effective list length (filtered or full).
 	listLen := len(m.navBrowser.tracks)
 	if m.navBrowser.search != "" {
