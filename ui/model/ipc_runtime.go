@@ -521,7 +521,7 @@ func (m *Model) handleV2DeferredRequest(ctx context.Context, jobs *ipc.JobStore,
 	case "url.load":
 		cmd = m.handleIPCURL(ipcURLRequest{URL: request.Path, Play: request.Play, Context: ctx, Reply: reply})
 	case "save":
-		cmd = m.handleIPCSave(ipcSaveRequest{Reply: reply})
+		cmd = m.handleIPCSave(ipcSaveRequest{Context: ctx, Reply: reply})
 	case "lyrics":
 		cmd = m.handleIPCLyrics(ipcLyricsRequest{Context: ctx, Reply: reply})
 	default:

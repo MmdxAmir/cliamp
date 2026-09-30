@@ -50,7 +50,8 @@ type ipcURLRequest struct {
 // ipcSaveRequest, ipcLyricsRequest and ipcHistoryRequest carry the save,
 // lyrics, history and history.clear operations.
 type ipcSaveRequest struct {
-	Reply chan ipc.Response
+	Context context.Context
+	Reply   chan ipc.Response
 }
 
 type ipcLyricsRequest struct {
@@ -140,7 +141,7 @@ func (m *Model) handleIPCSave(request ipcSaveRequest) tea.Cmd {
 	}
 	directory := m.downloadsDirectory
 	return func() tea.Msg {
-		path, err := tracksave.SaveTo(track, directory)
+		path, err := tracksave.SaveTo(requestContext(request.Context), track, directory)
 		if err != nil {
 			request.Reply <- ipc.Response{OK: false, Error: err.Error()}
 		} else {

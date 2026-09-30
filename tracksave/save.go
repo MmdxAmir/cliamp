@@ -2,6 +2,7 @@
 package tracksave
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 
 // Save downloads or copies track into ~/Music/cliamp and returns its path.
 func Save(track playlist.Track) (string, error) {
-	return SaveTo(track, "")
+	return SaveTo(context.Background(), track, "")
 }
 
 // Directory resolves the configured directory, falling back to ~/Music/cliamp.
@@ -36,8 +37,9 @@ func Directory(directory string) (string, error) {
 	return filepath.Join(home, "Music", "cliamp"), nil
 }
 
-// SaveTo downloads or copies a track to the configured directory.
-func SaveTo(track playlist.Track, directory string) (string, error) {
+// SaveTo downloads or copies a track to the configured directory. A cancel of
+// ctx stops a yt-dlp download.
+func SaveTo(ctx context.Context, track playlist.Track, directory string) (string, error) {
 	saveDir, err := Directory(directory)
 	if err != nil {
 		return "", err
@@ -46,7 +48,7 @@ func SaveTo(track playlist.Track, directory string) (string, error) {
 		return "", err
 	}
 	if NeedsDownload(track) {
-		return resolve.DownloadYTDL(track.Path, saveDir)
+		return resolve.DownloadYTDLContext(ctx, track.Path, saveDir)
 	}
 	if track.Stream || !insideTempDir(track.Path) {
 		return "", fmt.Errorf("only downloaded tracks can be saved")

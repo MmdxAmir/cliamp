@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -876,7 +877,7 @@ func (m *Model) saveTrack() tea.Cmd {
 	}
 	directory := m.downloadsDirectory
 	return func() tea.Msg {
-		path, err := tracksave.SaveTo(track, directory)
+		path, err := tracksave.SaveTo(context.Background(), track, directory)
 		return trackSavedMsg{path: path, err: err, download: download}
 	}
 }

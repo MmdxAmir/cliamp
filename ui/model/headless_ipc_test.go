@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -380,6 +381,67 @@ func TestIPCURLUsesRequestContext(t *testing.T) {
 			}
 			if !errors.Is(result.err, tt.wantErr) || len(result.tracks) != tt.wantTracks {
 				t.Fatalf("result = %d tracks, error %v; want %d tracks, error %v", len(result.tracks), result.err, tt.wantTracks, tt.wantErr)
+			}
+		})
+	}
+}
+
+// A job.cancel request or an IPC server shutdown cancels the request context,
+// which stops the yt-dlp download of a save. A live request saves the track.
+func TestIPCSaveUsesRequestContext(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping Unix shell script test on Windows")
+	}
+	const saved = `echo '{"_filename":"/music/Artist - Song.m4a"}'`
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	tests := []struct {
+		name    string
+		script  string // body of the fake yt-dlp
+		ctx     func(t *testing.T) context.Context
+		wantErr string // "" when the save succeeds
+	}{
+		{name: "canceled request", script: saved, ctx: func(*testing.T) context.Context { return canceled }, wantErr: "context canceled"},
+		{name: "cancel during the download", script: "exec sleep 30", ctx: func(t *testing.T) context.Context {
+			ctx, cancel := context.WithCancel(t.Context())
+			time.AfterFunc(100*time.Millisecond, cancel)
+			return ctx
+		}, wantErr: "context canceled"},
+		{name: "live request", script: saved, ctx: func(*testing.T) context.Context { return context.Background() }},
+		{name: "no context", script: saved, ctx: func(*testing.T) context.Context { return nil }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bin := t.TempDir()
+			if err := os.WriteFile(filepath.Join(bin, "yt-dlp"), []byte("#!/bin/sh\n"+tt.script+"\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			tracks := playlist.New()
+			tracks.Add(playlist.Track{Path: "https://www.youtube.com/watch?v=abc", Title: "Song"})
+			m := Model{playlist: tracks}
+			m.SetDownloadsDirectory(t.TempDir())
+			reply := make(chan ipc.Response, 1)
+
+			start := time.Now()
+			cmd := m.handleIPCSave(ipcSaveRequest{Context: tt.ctx(t), Reply: reply})
+			if cmd == nil {
+				t.Fatal("handleIPCSave returned no command")
+			}
+			cmd()
+			response := <-reply
+
+			if elapsed := time.Since(start); elapsed > 5*time.Second {
+				t.Fatalf("save returned after %v, want it to stop at the cancel", elapsed)
+			}
+			if tt.wantErr != "" {
+				if response.OK || !strings.Contains(response.Error, tt.wantErr) {
+					t.Fatalf("response = %+v, want an error with %q", response, tt.wantErr)
+				}
+				return
+			}
+			if !response.OK || response.Output != "/music/Artist - Song.m4a" {
+				t.Fatalf("response = %+v, want the saved path", response)
 			}
 		})
 	}
