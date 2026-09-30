@@ -217,3 +217,29 @@ func TestNavBrowserSearchFallbackOpensOnTop(t *testing.T) {
 		t.Fatalf("activeScreen() after Esc = %d, want the nav browser %d", got, screenNavBrowser)
 	}
 }
+
+// TestGlobalKeysReachEveryOverlay checks that Ctrl+C and Ctrl+K work over each
+// overlay. handleKey handles both keys before it asks the top overlay, so the
+// overlay handlers have no clauses for them.
+func TestGlobalKeysReachEveryOverlay(t *testing.T) {
+	for _, spec := range overlayStack {
+		t.Run(fmt.Sprint("ctrl+c ", spec.screen), func(t *testing.T) {
+			m := Model{player: &playbackFakeEngine{}, playlist: playlist.New()}
+			overlayOpeners[spec.screen](&m)
+			if cmd := m.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}); cmd == nil || !m.quitting {
+				t.Fatalf("Ctrl+C over screen %d did not quit", spec.screen)
+			}
+		})
+		if spec.screen == screenKeymap {
+			continue
+		}
+		t.Run(fmt.Sprint("ctrl+k ", spec.screen), func(t *testing.T) {
+			m := Model{player: &playbackFakeEngine{}, playlist: playlist.New()}
+			overlayOpeners[spec.screen](&m)
+			m.handleKey(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+			if got := m.activeScreen(); got != screenKeymap {
+				t.Fatalf("Ctrl+K over screen %d gave screen %d, want the keymap", spec.screen, got)
+			}
+		})
+	}
+}

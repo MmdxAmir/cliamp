@@ -33,10 +33,7 @@ func (m *Model) handleQueueKey(msg tea.KeyPressMsg) tea.Cmd {
 	qLen := m.playlist.QueueLen()
 
 	switch msg.String() {
-	case "ctrl+c":
-		m.queue.visible = false
-		return m.quit()
-	case "ctrl+k", "?":
+	case "?":
 		m.openKeymap()
 	case "ctrl+x":
 		m.toggleExpandedView()

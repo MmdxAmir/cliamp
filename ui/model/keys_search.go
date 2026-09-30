@@ -201,11 +201,8 @@ func (m *Model) searchMaybeAdjustScroll(visible int) {
 }
 
 func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
-	// Allow opening overlays during search (ctrl combos don't conflict with text input).
+	// Ctrl combos do not conflict with text input, so they run first.
 	switch msg.String() {
-	case "ctrl+k":
-		m.openKeymap()
-		return nil
 	case "ctrl+x":
 		m.toggleExpandedView()
 		m.searchMaybeAdjustScroll(m.searchVisible())
@@ -297,10 +294,6 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // handleNetSearchKey dispatches key presses to the active net search screen.
 func (m *Model) handleNetSearchKey(msg tea.KeyPressMsg) tea.Cmd {
-	if msg.String() == "ctrl+k" {
-		m.openKeymap()
-		return nil
-	}
 	switch m.netSearch.screen {
 	case netSearchInput:
 		return m.handleNetSearchInputKey(msg)

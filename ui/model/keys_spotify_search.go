@@ -12,12 +12,6 @@ import (
 
 // handleSpotSearchKey dispatches key presses to the active provider search screen.
 func (m *Model) handleSpotSearchKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch msg.String() {
-	case "ctrl+c":
-		m.closeSpotSearch()
-		return m.quit()
-	}
-
 	switch m.spotSearch.screen {
 	case spotSearchInput:
 		return m.handleSpotSearchInputKey(msg)

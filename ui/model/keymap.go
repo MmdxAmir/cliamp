@@ -232,9 +232,6 @@ func (m *Model) closeKeymap() {
 
 func (m *Model) handleKeymapSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "ctrl+c":
-		m.keymap.visible = false
-		return m.quit()
 	case "esc":
 		m.keymap.searching = false
 		m.keymap.search = ""
@@ -278,10 +275,6 @@ func (m *Model) handleKeymapKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	switch msg.String() {
-	case "ctrl+c":
-		m.keymap.visible = false
-		return m.quit()
-
 	case "esc", "ctrl+k", "?", "q":
 		m.closeKeymap()
 

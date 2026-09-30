@@ -123,9 +123,6 @@ func (m *Model) handleNavMenuKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "ctrl+x":
 		m.toggleExpandedView()
 		return nil
-	case "ctrl+c":
-		m.navBrowser.visible = false
-		return m.quit()
 	case "up", "k":
 		if m.navBrowser.cursor > 0 {
 			m.navBrowser.cursor--
@@ -200,9 +197,6 @@ func (m *Model) handleNavGenreListKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	switch msg.String() {
-	case "ctrl+c":
-		m.navBrowser.visible = false
-		return m.quit()
 	case "up", "k":
 		if m.navBrowser.cursor > 0 {
 			m.navBrowser.cursor--
@@ -267,9 +261,6 @@ func (m *Model) handleNavGenreSortKey(msg tea.KeyPressMsg) tea.Cmd {
 		listLen = len(m.navBrowser.searchIdx)
 	}
 	switch msg.String() {
-	case "ctrl+c":
-		m.navBrowser.visible = false
-		return m.quit()
 	case "up", "k":
 		if m.navBrowser.cursor > 0 {
 			m.navBrowser.cursor--
@@ -339,9 +330,6 @@ func (m *Model) handleNavArtistListKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	switch msg.String() {
-	case "ctrl+c":
-		m.navBrowser.visible = false
-		return m.quit()
 	case "up", "k":
 		if m.navBrowser.cursor > 0 {
 			m.navBrowser.cursor--
@@ -400,9 +388,6 @@ func (m *Model) handleNavAlbumListKey(msg tea.KeyPressMsg, artistAlbums bool) te
 	}
 
 	switch msg.String() {
-	case "ctrl+c":
-		m.navBrowser.visible = false
-		return m.quit()
 	case "up", "k":
 		if m.navBrowser.cursor > 0 {
 			m.navBrowser.cursor--
@@ -513,9 +498,6 @@ func (m *Model) handleNavTrackListKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.toggleAlbumHeadersManual()
 		m.navMaybeAdjustScroll()
 		return nil
-	case "ctrl+c":
-		m.navBrowser.visible = false
-		return m.quit()
 	case "up", "k":
 		if m.navBrowser.cursor > 0 {
 			m.navBrowser.cursor--

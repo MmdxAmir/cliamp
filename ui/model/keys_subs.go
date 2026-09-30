@@ -126,10 +126,7 @@ func (m *Model) handleSubsKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	switch msg.String() {
-	case "ctrl+c":
-		m.subs.visible = false
-		return m.quit()
-	case "ctrl+k", "?":
+	case "?":
 		m.openKeymap()
 	case "ctrl+x":
 		m.toggleExpandedView()

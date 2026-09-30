@@ -125,9 +125,6 @@ func (m *Model) handlePlaylistPickerKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	count := m.plPickerCount()
 	switch msg.String() {
-	case "ctrl+c":
-		m.closePlaylistPicker()
-		return m.quit()
 	case "esc", "backspace", "q":
 		m.closePlaylistPicker()
 	case "ctrl+x":

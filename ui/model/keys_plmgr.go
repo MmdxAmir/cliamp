@@ -108,9 +108,6 @@ func (m *Model) handlePlMgrListKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	count := m.plMgrListViewCount()
 	switch msg.String() {
-	case "ctrl+c":
-		m.plManager.visible = false
-		return m.quit()
 	case "/":
 		m.plManager.filtering = true
 		m.plManager.savedCursor = m.plManager.cursor
@@ -237,9 +234,6 @@ func (m *Model) handlePlMgrListKey(msg tea.KeyPressMsg) tea.Cmd {
 // the list or tracks screen.
 func (m *Model) handlePlMgrFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "ctrl+c":
-		m.plManager.visible = false
-		return m.quit()
 	case "esc":
 		// Cancel filter, restore cursor.
 		m.plMgrResetFilter()
@@ -315,9 +309,6 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.toggleAlbumHeadersManual()
 		m.plMgrTracksMaybeAdjustScroll(m.plMgrTracksVisible())
 		return nil
-	case "ctrl+c":
-		m.plManager.visible = false
-		return m.quit()
 	case "/":
 		m.plManager.filtering = true
 		m.plManager.savedCursor = m.plManager.cursor
@@ -510,9 +501,6 @@ func (m *Model) handlePlMgrDirsKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	switch msg.String() {
-	case "ctrl+c":
-		m.plManager.visible = false
-		return m.quit()
 	case "up", "k":
 		if m.plManager.cursor > 0 {
 			m.plManager.cursor--

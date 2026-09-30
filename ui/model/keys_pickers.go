@@ -4,9 +4,6 @@ import tea "charm.land/bubbletea/v2"
 
 func (m *Model) handleThemeFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "ctrl+c":
-		m.themePickerCancel()
-		return m.quit()
 	case "esc":
 		m.themePicker.filtering = false
 		m.themePicker.filter = ""
@@ -52,10 +49,6 @@ func (m *Model) handleThemeKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	count := m.themePickerViewCount()
 	switch msg.String() {
-	case "ctrl+c":
-		m.themePickerCancel()
-		return m.quit()
-
 	case "up", "k":
 		if m.themePicker.cursor > 0 {
 			m.themePicker.cursor--
@@ -125,9 +118,6 @@ func (m *Model) handleThemeKey(msg tea.KeyPressMsg) tea.Cmd {
 
 func (m *Model) handleVisPickerFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "ctrl+c":
-		m.visPickerCancel()
-		return m.quit()
 	case "esc":
 		m.visPicker.filtering = false
 		m.visPicker.filter = ""
@@ -173,10 +163,6 @@ func (m *Model) handleVisPickerKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	count := m.visPickerViewCount()
 	switch msg.String() {
-	case "ctrl+c":
-		m.visPickerCancel()
-		return m.quit()
-
 	case "up", "k":
 		if m.visPicker.cursor > 0 {
 			m.visPicker.cursor--
@@ -251,9 +237,6 @@ func (m *Model) deviceMaybeAdjustScroll(visible int) {
 // handleDeviceKey processes key presses while the audio device picker is open.
 func (m *Model) handleDeviceKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "ctrl+c":
-		m.devicePicker.visible = false
-		return m.quit()
 	case "ctrl+x":
 		m.toggleExpandedView()
 		m.deviceMaybeAdjustScroll(m.devicePickerVisible())

@@ -211,9 +211,6 @@ func (m *Model) fbUpdateFilter() {
 
 func (m *Model) handleFileBrowserSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "ctrl+c":
-		m.fileBrowser.visible = false
-		return m.quit()
 	case "esc":
 		m.fileBrowser.searching = false
 		m.fileBrowser.search = ""
@@ -276,10 +273,6 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	var cd string
 	switch msg.String() {
-	case "ctrl+c":
-		m.fileBrowser.visible = false
-		return m.quit()
-
 	case "esc", "o", "q":
 		m.fileBrowser.visible = false
 		m.fileBrowser.searching = false

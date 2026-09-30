@@ -43,7 +43,7 @@ func (m *Model) quit() tea.Cmd {
 
 func (m *Model) handleSpeedKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "q":
 		return m.quit()
 	case "]", "right", "l", "up", "k":
 		m.changeSpeed(0.25)
@@ -234,14 +234,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 				return m.answerLocationPrompt(true)
 			case "n", "N", "esc":
 				return m.answerLocationPrompt(false)
-			case "ctrl+c":
-				return m.quit()
 			}
 			return nil
 		}
 
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q":
 			return m.quit()
 		case "F":
 			if !m.openSubsOverlay() && m.luaMgr != nil {
@@ -386,7 +384,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	if m.focus == focusProvPill {
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q":
 			return m.quit()
 		case "left", "h":
 			if m.provPillIdx > 0 {
@@ -458,7 +456,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	switch key {
-	case "q", "ctrl+c":
+	case "q":
 		return m.quit()
 	case "ctrl+r":
 		// Refresh in the queue/playlist view: when a refreshable provider
@@ -817,8 +815,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 // handleInfoKey processes key presses while the track info overlay is open.
 func (m *Model) handleInfoKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "ctrl+c":
-		return m.quit()
 	case "esc", "i":
 		m.showInfo = false
 	case "ctrl+i":
@@ -838,8 +834,6 @@ func (m *Model) handleInfoKey(msg tea.KeyPressMsg) tea.Cmd {
 // handleLyricsKey processes key presses while the lyrics overlay is open.
 func (m *Model) handleLyricsKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "ctrl+c":
-		return m.quit()
 	case "esc", "y":
 		nextRequest(&m.requests.lyrics)
 		m.lyrics.loading = false
@@ -907,7 +901,7 @@ func (m *Model) handleFullVisualizerKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Hide the episode name so the full-screen visualizer can be put on a
 		// shared screen without naming what is playing.
 		m.hideTrackInfo = !m.hideTrackInfo
-	case "ctrl+k", "?":
+	case "?":
 		m.exitFullVisualizer()
 		m.openKeymap()
 
@@ -962,12 +956,6 @@ func (m *Model) closeJumpMode() {
 
 // handleJumpKey processes key presses while in jump-time mode.
 func (m *Model) handleJumpKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch msg.String() {
-	case "ctrl+c":
-		m.closeJumpMode()
-		return m.quit()
-	}
-
 	switch msg.Code {
 	case tea.KeyEscape:
 		m.closeJumpMode()
