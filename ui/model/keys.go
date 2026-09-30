@@ -204,138 +204,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
-	if m.fullVis {
-		return m.handleFullVisualizerKey(msg)
-	}
-	if m.keymap.visible {
-		return m.handleKeymapKey(msg)
-	}
-
-	// Audio device picker overlay
-	if m.devicePicker.visible {
-		return m.handleDeviceKey(msg)
-	}
-
-	// Provider search overlay sits on top of the nav browser, so it must
-	// claim keys first when both are visible.
-	if m.plPicker.visible {
-		return m.handlePlaylistPickerKey(msg)
-	}
-
-	// File browser overlay can be opened from inside the playlist manager, so it
-	// must take precedence when both states are visible.
-	if m.fileBrowser.visible {
-		return m.handleFileBrowserKey(msg)
-	}
-
-	// Provider search overlay sits on top of the nav browser, so it must
-	// claim keys first when both are visible.
-	if m.spotSearch.visible {
-		return m.handleSpotSearchKey(msg)
-	}
-
-	// Navidrome explore browser overlay
-	if m.navBrowser.visible {
-		return m.handleNavBrowserKey(msg)
-	}
-
-	// Theme picker overlay — interactive navigation
-	if m.themePicker.visible {
-		return m.handleThemeKey(msg)
-	}
-
-	// Visualizer picker overlay — interactive navigation
-	if m.visPicker.visible {
-		return m.handleVisPickerKey(msg)
-	}
-
-	// Playlist manager overlay (browse, add, remove, delete)
-	if m.plManager.visible {
-		return m.handlePlaylistManagerKey(msg)
-	}
-
-	// Subscribed-shows overlay
-	if m.subs.visible {
-		return m.handleSubsKey(msg)
-	}
-
-	// Queue manager overlay
-	if m.queue.visible {
-		return m.handleQueueKey(msg)
-	}
-
-	// Track info overlay
-	if m.showInfo {
-		switch msg.String() {
-		case "ctrl+c":
-			return m.quit()
-		case "esc", "i":
-			m.showInfo = false
-		case "ctrl+i":
-			m.showInfo = false
-			m.toggleMetadata()
-		case "up", "k":
-			if m.infoScroll > 0 {
-				m.infoScroll--
-			}
-		case "down", "j":
-			m.infoScroll++
-			m.infoMaybeAdjustScroll()
-		}
-		return nil
-	}
-
-	// Lyrics overlay
-	if m.lyrics.visible {
-		switch msg.String() {
-		case "ctrl+c":
-			return m.quit()
-		case "esc", "y":
-			nextRequest(&m.requests.lyrics)
-			m.lyrics.loading = false
-			m.lyrics.query = ""
-			m.lyrics.visible = false
-		case "r":
-			return m.retryLyrics()
-		case "[":
-			if m.lyricsSyncable() && m.lyricsHaveTimestamps() {
-				return m.nudgeLyricsOffset(-250 * time.Millisecond)
-			}
-		case "]":
-			if m.lyricsSyncable() && m.lyricsHaveTimestamps() {
-				return m.nudgeLyricsOffset(250 * time.Millisecond)
-			}
-		case "up", "k":
-			if !(m.lyricsSyncable() && m.lyricsHaveTimestamps()) && m.lyrics.scroll > 0 {
-				m.lyrics.scroll--
-			}
-		case "down", "j":
-			if !(m.lyricsSyncable() && m.lyricsHaveTimestamps()) {
-				maxScroll := max(len(m.lyrics.lines)-1, 0)
-				if m.lyrics.scroll < maxScroll {
-					m.lyrics.scroll++
-				}
-			}
-		case "ctrl+x":
-			m.toggleExpandedView()
-		}
-		return nil
-	}
-
-	if m.jumping {
-		return m.handleJumpKey(msg)
-	}
-
-	if m.urlInputting {
-		return m.handleURLInputKey(msg)
-	}
-
-	if m.search.active {
-		return m.handleSearchKey(msg)
-	}
-
-	if m.netSearch.active {
-		return m.handleNetSearchKey(msg)
+	// The top overlay owns the keys.
+	if spec, ok := m.topOverlay(); ok {
+		return spec.key(m, msg)
 	}
 
 	if m.provSearch.active {
@@ -943,6 +814,64 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// handleInfoKey processes key presses while the track info overlay is open.
+func (m *Model) handleInfoKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "ctrl+c":
+		return m.quit()
+	case "esc", "i":
+		m.showInfo = false
+	case "ctrl+i":
+		m.showInfo = false
+		m.toggleMetadata()
+	case "up", "k":
+		if m.infoScroll > 0 {
+			m.infoScroll--
+		}
+	case "down", "j":
+		m.infoScroll++
+		m.infoMaybeAdjustScroll()
+	}
+	return nil
+}
+
+// handleLyricsKey processes key presses while the lyrics overlay is open.
+func (m *Model) handleLyricsKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "ctrl+c":
+		return m.quit()
+	case "esc", "y":
+		nextRequest(&m.requests.lyrics)
+		m.lyrics.loading = false
+		m.lyrics.query = ""
+		m.lyrics.visible = false
+	case "r":
+		return m.retryLyrics()
+	case "[":
+		if m.lyricsSyncable() && m.lyricsHaveTimestamps() {
+			return m.nudgeLyricsOffset(-250 * time.Millisecond)
+		}
+	case "]":
+		if m.lyricsSyncable() && m.lyricsHaveTimestamps() {
+			return m.nudgeLyricsOffset(250 * time.Millisecond)
+		}
+	case "up", "k":
+		if !(m.lyricsSyncable() && m.lyricsHaveTimestamps()) && m.lyrics.scroll > 0 {
+			m.lyrics.scroll--
+		}
+	case "down", "j":
+		if !(m.lyricsSyncable() && m.lyricsHaveTimestamps()) {
+			maxScroll := max(len(m.lyrics.lines)-1, 0)
+			if m.lyrics.scroll < maxScroll {
+				m.lyrics.scroll++
+			}
+		}
+	case "ctrl+x":
+		m.toggleExpandedView()
+	}
+	return nil
+}
+
 func (m *Model) exitFullVisualizer() {
 	m.fullVis = false
 	m.recomputeLayout()
@@ -1083,112 +1012,15 @@ func (m *Model) toggleExpandedView() {
 	m.adjustScroll()
 }
 
-// handlePaste routes pasted text to the active text input field.
-// The priority order mirrors handleKey so the correct input receives the content.
+// handlePaste sends pasted text to the text field of the top overlay, as
+// handleKey sends keys. With no overlay open, the provider filter takes it.
 func (m *Model) handlePaste(content string) tea.Cmd {
 	if content == "" {
 		return nil
 	}
-
-	// Keymap overlay search
-	if m.keymap.visible {
-		m.insertText("keymap", &m.keymap.search, content)
-		m.updateKeymapFilter()
-		return nil
-	}
-
-	if m.themePicker.visible && m.themePicker.filtering {
-		m.insertText("theme-picker-filter", &m.themePicker.filter, content)
-		m.themePickerRecomputeFilter()
-		return nil
-	}
-
-	if m.visPicker.visible && m.visPicker.filtering {
-		m.insertText("visualizer-picker-filter", &m.visPicker.filter, content)
-		m.visPickerRecomputeFilter()
-		return nil
-	}
-
-	// Provider search can sit above the navigation browser.
-	if m.spotSearch.visible {
-		switch m.spotSearch.screen {
-		case spotSearchInput:
-			m.insertText("spot-search", &m.spotSearch.query, content)
-		case spotSearchNewName:
-			m.insertText("spot-playlist-name", &m.spotSearch.newName, content)
-		}
-		return nil
-	}
-
-	if m.plPicker.visible && m.plPicker.screen == plPickerNewName {
-		m.insertText("playlist-picker-name", &m.plPicker.newName, content)
-		m.plPicker.inputErr = ""
-		return nil
-	}
-
-	if m.fileBrowser.visible && m.fileBrowser.searching {
-		m.insertText("file-browser-search", &m.fileBrowser.search, content)
-		m.fbUpdateFilter()
-		return nil
-	}
-
-	// Nav browser search
-	if m.navBrowser.visible && m.navBrowser.mode != navBrowseModeMenu && m.navBrowser.searching {
-		m.insertText("nav-search", &m.navBrowser.search, content)
-		m.navBrowser.cursor = 0
-		m.navBrowser.scroll = 0
-		m.navUpdateSearch()
-		return nil
-	}
-
-	// Playlist manager name input
-	if m.plManager.visible && m.plManager.screen == plMgrScreenNewName {
-		m.insertText("playlist-manager-new-name", &m.plManager.newName, content)
-		m.plManager.inputErr = ""
-		return nil
-	}
-	if m.plManager.visible && m.plManager.screen == plMgrScreenRename {
-		m.insertText("playlist-manager-rename", &m.plManager.renameName, content)
-		m.plManager.inputErr = ""
-		return nil
-	}
-
-	// Playlist manager `/` filter
-	if m.plManager.visible && m.plManager.filtering {
-		m.insertText("playlist-manager-filter", &m.plManager.filter, content)
-		m.plManager.cursor = 0
-		m.plMgrRecomputeFilter()
-		return nil
-	}
-
-	// Subscribed-shows `/` filter
-	if m.subs.visible && m.subs.filtering {
-		m.insertText("subs-filter", &m.subs.filter, content)
-		m.updateSubsFilter()
-		return nil
-	}
-
-	if m.jumping {
-		m.insertText("jump", &m.jumpInput, content)
-		m.jumpErr = ""
-		return nil
-	}
-
-	if m.urlInputting {
-		m.insertText("url", &m.urlInput, content)
-		m.urlErr = ""
-		return nil
-	}
-
-	if m.search.active {
-		m.insertText("playlist-search", &m.search.query, content)
-		m.updateSearch()
-		return nil
-	}
-
-	if m.netSearch.active {
-		if m.netSearch.screen == netSearchInput {
-			m.insertText("net-search", &m.netSearch.query, content)
+	if spec, ok := m.topOverlay(); ok {
+		if spec.paste != nil {
+			spec.paste(m, content)
 		}
 		return nil
 	}

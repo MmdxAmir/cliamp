@@ -1,0 +1,168 @@
+package model
+
+import (
+	"fmt"
+	"slices"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+)
+
+// overlayOpeners sets the flag that opens each overlay in overlayStack.
+var overlayOpeners = map[topLevelScreen]func(*Model){
+	screenFullVisualizer:  func(m *Model) { m.fullVis = true },
+	screenKeymap:          func(m *Model) { m.keymap.visible = true },
+	screenDevicePicker:    func(m *Model) { m.devicePicker.visible = true },
+	screenPlaylistPicker:  func(m *Model) { m.plPicker.visible = true },
+	screenFileBrowser:     func(m *Model) { m.fileBrowser.visible = true },
+	screenSpotSearch:      func(m *Model) { m.spotSearch.visible = true },
+	screenNavBrowser:      func(m *Model) { m.navBrowser.visible = true },
+	screenThemePicker:     func(m *Model) { m.themePicker.visible = true },
+	screenVisPicker:       func(m *Model) { m.visPicker.visible = true },
+	screenPlaylistManager: func(m *Model) { m.plManager.visible = true },
+	screenQueue:           func(m *Model) { m.queue.visible = true },
+	screenSubs:            func(m *Model) { m.subs.visible = true },
+	screenInfo:            func(m *Model) { m.showInfo = true },
+	screenLyrics:          func(m *Model) { m.lyrics.visible = true },
+	screenJump:            func(m *Model) { m.jumping = true },
+	screenURLInput:        func(m *Model) { m.urlInputting = true },
+	screenSearch:          func(m *Model) { m.search.active = true },
+	screenNetSearch:       func(m *Model) { m.netSearch.active = true },
+}
+
+// probeOverlayStack replaces overlayStack for the test with specs that record
+// which overlay got a key or a paste and that render their screen number.
+// Each probe keeps the screen, and a paste handler only where the real spec
+// has one.
+func probeOverlayStack(t *testing.T) (keys, pastes *[]topLevelScreen) {
+	t.Helper()
+	keys, pastes = new([]topLevelScreen), new([]topLevelScreen)
+	probes := make([]overlaySpec, len(overlayStack))
+	for i, spec := range overlayStack {
+		screen := spec.screen
+		probe := overlaySpec{
+			screen: screen,
+			key: func(*Model, tea.KeyPressMsg) tea.Cmd {
+				*keys = append(*keys, screen)
+				return nil
+			},
+		}
+		if spec.paste != nil {
+			probe.paste = func(*Model, string) { *pastes = append(*pastes, screen) }
+		}
+		if spec.view.body != nil {
+			probe.view = overlayView{
+				header: func(*Model) string { return fmt.Sprint("header ", screen) },
+				help:   func(*Model) string { return fmt.Sprint("help ", screen) },
+				body:   func(*Model) string { return fmt.Sprint("body ", screen) },
+			}
+		}
+		probes[i] = probe
+	}
+	saved := overlayStack
+	overlayStack = probes
+	t.Cleanup(func() { overlayStack = saved })
+	return keys, pastes
+}
+
+// TestOverlayRoutesAgree opens each overlay alone and each pair of overlays.
+// The render, key and paste routes must all pick the overlay nearest the top
+// of overlayStack.
+func TestOverlayRoutesAgree(t *testing.T) {
+	for _, spec := range overlayStack {
+		if overlayOpeners[spec.screen] == nil {
+			t.Fatalf("overlayOpeners has no opener for screen %d", spec.screen)
+		}
+	}
+	keys, pastes := probeOverlayStack(t)
+
+	type combo struct {
+		open []topLevelScreen
+		top  overlaySpec
+	}
+	var combos []combo
+	for i, upper := range overlayStack {
+		combos = append(combos, combo{[]topLevelScreen{upper.screen}, upper})
+		for _, lower := range overlayStack[i+1:] {
+			// Open the lower overlay first, as a user would.
+			combos = append(combos, combo{[]topLevelScreen{lower.screen, upper.screen}, upper})
+		}
+	}
+
+	for _, c := range combos {
+		t.Run(fmt.Sprint(c.open), func(t *testing.T) {
+			var m Model
+			for _, screen := range c.open {
+				overlayOpeners[screen](&m)
+			}
+			want := c.top.screen
+
+			if got := m.activeScreen(); got != want {
+				t.Fatalf("activeScreen() = %d, want %d", got, want)
+			}
+			if c.top.view.body == nil {
+				if _, ok := m.activeOverlay(); ok {
+					t.Fatal("activeOverlay() ok = true for an overlay that replaces the frame")
+				}
+			} else {
+				for name, got := range map[string]string{
+					"header": m.renderPlaylistHeader(),
+					"help":   m.renderHelp(),
+					"body":   m.renderMainBody(),
+				} {
+					if w := fmt.Sprint(name, " ", want); got != w {
+						t.Errorf("%s = %q, want %q", name, got, w)
+					}
+				}
+			}
+
+			*keys, *pastes = nil, nil
+			m.handleKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
+			if !slices.Equal(*keys, []topLevelScreen{want}) {
+				t.Errorf("key went to %v, want [%d]", *keys, want)
+			}
+			m.handlePaste("x")
+			var wantPaste []topLevelScreen
+			if c.top.paste != nil {
+				wantPaste = []topLevelScreen{want}
+			}
+			if !slices.Equal(*pastes, wantPaste) {
+				t.Errorf("paste went to %v, want %v", *pastes, wantPaste)
+			}
+		})
+	}
+}
+
+// TestOverlayStackOrder pins the stack order where one overlay opens from
+// inside another, and the queue and subscriptions order that was chosen.
+func TestOverlayStackOrder(t *testing.T) {
+	index := func(screen topLevelScreen) int {
+		t.Helper()
+		i := slices.IndexFunc(overlayStack, func(s overlaySpec) bool { return s.screen == screen })
+		if i < 0 {
+			t.Fatalf("overlayStack has no screen %d", screen)
+		}
+		return i
+	}
+	above := []struct {
+		name         string
+		upper, lower topLevelScreen
+	}{
+		{"playlist picker over playlist manager", screenPlaylistPicker, screenPlaylistManager},
+		{"playlist picker over file browser", screenPlaylistPicker, screenFileBrowser},
+		{"file browser over playlist manager", screenFileBrowser, screenPlaylistManager},
+		{"provider search over nav browser", screenSpotSearch, screenNavBrowser},
+		{"queue over subscriptions", screenQueue, screenSubs},
+	}
+	for _, tc := range above {
+		if index(tc.upper) >= index(tc.lower) {
+			t.Errorf("%s: screen %d is not above screen %d", tc.name, tc.upper, tc.lower)
+		}
+	}
+	// The full-screen visualizer replaces the frame, and the keymap opens
+	// over any other overlay.
+	if overlayStack[0].screen != screenFullVisualizer || overlayStack[1].screen != screenKeymap {
+		t.Errorf("overlayStack starts with screens %d and %d, want the full-screen visualizer and the keymap",
+			overlayStack[0].screen, overlayStack[1].screen)
+	}
+}

@@ -23,8 +23,8 @@ import (
 //   - a body          (via overlayBody, fills effectivePlaylistVisible rows)
 //   - a help line      (via overlayHelpLine, used by renderHelp)
 //
-// The switches below are ordered to match activeScreen so the header, body, and
-// help always describe the same overlay.
+// overlayStack in overlays_table.go holds these pieces for each overlay, so the
+// header, body, and help always describe the same overlay.
 
 // — shared header/body helpers —
 
@@ -161,62 +161,16 @@ type overlayView struct {
 	body   func(*Model) string
 }
 
-// activeOverlay returns the render pieces for the active inline overlay, or
-// ok=false when no overlay is open (the normal playlist is shown). Describing
-// each overlay once here keeps its header, help, and body in sync, and the
-// cases are ordered to match activeScreen. renderPlaylistHeader, renderHelp,
-// and renderMainBody each call this and invoke the piece they need with &m.
+// activeOverlay returns the render pieces of the top overlay. It returns
+// ok=false when no overlay is open, and for the full-screen visualizer, which
+// replaces the whole frame. renderPlaylistHeader, renderHelp, and
+// renderMainBody each call this and invoke the piece they need with &m.
 func (m Model) activeOverlay() (overlayView, bool) {
-	switch {
-	case m.keymap.visible:
-		return overlayView{(*Model).keymapHeaderLine, (*Model).keymapHelpLine, (*Model).renderKeymapList}, true
-	case m.devicePicker.visible:
-		return overlayView{(*Model).deviceHeaderLine, (*Model).devicePickerHelpLine, (*Model).renderDeviceBody}, true
-	case m.plPicker.visible:
-		return overlayView{(*Model).plPickerHeaderLine, (*Model).plPickerHelpLine, (*Model).renderPlaylistPickerBody}, true
-	case m.fileBrowser.visible:
-		return overlayView{(*Model).fbHeaderLine, (*Model).fbHelpLine, (*Model).renderFileBrowserBody}, true
-	case m.spotSearch.visible:
-		return overlayView{(*Model).spotSearchHeaderLine, (*Model).spotSearchHelpLine, (*Model).renderSpotSearchBody}, true
-	case m.navBrowser.visible:
-		return overlayView{(*Model).navHeaderLine, (*Model).navHelpLine, (*Model).renderNavBody}, true
-	case m.themePicker.visible:
-		return overlayView{(*Model).themePickerHeaderLine, (*Model).themePickerHelpLine, (*Model).renderThemeBody}, true
-	case m.visPicker.visible:
-		return overlayView{(*Model).visPickerHeaderLine, (*Model).visPickerHelpLine, (*Model).renderVisPickerList}, true
-	case m.plManager.visible:
-		return overlayView{(*Model).plMgrHeaderLine, (*Model).plMgrHelpLine, (*Model).renderPlMgrBody}, true
-	case m.queue.visible:
-		return overlayView{
-			func(m *Model) string { return sepHeaderN("Queue", m.queue.cursor+1, m.playlist.QueueLen()) },
-			(*Model).queueHelpLine, (*Model).renderQueueBody}, true
-	case m.subs.visible:
-		return overlayView{(*Model).subsHeaderLine, (*Model).subsHelpLine, (*Model).renderSubsBody}, true
-	case m.showInfo:
-		return overlayView{
-			func(*Model) string { return sepHeader("Track Info") },
-			func(m *Model) string { return m.commandHelp(commandModeInfo) },
-			(*Model).renderInfoBody}, true
-	case m.lyrics.visible:
-		return overlayView{
-			func(*Model) string { return sepHeader("Lyrics") },
-			(*Model).lyricsHelpLine, (*Model).renderLyricsBody}, true
-	case m.jumping:
-		return overlayView{
-			func(*Model) string { return sepHeader("Jump to Time") },
-			func(m *Model) string { return m.commandHelp(commandModeJump) },
-			(*Model).renderJumpBody}, true
-	case m.urlInputting:
-		return overlayView{
-			func(m *Model) string { return m.promptHeader("url", "Load URL", m.urlInput) },
-			func(m *Model) string { return m.commandHelp(commandModeURL) },
-			(*Model).renderURLBody}, true
-	case m.search.active:
-		return overlayView{(*Model).searchHeaderLine, (*Model).searchHelpLine, (*Model).renderSearchList}, true
-	case m.netSearch.active:
-		return overlayView{(*Model).netSearchHeaderLine, (*Model).netSearchHelpLine, (*Model).renderNetSearchBody}, true
+	spec, ok := m.topOverlay()
+	if !ok || spec.view.body == nil {
+		return overlayView{}, false
 	}
-	return overlayView{}, false
+	return spec.view, true
 }
 
 // renderMainBody returns the active overlay's body, or the playlist when no

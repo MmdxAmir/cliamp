@@ -134,6 +134,76 @@ func TestHandlePasteRoutesToActiveInput(t *testing.T) {
 			},
 		},
 		{
+			name:    "theme picker filter",
+			model:   Model{themePicker: themePickerState{visible: true, filtering: true}},
+			content: "dark",
+			check: func(t *testing.T, m *Model) {
+				if m.themePicker.filter != "dark" {
+					t.Fatalf("themePicker.filter = %q, want %q", m.themePicker.filter, "dark")
+				}
+			},
+		},
+		{
+			name:    "theme picker without filter drops the paste",
+			model:   Model{themePicker: themePickerState{visible: true}, search: searchState{active: true}},
+			content: "dark",
+			check: func(t *testing.T, m *Model) {
+				if m.themePicker.filter != "" || m.search.query != "" {
+					t.Fatalf("filter = %q, search = %q, want both empty", m.themePicker.filter, m.search.query)
+				}
+			},
+		},
+		{
+			name:    "visualizer picker filter",
+			model:   Model{visPicker: visPickerState{visible: true, filtering: true}},
+			content: "bars",
+			check: func(t *testing.T, m *Model) {
+				if m.visPicker.filter != "bars" {
+					t.Fatalf("visPicker.filter = %q, want %q", m.visPicker.filter, "bars")
+				}
+			},
+		},
+		{
+			name:    "playlist picker name",
+			model:   Model{plPicker: playlistPickerState{visible: true, screen: plPickerNewName, inputErr: "empty"}},
+			content: "Mix",
+			check: func(t *testing.T, m *Model) {
+				if m.plPicker.newName != "Mix" || m.plPicker.inputErr != "" {
+					t.Fatalf("plPicker newName = %q, inputErr = %q, want %q and empty", m.plPicker.newName, m.plPicker.inputErr, "Mix")
+				}
+			},
+		},
+		{
+			name:    "file browser search",
+			model:   Model{fileBrowser: fileBrowserState{visible: true, searching: true}},
+			content: "flac",
+			check: func(t *testing.T, m *Model) {
+				if m.fileBrowser.search != "flac" {
+					t.Fatalf("fileBrowser.search = %q, want %q", m.fileBrowser.search, "flac")
+				}
+			},
+		},
+		{
+			name:    "playlist manager rename",
+			model:   Model{plManager: plManagerState{visible: true, screen: plMgrScreenRename}},
+			content: "Road",
+			check: func(t *testing.T, m *Model) {
+				if m.plManager.renameName != "Road" {
+					t.Fatalf("plManager.renameName = %q, want %q", m.plManager.renameName, "Road")
+				}
+			},
+		},
+		{
+			name:    "playlist manager filter",
+			model:   Model{plManager: plManagerState{visible: true, filtering: true}},
+			content: "jazz",
+			check: func(t *testing.T, m *Model) {
+				if m.plManager.filter != "jazz" {
+					t.Fatalf("plManager.filter = %q, want %q", m.plManager.filter, "jazz")
+				}
+			},
+		},
+		{
 			name: "nav browser search",
 			model: Model{navBrowser: navBrowserState{
 				visible:   true,

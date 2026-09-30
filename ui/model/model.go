@@ -573,47 +573,12 @@ type Model struct {
 
 }
 
+// activeScreen returns the screen of the top open overlay, or screenMain.
 func (m Model) activeScreen() topLevelScreen {
-	switch {
-	case m.fullVis:
-		return screenFullVisualizer
-	case m.keymap.visible:
-		return screenKeymap
-	case m.devicePicker.visible:
-		return screenDevicePicker
-	case m.plPicker.visible:
-		return screenPlaylistPicker
-	case m.fileBrowser.visible:
-		return screenFileBrowser
-	case m.spotSearch.visible:
-		return screenSpotSearch
-	case m.navBrowser.visible:
-		return screenNavBrowser
-	case m.themePicker.visible:
-		return screenThemePicker
-	case m.visPicker.visible:
-		return screenVisPicker
-	case m.plManager.visible:
-		return screenPlaylistManager
-	case m.queue.visible:
-		return screenQueue
-	case m.subs.visible:
-		return screenSubs
-	case m.showInfo:
-		return screenInfo
-	case m.lyrics.visible:
-		return screenLyrics
-	case m.jumping:
-		return screenJump
-	case m.urlInputting:
-		return screenURLInput
-	case m.search.active:
-		return screenSearch
-	case m.netSearch.active:
-		return screenNetSearch
-	default:
-		return screenMain
+	if spec, ok := m.topOverlay(); ok {
+		return spec.screen
 	}
+	return screenMain
 }
 
 // isOverlayActive reports whether an overlay suppresses the live main view.
