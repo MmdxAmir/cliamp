@@ -18,9 +18,20 @@ func (v *Visualizer) RegisterLuaVisualizers(names []string, host LuaVisHost) {
 	v.luaVisNames = names
 	v.luaHost = host
 	clear(v.luaDriverCache)
-	// Add to name map for StringToVisModeExact lookups.
+	// Add to name map for StringToVisModeExact lookups. A name that a
+	// built-in mode or an earlier Lua mode has keeps its mode, so a plugin
+	// named Bars cannot hide the built-in Bars. The Lua mode stays in the
+	// cycle and in the picker.
+	for name, mode := range visNameMap {
+		if mode >= VisCount {
+			delete(visNameMap, name)
+		}
+	}
 	for i, name := range names {
-		visNameMap[strings.ToLower(name)] = VisCount + VisMode(i)
+		key := strings.ToLower(name)
+		if _, taken := visNameMap[key]; !taken {
+			visNameMap[key] = VisCount + VisMode(i)
+		}
 	}
 }
 

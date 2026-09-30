@@ -139,3 +139,37 @@ func TestLuaModeGetsSmoothedBands(t *testing.T) {
 		}
 	}
 }
+
+// A Lua visualizer cannot take the name of a built-in mode or of an earlier
+// Lua mode, so a name always selects the same mode. It stays in the cycle
+// and in the picker.
+func TestRegisterLuaVisualizersKeepsNames(t *testing.T) {
+	v := NewVisualizer(44100)
+	v.RegisterLuaVisualizers([]string{"old"}, nil)
+	v.RegisterLuaVisualizers([]string{"Bars", "Custom", "custom"}, nil)
+	t.Cleanup(func() {
+		for name, mode := range visNameMap {
+			if mode >= VisCount {
+				delete(visNameMap, name)
+			}
+		}
+	})
+	tests := []struct {
+		name   string
+		want   VisMode
+		wantOK bool
+	}{
+		{"bars", VisBars, true},
+		{"Custom", VisCount + 1, true},
+		{"old", 0, false},
+	}
+	for _, tt := range tests {
+		got, ok := StringToVisModeExact(tt.name)
+		if got != tt.want || ok != tt.wantOK {
+			t.Errorf("StringToVisModeExact(%q) = %v, %v; want %v, %v", tt.name, got, ok, tt.want, tt.wantOK)
+		}
+	}
+	if names := v.AllModeNames(); names[VisCount] != "Bars" {
+		t.Errorf("AllModeNames()[VisCount] = %q, want the Lua Bars in the cycle", names[VisCount])
+	}
+}

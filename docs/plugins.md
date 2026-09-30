@@ -627,7 +627,7 @@ disabled = webhook, discord-rpc
 
 ## Visualizer plugins
 
-Plugins with `type = "visualizer"` add visualizer modes to the `v` key cycle with the built-in modes.
+Plugins with `type = "visualizer"` add visualizer modes to the `v` key cycle with the built-in modes. A name selects the built-in mode when a visualizer plugin has the same name, for example `Bars`, in `cliamp vis <name>` and in the `visualizer` config key. Use the `v` key or the picker to select that plugin, or give it another name.
 
 ```lua
 -- ~/.config/cliamp/plugins/simple-bars.lua
