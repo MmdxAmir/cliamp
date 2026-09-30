@@ -246,14 +246,16 @@ func TestServiceVolumeUsesStateFloor(t *testing.T) {
 func TestServiceRepublishesClampedVolume(t *testing.T) {
 	const playerName = "org.mpris.MediaPlayer2.Player"
 	tests := []struct {
-		name  string
-		state playback.State
-		set   float64
-		want  float64
+		name     string
+		state    playback.State
+		set      float64
+		want     float64
+		lostConn bool // the bus connection closes without Close
 	}{
 		{name: "below the floor", state: playback.State{VolumeDB: -50, VolumeMinDB: -50}, set: 0.001, want: 0},
 		{name: "below 0 at the floor", state: playback.State{VolumeDB: -50, VolumeMinDB: -50}, set: -0.5, want: 0},
 		{name: "above 1 at full volume", state: playback.State{VolumeDB: 6, VolumeMinDB: -50}, set: 1.5, want: 1},
+		{name: "lost connection", state: playback.State{VolumeDB: -50, VolumeMinDB: -50}, set: 0.001, want: 0, lostConn: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name+" without Update", func(t *testing.T) {
@@ -261,13 +263,28 @@ func TestServiceRepublishesClampedVolume(t *testing.T) {
 			svc := newTestService(t, func(msg tea.Msg) { got <- msg })
 			svc.Update(tt.state)
 
-			if err := svc.props.Set(playerName, "Volume", dbus.MakeVariant(tt.set)); err != nil {
+			if tt.lostConn {
+				svc.conn.Close()
+				// The emit fails, so Set returns an error after the
+				// callback queues the message.
+				_ = svc.props.Set(playerName, "Volume", dbus.MakeVariant(tt.set))
+			} else if err := svc.props.Set(playerName, "Volume", dbus.MakeVariant(tt.set)); err != nil {
 				t.Fatalf("Set Volume error = %v", err)
 			}
 			select {
 			case <-got:
 			case <-time.After(2 * time.Second):
 				t.Fatal("Set Volume sent no message")
+			}
+			if tt.lostConn {
+				// forwardMessages sends the next message only after
+				// republishVolume returns without a panic.
+				svc.dispatch(playback.NextMsg{})
+				select {
+				case <-got:
+				case <-time.After(2 * time.Second):
+					t.Fatal("forwardMessages stopped after the failed publish")
+				}
 			}
 			deadline := time.Now().Add(2 * time.Second)
 			for svc.props.GetMust(playerName, "Volume") != tt.want {
@@ -277,6 +294,9 @@ func TestServiceRepublishesClampedVolume(t *testing.T) {
 				time.Sleep(time.Millisecond)
 			}
 		})
+		if tt.lostConn {
+			continue
+		}
 		t.Run(tt.name+" with Update", func(t *testing.T) {
 			// send blocks, so only Update can publish.
 			release := make(chan struct{})

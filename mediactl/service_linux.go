@@ -14,6 +14,7 @@ import (
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/godbus/dbus/v5/prop"
 
+	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/playback"
 )
 
@@ -321,6 +322,14 @@ func (s *Service) republishVolume(db float64) {
 	if dbToLinear(db, math.Float64frombits(s.volFloor.Load())) != s.lastVol || !s.volSet.Swap(false) {
 		return
 	}
+	// SetMust panics when the emit fails, for example after the bus
+	// connection drops. A panic on this goroutine ends the process and
+	// leaves the terminal in raw mode.
+	defer func() {
+		if r := recover(); r != nil {
+			applog.Warn("mpris: republish volume: %v", r)
+		}
+	}()
 	s.props.SetMust("org.mpris.MediaPlayer2.Player", "Volume", s.lastVol)
 }
 
