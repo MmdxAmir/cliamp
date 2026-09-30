@@ -178,7 +178,7 @@ On Linux the build needs the ALSA, FLAC, Vorbis, Ogg and mpg123 headers: `libaso
 
 Tests are colocated with sources (`*_test.go`). Favor table-driven tests — the codebase already uses them heavily in `player/`, `playlist/`, `config/`, `ui/model/`, and `luaplugin/`. Tests read `site/index.html` to check the counts of visualizers, EQ presets, themes and plugin events. `config/config_golden_test.go` loads every setting of `config.toml.example`.
 
-Config lives at `~/.config/cliamp/config.toml` (example at `config.toml.example`); plugins at `~/.config/cliamp/plugins/`; custom radios at `~/.config/cliamp/radios.toml`; themes at `~/.config/cliamp/themes/`. The IPC socket is `~/.config/cliamp/cliamp.sock`, and the log is `~/.config/cliamp/cliamp.log`. `CLIAMP_CONFIG_DIR` and `XDG_CONFIG_HOME` move the config directory. Set them when you run a test binary, so it does not touch the socket of a running cliamp.
+Config lives at `~/.config/cliamp/config.toml` (example at `config.toml.example`); plugins at `~/.config/cliamp/plugins/`; custom radios at `~/.config/cliamp/radios.toml`; themes at `~/.config/cliamp/themes/`. The IPC socket is `~/.config/cliamp/cliamp.sock`, and the log is `~/.config/cliamp/cliamp.log`. Set HOME and every `XDG_*` directory to a temp directory when you run a test binary. `CLIAMP_CONFIG_DIR` and `XDG_CONFIG_HOME` move only the config directory, which holds the socket and the log. The data directory `~/.local/share/cliamp`, the `~/Music/cliamp` save directory and `~` in local music paths still follow HOME.
 
 ---
 
