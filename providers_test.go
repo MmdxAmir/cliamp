@@ -10,6 +10,7 @@ import (
 	"github.com/gopxl/beep/v2"
 
 	"github.com/bjarneo/cliamp/config"
+	"github.com/bjarneo/cliamp/external/navidrome"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -74,6 +75,11 @@ func TestBuildProviders(t *testing.T) {
 			}
 			if got, want := set.jellyfin() != nil, slices.Contains(tt.want, "jellyfin"); got != want {
 				t.Errorf("jellyfin() set = %v, want %v", got, want)
+			}
+			for _, e := range set.entries {
+				if nav, ok := e.Provider.(*navidrome.NavidromeClient); ok && nav.SaveSort == nil {
+					t.Error("the Navidrome album sort is not saved to the config")
+				}
 			}
 		})
 	}

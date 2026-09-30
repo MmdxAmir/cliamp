@@ -79,7 +79,7 @@ url             = "http://nas.local:9000"
 show_unplayable = true
 ```
 
-Set `LYRION_SHOW_UNPLAYABLE=true` for the same behavior with environment configuration.
+With environment configuration, set `LYRION_SHOW_UNPLAYABLE=true` for the same behavior. A `[lyrion]` block with `show_unplayable = true` and no `url` also works with the environment variables.
 
 An *album* that contains only plugin tracks still appears in the browser and opens empty. Cliamp filters playlists because the server reports their origin in the same response. Classifying albums would need one extra request per album.
 

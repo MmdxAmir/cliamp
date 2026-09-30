@@ -111,18 +111,21 @@ func NewFromConfig(cfg config.LyrionConfig) *Client {
 }
 
 // NewFromEnv creates a Client from LYRION_URL, LYRION_USER, and LYRION_PASS.
-// It returns nil when LYRION_URL is unset; the credentials are optional.
-func NewFromEnv() *Client {
-	u := os.Getenv("LYRION_URL")
-	if u == "" {
-		return nil
+// It keeps the settings of cfg that are not credentials, as
+// navidrome.NewFromEnv does. LYRION_SHOW_UNPLAYABLE=true also sets
+// show_unplayable. It returns nil when LYRION_URL is unset; the credentials
+// are optional.
+func NewFromEnv(cfg config.LyrionConfig) *Client {
+	cfg.URL = os.Getenv("LYRION_URL")
+	cfg.User = os.Getenv("LYRION_USER")
+	cfg.Password = os.Getenv("LYRION_PASS")
+	if strings.EqualFold(os.Getenv("LYRION_SHOW_UNPLAYABLE"), "true") {
+		cfg.ShowUnplayable = true
 	}
-	c := New(u, os.Getenv("LYRION_USER"), os.Getenv("LYRION_PASS"))
-	c.showUnplayable = strings.EqualFold(os.Getenv("LYRION_SHOW_UNPLAYABLE"), "true")
-	return c
+	return NewFromConfig(cfg)
 }
 
-func (c *Client) Name() string { return "lyrion" }
+func (c *Client) Name() string { return "Lyrion" }
 
 // Ping verifies the server is reachable and speaking JSON-RPC.
 func (c *Client) Ping() error {

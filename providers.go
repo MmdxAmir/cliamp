@@ -152,15 +152,21 @@ func buildProviders(cfg config.Config, interactive bool) *providerSet {
 	}
 	add("podcast", podcast.New(cfg.Podcast.Country))
 
-	if c := navidrome.NewFromConfig(cfg.Navidrome); c != nil {
-		add("navidrome", c)
-	} else if c := navidrome.NewFromEnv(cfg.Navidrome); c != nil {
-		add("navidrome", c)
+	// A configured server takes precedence over the environment variables.
+	nav := navidrome.NewFromConfig(cfg.Navidrome)
+	if nav == nil {
+		nav = navidrome.NewFromEnv(cfg.Navidrome)
 	}
-	if c := lyrion.NewFromConfig(cfg.Lyrion); c != nil {
-		add("lyrion", c)
-	} else if c := lyrion.NewFromEnv(); c != nil {
-		add("lyrion", c)
+	if nav != nil {
+		nav.SaveSort = config.SaveNavidromeSort
+		add("navidrome", nav)
+	}
+	lyr := lyrion.NewFromConfig(cfg.Lyrion)
+	if lyr == nil {
+		lyr = lyrion.NewFromEnv(cfg.Lyrion)
+	}
+	if lyr != nil {
+		add("lyrion", lyr)
 	}
 	if p := plex.NewFromConfig(cfg.Plex); p != nil {
 		add("plex", p)

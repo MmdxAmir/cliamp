@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -834,6 +835,46 @@ func TestDialErrorGetsNetdiagHint(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to contain %q", err, want)
+			}
+		})
+	}
+}
+
+// SaveAlbumSort keeps the pick for this session and saves it through
+// SaveSort. An empty pick selects the alphabetical sort. With no SaveSort, the
+// pick is not saved.
+func TestSaveAlbumSort(t *testing.T) {
+	saveErr := errors.New("disk full")
+	for _, tt := range []struct {
+		name      string
+		sort      string
+		noSaver   bool
+		saverErr  error
+		wantSort  string
+		wantSaved []string
+	}{
+		{name: "named sort", sort: SortNewest, wantSort: SortNewest, wantSaved: []string{SortNewest}},
+		{name: "empty sort", sort: "", wantSort: SortAlphabeticalByName, wantSaved: []string{SortAlphabeticalByName}},
+		{name: "no saver", sort: SortStarred, noSaver: true, wantSort: SortStarred},
+		{name: "save error", sort: SortByYear, saverErr: saveErr, wantSort: SortByYear, wantSaved: []string{SortByYear}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := New("https://music.test", "alice", "secret")
+			var saved []string
+			if !tt.noSaver {
+				c.SaveSort = func(sort string) error {
+					saved = append(saved, sort)
+					return tt.saverErr
+				}
+			}
+			if err := c.SaveAlbumSort(tt.sort); !errors.Is(err, tt.saverErr) {
+				t.Fatalf("SaveAlbumSort error = %v, want %v", err, tt.saverErr)
+			}
+			if got := c.DefaultAlbumSort(); got != tt.wantSort {
+				t.Errorf("DefaultAlbumSort() = %q, want %q", got, tt.wantSort)
+			}
+			if !slices.Equal(saved, tt.wantSaved) {
+				t.Errorf("saved = %v, want %v", saved, tt.wantSaved)
 			}
 		})
 	}

@@ -80,8 +80,8 @@ func jsonScalar(v any) string {
 // --- 2.1 construction -------------------------------------------------------
 
 func TestName(t *testing.T) {
-	if got := New("http://nas:9000", "", "").Name(); got != "lyrion" {
-		t.Errorf("Name() = %q, want lyrion", got)
+	if got := New("http://nas:9000", "", "").Name(); got != "Lyrion" {
+		t.Errorf("Name() = %q, want Lyrion", got)
 	}
 }
 
@@ -116,20 +116,46 @@ func TestNewFromConfig(t *testing.T) {
 	}
 }
 
+// NewFromEnv takes the server and the credentials from the environment and
+// keeps show_unplayable from the [lyrion] block, as navidrome.NewFromEnv
+// keeps its settings. LYRION_SHOW_UNPLAYABLE=true also sets it.
 func TestNewFromEnv(t *testing.T) {
-	t.Setenv("LYRION_URL", "")
-	if c := NewFromEnv(); c != nil {
-		t.Error("NewFromEnv with no LYRION_URL should return nil")
-	}
-	t.Setenv("LYRION_URL", "http://nas:9000")
-	t.Setenv("LYRION_USER", "bob")
-	t.Setenv("LYRION_PASS", "pw")
-	c := NewFromEnv()
-	if c == nil {
-		t.Fatal("NewFromEnv returned nil with LYRION_URL set")
-	}
-	if c.url != "http://nas:9000" || c.user != "bob" {
-		t.Errorf("NewFromEnv = %+v", c)
+	for _, tt := range []struct {
+		name           string
+		url, showEnv   string
+		cfg            config.LyrionConfig
+		wantNil        bool
+		wantUnplayable bool
+	}{
+		{name: "no url", wantNil: true},
+		{name: "no url with a config block", cfg: config.LyrionConfig{ShowUnplayable: true}, wantNil: true},
+		{name: "url", url: "http://nas:9000"},
+		{name: "config show_unplayable", url: "http://nas:9000", cfg: config.LyrionConfig{ShowUnplayable: true}, wantUnplayable: true},
+		{name: "env show_unplayable", url: "http://nas:9000", showEnv: "TRUE", wantUnplayable: true},
+		{name: "env ignores the config url", url: "http://nas:9000", cfg: config.LyrionConfig{URL: "http://other:9000", User: "eve"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("LYRION_URL", tt.url)
+			t.Setenv("LYRION_USER", "bob")
+			t.Setenv("LYRION_PASS", "pw")
+			t.Setenv("LYRION_SHOW_UNPLAYABLE", tt.showEnv)
+			c := NewFromEnv(tt.cfg)
+			if tt.wantNil {
+				if c != nil {
+					t.Fatalf("NewFromEnv = %+v, want nil", c)
+				}
+				return
+			}
+			if c == nil {
+				t.Fatal("NewFromEnv returned nil with LYRION_URL set")
+			}
+			if c.url != "http://nas:9000" || c.user != "bob" || c.password != "pw" {
+				t.Errorf("NewFromEnv = %+v, want the environment server and credentials", c)
+			}
+			if c.showUnplayable != tt.wantUnplayable {
+				t.Errorf("showUnplayable = %v, want %v", c.showUnplayable, tt.wantUnplayable)
+			}
+		})
 	}
 }
 

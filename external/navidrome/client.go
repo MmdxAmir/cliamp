@@ -94,9 +94,13 @@ type NavidromeClient struct {
 	browseSort       string
 	format           string
 	scrobbleDisabled bool
-	mu               sync.Mutex
-	playlistCache    []playlist.PlaylistInfo
-	trackCache       map[string][]playlist.Track
+	// SaveSort saves the album sort that the user picks. The caller sets
+	// it, as main sets it to config.SaveNavidromeSort. When it is nil,
+	// SaveAlbumSort keeps the sort for this session only.
+	SaveSort      func(sortType string) error
+	mu            sync.Mutex
+	playlistCache []playlist.PlaylistInfo
+	trackCache    map[string][]playlist.Track
 }
 
 // New creates a NavidromeClient with the given server credentials.
@@ -158,12 +162,17 @@ func (c *NavidromeClient) DefaultAlbumSort() string {
 	return SortAlphabeticalByName
 }
 
+// SaveAlbumSort makes sortType the album sort and saves it through SaveSort.
+// An empty sortType selects SortAlphabeticalByName.
 func (c *NavidromeClient) SaveAlbumSort(sortType string) error {
 	if sortType == "" {
 		sortType = SortAlphabeticalByName
 	}
 	c.browseSort = sortType
-	return config.SaveNavidromeSort(sortType)
+	if c.SaveSort == nil {
+		return nil
+	}
+	return c.SaveSort(sortType)
 }
 
 // subsonicError represents an application-level error from the Subsonic API.
