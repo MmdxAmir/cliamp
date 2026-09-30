@@ -68,6 +68,7 @@ type TidalProvider struct {
 	mu         sync.Mutex
 	client     *client
 	authCancel context.CancelFunc
+	authGen    uint64 // counts sign-ins, so a call clears only its own authCancel
 
 	listCache  []playlist.PlaylistInfo
 	trackCache map[string][]playlist.Track
@@ -124,9 +125,17 @@ func (p *TidalProvider) ensureClient() (*client, error) {
 	return c, nil
 }
 
+// signIn runs the interactive sign-in. Tests replace it.
+var signIn = newClientInteractive
+
 // Authenticate runs the interactive device-flow sign-in (shows a
 // link.tidal.com URL, waits for approval). Implements playlist.Authenticator.
 func (p *TidalProvider) Authenticate() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Cancel the old flow and register this one in one lock hold, so a
+	// newer call or Close always finds the flow that runs.
 	p.mu.Lock()
 	if p.client != nil {
 		p.mu.Unlock()
@@ -134,21 +143,19 @@ func (p *TidalProvider) Authenticate() error {
 	}
 	if p.authCancel != nil {
 		p.authCancel()
-		p.authCancel = nil
 	}
-	p.mu.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	p.mu.Lock()
+	p.authGen++
+	gen := p.authGen
 	p.authCancel = cancel
 	p.mu.Unlock()
 
-	c, err := newClientInteractive(ctx, p.clientID, p.clientSecret)
+	c, err := signIn(ctx, p.clientID, p.clientSecret)
 
 	p.mu.Lock()
-	p.authCancel = nil
+	if p.authGen == gen {
+		p.authCancel = nil
+	}
 	p.mu.Unlock()
-	cancel()
 
 	if err != nil {
 		return err

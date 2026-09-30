@@ -45,6 +45,7 @@ type baseProvider struct {
 	disk         *ytCache                    // lazy-loaded disk cache
 	cacheScope   string                      // immutable identity of the active OAuth account
 	authCancel   context.CancelFunc          // cancels any in-progress OAuth flow
+	authGen      uint64                      // counts sign-ins, so a call clears only its own authCancel
 }
 
 func newBase(session *Session, clientID, clientSecret string, hasCookies bool) *baseProvider {
@@ -70,15 +71,31 @@ func (b *baseProvider) ensureDiskCache() *ytCache {
 	return b.disk
 }
 
+// signIn runs the interactive sign-in. Tests replace it.
+var signIn = NewSession
+
 // initSession creates a session if one doesn't exist yet. If interactive is
 // false, only stored credentials are tried (returning ErrNeedsAuth on failure).
 // If interactive is true, a browser-based OAuth flow is started. Any previous
 // in-progress OAuth flow is cancelled first to free the callback port.
 func (b *baseProvider) initSession(interactive bool) error {
+	timeout := 30 * time.Second
+	if interactive {
+		timeout = 5 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	b.mu.Lock()
 	if b.session != nil {
 		b.mu.Unlock()
 		return nil
+	}
+	clientID := b.clientID
+	clientSecret := b.clientSecret
+	if clientID == "" {
+		b.mu.Unlock()
+		return fmt.Errorf("ytmusic: no client ID available")
 	}
 	// Cancel any previous in-progress auth attempt so the old listener
 	// on CallbackPort is released before we try to bind again.
@@ -86,32 +103,28 @@ func (b *baseProvider) initSession(interactive bool) error {
 		b.authCancel()
 		b.authCancel = nil
 	}
-	clientID := b.clientID
-	clientSecret := b.clientSecret
-	b.mu.Unlock()
-
-	if clientID == "" {
-		return fmt.Errorf("ytmusic: no client ID available")
+	// Register an interactive flow in the same lock hold, so a newer call
+	// or close always finds the flow that runs.
+	var gen uint64
+	if interactive {
+		b.authGen++
+		gen = b.authGen
+		b.authCancel = cancel
 	}
+	b.mu.Unlock()
 
 	var sess *Session
 	var err error
 	if interactive {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		b.mu.Lock()
-		b.authCancel = cancel
-		b.mu.Unlock()
-
-		sess, err = NewSession(ctx, clientID, clientSecret)
+		sess, err = signIn(ctx, clientID, clientSecret)
 
 		b.mu.Lock()
-		b.authCancel = nil
+		if b.authGen == gen {
+			b.authCancel = nil
+		}
 		b.mu.Unlock()
-		cancel()
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		sess, err = NewSessionSilent(ctx, clientID, clientSecret)
-		cancel()
 	}
 	if err != nil {
 		if !interactive {

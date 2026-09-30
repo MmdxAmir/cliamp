@@ -35,6 +35,7 @@ type SpotifyProvider struct {
 	trackCache map[string]*playlistCache // playlist ID → cache entry
 	pending    map[string]*pendingTracks
 	authCancel context.CancelFunc // cancels any in-progress OAuth flow
+	authGen    uint64             // counts sign-ins, so a call clears only its own authCancel
 
 	// Playlist list cache to avoid redundant API calls on provider switch.
 	listCache   []playlist.PlaylistInfo
@@ -83,6 +84,15 @@ func (p *SpotifyProvider) ensureSession() error {
 	return nil
 }
 
+// signIn runs the interactive sign-in. It reconnects existing when it is not
+// nil and then returns no new session. Tests replace it.
+var signIn = func(ctx context.Context, clientID string, existing *Session) (*Session, error) {
+	if existing != nil {
+		return nil, existing.ReconnectInteractive(ctx)
+	}
+	return NewSession(ctx, clientID)
+}
+
 // Authenticate runs the interactive sign-in flow (opens browser, waits for callback).
 // Any previous in-progress OAuth flow is cancelled first to free the callback port.
 //
@@ -90,36 +100,33 @@ func (p *SpotifyProvider) ensureSession() error {
 // session already exists at that point, its Web API token is missing or its
 // stream keys were rejected, so the session is rebuilt through the browser.
 func (p *SpotifyProvider) Authenticate() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Cancel the old flow and register this one in one lock hold, so a
+	// newer call or Close always finds the flow that runs.
 	p.mu.Lock()
+	clientID := p.clientID
+	if clientID == "" {
+		p.mu.Unlock()
+		return fmt.Errorf("spotify: no client ID available")
+	}
 	if p.authCancel != nil {
 		p.authCancel()
-		p.authCancel = nil
 	}
-	clientID := p.clientID
+	p.authGen++
+	gen := p.authGen
+	p.authCancel = cancel
 	existing := p.session
 	p.mu.Unlock()
 
-	if clientID == "" {
-		return fmt.Errorf("spotify: no client ID available")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	p.mu.Lock()
-	p.authCancel = cancel
-	p.mu.Unlock()
-
-	var sess *Session
-	var err error
-	if existing != nil {
-		err = existing.ReconnectInteractive(ctx)
-	} else {
-		sess, err = NewSession(ctx, clientID)
-	}
+	sess, err := signIn(ctx, clientID, existing)
 
 	p.mu.Lock()
-	p.authCancel = nil
+	if p.authGen == gen {
+		p.authCancel = nil
+	}
 	p.mu.Unlock()
-	cancel()
 
 	if err != nil {
 		return err
