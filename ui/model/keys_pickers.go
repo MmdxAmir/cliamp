@@ -55,10 +55,10 @@ func (m *Model) handleVisPickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.handleVisPickerFilterKey(msg)
 	}
 
-	visible := m.effectivePlaylistVisible()
-	if stepListCursor(msg.String(), &m.visPicker.cursor, m.visPickerViewCount(), visible) {
+	// The apply can cross VisNone and resize the rows, so fit the scroll after it.
+	if stepListCursor(msg.String(), &m.visPicker.cursor, m.visPickerViewCount(), m.effectivePlaylistVisible()) {
 		m.visPickerApply()
-		m.visPickerMaybeAdjustScroll(visible)
+		m.visPickerMaybeAdjustScroll(m.effectivePlaylistVisible())
 		return nil
 	}
 	switch msg.String() {

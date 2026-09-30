@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/bjarneo/cliamp/theme"
 	"github.com/bjarneo/cliamp/ui"
 	"github.com/charmbracelet/x/ansi"
@@ -140,6 +142,44 @@ func TestPickerListsWindowTheShownRows(t *testing.T) {
 				if strings.Join(got, "|") != strings.Join(tt.want, "|") {
 					t.Errorf("%s picker rows = %q, want %q", picker, got, tt.want)
 				}
+			}
+		})
+	}
+}
+
+// TestVisPickerKeepsCursorRowAcrossVisNone checks that a cursor key which moves
+// onto or off VisNone fits the picker window to the playlist rows after the
+// layout change, so the window shows the cursor row and no blank rows.
+func TestVisPickerKeepsCursorRowAcrossVisNone(t *testing.T) {
+	tests := []struct {
+		name  string
+		start ui.VisMode
+		key   tea.KeyPressMsg
+	}{
+		{name: "up from None", start: ui.VisNone, key: tea.KeyPressMsg{Code: 'k', Text: "k"}},
+		{name: "end from Bars", start: ui.VisBars, key: tea.KeyPressMsg{Code: 'G', Text: "G"}},
+		{name: "down onto None", start: ui.VisNone - 1, key: tea.KeyPressMsg{Code: 'j', Text: "j"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newLayoutTestModel(80, 24)
+			m.vis.Mode = tt.start
+			m.recomputeLayout()
+			m.openVisPicker()
+
+			updated, _ := m.Update(tt.key)
+			m = updated.(Model)
+
+			rows := strings.Split(ansi.Strip(m.renderVisPickerList()), "\n")
+			var cursorRow bool
+			for i, row := range rows {
+				if strings.TrimSpace(row) == "" {
+					t.Errorf("row %d is blank, rows = %q", i, rows)
+				}
+				cursorRow = cursorRow || strings.HasPrefix(row, "> ")
+			}
+			if !cursorRow {
+				t.Errorf("no cursor row in %q", rows)
 			}
 		})
 	}
