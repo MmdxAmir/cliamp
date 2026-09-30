@@ -114,7 +114,7 @@ func (m Model) selectedPlaylistStarAction() playlistStarAction {
 	if _, ok := m.favoriteStation(track, m.loadedPlaylist != ""); ok {
 		return starRadioFavorite
 	}
-	if m.favMgr != nil {
+	if m.favStore != nil {
 		return starFavorite
 	}
 	return starUnavailable

@@ -30,7 +30,7 @@ type dirSourceTestProvider struct {
 	added         []string
 	failOn        map[string]error // dirs that AddDirSource should fail on
 	historyTracks []playlist.Track // served for the Recently Played playlist
-	favPaths      map[string]struct{}
+	favs          *favorites.Store // served for the Favorites playlist, as the local provider does
 }
 
 type dirSetRecCall struct {
@@ -42,12 +42,8 @@ func (p *dirSourceTestProvider) Tracks(id string) ([]playlist.Track, error) {
 	if id == history.PlaylistName {
 		return append([]playlist.Track(nil), p.historyTracks...), nil
 	}
-	if id == favorites.PlaylistName && p.favPaths != nil {
-		var out []playlist.Track
-		for path := range p.favPaths {
-			out = append(out, playlist.Track{Path: path, Title: path})
-		}
-		return out, nil
+	if id == favorites.PlaylistName && p.favs != nil {
+		return p.favs.Tracks()
 	}
 	return p.commandsTestProvider.Tracks(id)
 }
@@ -91,49 +87,39 @@ func (p *dirSourceTestProvider) SetDirRecursive(_, dir string, recursive bool) e
 	return nil
 }
 
-func (p *dirSourceTestProvider) ToggleFavorite(track playlist.Track) (bool, error) {
-	if p.favPaths == nil {
-		p.favPaths = make(map[string]struct{})
+// useFavorites gives p a favorites store in a temp directory, unless it has
+// one, and returns it. The Model and p then share the store, as the Model
+// and the local provider do.
+func (p *dirSourceTestProvider) useFavorites(t *testing.T) *favorites.Store {
+	t.Helper()
+	if p.favs == nil {
+		p.favs = favorites.NewAt(filepath.Join(t.TempDir(), "favorites.toml"))
 	}
-	if _, ok := p.favPaths[track.Path]; ok {
-		delete(p.favPaths, track.Path)
-		return false, nil
-	}
-	p.favPaths[track.Path] = struct{}{}
-	return true, nil
-}
-
-func (p *dirSourceTestProvider) IsFavorited(path string) bool {
-	if p.favPaths == nil {
-		return false
-	}
-	_, ok := p.favPaths[path]
-	return ok
-}
-
-func (p *dirSourceTestProvider) FavoritesCount() int {
-	return len(p.favPaths)
+	return p.favs
 }
 
 func (p *dirSourceTestProvider) Playlists() ([]playlist.PlaylistInfo, error) {
 	favs := playlist.PlaylistInfo{ID: favorites.PlaylistName, Name: favorites.PlaylistName, Section: favorites.PlaylistName}
-	if p.favPaths != nil {
-		favs.TrackCount = len(p.favPaths)
-	}
+	favs.TrackCount = p.favs.Count()
 	return []playlist.PlaylistInfo{favs, {ID: "music", Name: "music"}}, nil
 }
 
-func newDirsScreenTestModel(prov playlist.Provider) Model {
-	var favMgr provider.FavoritesManager
-	if fm, ok := prov.(provider.FavoritesManager); ok {
-		favMgr = fm
+// newDirsScreenTestModel returns a Model with prov as the local provider. A
+// dirSourceTestProvider shares its favorites store with the Model.
+func newDirsScreenTestModel(t *testing.T, prov playlist.Provider) Model {
+	t.Helper()
+	var favs *favorites.Store
+	if fp, ok := prov.(interface {
+		useFavorites(*testing.T) *favorites.Store
+	}); ok {
+		favs = fp.useFavorites(t)
 	}
 	m := Model{
 		playlist:      playlist.New(),
 		localProvider: prov,
 		provider:      prov,
 		providers:     []provider.Entry{{Key: "local", Name: "Local", Provider: prov}},
-		favMgr:        favMgr,
+		favStore:      favs,
 		vis:           ui.NewVisualizer(48000),
 		plManager: plManagerState{
 			visible:     true,
@@ -161,7 +147,7 @@ func TestPlMgrDKeyOpensDirsScreen(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		dirs: []playlist.DirSource{{Path: "/home/me/Music", Recursive: true}},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 
 	m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "D"})
 
@@ -175,7 +161,7 @@ func TestPlMgrDKeyOpensDirsScreen(t *testing.T) {
 
 func TestPlMgrDKeyHistoryShowsNotice(t *testing.T) {
 	prov := &dirSourceTestProvider{}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.selPlaylist = history.PlaylistName
 
 	m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "D"})
@@ -195,7 +181,7 @@ func TestPlMgrDKeyNoticeWhenUnsupported(t *testing.T) {
 	// A plain commandsTestProvider does not implement PlaylistDirSourceManager,
 	// so the D key must show a notice and stay on the tracks screen.
 	plain := commandsTestProvider{name: "Local"}
-	m := newDirsScreenTestModel(&dirSourceTestProvider{})
+	m := newDirsScreenTestModel(t, &dirSourceTestProvider{})
 	m.localProvider = plain
 	m.provider = plain
 
@@ -279,7 +265,7 @@ func TestPlMgrDeleteRefreshesProviderPane(t *testing.T) {
 		name:  "Local",
 		lists: []playlist.PlaylistInfo{{ID: "music", Name: "music"}, {ID: "top40", Name: "top40"}},
 	}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenList
 	m.plManager.playlists = []playlist.PlaylistInfo{
 		{ID: "music", Name: "music"},
@@ -332,7 +318,7 @@ func TestPlMgrDeleteSkipsPaneFetchWhenRemoteActive(t *testing.T) {
 		lists: []playlist.PlaylistInfo{{ID: "top40", Name: "top40"}},
 	}}
 	remote := &commandsTestProvider{name: "Navidrome", lists: []playlist.PlaylistInfo{{ID: "nd", Name: "nd"}}}
-	m := newDirsScreenTestModel(local)
+	m := newDirsScreenTestModel(t, local)
 	m.providers = append(m.providers, provider.Entry{Key: "navidrome", Name: "Navidrome", Provider: remote})
 	m.provPillIdx = 1
 	m.provider = remote
@@ -351,7 +337,7 @@ func TestPlMgrDeleteSkipsPaneFetchWhenRemoteActive(t *testing.T) {
 
 func TestPlMgrDeleteGuardsRecentlyPlayed(t *testing.T) {
 	prov := &paneManageProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenList
 	m.plManager.playlists = []playlist.PlaylistInfo{
 		{ID: "music", Name: "music"},
@@ -377,19 +363,19 @@ func TestPlMgrDeleteGuardsRecentlyPlayed(t *testing.T) {
 
 func TestPlMgrFKeyRemovesRowFromFavoritesScreen(t *testing.T) {
 	prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-	if _, err := prov.ToggleFavorite(playlist.Track{Path: "/a.mp3", Title: "A"}); err != nil {
+	if _, err := prov.useFavorites(t).Toggle(playlist.Track{Path: "/a.mp3", Title: "A"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := prov.ToggleFavorite(playlist.Track{Path: "/b.mp3", Title: "B"}); err != nil {
+	if _, err := prov.favs.Toggle(playlist.Track{Path: "/b.mp3", Title: "B"}); err != nil {
 		t.Fatal(err)
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.selPlaylist = favorites.PlaylistName
 	m.plMgrLoadTracks([]playlist.Track{{Path: "/a.mp3"}, {Path: "/b.mp3"}})
 
 	cmd := m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "f"})
 
-	if prov.IsFavorited("/a.mp3") {
+	if prov.favs.IsFavorited("/a.mp3") {
 		t.Fatal("f should unfavorite the highlighted track")
 	}
 	if len(m.plManager.tracks) != 1 || m.plManager.tracks[0].Path != "/b.mp3" {
@@ -413,7 +399,7 @@ func TestPlMgrFKeyRemovesRowFromFavoritesScreen(t *testing.T) {
 
 func TestFKeyFromQueueRefreshesFavoritesCount(t *testing.T) {
 	prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.focus = focusPlaylist
 	m.loadedPlaylist = "music"
 	m.playlist = playlist.New()
@@ -426,7 +412,7 @@ func TestFKeyFromQueueRefreshesFavoritesCount(t *testing.T) {
 	if cmd := m.handleKey(tea.KeyPressMsg{Text: "f"}); cmd == nil {
 		t.Fatal("expected a provider-playlist refresh command")
 	}
-	if !prov.IsFavorited("/song.mp3") {
+	if !prov.favs.IsFavorited("/song.mp3") {
 		t.Fatal("track should be favorited after f")
 	}
 	// Opening the manager must show the updated Favorites count.
@@ -444,7 +430,7 @@ func TestFKeyFromQueueRefreshesFavoritesCount(t *testing.T) {
 
 func TestPlMgrDeleteGuardsFavorites(t *testing.T) {
 	prov := &paneManageProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenList
 	m.plManager.playlists = []playlist.PlaylistInfo{
 		{ID: favorites.PlaylistName, Name: favorites.PlaylistName},
@@ -474,7 +460,7 @@ func TestPlMgrDirsToggleRecursive(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		dirs: []playlist.DirSource{{Path: "/Music", Recursive: true}},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "D"}) // open dirs screen
 
 	m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "r"})
@@ -494,7 +480,7 @@ func TestPlMgrDirsRemoveConfirmFlow(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		dirs: []playlist.DirSource{{Path: "/Music", Recursive: true}},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "D"}) // open dirs screen
 
 	// 'd' arms the confirmation prompt; nothing removed yet.
@@ -523,7 +509,7 @@ func TestFileBrowserDAddsDirSource(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	// Reproduce the file-browser state set up by openFileBrowserForPlaylist:
 	// with nothing selected or highlighted, the browsing dir becomes the source.
 	m.plManager.screen = plMgrScreenDirs
@@ -548,7 +534,7 @@ func TestFileBrowserDGrabsHighlightedFolder(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenDirs
 	m.fileBrowser.visible = true
 	m.fileBrowser.targetPlaylist = "music"
@@ -575,7 +561,7 @@ func TestFileBrowserDPartialFailureStillRefreshes(t *testing.T) {
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 		failOn:               map[string]error{"/d2": errors.New("boom")},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenDirs
 	m.plManager.selPlaylist = "music"
 	m.fileBrowser.visible = true
@@ -606,7 +592,7 @@ func TestFbConfirmSelectedDirBecomesSource(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.fileBrowser.visible = true
 	m.fileBrowser.targetPlaylist = "music"
 	m.fileBrowser.entries = []fbEntry{
@@ -631,7 +617,7 @@ func TestFbConfirmMixedSelectionSplitsDirsAndFiles(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.fileBrowser.visible = true
 	m.fileBrowser.targetPlaylist = "music"
 	m.fileBrowser.entries = []fbEntry{
@@ -662,7 +648,7 @@ func TestProviderPanePUsesLocalProviderKey(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: tc.display}}
-			m := newDirsScreenTestModel(prov)
+			m := newDirsScreenTestModel(t, prov)
 			m.providers = []provider.Entry{{Key: tc.key, Name: tc.display, Provider: prov}}
 			m.focus = focusProvider
 			m.plManager.visible = false
@@ -678,7 +664,7 @@ func TestProviderPanePUsesLocalProviderKey(t *testing.T) {
 
 func TestProviderPanePOpensPlaylistManager(t *testing.T) {
 	prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.focus = focusProvider
 	m.plManager.visible = false
 
@@ -694,7 +680,7 @@ func TestProviderPanePOpensPlaylistManager(t *testing.T) {
 
 func TestPlMgrAKeyOpensNewPlaylistInput(t *testing.T) {
 	prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenList
 
 	m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "a"})
@@ -709,7 +695,7 @@ func TestPlMgrAKeyOpensNewPlaylistInput(t *testing.T) {
 
 func TestPlMgrDKeyOnListOpensBrowserForPlaylist(t *testing.T) {
 	prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenList
 	m.plManager.playlists = []playlist.PlaylistInfo{{ID: "music", Name: "music"}}
 	m.plManager.cursor = 0
@@ -728,7 +714,7 @@ func TestPlMgrNewNameEnterCreatesAndOpensBrowser(t *testing.T) {
 	prov := &creatingDirSourceProvider{dirSourceTestProvider: dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 	}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenNewName
 	m.plManager.newName = "fresh"
 
@@ -752,7 +738,7 @@ func TestPlMgrNewNameBrowserStartsAtHome(t *testing.T) {
 	prov := &creatingDirSourceProvider{dirSourceTestProvider: dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 	}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenNewName
 	m.plManager.newName = "fresh"
 	m.fileBrowser.dir = "/var/log"
@@ -772,7 +758,7 @@ func TestFileBrowserEscDoneCommitsSelection(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.focus = focusPlaylist
 	m.fileBrowser.visible = true
 	m.fileBrowser.targetPlaylist = "music"
@@ -798,7 +784,7 @@ func TestBeginPlaybackTrackRecordsHistoryImmediately(t *testing.T) {
 		name:  "Local",
 		lists: []playlist.PlaylistInfo{{ID: "music", Name: "music"}},
 	}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.historyStore = history.NewAt(filepath.Join(t.TempDir(), "history.toml"))
 	m.plManager.screen = plMgrScreenList
 	m.plManager.playlists = nil
@@ -824,7 +810,7 @@ func TestBeginPlaybackTrackRecordsHistoryImmediately(t *testing.T) {
 
 func TestMaybeScrobbleLeavesHistoryToTrackStart(t *testing.T) {
 	prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.historyStore = history.NewAt(filepath.Join(t.TempDir(), "history.toml"))
 	m.plManager.screen = plMgrScreenList
 	m.plManager.playlists = nil
@@ -845,7 +831,7 @@ func TestMaybeScrobbleLeavesHistoryToTrackStart(t *testing.T) {
 
 func TestMaybeScrobbleReloadsOpenHistoryTracks(t *testing.T) {
 	prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.historyStore = history.NewAt(filepath.Join(t.TempDir(), "history.toml"))
 	m.plManager.screen = plMgrScreenTracks
 	m.plManager.selPlaylist = history.PlaylistName
@@ -872,7 +858,7 @@ func TestMaybeScrobbleReloadsOpenHistoryTracks(t *testing.T) {
 // not survive (the scroll adjuster returns early on an empty list).
 func TestPlMgrReloadTracksResetsScrollWhenEmpty(t *testing.T) {
 	prov := &dirSourceTestProvider{}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenTracks
 	m.plManager.selPlaylist = favorites.PlaylistName
 	m.plManager.tracks = []playlist.Track{{Path: "/a.mp3", Title: "A"}}
@@ -893,7 +879,7 @@ func TestFKeyTogglesFavorite(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.focus = focusPlaylist
 	m.loadedPlaylist = "music"
 	m.playlist = playlist.New()
@@ -904,13 +890,13 @@ func TestFKeyTogglesFavorite(t *testing.T) {
 
 	// n is no longer a favorite key.
 	m.handleKey(tea.KeyPressMsg{Text: "n"})
-	if prov.IsFavorited("/song.mp3") {
+	if prov.favs.IsFavorited("/song.mp3") {
 		t.Fatal("n must not favorite a track")
 	}
 
 	// Toggle on.
 	m.handleKey(tea.KeyPressMsg{Text: "f"})
-	if !prov.IsFavorited("/song.mp3") {
+	if !prov.favs.IsFavorited("/song.mp3") {
 		t.Fatal("track should be favorited after f")
 	}
 	if m.favSet == nil {
@@ -922,7 +908,7 @@ func TestFKeyTogglesFavorite(t *testing.T) {
 
 	// Toggle off.
 	m.handleKey(tea.KeyPressMsg{Text: "f"})
-	if prov.IsFavorited("/song.mp3") {
+	if prov.favs.IsFavorited("/song.mp3") {
 		t.Fatal("track should be unfavorited after second f")
 	}
 	if m.favSet != nil {
@@ -932,12 +918,12 @@ func TestFKeyTogglesFavorite(t *testing.T) {
 	}
 }
 
-func TestFKeyNoopWithoutFavMgr(t *testing.T) {
+func TestFKeyNoopWithoutFavoritesStore(t *testing.T) {
 	plain := commandsTestProvider{name: "Local"}
-	m := newDirsScreenTestModel(&dirSourceTestProvider{})
+	m := newDirsScreenTestModel(t, &dirSourceTestProvider{})
 	m.localProvider = plain
 	m.provider = plain
-	m.favMgr = nil
+	m.favStore = nil
 	m.focus = focusPlaylist
 	m.loadedPlaylist = "music"
 	m.playlist = playlist.New()
@@ -948,7 +934,7 @@ func TestFKeyNoopWithoutFavMgr(t *testing.T) {
 
 	// No crash, no status change.
 	if m.status.text != "" {
-		t.Fatalf("status = %q, want empty (no favMgr)", m.status.text)
+		t.Fatalf("status = %q, want empty (no favorites store)", m.status.text)
 	}
 }
 
@@ -964,7 +950,7 @@ func TestPlMgrDeleteUndoRestoresDirDocument(t *testing.T) {
 			"mix": []byte("[[dir]]\npath = \"/music/rock\"\nrecursive = true\n\n[[track]]\npath = \"/music/keep.mp3\"\n"),
 		},
 	}
-	m := newDirsScreenTestModel(prov)
+	m := newDirsScreenTestModel(t, prov)
 	m.plManager.screen = plMgrScreenList
 	m.plManager.playlists = []playlist.PlaylistInfo{{ID: "mix", Name: "mix"}}
 	m.plManager.cursor = 0

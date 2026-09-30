@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -968,37 +969,62 @@ func TestCanAddToPlaylistMatchesAddTracks(t *testing.T) {
 	}
 }
 
-func TestFavoritesManagerToggle(t *testing.T) {
+// TestNewListsTheSharedStores checks that New lists the virtual playlists
+// from the stores that the caller passes. A write through the store shows at
+// once, because the provider keeps no copy of its own.
+func TestNewListsTheSharedStores(t *testing.T) {
 	track := playlist.Track{Path: "/a.mp3", Title: "A"}
 	tests := []struct {
-		name  string
-		store bool
-		want  []bool // favorited state after each toggle
+		name       string
+		withStores bool
+		wantLists  []string
 	}{
-		{name: "toggle on then off", store: true, want: []bool{true, false}},
-		{name: "no favorites store", want: []bool{false, false}},
+		{name: "shared stores", withStores: true, wantLists: []string{favorites.PlaylistName, history.PlaylistName}},
+		{name: "no stores", withStores: false, wantLists: nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := newTestProviderWithFavorites(t)
-			if !tt.store {
-				p.favorites = nil
+			dir := t.TempDir()
+			t.Setenv("CLIAMP_CONFIG_DIR", dir)
+			var favs *favorites.Store
+			var hist *history.Store
+			if tt.withStores {
+				favs = favorites.NewAt(filepath.Join(dir, "favorites.toml"))
+				hist = history.NewAt(filepath.Join(dir, "history.toml"))
+				if _, err := favs.Toggle(track); err != nil {
+					t.Fatal(err)
+				}
+				if err := hist.Record(track, time.Now()); err != nil {
+					t.Fatal(err)
+				}
 			}
-			var fm provider.FavoritesManager = p
-			if p.IsFavorited(track.Path) {
-				t.Fatal("favorited before the first toggle")
+			p := New(favs, hist)
+
+			lists, err := p.Playlists()
+			if err != nil {
+				t.Fatal(err)
 			}
-			for i, want := range tt.want {
-				got, err := fm.ToggleFavorite(track)
-				if err != nil {
-					t.Fatalf("toggle %d: ToggleFavorite: %v", i, err)
+			var names []string
+			for _, pl := range lists {
+				names = append(names, pl.Name)
+			}
+			if !slices.Equal(names, tt.wantLists) {
+				t.Fatalf("Playlists() = %v, want %v", names, tt.wantLists)
+			}
+			for _, name := range tt.wantLists {
+				tracks, err := p.Tracks(name)
+				if err != nil || len(tracks) != 1 || tracks[0].Path != track.Path {
+					t.Fatalf("Tracks(%q) = %+v, %v, want %s", name, tracks, err, track.Path)
 				}
-				if got != want {
-					t.Fatalf("toggle %d: ToggleFavorite = %v, want %v", i, got, want)
-				}
-				if got := p.IsFavorited(track.Path); got != want {
-					t.Fatalf("toggle %d: IsFavorited = %v, want %v", i, got, want)
-				}
+			}
+			if favs == nil {
+				return
+			}
+			if _, err := favs.Toggle(track); err != nil {
+				t.Fatal(err)
+			}
+			if tracks, err := p.Tracks(favorites.PlaylistName); err != nil || len(tracks) != 0 {
+				t.Fatalf("Tracks(Favorites) after a store toggle = %+v, %v, want none", tracks, err)
 			}
 		})
 	}

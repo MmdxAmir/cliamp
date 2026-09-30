@@ -465,12 +465,14 @@ type Model struct {
 	// It is shared by value-receiver copies of Model.
 	ipcRuntime *ipcRuntimeState
 
-	// History recorder (nil if config dir unavailable; safe to call when nil)
+	// historyStore records Recently Played. It is nil when the config
+	// directory is unavailable. main.go shares it with the local provider.
 	historyStore *history.Store
 
-	// Favorites manager (nil when local provider doesn't support it; safe to
-	// call when nil). Cached here to avoid a type assertion per rendered track.
-	favMgr provider.FavoritesManager
+	// favStore holds the ♥ favorites. It is nil when the config directory is
+	// unavailable. main.go shares it with the local provider, which lists it
+	// as the Favorites playlist.
+	favStore *favorites.Store
 	// favSync orders the calls that copy favorite changes to providers. It
 	// is created on first use and shared across Model value copies.
 	favSync *favorites.SyncQueue

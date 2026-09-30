@@ -29,6 +29,8 @@ import (
 	"github.com/bjarneo/cliamp/external/tidal"
 	"github.com/bjarneo/cliamp/external/yandex"
 	"github.com/bjarneo/cliamp/external/ytmusic"
+	"github.com/bjarneo/cliamp/favorites"
+	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/embyapi"
 	"github.com/bjarneo/cliamp/internal/resume"
 	"github.com/bjarneo/cliamp/player"
@@ -44,8 +46,11 @@ import (
 // no code here.
 type providerSet struct {
 	entries []provider.Entry
-	// local is nil when the config directory is unavailable.
+	// local, favorites and history are nil when the config directory is
+	// unavailable. The local provider and the Model share the two stores.
 	local          *local.Provider
+	favorites      *favorites.Store
+	history        *history.Store
 	radioFavorites *radio.Favorites
 }
 
@@ -133,7 +138,8 @@ func buildProviders(cfg config.Config, interactive bool) *providerSet {
 		Country:     cfg.Radio.Country,
 		SaveCountry: config.SaveRadioCountry,
 	})
-	s.local = local.New()
+	s.favorites, s.history = favorites.New(), history.New()
+	s.local = local.New(s.favorites, s.history)
 	// Bookmarks became favorites. Copy the old bookmarks one time.
 	if added, err := s.local.MigrateBookmarks(); err != nil {
 		applog.Warn("bookmark migration: %v", err)

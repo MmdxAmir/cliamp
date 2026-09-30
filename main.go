@@ -137,7 +137,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		defer luaMgr.Close()
 	}
 
-	m := model.New(p, pl, providers.entries, defaultProvider, providers.localPlaylists(), theme.LoadAll(), luaMgr, config.SaveFunc{})
+	m := model.New(p, pl, providers.entries, defaultProvider, providers.localPlaylists(), providers.favorites, providers.history, theme.LoadAll(), luaMgr, config.SaveFunc{})
 	m.SetRadioFavorites(providers.radioFavorites)
 	if resumeServer != nil {
 		m.SetResumeSaver(serverResumeSaver(resumeServer))

@@ -30,7 +30,9 @@ func applyThemeAll(t theme.Theme) {
 // providers is the ordered list of available providers (Radio, Navidrome, Spotify, Jellyfin, etc.).
 // defaultProvider is the config key of the provider to select initially.
 // localProv is an optional direct reference to the local provider for write ops.
-func New(p player.Engine, pl *playlist.Playlist, providers []provider.Entry, defaultProvider string, localProv playlist.Provider, themes []theme.Theme, luaMgr *luaplugin.Manager, cs ConfigSaver) Model {
+// favs and hist are the favorites and history stores that the local provider
+// also reads. Each can be nil.
+func New(p player.Engine, pl *playlist.Playlist, providers []provider.Entry, defaultProvider string, localProv playlist.Provider, favs *favorites.Store, hist *history.Store, themes []theme.Theme, luaMgr *luaplugin.Manager, cs ConfigSaver) Model {
 	m := Model{
 		player:           p,
 		playlist:         pl,
@@ -46,13 +48,11 @@ func New(p player.Engine, pl *playlist.Playlist, providers []provider.Entry, def
 		providers:        providers,
 		navBrowser:       navBrowserState{},
 		luaMgr:           luaMgr,
-		historyStore:     history.New(),
+		historyStore:     hist,
+		favStore:         favs,
 		showAlbumHeaders: false,
 	}
-	if fm, ok := localProv.(provider.FavoritesManager); ok {
-		m.favMgr = fm
-		m.refreshFavSet()
-	}
+	m.refreshFavSet()
 	if luaMgr != nil {
 		m.pluginEmit = &pluginEmitState{}
 		if luaMgr.PluginCount() > 0 {
@@ -330,10 +330,10 @@ func (m Model) Init() tea.Cmd {
 // never hits disk.
 func (m *Model) refreshFavSet() {
 	m.favSet = nil
-	if m.favMgr == nil {
+	if m.favStore == nil {
 		return
 	}
-	tracks, err := m.localProvider.Tracks(favorites.PlaylistName)
+	tracks, err := m.favStore.Tracks()
 	if err != nil || len(tracks) == 0 {
 		return
 	}

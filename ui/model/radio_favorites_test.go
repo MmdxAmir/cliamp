@@ -1,7 +1,6 @@
 package model
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/external/radio"
+	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -141,13 +141,16 @@ func TestRadioFavoriteFollowsTrackAfterProviderSwitch(t *testing.T) {
 	}
 }
 
-// failingFavorites is a favorites store whose writes fail.
-type failingFavorites struct {
-	dirSourceTestProvider
-	err error
+// failingFavorites returns a favorites store whose writes fail, because the
+// directory of its file is a regular file.
+func failingFavorites(t *testing.T) *favorites.Store {
+	t.Helper()
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return favorites.NewAt(filepath.Join(blocker, "favorites.toml"))
 }
-
-func (p *failingFavorites) ToggleFavorite(playlist.Track) (bool, error) { return false, p.err }
 
 // A station row outside saved playlists toggles the station favorite. In a
 // saved local playlist the same row toggles the track favorite, because the
@@ -172,14 +175,12 @@ func TestRadioRowFavoriteDispatch(t *testing.T) {
 			if tc.saved {
 				m.loadedPlaylist = "Saved radios"
 			}
-			hearts := &failingFavorites{}
+			local := &dirSourceTestProvider{}
+			hearts := local.useFavorites(t)
 			if tc.fail {
-				hearts.err = errors.New("read-only favorites")
-				m.favMgr = hearts
-			} else {
-				m.favMgr = &hearts.dirSourceTestProvider
+				local.favs = failingFavorites(t)
 			}
-			m.localProvider = m.favMgr.(playlist.Provider)
+			m.localProvider, m.favStore = local, local.favs
 			if help := m.commandHelp(commandModeMain); !strings.Contains(help, tc.wantHelp) {
 				t.Fatalf("help = %q, want %q", help, tc.wantHelp)
 			}
@@ -202,7 +203,7 @@ func TestRadioRowFavoriteDispatch(t *testing.T) {
 			}
 
 			m.handleKey(tea.KeyPressMsg{Text: "f"})
-			if m.radioFavorites.Count() != 0 || hearts.FavoritesCount() != 0 || m.playlistTrackFavorited(tracks[0]) {
+			if m.radioFavorites.Count() != 0 || hearts.Count() != 0 || m.playlistTrackFavorited(tracks[0]) {
 				t.Fatal("second f did not remove the favorite")
 			}
 		})
@@ -235,8 +236,9 @@ func TestIPCBookmarkStationRowMatchesReportedBookmark(t *testing.T) {
 			if tc.saved {
 				m.loadedPlaylist = "Saved radios"
 			}
-			store := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-			m.localProvider, m.favMgr = store, store
+			local := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
+			store := local.useFavorites(t)
+			m.localProvider, m.favStore = local, store
 			info := ipcTrackInfo(tracks[0], 0, 0, false)
 
 			for _, want := range []bool{true, false} {
@@ -778,8 +780,9 @@ func TestTrackFavoriteHelpRequiresPlaylistFocus(t *testing.T) {
 			m, _, _ := radioFavoriteTestModel(t)
 			local := playlist.Track{Path: "/music/local.mp3", Title: "Local"}
 			m.replacePlayerPlaylist([]playlist.Track{local})
-			hearts := &dirSourceTestProvider{}
-			m.favMgr, m.localProvider = hearts, hearts
+			localProv := &dirSourceTestProvider{}
+			hearts := localProv.useFavorites(t)
+			m.favStore, m.localProvider = hearts, localProv
 			m.focus = tc.focus
 			m.layout.tier = layoutMinimal
 			found := false

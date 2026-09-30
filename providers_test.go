@@ -13,6 +13,8 @@ import (
 	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/external/emby"
 	"github.com/bjarneo/cliamp/external/navidrome"
+	"github.com/bjarneo/cliamp/favorites"
+	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/resume"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
@@ -98,6 +100,31 @@ func TestBuildProviders(t *testing.T) {
 	}
 }
 
+// buildProviders makes one favorites store and one history store. The local
+// provider lists the virtual playlists from the same stores, so a write
+// through the set shows in the local provider at once.
+func TestBuildProvidersSharesTheStores(t *testing.T) {
+	isolateProviderEnv(t)
+	set := buildProviders(config.Config{}, false)
+	t.Cleanup(set.Close)
+	if set.favorites == nil || set.history == nil {
+		t.Fatal("the favorites and history stores must be set")
+	}
+	track := playlist.Track{Path: "/music/a.mp3", Title: "A"}
+	if _, err := set.favorites.Toggle(track); err != nil {
+		t.Fatal(err)
+	}
+	if err := set.history.Record(track, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{favorites.PlaylistName, history.PlaylistName} {
+		tracks, err := set.local.Tracks(name)
+		if err != nil || len(tracks) != 1 || tracks[0].Path != track.Path {
+			t.Errorf("local Tracks(%q) = %+v, %v, want %s", name, tracks, err, track.Path)
+		}
+	}
+}
+
 // With no HOME, XDG_CONFIG_HOME or CLIAMP_CONFIG_DIR, cliamp has no config
 // directory and no local provider. The Model then starts without one and
 // does not panic.
@@ -118,7 +145,7 @@ func TestBuildProvidersWithoutConfigDir(t *testing.T) {
 	if lp := set.localPlaylists(); lp != nil {
 		t.Fatalf("localPlaylists() = %#v, want a nil interface", lp)
 	}
-	model.New(&player.Player{}, playlist.New(), set.entries, "cliamp", set.localPlaylists(), nil, nil, config.SaveFunc{})
+	model.New(&player.Player{}, playlist.New(), set.entries, "cliamp", set.localPlaylists(), set.favorites, set.history, nil, nil, config.SaveFunc{})
 }
 
 // fakeStreamer decodes fake: URIs, as Spotify decodes spotify: URIs, and

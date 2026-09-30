@@ -76,7 +76,7 @@ func newHeadlessModel(t *testing.T, engine player.Engine, providers []provider.E
 	t.Cleanup(func() { ui.FrameStyle, ui.PanelWidth = style, width })
 	pl := playlist.New()
 	pl.Add(tracks...)
-	m := New(engine, pl, providers, "", nil, nil, nil, nil)
+	m := New(engine, pl, providers, "", nil, nil, history.New(), nil, nil, nil)
 	m.SetHeadless(true)
 	return m
 }

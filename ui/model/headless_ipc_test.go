@@ -420,14 +420,14 @@ func TestHeadlessBookmarkSyncsOwningProvider(t *testing.T) {
 				{Key: "local", Name: "Local", Provider: store},
 				{Key: "fake", Name: "Fake", Provider: fake},
 			})
-			m.localProvider, m.favMgr = store, store
+			m.localProvider, m.favStore = store, store.useFavorites(t)
 			track := ipc.TrackInfo{Path: tc.path, Title: "Song"}
 
 			for _, want := range []bool{true, false} {
 				if response := runV2(t, &m, "playlist.bookmark", ipc.Request{Provider: "local", Playlist: "Mix", Track: &track}); !response.OK {
 					t.Fatalf("playlist.bookmark = %+v", response)
 				}
-				if got := store.IsFavorited(tc.path); got != want {
+				if got := store.favs.IsFavorited(tc.path); got != want {
 					t.Fatalf("favorited = %v, want %v", got, want)
 				}
 			}

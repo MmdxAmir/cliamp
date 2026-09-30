@@ -22,7 +22,7 @@ func (s *recordingConfigSaver) Save(key, value string) error {
 
 func newEQTestModel(custom [eqBandCount]float64, saver ConfigSaver) Model {
 	player := &playbackFakeEngine{eqBands: custom}
-	m := New(player, playlist.New(), nil, "", nil, nil, nil, saver)
+	m := New(player, playlist.New(), nil, "", nil, nil, nil, nil, nil, saver)
 	m.layout.tier = layoutFull
 	m.focus = focusEQ
 	return m

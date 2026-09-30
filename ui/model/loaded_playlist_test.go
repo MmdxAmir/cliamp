@@ -74,15 +74,16 @@ func TestV2ProviderLoadKeepsWriteBacksLocal(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("CLIAMP_CONFIG_DIR", dir)
-			lp := local.New()
+			favs, hist := favorites.New(), history.New()
+			lp := local.New(favs, hist)
 			if err := lp.SavePlaylist("Mix", []playlist.Track{a, b}); err != nil {
 				t.Fatal(err)
 			}
 			for i, track := range []playlist.Track{b, a} {
-				if err := history.New().Record(track, time.Unix(int64(1000+i), 0)); err != nil {
+				if err := hist.Record(track, time.Unix(int64(1000+i), 0)); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := lp.ToggleFavorite(track); err != nil {
+				if _, err := favs.Toggle(track); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -136,11 +137,12 @@ func TestV2ProviderLoadKeepsWriteBacksLocal(t *testing.T) {
 func TestStationRowInFavoritesTogglesTrackFavorite(t *testing.T) {
 	m, _, tracks := radioFavoriteTestModel(t)
 	station := tracks[0]
-	lp := local.New()
-	if _, err := lp.ToggleFavorite(station); err != nil {
+	favs := favorites.New()
+	lp := local.New(favs, nil)
+	if _, err := favs.Toggle(station); err != nil {
 		t.Fatal(err)
 	}
-	m.provider, m.localProvider, m.favMgr = lp, lp, lp
+	m.provider, m.localProvider, m.favStore = lp, lp, favs
 	m.refreshFavSet()
 
 	m.requests.tracks = 1
@@ -160,7 +162,7 @@ func TestStationRowInFavoritesTogglesTrackFavorite(t *testing.T) {
 	m.focus = focusPlaylist
 	m.plCursor = 0
 	m.handleKey(tea.KeyPressMsg{Text: "f"})
-	if lp.IsFavorited(station.Path) {
+	if favs.IsFavorited(station.Path) {
 		t.Fatal("f did not remove the station from Favorites")
 	}
 	if m.radioFavorites.Count() != 0 {

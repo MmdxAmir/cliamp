@@ -36,7 +36,6 @@ var (
 	_ provider.PlaylistRenamer          = (*Provider)(nil)
 	_ provider.Searcher                 = (*Provider)(nil)
 	_ provider.PlaylistDirSourceManager = (*Provider)(nil)
-	_ provider.FavoritesManager         = (*Provider)(nil)
 )
 
 // Provider reads and writes TOML-based playlists stored on disk.
@@ -48,16 +47,19 @@ type Provider struct {
 	mu sync.Mutex // see lock
 }
 
-// New creates a Provider using ~/.config/cliamp/playlists/ as the base directory.
-func New() *Provider {
+// New creates a Provider using ~/.config/cliamp/playlists/ as the base
+// directory. It lists the virtual Favorites and Recently Played playlists
+// from favs and hist, which the caller owns. Either store can be nil. It
+// returns nil when the config directory is unavailable.
+func New(favs *favorites.Store, hist *history.Store) *Provider {
 	dir, err := appdir.Dir()
 	if err != nil {
 		return nil
 	}
 	return &Provider{
 		dir:       filepath.Join(dir, "playlists"),
-		history:   history.New(),
-		favorites: favorites.New(),
+		history:   hist,
+		favorites: favs,
 	}
 }
 
@@ -1063,23 +1065,6 @@ func (p *Provider) RestorePlaylistDocument(name string, data []byte) error {
 		return fmt.Errorf("replacing playlist %q: %w", name, err)
 	}
 	return nil
-}
-
-// ToggleFavorite toggles a track in the favorites store.
-// Implements provider.FavoritesManager.
-func (p *Provider) ToggleFavorite(track playlist.Track) (bool, error) {
-	if p.favorites == nil {
-		return false, nil
-	}
-	return p.favorites.Toggle(track)
-}
-
-// IsFavorited reports whether the given path is in the favorites store.
-func (p *Provider) IsFavorited(path string) bool {
-	if p.favorites == nil {
-		return false
-	}
-	return p.favorites.IsFavorited(path)
 }
 
 // RemoveTrack removes a track by index from the named playlist.

@@ -2105,7 +2105,7 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "D":
 		m.plMgrOpenDirs()
 	case "f":
-		if m.favMgr != nil {
+		if m.favStore != nil {
 			realIdx := m.plMgrTrackRealIndex(m.plManager.cursor)
 			if realIdx >= 0 && realIdx < len(m.plManager.tracks) {
 				track := m.plManager.tracks[realIdx]

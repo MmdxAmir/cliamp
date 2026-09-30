@@ -28,7 +28,7 @@ type trackFavoriteSyncedMsg struct {
 // It does nothing without a favorites store, and shows an error in the status
 // bar when the store fails.
 func (m *Model) favoriteTrackKey(track playlist.Track) tea.Cmd {
-	if m.favMgr == nil {
+	if m.favStore == nil {
 		return nil
 	}
 	cmd, err := m.toggleTrackFavorite(track)
@@ -43,10 +43,10 @@ func (m *Model) favoriteTrackKey(track playlist.Track) tea.Cmd {
 // which stays the source of truth. The returned command copies the change to
 // the provider that owns the track and refreshes the provider pane counts.
 func (m *Model) toggleTrackFavorite(track playlist.Track) (tea.Cmd, error) {
-	if m.favMgr == nil {
+	if m.favStore == nil {
 		return nil, errFavoritesUnavailable
 	}
-	favorite, err := m.favMgr.ToggleFavorite(track)
+	favorite, err := m.favStore.Toggle(track)
 	if err != nil {
 		return nil, err
 	}

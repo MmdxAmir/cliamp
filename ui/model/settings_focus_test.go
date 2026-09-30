@@ -363,7 +363,7 @@ func TestSettingsFocusHelpAndReservation(t *testing.T) {
 			t.Fatalf("keymap did not start with the focused %s context", label)
 		}
 	}
-	m := New(&playbackFakeEngine{}, playlist.New(), nil, "", nil, nil, nil, nil)
+	m := New(&playbackFakeEngine{}, playlist.New(), nil, "", nil, nil, nil, nil, nil, nil)
 	if m.focus != focusPlaylist {
 		t.Fatalf("startup focus = %s, want unchanged playlist focus", m.focus.label())
 	}

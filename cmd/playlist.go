@@ -15,6 +15,7 @@ import (
 
 	"github.com/bjarneo/cliamp/external/local"
 	"github.com/bjarneo/cliamp/favorites"
+	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/sshurl"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/resolve"
@@ -535,7 +536,7 @@ func PlaylistImport(path, name string) error {
 // PlaylistFavorite toggles the ♥ favorite of a track by index. The
 // "playlist bookmark" command is an alias of this command.
 func PlaylistFavorite(name string, index int) error {
-	prov, err := newFavoritesProvider()
+	prov, favs, err := newFavoritesProvider()
 	if err != nil {
 		return err
 	}
@@ -549,7 +550,7 @@ func PlaylistFavorite(name string, index int) error {
 	}
 	track := tracks[index-1]
 
-	favorite, err := prov.ToggleFavorite(track)
+	favorite, err := favs.Toggle(track)
 	if err != nil {
 		return fmt.Errorf("toggling favorite: %w", err)
 	}
@@ -564,12 +565,12 @@ func PlaylistFavorite(name string, index int) error {
 // PlaylistFavorites lists the ♥ favorites. The "playlist bookmarks" command
 // is an alias of this command.
 func PlaylistFavorites() error {
-	prov, err := newFavoritesProvider()
+	_, favs, err := newFavoritesProvider()
 	if err != nil {
 		return err
 	}
 
-	tracks, err := prov.Tracks(favorites.PlaylistName)
+	tracks, err := favs.Tracks()
 	if err != nil {
 		return fmt.Errorf("loading favorites: %w", err)
 	}
@@ -584,17 +585,18 @@ func PlaylistFavorites() error {
 	return nil
 }
 
-// newFavoritesProvider returns the local provider after the one-time copy of
-// old bookmarks into favorites.
-func newFavoritesProvider() (*local.Provider, error) {
-	prov, err := newProvider()
+// newFavoritesProvider returns the local provider and the favorites store
+// that it lists, after the one-time copy of old bookmarks into favorites.
+func newFavoritesProvider() (*local.Provider, *favorites.Store, error) {
+	favs := favorites.New()
+	prov, err := newProviderWith(favs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if _, err := prov.MigrateBookmarks(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 	}
-	return prov, nil
+	return prov, favs, nil
 }
 
 // PlaylistEnrich probes duration and derives album metadata for SSH tracks.
@@ -950,8 +952,15 @@ func sshFindAudio(host string, paths []string) ([]string, error) {
 	return allFiles, nil
 }
 
+// newProvider returns the local provider. It lists Favorites and Recently
+// Played from their stores, as the player does.
 func newProvider() (*local.Provider, error) {
-	p := local.New()
+	return newProviderWith(favorites.New())
+}
+
+// newProviderWith returns the local provider that lists favs as Favorites.
+func newProviderWith(favs *favorites.Store) (*local.Provider, error) {
+	p := local.New(favs, history.New())
 	if p == nil {
 		return nil, fmt.Errorf("failed to initialize local playlist provider")
 	}

@@ -399,15 +399,6 @@ type Closer interface {
 	Close()
 }
 
-// FavoritesManager is implemented by providers that support a cross-playlist
-// favorites virtual playlist. The UI uses this to toggle favorites from the
-// track list without going through the per-playlist write path.
-type FavoritesManager interface {
-	// ToggleFavorite toggles the given track in the favorites store.
-	// Returns true when the track is now favorited after the call.
-	ToggleFavorite(track playlist.Track) (bool, error)
-}
-
 // TrackPager is implemented by providers that can return a playlist's tracks
 // one page at a time so the UI can populate the queue progressively. Pages are
 // requested sequentially: the caller feeds each returned next back in until it

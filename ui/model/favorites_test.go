@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -65,17 +66,17 @@ func runCmd(cmd tea.Cmd) []tea.Msg {
 	return []tea.Msg{msg}
 }
 
-// favoriteKeyTestModel returns a model with a fake favorites store and one
-// local track in the playlist, the playlist manager, the provider browser,
-// and the search results.
-func favoriteKeyTestModel(t *testing.T) (Model, *dirSourceTestProvider) {
+// favoriteKeyTestModel returns a model with a favorites store in a temp
+// directory and one local track in the playlist, the playlist manager, the
+// provider browser, and the search results.
+func favoriteKeyTestModel(t *testing.T) (Model, *favorites.Store) {
 	t.Helper()
-	store := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
+	local := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
 	m := keybindingTestModel()
-	m.localProvider, m.favMgr = store, store
+	m.localProvider, m.favStore = local, local.useFavorites(t)
 	m.focus = focusPlaylist
 	m.playlist.Add(playlist.Track{Path: "/playlist.mp3", Title: "Playlist"})
-	return m, store
+	return m, m.favStore
 }
 
 func TestFavoriteKeyDispatchByContext(t *testing.T) {
@@ -178,13 +179,13 @@ func TestFavoriteKeyDispatchByContext(t *testing.T) {
 
 			m.handleKey(tea.KeyPressMsg{Text: tc.key})
 			if tc.wantPath == "" {
-				if store.FavoritesCount() != 0 {
-					t.Fatalf("%s favorited %v", tc.key, store.favPaths)
+				if store.Count() != 0 {
+					t.Fatalf("%s favorited a track", tc.key)
 				}
 				return
 			}
-			if store.FavoritesCount() != 1 || !store.IsFavorited(tc.wantPath) {
-				t.Fatalf("favorites = %v, want only %s", store.favPaths, tc.wantPath)
+			if store.Count() != 1 || !store.IsFavorited(tc.wantPath) {
+				t.Fatalf("favorites count = %d, want only %s", store.Count(), tc.wantPath)
 			}
 			if _, ok := m.favSet[tc.wantPath]; !ok {
 				t.Fatal("favSet was not refreshed")
@@ -194,7 +195,7 @@ func TestFavoriteKeyDispatchByContext(t *testing.T) {
 			}
 
 			m.handleKey(tea.KeyPressMsg{Text: tc.key})
-			if store.FavoritesCount() != 0 {
+			if store.Count() != 0 {
 				t.Fatalf("second f did not remove %s", tc.wantPath)
 			}
 		})
@@ -215,14 +216,14 @@ func TestFavoriteKeyKeepsProviderFavorites(t *testing.T) {
 	} {
 		t.Run(tc.view, func(t *testing.T) {
 			m, p := favoriteAlbumTestModel(tc.view)
-			store := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
-			m.localProvider, m.favMgr = store, store
+			local := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
+			m.localProvider, m.favStore = local, local.useFavorites(t)
 			m.handleKey(tea.KeyPressMsg{Text: "f"})
 			if len(p.toggled) != 1 || p.toggled[0] != tc.wantID {
 				t.Fatalf("provider favorites = %v, want %s", p.toggled, tc.wantID)
 			}
-			if store.FavoritesCount() != 0 {
-				t.Fatalf("f changed track favorites: %v", store.favPaths)
+			if m.favStore.Count() != 0 {
+				t.Fatal("f changed track favorites")
 			}
 		})
 	}
@@ -391,7 +392,7 @@ func TestIPCBookmarkAliasTogglesFavorite(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m, store := favoriteKeyTestModel(t)
 			if tc.noStore {
-				m.favMgr = nil
+				m.favStore = nil
 			}
 			for _, want := range []bool{true, false} {
 				reply := make(chan ipc.Response, 1)
@@ -401,7 +402,7 @@ func TestIPCBookmarkAliasTogglesFavorite(t *testing.T) {
 					t.Fatalf("response = %+v, want OK=%v", response, tc.wantOK)
 				}
 				if !tc.wantOK {
-					if store.FavoritesCount() != 0 {
+					if store.Count() != 0 {
 						t.Fatal("a failed request changed favorites")
 					}
 					return

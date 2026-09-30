@@ -264,7 +264,7 @@ func TestAppStartHookReadsTheConfiguredModel(t *testing.T) {
 	pl := playlist.New()
 	pl.Replace([]playlist.Track{{Title: "A", Path: "a.mp3"}, {Title: "B", Path: "b.mp3"}})
 	pl.SetIndex(0)
-	m := New(&playbackFakeEngine{}, pl, nil, "", nil, nil, mgr, nil)
+	m := New(&playbackFakeEngine{}, pl, nil, "", nil, nil, nil, nil, mgr, nil)
 	load := m.PluginStateLoader()
 	mgr.SetStateProvider(luaplugin.StateProvider{
 		CurrentIndex: func() int { return load().Index },
