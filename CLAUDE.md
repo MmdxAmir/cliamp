@@ -62,7 +62,7 @@ Top-level layout (each subdirectory below is a Go package):
 
 ### Provider contract
 
-All providers implement the interfaces in `provider/interfaces.go` (Browse, Tracks, Search where relevant). When adding a provider, add a package under `external/<name>/`, then register it in `main.go` behind a config check. Follow existing providers (Navidrome / Plex / Jellyfin) as templates — they share a lot of shape.
+All providers implement the interfaces in `provider/interfaces.go` (Browse, Tracks, Search where relevant). When adding a provider, add a package under `external/<name>/`, then add it to `buildProviders` and `providerKeys` in `providers.go`. `docs/provider-development.md` has the full steps. Follow existing providers (Navidrome / Plex / Jellyfin) as templates — they share a lot of shape.
 
 ### Plugin surface
 
