@@ -37,8 +37,8 @@ func armedModel() (Model, *playbackFakeEngine) {
 	return m, player
 }
 
-// Every way of changing the next track drops the armed b.mp3, and the next
-// tick arms the new next track instead.
+// Every way of changing the next track drops the armed b.mp3 and arms the
+// new next track at once, with no tick.
 func TestUpdateDropsStalePreload(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -47,6 +47,7 @@ func TestUpdateDropsStalePreload(t *testing.T) {
 		wantNext string
 	}{
 		{name: "IPC repeat one", msg: v2Request(t, "repeat", ipc.Request{Name: "one"}), wantNext: "a.mp3"},
+		{name: "IPC enqueue a later track", msg: v2Request(t, "queue.enqueue", ipc.Request{Index: 2}), wantNext: "c.mp3"},
 		{name: "plugin swap next away", msg: PluginQueueMsg{Op: "move", Index: 1, To: 2}, wantNext: "c.mp3"},
 		{name: "plugin remove next", msg: PluginQueueMsg{Op: "remove", Index: 1}, wantNext: "c.mp3"},
 		{name: "TUI move next down", cursor: 1, msg: tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift}, wantNext: "c.mp3"},
@@ -61,11 +62,8 @@ func TestUpdateDropsStalePreload(t *testing.T) {
 			if player.clearPreloadCalls == 0 || (m.preloadFor == "b.mp3" && (m.preloading || player.hasPreload)) {
 				t.Fatalf("b.mp3 still armed after the next track changed (ClearPreload %d)", player.clearPreloadCalls)
 			}
-
-			next, _ = m.Update(tickMsg(time.Now()))
-			m = next.(Model)
 			if !m.preloading || m.preloadFor != tc.wantNext {
-				t.Fatalf("after a tick: preloading %v for %q, want %s", m.preloading, m.preloadFor, tc.wantNext)
+				t.Fatalf("preloading %v for %q, want %s in flight at once", m.preloading, m.preloadFor, tc.wantNext)
 			}
 		})
 	}
@@ -82,26 +80,52 @@ func TestUpdateDropsStalePreloadOnRepeatAllAppend(t *testing.T) {
 	if response := runV2(t, &m, "queue", ipc.Request{Path: "d.mp3"}); !response.OK {
 		t.Fatalf("queue response = %+v", response)
 	}
+	if player.clearPreloadCalls != 1 || !m.preloading || m.preloadFor != "d.mp3" {
+		t.Fatalf("ClearPreload %d, preloading %v for %q; want a.mp3 dropped and d.mp3 in flight at once", player.clearPreloadCalls, m.preloading, m.preloadFor)
+	}
 	next, _ := m.Update(tickMsg(time.Now()))
 	if m = next.(Model); player.clearPreloadCalls != 1 || m.preloadFor != "d.mp3" {
 		t.Fatalf("ClearPreload %d, preloading %q; want a.mp3 dropped and d.mp3 armed", player.clearPreloadCalls, m.preloadFor)
 	}
 }
 
-// A message that leaves b.mp3 next keeps it armed.
+// A message that leaves b.mp3 next keeps it armed. An append of d.mp3 after
+// c.mp3 leaves b.mp3 next from each entry point.
 func TestUpdateKeepsValidPreload(t *testing.T) {
+	d := playlist.Track{Title: "D", Path: "d.mp3", DurationSecs: 180}
 	for _, tc := range []struct {
-		name string
-		msg  tea.Msg
+		name  string
+		setup func(m *Model)
+		msg   tea.Msg
+		// wantLen is the queue length after msg. It is 3 when 0.
+		wantLen int
 	}{
 		{name: "status", msg: ShowStatusMsg{}},
-		{name: "plugin remove below next", msg: PluginQueueMsg{Op: "remove", Index: 2}},
+		{name: "plugin remove below next", msg: PluginQueueMsg{Op: "remove", Index: 2}, wantLen: 2},
 		{name: "tick", msg: tickMsg(time.Now())},
+		{name: "plugin add_track", msg: PluginQueueMsg{Op: "add_track", Track: d}, wantLen: 4},
+		{name: "plugin add resolved", msg: pluginQueueAddedMsg{tracks: []playlist.Track{d}}, wantLen: 4},
+		{name: "IPC queue", msg: v2Request(t, "queue", ipc.Request{Path: d.Path}), wantLen: 4},
+		{
+			name: "playlist manager append",
+			setup: func(m *Model) {
+				m.plManager = plManagerState{visible: true, screen: plMgrScreenTracks, selPlaylist: "Other", tracks: []playlist.Track{d}}
+			},
+			msg:     tea.KeyPressMsg{Text: "A"},
+			wantLen: 4,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, player := armedModel()
+			if tc.setup != nil {
+				tc.setup(&m)
+			}
 			next, _ := m.Update(tc.msg)
-			if player.clearPreloadCalls != 0 || !player.hasPreload || next.(Model).preloadFor != "b.mp3" {
+			m = next.(Model)
+			if got, want := m.playlist.Len(), cmp.Or(tc.wantLen, 3); got != want {
+				t.Fatalf("queue length = %d, want %d", got, want)
+			}
+			if player.clearPreloadCalls != 0 || !player.hasPreload || m.preloadFor != "b.mp3" {
 				t.Fatalf("still-valid b.mp3 was dropped (ClearPreload %d)", player.clearPreloadCalls)
 			}
 		})
