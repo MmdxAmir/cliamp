@@ -2,10 +2,12 @@ package model
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -310,4 +312,239 @@ func (m Model) maybeRequestVisualizerRefresh(msg tea.Msg, wasScreen topLevelScre
 		(wasPaused && !paused) {
 		m.vis.RequestRefresh()
 	}
+}
+
+// handleTick samples the player, runs the timed jobs, advances past a
+// finished track and schedules the next tick.
+func (m *Model) handleTick(msg tickMsg) tea.Cmd {
+	now := time.Time(msg)
+	dt := m.tickDelta(now)
+
+	// Cache expensive player state once per tick so View() render
+	// functions don't re-acquire speaker.Lock() multiple times.
+	// PositionAndDuration() batches both reads under one speaker lock.
+	if !m.buffering {
+		if m.seek.active {
+			m.cachedPos = m.seek.targetPos
+			m.cachedDur = m.player.Duration()
+		} else {
+			m.cachedPos, m.cachedDur = m.player.PositionAndDuration()
+			// Piped SSH streams report 0 duration — use metadata fallback.
+			if m.cachedDur == 0 {
+				if track, _ := m.currentPlaybackTrack(); track.DurationSecs > 0 && strings.HasPrefix(track.Path, "ssh://") {
+					m.cachedDur = time.Duration(track.DurationSecs) * time.Second
+				}
+			}
+		}
+	} else {
+		track, _ := m.currentPlaybackTrack()
+		m.cachedDur = time.Duration(track.DurationSecs) * time.Second
+		m.cachedPos = 0
+	}
+	m.tickVisualizer(now)
+	m.tickProgressReport(now)
+	// Process debounced yt-dlp seek.
+	var seekCmd tea.Cmd
+	if cmd := m.tickSeek(dt); cmd != nil {
+		seekCmd = cmd
+	}
+	// Expire temporary status messages.
+	wasStatus := m.status.text != ""
+	if !m.status.expiresAt.IsZero() && !now.Before(m.status.expiresAt) {
+		m.status.Clear()
+	}
+	// Drain app log buffer and expire old entries.
+	wasLogs := len(m.logLines)
+	m.tickLogLines(now)
+	if (wasStatus && m.status.text == "") || len(m.logLines) != wasLogs {
+		m.applyHeightMode()
+		m.adjustScroll()
+	}
+	m.tickPendingSpeedSave(dt)
+	m.tickPendingEQSave(dt)
+	if m.pendingSeekActive && !m.pendingSeekExpiresAt.IsZero() && !now.Before(m.pendingSeekExpiresAt) {
+		m.pendingSeekActive = false
+		m.pendingSeekExpiresAt = time.Time{}
+	}
+	// Decrement seek grace period.
+	advanceTickUnits(&m.seek.grace, &m.seek.graceFor, dt, ui.TickFast)
+	// Surface stream errors (e.g., connection drops) and auto-reconnect streams.
+	// Suppress during yt-dlp seek and grace period — killing the old pipeline
+	// triggers a transient error that can persist for a few ticks.
+	if err := m.player.StreamErr(); err != nil && !m.seek.active && m.seek.grace == 0 {
+		track, idx := m.currentPlaybackTrack()
+		isStream := idx >= 0 && (track.Stream || playlist.IsYouTubeURL(track.Path) || playlist.IsYTDL(track.Path))
+		if isStream && m.reconnect.attempts < 5 {
+			m.scheduleReconnect(now)
+		} else {
+			m.err = err
+			m.reconnect.at = time.Time{}
+		}
+	}
+	var lyricCmd tea.Cmd
+	// Poll ICY stream title for live radio display.
+	if title := m.player.StreamTitle(); title != "" && title != m.streamTitle {
+		m.streamTitle = title
+		m.resetTitleScroll()
+		m.applyHeightMode()
+		m.adjustScroll()
+		// Auto-fetch lyrics when the stream song changes and lyrics overlay is open.
+		if m.lyrics.visible && !m.lyrics.loading {
+			if artist, song, ok := splitStreamTitle(title); ok {
+				track, _ := m.currentPlaybackTrack()
+				if q := lyricsLookupKey(track, artist, song); q != m.lyrics.query {
+					m.lyrics.query = q
+					m.lyrics.loading = true
+					m.lyrics.lines = nil
+					m.lyrics.err = nil
+					m.lyrics.scroll = 0
+					lyricCmd = m.fetchLyricsForTrack(track, artist, song)
+				}
+			}
+		}
+	}
+	m.network.sampleFor += dt
+	if m.network.sampleFor >= time.Second {
+		downloaded, _ := m.player.StreamBytes()
+		delta := downloaded - m.network.lastBytes
+		if delta > 0 {
+			// Exponential moving average for smooth display.
+			instant := float64(delta) / m.network.sampleFor.Seconds() // bytes/sec
+			if m.network.speed == 0 {
+				m.network.speed = instant
+			} else {
+				m.network.speed = m.network.speed*0.6 + instant*0.4
+			}
+		} else if downloaded == 0 {
+			m.network.speed = 0
+		}
+		m.network.lastBytes = downloaded
+		m.network.sampleFor = 0
+	}
+	// Fire scheduled reconnect when the timer expires.
+	if !m.reconnect.at.IsZero() && now.After(m.reconnect.at) {
+		m.reconnect.at = time.Time{}
+		track, idx := m.currentPlaybackTrack()
+		m.player.Stop()
+		if idx >= 0 {
+			// playTrack resets reconnect state for every new start, so carry
+			// the live-drain marker and its attempt count across this restart.
+			ytdlLiveDrain, attempts := m.reconnect.ytdlLiveDrain, m.reconnect.attempts
+			playCmd := m.playTrack(track)
+			if ytdlLiveDrain {
+				m.reconnect.ytdlLiveDrain, m.reconnect.attempts = true, attempts
+			}
+			// Preserve any seek/lyric commands already queued this tick
+			// rather than dropping them on the early return.
+			batch := []tea.Cmd{playCmd, tickCmdAt(ui.TickFast)}
+			if seekCmd != nil {
+				batch = append(batch, seekCmd)
+			}
+			if lyricCmd != nil {
+				batch = append(batch, lyricCmd)
+			}
+			return tea.Batch(batch...)
+		}
+	}
+	var cmds []tea.Cmd
+	if seekCmd != nil {
+		cmds = append(cmds, seekCmd)
+	}
+	if lyricCmd != nil {
+		cmds = append(cmds, lyricCmd)
+	}
+	// Check gapless transition (audio already playing next track)
+	gaplessAdvanced := m.player.GaplessAdvanced()
+	if gaplessAdvanced {
+		// Leave the track that just finished before advancing the playlist.
+		// For gapless, the track played fully (100% ≥ 50%), so elapsed = duration.
+		// The player stashed the finished pipeline's real duration at swap
+		// time; metadata is only a fallback for tracks without it.
+		finishedTrack, _ := m.currentPlaybackTrack()
+		fullDur := m.player.LastPlayedDuration()
+		if fullDur <= 0 {
+			fullDur = time.Duration(finishedTrack.DurationSecs) * time.Second
+		}
+		m.leaveTrack(fullDur, fullDur)
+
+		var newTrack playlist.Track
+		var ok bool
+		if m.playbackDetached {
+			var idx int
+			newTrack, idx = m.playlist.Current()
+			ok = idx >= 0
+			m.playbackDetached = false
+		} else {
+			newTrack, ok = m.playlist.Next()
+			m.normalizeQueueOverlay()
+		}
+		if !ok {
+			m.endQueue()
+			cmds = append(cmds, tickCmdAt(m.tickInterval()))
+			return tea.Batch(cmds...)
+		}
+		m.plCursor = m.playlist.Index()
+		m.adjustScroll()
+		var gaplessLyricCmd tea.Cmd
+		newTrack, gaplessLyricCmd = m.beginPlaybackTrack(newTrack)
+		if gaplessLyricCmd != nil {
+			cmds = append(cmds, gaplessLyricCmd)
+		}
+		// The preload that just fired is consumed — clear the in-flight flag
+		// so the next track can be preloaded.
+		m.preloading = false
+		// A stream decoder error at the track boundary (e.g., server closing
+		// the connection when the preload HTTP request opens) is expected and
+		// not a user-visible problem. Clear any pending error so the red
+		// message doesn't flash at every track transition.
+		m.err = nil
+		// Gapless advances without calling playTrack(), so emit now-playing here.
+		m.nowPlaying(newTrack)
+		cmds = append(cmds, m.preloadNext())
+	}
+	m.tickResumeSave(now)
+	// Check if gapless drained (end of playlist, no preloaded next).
+	// Skip if already buffering a yt-dlp download to avoid advancing
+	// the playlist on every tick while waiting for the resolve.
+	if !gaplessAdvanced && m.player.IsPlaying() && !m.player.IsPaused() && m.player.Drained() && !m.buffering && m.reconnect.at.IsZero() {
+		finishedTrack, idx := m.currentPlaybackTrack()
+		if idx >= 0 && m.currentPlaybackIsLive(finishedTrack) {
+			// A live stream has no natural end. A clean decoder EOF is a
+			// disconnect, so retry this station instead of advancing.
+			m.scheduleReconnect(now)
+			m.reconnect.ytdlLiveDrain = playlist.IsYTDL(finishedTrack.Path)
+		} else {
+			// Track drained to end — always ≥ 50%. The player is still on
+			// the finished track here, so its live duration is authoritative
+			// even when playlist metadata (DurationSecs) is unknown.
+			drainDur := m.player.Duration()
+			if drainDur <= 0 {
+				drainDur = time.Duration(finishedTrack.DurationSecs) * time.Second
+			}
+			m.leaveTrack(drainDur, drainDur)
+
+			// Stop the player before dispatching the async nextTrack command.
+			// This clears the gapless streamer so the finished track cannot
+			// replay while waiting for a yt-dlp pipe chain to spin up.
+			m.player.Stop()
+			cmds = append(cmds, m.nextTrack())
+		}
+	}
+	m.advanceTitleScroll(now)
+	// Retry deferred stream preload: preloadNext() returns nil (defers) when
+	// the current stream has >streamPreloadLeadTime remaining. Poll every tick
+	// until we're within the window and the preload gets armed.
+	// Guard with !m.preloading so we don't fire a second concurrent HTTP
+	// connection while the first preloadStreamCmd goroutine is still running,
+	// and with !m.tracksPaging because each page of a paged load remixes the
+	// upcoming order, so anything armed now would be stale by the next one.
+	if m.player.IsPlaying() && !m.player.IsPaused() && !m.buffering && !m.preloading && !m.tracksPaging && !m.player.HasPreload() {
+		if cmd := m.preloadNext(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+
+	m.advanceTerminalTitle()
+	cmds = append(cmds, tickCmdAt(m.tickInterval()))
+	return tea.Batch(cmds...)
 }
