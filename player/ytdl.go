@@ -160,6 +160,7 @@ func ffmpegInstallHint() string {
 // yt-dlp downloads the best audio and writes raw data to stdout; ffmpeg reads
 // that via a pipe and converts it to PCM on its stdout, which we consume.
 type ytdlPipeStreamer struct {
+	pipeReport // total stays 0: the length of a piped page is unknown
 	ytdlCmd    *exec.Cmd
 	ffmpegCmd  *exec.Cmd
 	pipe       io.ReadCloser // ffmpeg stdout (PCM output)
@@ -169,7 +170,6 @@ type ytdlPipeStreamer struct {
 	ytdlDone   <-chan struct{}
 	ffmpegDone <-chan struct{}
 	pcmBuf     []byte
-	state      *pipeStreamState
 	f32        bool // true = f32le, false = s16le
 	closeOnce  sync.Once
 }
@@ -228,19 +228,6 @@ func (y *ytdlPipeStreamer) waitCause(d time.Duration) error {
 	return ffErr
 }
 
-func (y *ytdlPipeStreamer) Err() error {
-	if y.state == nil {
-		return nil
-	}
-	return y.state.err.load()
-}
-func (y *ytdlPipeStreamer) Len() int { return 0 }
-func (y *ytdlPipeStreamer) Position() int {
-	if y.state == nil {
-		return 0
-	}
-	return int(y.state.pos.Load())
-}
 func (y *ytdlPipeStreamer) Seek(int) error { return nil }
 
 func (y *ytdlPipeStreamer) Close() error {
@@ -394,7 +381,7 @@ func decodeYTDLPipe(pageURL string, sr beep.SampleRate, bitDepth, startSec int) 
 		ffmpegErr:  ffmpegErrCh,
 		ytdlDone:   ytdlDone,
 		ffmpegDone: ffmpegDone,
-		state:      newPipeStreamState(0),
+		pipeReport: pipeReport{state: newPipeStreamState(0)},
 		f32:        bitDepth == 32,
 	}, format, nil
 }

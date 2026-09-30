@@ -633,9 +633,9 @@ func blockedNavPlayback(t *testing.T) (*trackPipeline, <-chan struct{}, <-chan s
 	reader, writer := io.Pipe()
 	decoder := &navFFmpegStreamer{
 		ffmpegPipe: ffmpegPipe{
-			reader: bufio.NewReader(reader),
-			pipe:   reader,
-			state:  newPipeStreamState(0),
+			pipeReport: pipeReport{state: newPipeStreamState(0)},
+			reader:     bufio.NewReader(reader),
+			pipe:       reader,
 		},
 		nb: newCompletedTestNavBuffer(t, nil),
 		sr: 100,

@@ -107,6 +107,29 @@ type pipeStreamState struct {
 	pos atomic.Int64
 }
 
+// pipeReport answers Err, Len and Position for a pipe-based streamer from
+// the state that its Stream updates. ffmpegPipe and ytdlPipeStreamer embed it.
+type pipeReport struct {
+	state *pipeStreamState
+	total int // total frames (0 if unknown/unbounded)
+}
+
+func (r *pipeReport) Err() error {
+	if r.state == nil {
+		return nil
+	}
+	return r.state.err.load()
+}
+
+func (r *pipeReport) Len() int { return r.total }
+
+func (r *pipeReport) Position() int {
+	if r.state == nil {
+		return 0
+	}
+	return int(r.state.pos.Load())
+}
+
 func newPipeStreamState(pos int) *pipeStreamState {
 	state := &pipeStreamState{}
 	state.pos.Store(int64(pos))
@@ -224,12 +247,12 @@ func startFFmpegPipe(input string, stdin io.ReadCloser, sr beep.SampleRate, bitD
 	}
 
 	fp := ffmpegPipe{
-		proc:   proc,
-		reader: bufio.NewReaderSize(pipe, pipeBufSize),
-		pipe:   pipe,
-		input:  stdin,
-		state:  newPipeStreamState(0),
-		f32:    bitDepth == 32,
+		pipeReport: pipeReport{state: newPipeStreamState(0)},
+		proc:       proc,
+		reader:     bufio.NewReaderSize(pipe, pipeBufSize),
+		pipe:       pipe,
+		input:      stdin,
+		f32:        bitDepth == 32,
 	}
 	format := beep.Format{SampleRate: sr, NumChannels: 2, Precision: precision}
 	return fp, format, nil
@@ -239,15 +262,14 @@ func startFFmpegPipe(input string, stdin io.ReadCloser, sr beep.SampleRate, bitD
 // ffmpeg streamers. Each concrete streamer embeds this and adds its own
 // Seek (and optionally start) implementation.
 type ffmpegPipe struct {
+	pipeReport
 	proc   *ffmpegProcess
 	reader *bufio.Reader
 	pipe   io.ReadCloser
 	input  io.Closer // optional stdin source or owned stdin pump; interrupted before Wait
 	pcmBuf []byte    // reusable block buffer for decoded PCM bytes
-	state  *pipeStreamState
-	f32    bool // true = f32le, false = s16le
-	live   bool // true for infinite radio streams: EOF means the upstream died
-	total  int  // total frames (0 if unknown/unbounded)
+	f32    bool      // true = f32le, false = s16le
+	live   bool      // true for infinite radio streams: EOF means the upstream died
 }
 
 func (f *ffmpegPipe) Stream(samples [][2]float64) (int, bool) {
@@ -269,20 +291,6 @@ func (f *ffmpegPipe) Stream(samples [][2]float64) (int, bool) {
 		f.state.err.publish(io.ErrUnexpectedEOF)
 	}
 	return n, ok
-}
-
-func (f *ffmpegPipe) Err() error {
-	if f.state == nil {
-		return nil
-	}
-	return f.state.err.load()
-}
-func (f *ffmpegPipe) Len() int { return f.total }
-func (f *ffmpegPipe) Position() int {
-	if f.state == nil {
-		return 0
-	}
-	return int(f.state.pos.Load())
 }
 
 // interrupt releases any blocked PCM or stdin read without waiting for FFmpeg.
@@ -404,7 +412,7 @@ func decodeFFmpegLocal(path string, sr beep.SampleRate, bitDepth int) (*localFFm
 	_, _, precision := ffmpegPCMArgs(bitDepth)
 	total := probeFrames(path, sr)
 
-	s := &localFFmpegStreamer{ffmpegPipe: ffmpegPipe{total: total, f32: bitDepth == 32}, path: path, sr: sr}
+	s := &localFFmpegStreamer{ffmpegPipe: ffmpegPipe{pipeReport: pipeReport{total: total}, f32: bitDepth == 32}, path: path, sr: sr}
 	fp, err := s.startPipe(0)
 	if err != nil {
 		return nil, beep.Format{}, err
@@ -449,12 +457,11 @@ func (s *localFFmpegStreamer) startPipe(seekPos int) (ffmpegPipe, error) {
 	}
 
 	fp := ffmpegPipe{
-		proc:   proc,
-		reader: bufio.NewReaderSize(pipe, pipeBufSize),
-		pipe:   pipe,
-		state:  newPipeStreamState(seekPos),
-		f32:    s.f32,
-		total:  s.total,
+		pipeReport: pipeReport{state: newPipeStreamState(seekPos), total: s.total},
+		proc:       proc,
+		reader:     bufio.NewReaderSize(pipe, pipeBufSize),
+		pipe:       pipe,
+		f32:        s.f32,
 	}
 	if err := fp.waitForAudioBytes(pcmFrameSize(fp.f32), ffmpegPipeTimeout); err != nil {
 		_ = fp.stop()
@@ -662,13 +669,12 @@ func (s *navFFmpegStreamer) startPipe(seekPos int, validate bool) (ffmpegPipe, e
 	}
 
 	fp := ffmpegPipe{
-		proc:   proc,
-		pipe:   pipe,
-		reader: bufio.NewReaderSize(pipe, pipeBufSize),
-		input:  startNavFFmpegInput(s.nb.newReader(), stdin),
-		state:  newPipeStreamState(seekPos),
-		f32:    s.f32,
-		total:  s.total,
+		pipeReport: pipeReport{state: newPipeStreamState(seekPos), total: s.total},
+		proc:       proc,
+		pipe:       pipe,
+		reader:     bufio.NewReaderSize(pipe, pipeBufSize),
+		input:      startNavFFmpegInput(s.nb.newReader(), stdin),
+		f32:        s.f32,
 	}
 	if validate {
 		if err := fp.waitForAudioBytes(pcmFrameSize(fp.f32), ffmpegPipeTimeout); err != nil {

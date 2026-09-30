@@ -168,10 +168,10 @@ func TestWaitCause(t *testing.T) {
 func TestYTDLPipeErrConcurrentWithStream(t *testing.T) {
 	readErr := errors.New("yt-dlp PCM read failed")
 	y := &ytdlPipeStreamer{
-		reader:    bufio.NewReader(&readResult{data: []byte{1}, err: readErr}),
-		ytdlErr:   make(chan error),
-		ffmpegErr: make(chan error),
-		state:     newPipeStreamState(0),
+		pipeReport: pipeReport{state: newPipeStreamState(0)},
+		reader:     bufio.NewReader(&readResult{data: []byte{1}, err: readErr}),
+		ytdlErr:    make(chan error),
+		ffmpegErr:  make(chan error),
 	}
 	testPipeErrConcurrentWithStream(t, y, readErr)
 }

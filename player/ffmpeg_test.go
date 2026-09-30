@@ -228,7 +228,7 @@ func TestFFmpegPipeEmptyDestinationDoesNotWait(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	f := &ffmpegPipe{proc: proc, state: newPipeStreamState(0)}
+	f := &ffmpegPipe{pipeReport: pipeReport{state: newPipeStreamState(0)}, proc: proc}
 	defer f.stop()
 
 	done := make(chan struct{})
@@ -252,8 +252,8 @@ func TestFFmpegPipeEmptyDestinationDoesNotWait(t *testing.T) {
 func TestFFmpegPipeErrConcurrentWithStream(t *testing.T) {
 	readErr := errors.New("pcm read failed")
 	f := &ffmpegPipe{
-		reader: bufio.NewReader(&readResult{data: []byte{1}, err: readErr}),
-		state:  newPipeStreamState(0),
+		pipeReport: pipeReport{state: newPipeStreamState(0)},
+		reader:     bufio.NewReader(&readResult{data: []byte{1}, err: readErr}),
 	}
 	testPipeErrConcurrentWithStream(t, f, readErr)
 }
@@ -274,9 +274,9 @@ func TestFFmpegPipeLiveEOF(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := &ffmpegPipe{
-				reader: bufio.NewReader(bytes.NewReader(nil)), // immediate EOF
-				state:  newPipeStreamState(0),
-				live:   tt.live,
+				pipeReport: pipeReport{state: newPipeStreamState(0)},
+				reader:     bufio.NewReader(bytes.NewReader(nil)), // immediate EOF
+				live:       tt.live,
 			}
 			samples := make([][2]float64, 8)
 			n, ok := f.Stream(samples)
@@ -930,6 +930,39 @@ func TestPeekWithTimeout(t *testing.T) {
 			}
 			if !errors.Is(closedWith, tt.wantClosed) {
 				t.Fatalf("closed called with %v, want %v", closedWith, tt.wantClosed)
+			}
+		})
+	}
+}
+
+// TestPipeReport checks the Err, Len and Position that every pipe streamer
+// takes from pipeReport, also before its state exists.
+func TestPipeReport(t *testing.T) {
+	failed := errors.New("pipe failed")
+	state := newPipeStreamState(40)
+	state.err.publish(failed)
+	tests := []struct {
+		name    string
+		decoder beep.StreamSeekCloser
+		wantErr error
+		wantLen int
+		wantPos int
+	}{
+		{name: "ffmpeg pipe before start", decoder: &ffmpegPipeStreamer{}},
+		{name: "ffmpeg pipe", decoder: &localFFmpegStreamer{ffmpegPipe: ffmpegPipe{pipeReport: pipeReport{state: state, total: 100}}}, wantErr: failed, wantLen: 100, wantPos: 40},
+		{name: "yt-dlp pipe before start", decoder: &ytdlPipeStreamer{}},
+		{name: "yt-dlp pipe", decoder: &ytdlPipeStreamer{pipeReport: pipeReport{state: state}}, wantErr: failed, wantPos: 40},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.decoder.Err(); !errors.Is(err, tt.wantErr) {
+				t.Errorf("Err() = %v, want %v", err, tt.wantErr)
+			}
+			if got := tt.decoder.Len(); got != tt.wantLen {
+				t.Errorf("Len() = %d, want %d", got, tt.wantLen)
+			}
+			if got := tt.decoder.Position(); got != tt.wantPos {
+				t.Errorf("Position() = %d, want %d", got, tt.wantPos)
 			}
 		})
 	}
