@@ -169,3 +169,44 @@ func TestPlaybackReportsKeepOrder(t *testing.T) {
 		t.Fatalf("reports = %v, want %v", reporter.reports, want)
 	}
 }
+
+// At exit, main waits a bounded time for the queued reports. The wait ends
+// when the last report ran, or when the time is up while a report still
+// runs.
+func TestReportQueueWait(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		reports int
+		release bool // the reports finish before the wait ends
+		want    bool
+	}{
+		{name: "no report", want: true},
+		{name: "finished reports", reports: 3, release: true, want: true},
+		{name: "a report that still runs", reports: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m := Model{}
+			release := make(chan struct{})
+			defer close(release)
+			var ran atomic.Int32
+			for range tt.reports {
+				m.queueReport("", func() {
+					if !tt.release {
+						<-release
+					}
+					ran.Add(1)
+				})
+			}
+			timeout := 50 * time.Millisecond
+			if tt.want {
+				timeout = 5 * time.Second
+			}
+			if got := m.WaitReports(timeout); got != tt.want {
+				t.Fatalf("WaitReports = %v, want %v", got, tt.want)
+			}
+			if tt.want && int(ran.Load()) != tt.reports {
+				t.Fatalf("%d reports ran before the wait ended, want %d", ran.Load(), tt.reports)
+			}
+		})
+	}
+}

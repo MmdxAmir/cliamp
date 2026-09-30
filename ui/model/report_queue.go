@@ -3,6 +3,7 @@ package model
 import (
 	"slices"
 	"sync"
+	"time"
 )
 
 // reportQueue runs the playback reports to providers one at a time, in the
@@ -17,6 +18,7 @@ type reportQueue struct {
 	mu      sync.Mutex
 	pending []queuedReport
 	running bool
+	idle    chan struct{} // closed when the running drain ends
 }
 
 // queuedReport is a report that waits to run. progress is the track path
@@ -39,17 +41,19 @@ func (q *reportQueue) add(progress string, report func()) {
 	q.pending = append(q.pending, queuedReport{progress: progress, run: report})
 	if !q.running {
 		q.running = true
-		go q.drain()
+		q.idle = make(chan struct{})
+		go q.drain(q.idle)
 	}
 }
 
-// drain runs the queued reports until none waits.
-func (q *reportQueue) drain() {
+// drain runs the queued reports until none waits. It then closes idle.
+func (q *reportQueue) drain(idle chan struct{}) {
 	for {
 		q.mu.Lock()
 		if len(q.pending) == 0 {
 			q.running = false
 			q.mu.Unlock()
+			close(idle)
 			return
 		}
 		report := q.pending[0].run
@@ -57,5 +61,25 @@ func (q *reportQueue) drain() {
 		q.pending = q.pending[1:]
 		q.mu.Unlock()
 		report()
+	}
+}
+
+// wait waits until no report waits or runs, or until timeout passes. It
+// reports whether the queue drained.
+func (q *reportQueue) wait(timeout time.Duration) bool {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		q.mu.Lock()
+		running, idle := q.running, q.idle
+		q.mu.Unlock()
+		if !running {
+			return true
+		}
+		select {
+		case <-idle:
+		case <-deadline.C:
+			return false
+		}
 	}
 }

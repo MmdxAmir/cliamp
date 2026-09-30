@@ -201,6 +201,17 @@ func (m *Model) queueReport(progress string, report func()) {
 	m.reports.add(progress, report)
 }
 
+// WaitReports waits up to timeout for the playback reports that Update
+// queued, such as the scrobble of the track that played at quit. It reports
+// whether they all ran. main calls it after the program ends, so the
+// process does not exit before the reports reach the providers.
+func (m Model) WaitReports(timeout time.Duration) bool {
+	if m.reports == nil {
+		return true
+	}
+	return m.reports.wait(timeout)
+}
+
 // recordListenedTrack adds a starting track to local history and refreshes
 // any Recently Played surfaces. Called when playback of the track begins so
 // the list mirrors what is playing right now, not the previous song.

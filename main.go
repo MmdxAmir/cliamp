@@ -214,8 +214,15 @@ func run(overrides config.Overrides, positional []string, headless, visualizer60
 		return err
 	}
 	saveOnExit(finalModel, headless, resumeServer)
+	if fm, ok := finalModel.(model.Model); ok {
+		fm.WaitReports(reportsExitWait)
+	}
 	return nil
 }
+
+// reportsExitWait bounds the wait at exit for the playback reports that the
+// Model queued, such as the scrobble of the track that played at quit.
+const reportsExitWait = 3 * time.Second
 
 // checkNotRunning returns an error when another instance serves the socket.
 // Headless mode calls it before it builds the providers, opens the audio
