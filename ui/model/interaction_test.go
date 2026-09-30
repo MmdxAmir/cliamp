@@ -941,6 +941,8 @@ func TestIPCQueueMutationNormalizesOverlay(t *testing.T) {
 		player:    &playbackFakeEngine{},
 		playlist:  p,
 		plVisible: 2,
+		plCursor:  2,
+		plScroll:  1,
 		queue:     queueOverlay{visible: true, cursor: 2, scroll: 2},
 	}
 
@@ -956,6 +958,9 @@ func TestIPCQueueMutationNormalizesOverlay(t *testing.T) {
 	}
 	if m.queue.cursor != 0 || m.queue.scroll != 0 {
 		t.Fatalf("queue state after IPC clear = cursor %d, scroll %d; want 0, 0", m.queue.cursor, m.queue.scroll)
+	}
+	if m.plCursor != 0 || m.plScroll != 0 {
+		t.Fatalf("playlist state after IPC clear = cursor %d, scroll %d; want 0, 0", m.plCursor, m.plScroll)
 	}
 	view, ok := m.activeOverlay()
 	if !ok {

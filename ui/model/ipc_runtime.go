@@ -287,6 +287,7 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 		m.replacePlaylist(nil)
 		m.clearLoadedPlaylist()
 		m.setHeaderStateFromTracks(nil)
+		m.plCursor, m.plScroll = 0, 0
 	}
 	m.completeV2Job(jobs, jobID, m.v2PlaylistResponse())
 	return nil
