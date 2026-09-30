@@ -541,6 +541,20 @@ func waitV2ResponseCmd(ctx context.Context, jobs *ipc.JobStore, jobID string, re
 	}
 }
 
+// handleV2Response finishes a V2 job with the response of its async work.
+func (m *Model) handleV2Response(msg ipcV2ResponseMsg) {
+	if msg.Response.OK {
+		if msg.Operation == "device" {
+			m.applyV2DeviceResponse(msg.Response)
+		}
+		m.completeV2Job(msg.Jobs, msg.JobID, msg.Response)
+	} else {
+		err := v2InternalError()
+		err.Detail = msg.Response.Error
+		m.failV2Job(msg.Jobs, msg.JobID, err)
+	}
+}
+
 func (m *Model) completeV2Job(jobs *ipc.JobStore, jobID string, result any) {
 	if jobs == nil || jobID == "" {
 		return

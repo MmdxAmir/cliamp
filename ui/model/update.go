@@ -362,16 +362,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case ipcV2ResponseMsg:
-		if msg.Response.OK {
-			if msg.Operation == "device" {
-				m.applyV2DeviceResponse(msg.Response)
-			}
-			m.completeV2Job(msg.Jobs, msg.JobID, msg.Response)
-		} else {
-			err := v2InternalError()
-			err.Detail = msg.Response.Error
-			m.failV2Job(msg.Jobs, msg.JobID, err)
-		}
+		m.handleV2Response(msg)
 		return m, nil
 
 	}
