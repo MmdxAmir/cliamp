@@ -501,8 +501,9 @@ func (m *Model) isCustomStreamURI(path string) bool {
 }
 
 // hasSourceResolver reports whether the player resolves path when playback
-// starts, as it does for qobuz:// and tidal:// URIs. Favorites, history and
-// saved playlists reload such tracks with Stream false.
+// starts, as it does for qobuz:// and tidal:// URIs. Files that older
+// versions wrote reload such tracks without the stream flag, so this check
+// still marks them as network tracks.
 func (m *Model) hasSourceResolver(path string) bool {
 	r, ok := m.player.(interface{ HasSourceResolver(string) bool })
 	return ok && r.HasSourceResolver(path)

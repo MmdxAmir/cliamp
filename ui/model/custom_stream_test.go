@@ -96,8 +96,9 @@ func TestPlayTrackStartsCustomURIOffUpdate(t *testing.T) {
 		wantAsync bool
 	}{
 		{name: "spotify track", path: "spotify:track:abc", wantAsync: true},
-		// Favorites, history and saved playlists reload a qobuz:// track
-		// with Stream false. The resolver still opens it over the network.
+		// A file that an older version wrote reloads a qobuz:// track
+		// without the stream flag. The resolver still opens it over the
+		// network.
 		{name: "qobuz track from a saved list", path: "qobuz://track/42", wantAsync: true},
 		{name: "local file", path: "local.mp3", wantAsync: false},
 	}
