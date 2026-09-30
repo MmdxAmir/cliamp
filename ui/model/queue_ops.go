@@ -65,7 +65,7 @@ func (m *Model) moveTrack(from, to int) (tea.Cmd, error) {
 // that follows makes that undo stale. While the queue mirrors a
 // writable saved playlist, a track from its directory source is refused,
 // because the file cannot drop it. Removing the track that plays stops
-// playback.
+// playback. A track that plays detached from the list keeps playing.
 func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 	track, ok := m.playlist.Track(idx)
 	if !ok {
@@ -103,7 +103,9 @@ func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 			persisted = true
 		}
 	}
-	wasActive := idx == m.playlist.Index()
+	// A detached track plays outside the list, so the selected row of the
+	// list is not the playing track.
+	wasActive := !m.playbackDetached && idx == m.playlist.Index()
 	if !m.playlist.Remove(idx) {
 		return nil, errQueueIndex
 	}

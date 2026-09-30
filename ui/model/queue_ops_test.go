@@ -145,6 +145,22 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 			},
 		},
 		{
+			// A provider list replaced the queue while a.mp3 plays, so a.mp3
+			// plays detached from the new list. Its selected row is not the
+			// playing track, so the removal does not stop playback.
+			name:   "remove the selected row while a detached track plays",
+			cursor: 0,
+			setup: func(m *Model) {
+				m.replacePlayerPlaylist([]playlist.Track{{Path: "/music/p.mp3"}, {Path: "/music/q.mp3"}})
+			},
+			key:  func(*Model) tea.Msg { return tea.KeyPressMsg{Text: "x"} },
+			v2Op: "queue.remove", v2: ipc.Request{Index: 0},
+			plugin: PluginQueueMsg{Op: "remove", Index: 0},
+			want: func(s queueOpState) bool {
+				return s.queue == "q" && s.saved == "a b c" && s.loaded == "" && s.stops == 0 && s.undo && s.undoHint && s.preload
+			},
+		},
+		{
 			name:   "append",
 			cursor: 1,
 			key: func(m *Model) tea.Msg {
