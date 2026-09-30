@@ -817,9 +817,7 @@ func TestMaybeScrobbleLeavesHistoryToTrackStart(t *testing.T) {
 
 	// Leaving a track (skip/finish) only handles provider scrobbles; the
 	// history entry was already written when playback started.
-	if cmd := m.maybeScrobble(playlist.Track{Path: "/song.mp3", DurationSecs: 120}, 120*time.Second, 120*time.Second); cmd != nil {
-		t.Fatal("scrobble must not schedule a history refresh")
-	}
+	m.maybeScrobble(playlist.Track{Path: "/song.mp3", DurationSecs: 120}, 120*time.Second, 120*time.Second)
 	entries, err := m.historyStore.Recent(10)
 	if err != nil {
 		t.Fatal(err)

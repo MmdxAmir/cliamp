@@ -208,17 +208,17 @@ func (m *Model) recordListenedTrack(track playlist.Track) tea.Cmd {
 // is left (skip, stop, natural end) and past 50% of its known duration,
 // matching Last.fm-style play-count conventions. Local history is recorded
 // separately at track start via recordListenedTrack.
-func (m *Model) maybeScrobble(track playlist.Track, elapsed, duration time.Duration) tea.Cmd {
-	dur := duration
-	if dur <= 0 {
-		dur = time.Duration(track.DurationSecs) * time.Second
+func (m *Model) maybeScrobble(track playlist.Track, elapsed, duration time.Duration) {
+	if duration <= 0 {
+		// Unknown duration: use DurationSecs metadata as fallback.
+		duration = time.Duration(track.DurationSecs) * time.Second
 	}
-	pastThreshold := dur > 0 && elapsed >= dur/2
-
-	var refresh tea.Cmd
+	if duration <= 0 || elapsed < duration/2 {
+		return // unknown duration, or less than 50% played
+	}
 
 	// Emit scrobble event to Lua plugins for all tracks (not just Navidrome).
-	if m.luaMgr != nil && pastThreshold && m.luaMgr.HasHook(luaplugin.EventTrackScrobble) {
+	if m.luaMgr != nil && m.luaMgr.HasHook(luaplugin.EventTrackScrobble) {
 		data := trackToMap(track)
 		data["played_secs"] = elapsed.Seconds()
 		m.emitPlugin(luaplugin.EventTrackScrobble, data)
@@ -226,17 +226,7 @@ func (m *Model) maybeScrobble(track playlist.Track, elapsed, duration time.Durat
 
 	reporter := m.findPlaybackReporter(track)
 	if reporter == nil {
-		return refresh
-	}
-	if duration <= 0 {
-		// Unknown duration: use DurationSecs metadata as fallback.
-		duration = time.Duration(track.DurationSecs) * time.Second
-	}
-	if duration <= 0 {
-		return refresh // still unknown — skip
-	}
-	if elapsed < duration/2 {
-		return refresh // less than 50% played
+		return
 	}
 	canSeek := m.player.Seekable()
 	m.queueReport(func() {
@@ -244,7 +234,20 @@ func (m *Model) maybeScrobble(track playlist.Track, elapsed, duration time.Durat
 			applog.Warn("scrobble failed for %q: %v", track.Title, err)
 		}
 	})
-	return refresh
+}
+
+// leaveTrack reports that the listener left the track that plays after
+// elapsed of dur, and scrobbles it when it qualifies. stopPlayback and
+// playTrack call it with the engine position before the engine moves on.
+// It reports only a track that the engine started, and each start once, so
+// a stop or a start that follows the end of a track does not report the
+// track again.
+func (m *Model) leaveTrack(elapsed, dur time.Duration) {
+	if !m.playingTrackActive || !m.playingTrackStarted || m.playingTrackLeft {
+		return
+	}
+	m.playingTrackLeft = true
+	m.maybeScrobble(m.playingTrack, elapsed, dur)
 }
 
 // findTrackPosition returns the provider that can report track's saved

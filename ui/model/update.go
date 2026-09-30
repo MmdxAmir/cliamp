@@ -313,7 +313,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check gapless transition (audio already playing next track)
 		gaplessAdvanced := m.player.GaplessAdvanced()
 		if gaplessAdvanced {
-			// Capture the track that just finished before advancing the playlist.
+			// Leave the track that just finished before advancing the playlist.
 			// For gapless, the track played fully (100% ≥ 50%), so elapsed = duration.
 			// The player stashed the finished pipeline's real duration at swap
 			// time; metadata is only a fallback for tracks without it.
@@ -322,9 +322,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if fullDur <= 0 {
 				fullDur = time.Duration(finishedTrack.DurationSecs) * time.Second
 			}
-			if refresh := m.maybeScrobble(finishedTrack, fullDur, fullDur); refresh != nil {
-				cmds = append(cmds, refresh)
-			}
+			m.leaveTrack(fullDur, fullDur)
 
 			var newTrack playlist.Track
 			var ok bool
@@ -382,9 +380,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if drainDur <= 0 {
 					drainDur = time.Duration(finishedTrack.DurationSecs) * time.Second
 				}
-				if refresh := m.maybeScrobble(finishedTrack, drainDur, drainDur); refresh != nil {
-					cmds = append(cmds, refresh)
-				}
+				m.leaveTrack(drainDur, drainDur)
 
 				// Stop the player before dispatching the async nextTrack command.
 				// This clears the gapless streamer so the finished track cannot
@@ -795,7 +791,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.replace {
-			m.player.Stop()
+			m.stopPlayback()
 			m.player.ClearPreload()
 			m.resetYTDLBatch()
 			m.retireTracksPaging()

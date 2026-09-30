@@ -38,6 +38,7 @@ func (m *Model) setPlaybackTrack(track playlist.Track) {
 	m.playingTrack = track
 	m.playingTrackActive = true
 	m.playingTrackStarted = false
+	m.playingTrackLeft = false
 	m.playbackDetached = false
 }
 
@@ -55,6 +56,7 @@ func (m *Model) clearPlaybackTrack() {
 	m.playingTrack = playlist.Track{}
 	m.playingTrackActive = false
 	m.playingTrackStarted = false
+	m.playingTrackLeft = false
 	m.playbackDetached = false
 	m.playingProvider = ""
 }
@@ -63,8 +65,10 @@ func (m *Model) clearPlaybackTrack() {
 // stream generation so a yt-dlp or HTTP stream still spinning up for the
 // previous track is refused when it becomes ready, instead of starting to play
 // seconds after the user stopped or ran past the end of the queue. It returns
-// the track that was playing and whether the engine had started it.
+// the track that was playing and whether the engine had started it. It
+// scrobbles that track through leaveTrack before the engine stops.
 func (m *Model) stopPlayback() (playlist.Track, bool) {
+	m.leaveTrack(m.player.PositionAndDuration())
 	nextRequest(&m.requests.stream)
 	m.player.SetPlaybackGeneration(m.requests.stream)
 	m.player.Stop()

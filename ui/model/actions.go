@@ -9,34 +9,32 @@ import (
 // This file holds one action verb for each user intent that more than one
 // entry point starts. The keys, the full-screen visualizer keys, the
 // playback messages from media controls and Lua, the Lua queue calls and V2
-// IPC call the same verb. So each intent gets the same scrobble,
-// notification, config save and preload rearm, whatever starts it.
+// IPC call the same verb. So each intent gets the same notification, config
+// save and preload rearm, whatever starts it. The scrobble of a track that
+// is left comes from playTrack and stopPlayback.
 
-// skipNext scrobbles the track that plays and starts the next track.
+// skipNext starts the next track. playTrack or stopPlayback scrobbles the
+// track that it leaves.
 func (m *Model) skipNext() tea.Cmd {
-	refresh := m.scrobbleCurrent()
 	cmd := m.nextTrack()
 	m.notifyAll()
-	return tea.Batch(refresh, cmd)
+	return cmd
 }
 
-// skipPrev scrobbles the track that plays and goes to the previous track.
-// Past 3 seconds into a track, it restarts that track instead.
+// skipPrev goes to the previous track. Past 3 seconds into a track, it
+// restarts that track instead. A restart also scrobbles the track.
 func (m *Model) skipPrev() tea.Cmd {
-	refresh := m.scrobbleCurrent()
 	cmd := m.prevTrack()
 	m.notifyAll()
-	return tea.Batch(refresh, cmd)
+	return cmd
 }
 
-// playIndex scrobbles the track that plays and starts the track at idx. An
-// unplayable track is skipped forward.
+// playIndex starts the track at idx. An unplayable track is skipped forward.
 func (m *Model) playIndex(idx int) tea.Cmd {
-	refresh := m.scrobbleCurrent()
 	m.playlist.SetIndex(idx)
 	cmd := m.playCurrentTrack()
 	m.notifyAll()
-	return tea.Batch(refresh, cmd)
+	return cmd
 }
 
 // setShuffle turns shuffle on or off, saves the mode and re-arms the preload

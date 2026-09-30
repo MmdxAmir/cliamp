@@ -47,16 +47,6 @@ func (m *Model) quit() tea.Cmd {
 	return tea.Quit
 }
 
-// scrobbleCurrent fires a scrobble for the currently playing track if
-// applicable. Returns the Recently Played refresh command when one was
-// recorded.
-func (m *Model) scrobbleCurrent() tea.Cmd {
-	if track, idx := m.currentPlaybackTrack(); idx >= 0 {
-		return m.maybeScrobble(track, m.player.Position(), m.player.Duration())
-	}
-	return nil
-}
-
 func (m *Model) handleSpeedKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "q", "ctrl+c":
@@ -642,12 +632,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return cmd
 
 	case "s":
-		// Stopping counts like skipping: if the track passed the 50%
-		// threshold, it lands in Recently Played before teardown.
-		refresh := m.scrobbleCurrent()
 		m.stopByUser()
 		m.notifyPlayback()
-		return refresh
+		return nil
 
 	case ">", ".":
 		return m.skipNext()
@@ -2104,7 +2091,7 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 // plMgrLoadAndPlay replaces the live playlist with the manager's tracks and
 // starts playback at startIdx.
 func (m *Model) plMgrLoadAndPlay(startIdx int) tea.Cmd {
-	m.player.Stop()
+	m.stopPlayback()
 	m.player.ClearPreload()
 	m.resetYTDLBatch()
 	m.retireTracksPaging()

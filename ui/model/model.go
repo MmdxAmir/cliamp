@@ -472,7 +472,10 @@ type Model struct {
 	// track.change has fired. It stays false while a stream buffers or after a
 	// start failed, so those never count as a finished track.
 	playingTrackStarted bool
-	playbackDetached    bool
+	// playingTrackLeft is set once leaveTrack has reported playingTrack, so
+	// a stop or a start that follows does not report it again.
+	playingTrackLeft bool
+	playbackDetached bool
 	// playingProvider names the provider that was active when the playing
 	// track started, so a label for it stays right after the listener
 	// switches providers while it keeps playing.

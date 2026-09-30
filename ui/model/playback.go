@@ -121,6 +121,9 @@ func (m *Model) prevTrack() tea.Cmd {
 	if m.player.Position() > 3*time.Second {
 		if m.player.Seekable() {
 			// Seekable media rewinds in place; non-seekable streams must be restarted.
+			// The rewind ends the play so far, and the replay can scrobble again.
+			m.leaveTrack(m.player.PositionAndDuration())
+			m.playingTrackLeft = false
 			return m.seekAbsolute(0)
 		}
 		track, idx := m.currentPlaybackTrack()
@@ -175,7 +178,7 @@ func (m *Model) playCurrentTrack() tea.Cmd {
 // playTrackImmediate appends a track to the playlist and starts playing it now,
 // stopping any current playback. Used by search-result "Play now" actions.
 func (m *Model) playTrackImmediate(track playlist.Track) tea.Cmd {
-	m.player.Stop()
+	m.stopPlayback()
 	m.player.ClearPreload()
 	idx := m.appendTracks(track)
 	m.playlist.SetIndex(idx)
@@ -207,7 +210,7 @@ func (m *Model) appendTrack(track playlist.Track) tea.Cmd {
 // its first track. Like playTrackImmediate it adds rather than replaces, so a
 // queue built up over an evening survives picking an album from search.
 func (m *Model) playAlbumImmediate(album playlist.Track, tracks []playlist.Track) tea.Cmd {
-	m.player.Stop()
+	m.stopPlayback()
 	m.player.ClearPreload()
 	idx := m.appendTracks(tracks...)
 	m.playlist.SetIndex(idx)
@@ -342,6 +345,9 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 		m.status.Activity("Loading feed...", statusTTLLong)
 		return resolveFeedTrackCmd(track.Path)
 	}
+	// The track that plays now is left, so it can scrobble before the
+	// engine moves on.
+	m.leaveTrack(m.player.PositionAndDuration())
 	if m.provider != nil {
 		m.playingProvider = m.provider.Name()
 	}

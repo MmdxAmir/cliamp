@@ -539,7 +539,7 @@ func (m *Model) handleNavTrackListKey(msg tea.KeyPressMsg) tea.Cmd {
 		tracks := m.navPlaybackTracks()
 		if index := m.navBrowser.cursor; index >= 0 && index < len(tracks) {
 			const maxAdd = 500
-			m.player.Stop()
+			m.stopPlayback()
 			m.player.ClearPreload()
 
 			toAdd := tracks[index:min(index+maxAdd, len(tracks))]
@@ -645,7 +645,7 @@ func (m *Model) replacePlaylistFromNav() tea.Cmd {
 	if len(tracks) == 0 {
 		return nil
 	}
-	m.player.Stop()
+	m.stopPlayback()
 	m.player.ClearPreload()
 	m.resetYTDLBatch()
 	m.retireTracksPaging()
