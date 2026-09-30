@@ -147,7 +147,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 	m.SetIPCBroker(pluginBroker)
 	if luaMgr != nil {
-		luaMgr.SetStateProvider(luaStateProvider(p, m.LoadPluginState))
+		luaMgr.SetStateProvider(luaStateProvider(p, m.PluginStateLoader()))
 		if names := luaMgr.Visualizers(); len(names) > 0 {
 			m.RegisterLuaVisualizers(names, luaMgr)
 		}

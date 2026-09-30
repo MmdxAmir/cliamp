@@ -26,17 +26,20 @@ type PluginState struct {
 	revision uint64 // the playlist revision that Queue shows
 }
 
-// LoadPluginState returns the state that the Model published last. With no
-// plugin loaded, it returns a stopped state. It is safe to call from any
-// goroutine and on any copy of the Model, because the copies share one
-// store.
-func (m Model) LoadPluginState() PluginState {
-	if m.pluginState != nil {
-		if state := m.pluginState.Load(); state != nil {
-			return *state
+// PluginStateLoader returns a func that loads the state that the Model
+// published last. With no plugin loaded, the func returns a stopped state.
+// The func is safe to call from any goroutine. Every copy of the Model
+// publishes to the store that it reads.
+func (m *Model) PluginStateLoader() func() PluginState {
+	store := m.pluginState
+	return func() PluginState {
+		if store != nil {
+			if state := store.Load(); state != nil {
+				return *state
+			}
 		}
+		return PluginState{Status: "stopped", Speed: 1}
 	}
-	return PluginState{Status: "stopped", Speed: 1}
 }
 
 // publishPluginState stores the state that Lua plugins read. It rebuilds

@@ -103,7 +103,7 @@ func TestPluginStateReportsThePlayingTrack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := tt.run(t)
-			got := m.LoadPluginState()
+			got := m.PluginStateLoader()()
 			if got.Track != tt.wantTrack {
 				t.Errorf("track = %+v, want %+v", got.Track, tt.wantTrack)
 			}
@@ -116,12 +116,13 @@ func TestPluginStateReportsThePlayingTrack(t *testing.T) {
 
 // With no plugin loaded, the Model publishes nothing, and a read returns a
 // stopped state at normal speed.
-func TestLoadPluginStateWithoutPlugins(t *testing.T) {
+func TestPluginStateLoaderWithoutPlugins(t *testing.T) {
 	m := Model{player: &playbackFakeEngine{playing: true}, playlist: playlist.New()}
 	updated, _ := m.Update(pluginStateTestMsg{})
-	got := updated.(Model).LoadPluginState()
+	m = updated.(Model)
+	got := m.PluginStateLoader()()
 	if got.Status != "stopped" || got.Speed != 1 {
-		t.Fatalf("LoadPluginState() = %+v, want stopped at speed 1", got)
+		t.Fatalf("PluginStateLoader()() = %+v, want stopped at speed 1", got)
 	}
 }
 
@@ -132,14 +133,15 @@ func TestPluginStateRebuildsQueueOnPlaylistChange(t *testing.T) {
 		playlist.Track{Title: "A", Path: "a.mp3"},
 		playlist.Track{Title: "B", Path: "b.mp3"})
 	m.publishPluginState()
-	first := m.LoadPluginState().Queue
+	load := m.PluginStateLoader()
+	first := load().Queue
 	m.publishPluginState()
-	if second := m.LoadPluginState().Queue; &second[0] != &first[0] {
+	if second := load().Queue; &second[0] != &first[0] {
 		t.Fatal("the queue was built again with no playlist change")
 	}
 	m.playlist.Add(playlist.Track{Title: "C", Path: "c.mp3"})
 	m.publishPluginState()
-	if third := m.LoadPluginState().Queue; len(third) != 3 || third[2].Title != "C" {
+	if third := load().Queue; len(third) != 3 || third[2].Title != "C" {
 		t.Fatalf("queue = %+v, want the added track", third)
 	}
 }
@@ -149,9 +151,9 @@ func TestPluginStateRebuildsQueueOnPlaylistChange(t *testing.T) {
 func TestPluginStateConcurrentReads(t *testing.T) {
 	m := newPluginStateModel(&playbackFakeEngine{playing: true},
 		playlist.Track{Title: "A", Path: "a.mp3"})
-	// main.go binds LoadPluginState to the Model that New returned. The
-	// copies that Update returns share its store.
-	load := m.LoadPluginState
+	// main.go takes the loader from the Model that New returned. The
+	// copies that Update returns publish to its store.
+	load := m.PluginStateLoader()
 	var stop atomic.Bool
 	var wg sync.WaitGroup
 	for range 4 {
