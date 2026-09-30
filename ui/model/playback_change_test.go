@@ -42,8 +42,6 @@ func (r *countingReporter) scrobbled() []string {
 // offset, a stop goes to 0 and a seek that works moves the position.
 type changeEngine struct {
 	playbackFakeEngine
-	volume      float64
-	streamTitle string
 }
 
 func (e *changeEngine) PlayAt(path string, dur, offset time.Duration) error {
@@ -63,10 +61,6 @@ func (e *changeEngine) Seek(d time.Duration) error {
 	e.position += d
 	return nil
 }
-
-func (e *changeEngine) SetVolume(db float64) { e.volume = db }
-func (e *changeEngine) Volume() float64      { return e.volume }
-func (e *changeEngine) StreamTitle() string  { return e.streamTitle }
 
 // playbackChange is the Model and fakes that one playback-changing message
 // runs against.

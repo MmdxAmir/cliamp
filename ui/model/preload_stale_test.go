@@ -317,7 +317,7 @@ type withSetup struct {
 func runVerbEntry(t *testing.T, msg tea.Msg, skips, notifies bool) verbState {
 	t.Helper()
 	mgr, messages, _ := newReportTestPlugin(t, "playback.state", `ev.status`)
-	engine := &settingsFocusEngine{playbackFakeEngine: playbackFakeEngine{playing: true, duration: 180 * time.Second, position: 179 * time.Second, hasPreload: true}}
+	engine := &playbackFakeEngine{playing: true, duration: 180 * time.Second, position: 179 * time.Second, hasPreload: true}
 	reporter := &verbReporter{scrobbles: make(chan string, 4)}
 	notifier := &fakeNotifier{}
 	saver := &recordingSaver{}

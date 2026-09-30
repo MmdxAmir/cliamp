@@ -243,17 +243,6 @@ func TestSettingsFocusVisibleInEveryLayout(t *testing.T) {
 	}
 }
 
-type settingsFocusEngine struct {
-	playbackFakeEngine
-	volume float64
-	mono   bool
-}
-
-func (p *settingsFocusEngine) SetVolume(volume float64) { p.volume = volume }
-func (p *settingsFocusEngine) Volume() float64          { return p.volume }
-func (p *settingsFocusEngine) ToggleMono()              { p.mono = !p.mono }
-func (p *settingsFocusEngine) Mono() bool               { return p.mono }
-
 func TestSettingsFocusActions(t *testing.T) {
 	for _, focus := range []focusArea{focusVolume, focusShuffle, focusRepeat} {
 		for _, key := range []tea.KeyPressMsg{
@@ -263,7 +252,7 @@ func TestSettingsFocusActions(t *testing.T) {
 		} {
 			t.Run(focus.label()+"/"+key.String(), func(t *testing.T) {
 				m := newColumnTestModel(100, 30)
-				p := &settingsFocusEngine{}
+				p := &playbackFakeEngine{}
 				notifier := &fakeNotifier{}
 				saver := &recordingSaver{}
 				m.player, m.notifier, m.configSaver, m.focus = p, notifier, saver, focus

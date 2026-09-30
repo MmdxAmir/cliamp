@@ -16,12 +16,12 @@ func TestPluginPlayerMessages(t *testing.T) {
 	tests := []struct {
 		name  string
 		msg   tea.Msg
-		check func(t *testing.T, m Model, engine *settingsFocusEngine, notifier *fakeNotifier)
+		check func(t *testing.T, m Model, engine *playbackFakeEngine, notifier *fakeNotifier)
 	}{
 		{
 			name: "volume",
 			msg:  playback.SetVolumeMsg{VolumeDB: -40},
-			check: func(t *testing.T, _ Model, engine *settingsFocusEngine, notifier *fakeNotifier) {
+			check: func(t *testing.T, _ Model, engine *playbackFakeEngine, notifier *fakeNotifier) {
 				if engine.volume != -40 {
 					t.Errorf("volume = %v, want -40", engine.volume)
 				}
@@ -33,7 +33,7 @@ func TestPluginPlayerMessages(t *testing.T) {
 		{
 			name: "speed",
 			msg:  playback.SetSpeedMsg{Ratio: 1.5},
-			check: func(t *testing.T, m Model, engine *settingsFocusEngine, _ *fakeNotifier) {
+			check: func(t *testing.T, m Model, engine *playbackFakeEngine, _ *fakeNotifier) {
 				if got := engine.Speed(); got != 1.5 {
 					t.Errorf("speed = %v, want 1.5", got)
 				}
@@ -45,7 +45,7 @@ func TestPluginPlayerMessages(t *testing.T) {
 		{
 			name: "mono",
 			msg:  playback.ToggleMonoMsg{},
-			check: func(t *testing.T, _ Model, engine *settingsFocusEngine, _ *fakeNotifier) {
+			check: func(t *testing.T, _ Model, engine *playbackFakeEngine, _ *fakeNotifier) {
 				if !engine.mono {
 					t.Error("mono = false, want true")
 				}
@@ -54,7 +54,7 @@ func TestPluginPlayerMessages(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			engine := &settingsFocusEngine{}
+			engine := &playbackFakeEngine{}
 			notifier := &fakeNotifier{}
 			m := Model{player: engine, playlist: playlist.New(), configSaver: &recordingSaver{}, notifier: notifier}
 			updated, _ := m.Update(tt.msg)

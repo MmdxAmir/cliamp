@@ -277,7 +277,7 @@ func TestV2SettingsOperations(t *testing.T) {
 				playlist.Track{Path: "/music/three.flac", Title: "Three"},
 			)
 			saver := &recordingSaver{}
-			m := Model{player: &settingsFocusEngine{}, playlist: pl, configSaver: saver, vis: ui.NewVisualizer(44100)}
+			m := Model{player: &playbackFakeEngine{}, playlist: pl, configSaver: saver, vis: ui.NewVisualizer(44100)}
 			if tc.setup != nil {
 				tc.setup(&m)
 			}
@@ -450,7 +450,7 @@ func TestNormalizeV2OperationCoversRegistryAliases(t *testing.T) {
 
 	pl := playlist.New()
 	pl.Add(playlist.Track{Path: "/music/one.flac", Title: "One"})
-	engine := &settingsFocusEngine{}
+	engine := &playbackFakeEngine{}
 	m := Model{player: engine, playlist: pl}
 	if response := runV2(t, &m, "runtime.queue.list", ipc.Request{}); !response.OK || response.Total != 1 {
 		t.Fatalf("runtime.queue.list = %+v, want the live playlist", response)

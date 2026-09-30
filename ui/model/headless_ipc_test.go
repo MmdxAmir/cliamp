@@ -109,7 +109,7 @@ func TestHeadlessStateSnapshot(t *testing.T) {
 
 // A job reports its result and the snapshot of the state that it committed.
 func TestHeadlessVolumeJobCarriesSnapshot(t *testing.T) {
-	engine := &headlessEngine{volume: -6}
+	engine := &headlessEngine{playbackFakeEngine: playbackFakeEngine{volume: -6}}
 	m := newHeadlessModel(t, engine, nil, playlist.Track{Path: "/music/one.flac", Title: "One"})
 
 	msg := v2Request(t, "volume", ipc.Request{Value: -18})
@@ -157,7 +157,7 @@ func TestHeadlessQueueListIncludesMetadata(t *testing.T) {
 
 // Media-control messages apply in the order that they arrive.
 func TestHeadlessMediaControlsApplyInOrder(t *testing.T) {
-	engine := &headlessEngine{volume: -6}
+	engine := &headlessEngine{playbackFakeEngine: playbackFakeEngine{volume: -6}}
 	m := newHeadlessModel(t, engine, nil)
 	for _, want := range []float64{-10, -20} {
 		updated, _ := m.Update(playback.SetVolumeMsg{VolumeDB: want})
@@ -282,7 +282,7 @@ func TestHeadlessStreamTitleFields(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			engine := &headlessEngine{streamTitle: tc.streamTitle}
+			engine := &headlessEngine{playbackFakeEngine: playbackFakeEngine{streamTitle: tc.streamTitle}}
 			engine.playing = true
 			m := newHeadlessModel(t, engine, nil, tc.track)
 

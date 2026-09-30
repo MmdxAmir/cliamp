@@ -15,16 +15,11 @@ import (
 type stereoFakeEngine struct {
 	*playbackFakeEngine
 	samples [][2]float64
-	volume  float64
-	mono    bool
 }
 
 func (f *stereoFakeEngine) StereoSamplesInto(dst [][2]float64) int {
 	return copy(dst, f.samples)
 }
-
-func (f *stereoFakeEngine) Volume() float64 { return f.volume }
-func (f *stereoFakeEngine) Mono() bool      { return f.mono }
 
 type samplingFakeEngine struct {
 	*playbackFakeEngine
@@ -427,10 +422,8 @@ func TestInitialTickUsesFastCadence(t *testing.T) {
 
 func TestVisualizerTickContextProcessesStereoOutput(t *testing.T) {
 	player := &stereoFakeEngine{
-		playbackFakeEngine: &playbackFakeEngine{playing: true},
+		playbackFakeEngine: &playbackFakeEngine{playing: true, volume: -6.020599913279624, mono: true},
 		samples:            [][2]float64{{0.8, 0.4}},
-		volume:             -6.020599913279624,
-		mono:               true,
 	}
 	m := Model{
 		player:          player,

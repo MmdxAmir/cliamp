@@ -44,9 +44,16 @@ type playbackFakeEngine struct {
 	hasPreload          bool
 	eqBands             [eqBandCount]float64
 	speed               float64 // 0 reads as the default speed 1.0
+	volume              float64
+	mono                bool
+	streamTitle         string
+	playErr             error // PlayAt and PlayAtForGeneration fail with it
 }
 
 func (f *playbackFakeEngine) PlayAt(path string, _, offset time.Duration) error {
+	if f.playErr != nil {
+		return f.playErr
+	}
 	f.playAtOffsets = append(f.playAtOffsets, offset)
 	f.playing = true
 	f.paused = false
@@ -115,14 +122,14 @@ func (f *playbackFakeEngine) PositionAndDuration() (time.Duration, time.Duration
 }
 func (f *playbackFakeEngine) SetVolumeMin(float64)                   {}
 func (f *playbackFakeEngine) VolumeMin() float64                     { return -50 }
-func (f *playbackFakeEngine) SetVolume(float64)                      {}
-func (f *playbackFakeEngine) Volume() float64                        { return 0 }
-func (f *playbackFakeEngine) ToggleMono()                            {}
-func (f *playbackFakeEngine) Mono() bool                             { return false }
+func (f *playbackFakeEngine) SetVolume(db float64)                   { f.volume = db }
+func (f *playbackFakeEngine) Volume() float64                        { return f.volume }
+func (f *playbackFakeEngine) ToggleMono()                            { f.mono = !f.mono }
+func (f *playbackFakeEngine) Mono() bool                             { return f.mono }
 func (f *playbackFakeEngine) SetEQBand(band int, gain float64)       { f.eqBands[band] = gain }
 func (f *playbackFakeEngine) EQBands() [10]float64                   { return f.eqBands }
 func (f *playbackFakeEngine) StreamErr() error                       { return nil }
-func (f *playbackFakeEngine) StreamTitle() string                    { return "" }
+func (f *playbackFakeEngine) StreamTitle() string                    { return f.streamTitle }
 func (f *playbackFakeEngine) StreamBytes() (downloaded, total int64) { return 0, 0 }
 func (f *playbackFakeEngine) SamplesInto([]float64) int              { return 0 }
 func (f *playbackFakeEngine) WaveformSamplesInto([]float64) int      { return 0 }

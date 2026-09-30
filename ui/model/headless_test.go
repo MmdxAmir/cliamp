@@ -23,26 +23,13 @@ import (
 	"github.com/bjarneo/cliamp/ui"
 )
 
-// headlessEngine is a player fake for headless Model tests. It keeps the
-// volume, reports a stream title and fills the audio taps with a tone.
+// headlessEngine is a player fake for headless Model tests. It fills the
+// audio taps with a tone.
 type headlessEngine struct {
 	playbackFakeEngine
-	volume      float64
-	streamTitle string
-	tone        bool
-	playErr     error
+	tone bool
 }
 
-func (e *headlessEngine) PlayAt(path string, dur, offset time.Duration) error {
-	if e.playErr != nil {
-		return e.playErr
-	}
-	return e.playbackFakeEngine.PlayAt(path, dur, offset)
-}
-
-func (e *headlessEngine) SetVolume(db float64)                  { e.volume = db }
-func (e *headlessEngine) Volume() float64                       { return e.volume }
-func (e *headlessEngine) StreamTitle() string                   { return e.streamTitle }
 func (e *headlessEngine) SamplesInto(dst []float64) int         { return e.fill(dst) }
 func (e *headlessEngine) WaveformSamplesInto(dst []float64) int { return e.fill(dst) }
 
@@ -292,7 +279,7 @@ func TestPlayFailureIsLogged(t *testing.T) {
 			}
 			t.Cleanup(func() { _ = closeLog() })
 			failure := errors.New("device busy")
-			m := newHeadlessModel(t, &headlessEngine{playErr: failure}, nil, tc.track)
+			m := newHeadlessModel(t, &headlessEngine{playbackFakeEngine: playbackFakeEngine{playErr: failure}}, nil, tc.track)
 
 			m.playCurrentTrack()
 			if tc.track.Stream {

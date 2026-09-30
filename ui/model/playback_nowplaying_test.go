@@ -74,25 +74,6 @@ end)
 	return mgr, messages, closePlugins
 }
 
-type nowPlayingEngine struct {
-	playbackFakeEngine
-	startErr error
-}
-
-func (p *nowPlayingEngine) PlayAt(path string, duration, offset time.Duration) error {
-	if p.startErr != nil {
-		return p.startErr
-	}
-	return p.playbackFakeEngine.PlayAt(path, duration, offset)
-}
-
-func (p *nowPlayingEngine) PlayAtForGeneration(path string, duration, offset time.Duration, gen uint64) error {
-	if gen != p.playGeneration {
-		return nil
-	}
-	return p.PlayAt(path, duration, offset)
-}
-
 func TestPlayTrackEmitsPluginTrackChange(t *testing.T) {
 	for _, path := range []string{
 		"/music/local.flac",
@@ -111,9 +92,9 @@ func TestPlayTrackEmitsPluginTrackChange(t *testing.T) {
 					track := playlist.Track{Path: path, Title: "Title", Artist: "Artist", Stream: playlist.IsURL(path)}
 					pl := playlist.New()
 					pl.Add(track)
-					engine := &nowPlayingEngine{}
+					engine := &playbackFakeEngine{}
 					if outcome == "failed" {
-						engine.startErr = errors.New("playback startup failed")
+						engine.playErr = errors.New("playback startup failed")
 					}
 					m := Model{player: engine, playlist: pl, luaMgr: mgr}
 					if reporter {
@@ -136,8 +117,8 @@ func TestPlayTrackEmitsPluginTrackChange(t *testing.T) {
 						updated, _ := m.Update(msg)
 						m = updated.(Model)
 					}
-					if outcome == "failed" && !errors.Is(m.err, engine.startErr) {
-						t.Fatalf("playback error = %v, want %v", m.err, engine.startErr)
+					if outcome == "failed" && !errors.Is(m.err, engine.playErr) {
+						t.Fatalf("playback error = %v, want %v", m.err, engine.playErr)
 					}
 					// Close waits for every asynchronous Lua callback before assertions.
 					closePlugins()
