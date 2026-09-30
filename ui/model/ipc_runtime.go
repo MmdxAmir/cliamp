@@ -225,10 +225,7 @@ func (m *Model) handleV2QueueRequest(ctx context.Context, jobs *ipc.JobStore, jo
 			m.failV2Job(jobs, jobID, v2InvalidParamsError())
 			return nil
 		}
-		track := playlist.TrackFromPath(request.Path)
-		m.playlist.Add(track)
-		m.clearLoadedPlaylist()
-		m.addToHeaderState([]playlist.Track{track})
+		m.appendTracks(playlist.TrackFromPath(request.Path))
 		m.completeV2Job(jobs, jobID, m.v2PlaylistResponse())
 		return nil
 	}

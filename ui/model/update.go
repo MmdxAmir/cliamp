@@ -658,9 +658,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ytdlBatch.done = true
 			return m, nil
 		}
-		m.playlist.Add(msg.tracks...)
-		m.clearLoadedPlaylist()
-		m.addToHeaderState(msg.tracks)
+		m.appendTracks(msg.tracks...)
 		m.ytdlBatch.offset += len(msg.tracks)
 		if len(msg.tracks) < ytdlBatchSize {
 			m.ytdlBatch.done = true
@@ -709,9 +707,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if len(msg.tracks) > 0 {
-			m.playlist.Add(msg.tracks...)
-			m.clearLoadedPlaylist()
-			m.addToHeaderState(msg.tracks)
+			m.appendTracks(msg.tracks...)
 			m.status.Showf(statusTTLDefault, "Loaded %d track(s)", len(msg.tracks))
 		} else {
 			m.status.Warning("No tracks found at URL.", statusTTLDefault)
@@ -809,9 +805,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.plCursor = 0
 			m.plScroll = 0
 		} else {
-			m.playlist.Add(msg.tracks...)
-			m.clearLoadedPlaylist()
-			m.addToHeaderState(msg.tracks)
+			m.appendTracks(msg.tracks...)
 		}
 		m.focus = focusPlaylist
 		m.applyHeightMode()

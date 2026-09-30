@@ -111,11 +111,8 @@ func (m *Model) handleIPCURLResult(result ipcURLLoadResult) tea.Cmd {
 	// asked to play a URL hears it even when something is already playing.
 	// Without it the tracks are appended and only start when the player is
 	// idle, which is the right default for a plain append.
-	start := m.playlist.Len()
 	wasStopped := !m.player.IsPlaying()
-	m.playlist.Add(result.tracks...)
-	m.clearLoadedPlaylist()
-	m.addToHeaderState(result.tracks)
+	start := m.appendTracks(result.tracks...)
 	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks, m.trackFavoriteLookup(true)), Total: len(result.tracks)}
 	if result.request.Play {
 		m.player.Stop()

@@ -179,10 +179,7 @@ func (m *Model) playCurrentTrack() tea.Cmd {
 func (m *Model) playTrackImmediate(track playlist.Track) tea.Cmd {
 	m.player.Stop()
 	m.player.ClearPreload()
-	m.playlist.Add(track)
-	m.clearLoadedPlaylist()
-	m.addToHeaderState([]playlist.Track{track})
-	idx := m.playlist.Len() - 1
+	idx := m.appendTracks(track)
 	m.playlist.SetIndex(idx)
 	m.plCursor = idx
 	m.adjustScroll()
@@ -195,10 +192,7 @@ func (m *Model) playTrackImmediate(track playlist.Track) tea.Cmd {
 // appendTrack appends a track to the playlist; auto-plays if nothing is playing.
 func (m *Model) appendTrack(track playlist.Track) tea.Cmd {
 	wasEmpty := m.playlist.Len() == 0
-	m.playlist.Add(track)
-	m.clearLoadedPlaylist()
-	m.addToHeaderState([]playlist.Track{track})
-	idx := m.playlist.Len() - 1
+	idx := m.appendTracks(track)
 	m.status.Showf(statusTTLMedium, "Added: %s", track.DisplayName())
 	if wasEmpty || !m.player.IsPlaying() {
 		m.playlist.SetIndex(idx)
@@ -217,10 +211,7 @@ func (m *Model) appendTrack(track playlist.Track) tea.Cmd {
 func (m *Model) playAlbumImmediate(album playlist.Track, tracks []playlist.Track) tea.Cmd {
 	m.player.Stop()
 	m.player.ClearPreload()
-	idx := m.playlist.Len()
-	m.playlist.Add(tracks...)
-	m.clearLoadedPlaylist()
-	m.addToHeaderState(tracks)
+	idx := m.appendTracks(tracks...)
 	m.playlist.SetIndex(idx)
 	m.plCursor = idx
 	m.adjustScroll()
@@ -234,10 +225,7 @@ func (m *Model) playAlbumImmediate(album playlist.Track, tracks []playlist.Track
 // track if nothing is playing.
 func (m *Model) appendAlbum(album playlist.Track, tracks []playlist.Track) tea.Cmd {
 	wasEmpty := m.playlist.Len() == 0
-	idx := m.playlist.Len()
-	m.playlist.Add(tracks...)
-	m.clearLoadedPlaylist()
-	m.addToHeaderState(tracks)
+	idx := m.appendTracks(tracks...)
 	m.status.Showf(statusTTLMedium, "Added album: %s (%d tracks)", album.Title, len(tracks))
 	if wasEmpty || !m.player.IsPlaying() {
 		m.playlist.SetIndex(idx)
@@ -253,10 +241,7 @@ func (m *Model) appendAlbum(album playlist.Track, tracks []playlist.Track) tea.C
 // queueAlbumNext queues a whole album to play after the current track, keeping
 // its running order.
 func (m *Model) queueAlbumNext(album playlist.Track, tracks []playlist.Track) tea.Cmd {
-	idx := m.playlist.Len()
-	m.playlist.Add(tracks...)
-	m.clearLoadedPlaylist()
-	m.addToHeaderState(tracks)
+	idx := m.appendTracks(tracks...)
 	for i := range tracks {
 		m.playlist.Queue(idx + i)
 	}
@@ -310,10 +295,7 @@ func (m *Model) cancelSpotRequest() {
 
 // queueTrackNext adds a track to the playlist and queues it to play next.
 func (m *Model) queueTrackNext(track playlist.Track) tea.Cmd {
-	m.playlist.Add(track)
-	m.clearLoadedPlaylist()
-	m.addToHeaderState([]playlist.Track{track})
-	idx := m.playlist.Len() - 1
+	idx := m.appendTracks(track)
 	m.playlist.Queue(idx)
 	m.normalizeQueueOverlay()
 	m.status.Showf(statusTTLMedium, "Queued: %s", track.DisplayName())
