@@ -591,8 +591,8 @@ func (m *Model) clearLoadedPlaylist() {
 
 // setLoadedLocalPlaylist records the list that a provider load put in the
 // queue. Only a saved list of the local provider counts, so the name is never
-// a remote ID. History is excluded as well. The key path and the IPC
-// provider.load path both use it.
+// a remote ID. History is excluded as well. The key path, the playlist
+// manager and the IPC provider.load path all use it.
 func (m *Model) setLoadedLocalPlaylist(providerName, id string) {
 	m.clearLoadedPlaylist()
 	if m.localProvider != nil && providerName == m.localProvider.Name() && id != history.PlaylistName {

@@ -603,3 +603,28 @@ func TestRenameMovesTheLoadedPlaylist(t *testing.T) {
 		})
 	}
 }
+
+// A load from the playlist manager marks the loaded list as the provider
+// pane and IPC provider.load do. Recently Played is no saved list, so the ♥
+// rule and the snapshot do not read it as one.
+func TestPlaylistManagerLoadMarksTheLoadedList(t *testing.T) {
+	for _, tc := range []struct {
+		list, want string
+	}{
+		{list: "Mix", want: "Mix"},
+		{list: favorites.PlaylistName, want: favorites.PlaylistName},
+		{list: history.PlaylistName},
+	} {
+		t.Run(tc.list, func(t *testing.T) {
+			m, _, _ := queueOpModel(t, false, "Other", 0)
+			m.plManager = plManagerState{visible: true, selPlaylist: tc.list, tracks: []playlist.Track{{Path: "/music/b.mp3"}}}
+			m.plMgrLoadAndPlay(0)
+			if m.loadedPlaylist != tc.want {
+				t.Fatalf("loadedPlaylist = %q, want %q", m.loadedPlaylist, tc.want)
+			}
+			if got := m.runtimeSnapshot().Playlist; got != tc.want {
+				t.Fatalf("snapshot playlist = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

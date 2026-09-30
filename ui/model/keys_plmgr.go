@@ -455,7 +455,12 @@ func (m *Model) plMgrLoadAndPlay(startIdx int) tea.Cmd {
 	m.retireTracksPaging()
 	m.replacePlaylist(m.plManager.tracks)
 	m.setHeaderStateFromTracks(m.plManager.tracks)
-	m.SetLoadedPlaylist(m.plManager.selPlaylist)
+	// The manager lists the playlists of the local provider.
+	localName := ""
+	if m.localProvider != nil {
+		localName = m.localProvider.Name()
+	}
+	m.setLoadedLocalPlaylist(localName, m.plManager.selPlaylist)
 	if startIdx < 0 || startIdx >= m.playlist.Len() {
 		startIdx = 0
 	}
