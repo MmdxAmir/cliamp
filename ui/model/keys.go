@@ -272,9 +272,7 @@ func (m *Model) handleProviderPaneKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "q":
 		return m.quit()
 	case "F":
-		if !m.openSubsOverlay() && m.luaMgr != nil {
-			m.luaMgr.EmitKey(msg.String())
-		}
+		m.openSubsOverlay()
 	case "l":
 		return m.loadLatestFromProviderList()
 	case "a":
@@ -446,15 +444,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.quit()
 	case "ctrl+r":
 		// The playlist view reloads only an open provider playlist that
-		// keeps its ID across Refresh. Keep plugin key bindings working:
-		// ctrl+r is no longer an unhandled key here, so forward it when
-		// another provider playlist is open.
-		if m.provider != nil && !m.provPane.loading && m.activeProviderPlaylistID != "" && !m.refreshesInPlace() {
-			if m.luaMgr != nil {
-				m.luaMgr.EmitKey(msg.String())
-			}
-			return nil
-		}
+		// keeps its ID across Refresh.
 		return m.refreshActiveProvider(true)
 	case "esc", "backspace", "b":
 		if m.focus == focusPlaylist {
@@ -628,11 +618,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 
 	case "F":
-		// Keep plugin key bindings working: when the overlay does not open,
-		// F is no longer an unhandled key here, so forward it explicitly.
-		if !m.openSubsOverlay() && m.luaMgr != nil {
-			m.luaMgr.EmitKey(msg.String())
-		}
+		m.openSubsOverlay()
 
 	case "ctrl+s":
 		return m.saveTrack()

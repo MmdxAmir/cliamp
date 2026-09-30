@@ -512,7 +512,7 @@ func TestOverlayLoadsThroughTheSubscriptionProvider(t *testing.T) {
 		playlist:  playlist.New(),
 	}
 
-	if !m.openSubsOverlay() {
+	if m.openSubsOverlay(); !m.subs.visible {
 		t.Fatal("overlay did not open")
 	}
 	cmd := m.loadSubscription(subsLoadAppend)
@@ -525,12 +525,14 @@ func TestOverlayLoadsThroughTheSubscriptionProvider(t *testing.T) {
 	}
 }
 
-func TestOpenSubsOverlayReportsWhetherItOpened(t *testing.T) {
-	if m := stubSubsModel(); !m.openSubsOverlay() {
-		t.Error("openSubsOverlay() = false with subscriptions present")
+func TestOpenSubsOverlayOpensOnlyWithShows(t *testing.T) {
+	m := stubSubsModel()
+	if m.openSubsOverlay(); !m.subs.visible {
+		t.Error("overlay stayed closed with subscriptions present")
 	}
-	if m := (&Model{provider: &subProv{}, playlist: playlist.New()}); m.openSubsOverlay() {
-		t.Error("openSubsOverlay() = true with nothing to show")
+	empty := &Model{provider: &subProv{}, playlist: playlist.New()}
+	if empty.openSubsOverlay(); empty.subs.visible {
+		t.Error("overlay opened with nothing to show")
 	}
 }
 

@@ -31,18 +31,18 @@ func (m Model) hasSubscriptions() bool {
 	return sl != nil && len(sl.Subscriptions()) > 0
 }
 
-// openSubsOverlay loads the subscription list and shows the overlay. It
-// reports whether it did, so a key that opened nothing can still reach plugins.
-func (m *Model) openSubsOverlay() bool {
+// openSubsOverlay loads the subscription list and shows the overlay. With no
+// subscribed shows, it shows a warning instead.
+func (m *Model) openSubsOverlay() {
 	sl := m.subscriptionProvider()
 	if sl == nil {
 		m.status.Warning("No provider keeps subscriptions.", statusTTLDefault)
-		return false
+		return
 	}
 	shows := sl.Subscriptions()
 	if len(shows) == 0 {
 		m.status.Warning("No subscribed shows. Press f on a show to subscribe.", statusTTLDefault)
-		return false
+		return
 	}
 	// A load started before the overlay was closed is still running; keep
 	// its state so the guards refuse a second request until it lands.
@@ -53,7 +53,6 @@ func (m *Model) openSubsOverlay() bool {
 		loading: m.subs.loading,
 		status:  m.subs.status,
 	}
-	return true
 }
 
 // subscriptionLoader returns the provider that owns a subscription list as an
