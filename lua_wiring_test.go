@@ -2,7 +2,6 @@ package main
 
 import (
 	"reflect"
-	"slices"
 	"testing"
 	"time"
 
@@ -113,10 +112,11 @@ func TestLuaSenderDoesNotBlockAndKeepsOrder(t *testing.T) {
 	}
 }
 
-// A full queue drops new messages instead of blocking the plugin. The
-// messages that arrive keep their order.
-func TestLuaSenderDropsWhenFull(t *testing.T) {
-	const n = luaSendQueueSize + 50
+// A plugin that adds a long list calls a control many times while the
+// event loop is busy. Every call returns at once, and the Model gets every
+// message in the order of the calls.
+func TestLuaSenderKeepsEveryMessage(t *testing.T) {
+	const n = 1000
 	sink := newBlockingSend(n)
 	queue, stop := newLuaSender(sink.send)
 	defer stop()
@@ -131,25 +131,19 @@ func TestLuaSenderDropsWhenFull(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("a full queue blocked the plugin")
+		t.Fatal("a Lua control waited for the event loop")
 	}
 
 	close(sink.release)
-	var got []int
-	for {
+	for i := range n {
 		select {
 		case msg := <-sink.got:
-			got = append(got, int(msg.(playback.SeekMsg).Offset))
-			continue
-		case <-time.After(100 * time.Millisecond):
+			if got := int(msg.(playback.SeekMsg).Offset); got != i {
+				t.Fatalf("message %d = %d, want %d", i, got, i)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("message %d did not arrive", i)
 		}
-		break
-	}
-	if len(got) < luaSendQueueSize || len(got) >= n {
-		t.Fatalf("got %d messages, want at least %d and fewer than %d", len(got), luaSendQueueSize, n)
-	}
-	if !slices.IsSorted(got) {
-		t.Fatalf("messages arrived out of order: %v", got)
 	}
 }
 
