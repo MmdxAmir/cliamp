@@ -39,8 +39,9 @@ import (
 )
 
 // providerSet holds the providers of one run, in the order of the provider
-// list. The player hooks, the sign-in observers and the shutdown find each
-// capability in entries, so a new provider needs no change here for them.
+// list. The player hooks, the sign-in observers and the shutdown find the
+// providers in entries. A provider.CustomStreamer or a provider.Closer needs
+// no code here.
 type providerSet struct {
 	entries []provider.Entry
 	// local is nil when the config directory is unavailable.
