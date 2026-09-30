@@ -61,8 +61,8 @@ func (m *Model) moveTrack(from, to int) (tea.Cmd, error) {
 
 // removeTrack removes the track at idx. When the queue mirrors a writable
 // saved playlist, the track leaves that file too. With recordUndo, Ctrl+Z
-// restores both. Only the x key records an undo, so a remote or plugin
-// removal keeps the undo of the last key edit. While the queue mirrors a
+// restores both. Only the x key records an undo. A remote or plugin edit
+// that follows makes that undo stale. While the queue mirrors a
 // writable saved playlist, a track from its directory source is refused,
 // because the file cannot drop it. Removing the track that plays stops
 // playback.
@@ -109,7 +109,7 @@ func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 	m.normalizeQueueOverlay()
 	undoHint := ""
 	if recordUndo {
-		m.playlistUndo = playlistUndo{active: true, snapshot: snapshot, loaded: loaded, saved: saved, persisted: persisted}
+		m.recordPlaylistUndo(playlistUndo{snapshot: snapshot, saved: saved, persisted: persisted})
 		undoHint = " (Ctrl+Z to undo)"
 	}
 	if wasActive {

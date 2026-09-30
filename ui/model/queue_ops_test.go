@@ -35,7 +35,7 @@ type queueOpState struct {
 // A queue edit follows one rule, whether a key, IPC or a Lua plugin starts
 // it. Each row runs one edit through a key press, runV2 and PluginQueueMsg
 // and expects the same end state. Only the x key records an undo. A remote
-// or plugin removal records none, so it keeps the undo of the last key edit.
+// or plugin removal records none.
 func TestQueueEditsFollowOneRule(t *testing.T) {
 	d := playlist.Track{Path: "/music/d.mp3"}
 	for _, tc := range []struct {
@@ -267,4 +267,102 @@ func queueOpPaths(tracks []playlist.Track) string {
 		names[i] = strings.TrimSuffix(strings.TrimPrefix(track.Path, "/music/"), ".mp3")
 	}
 	return strings.Join(names, " ")
+}
+
+// Ctrl+Z restores the queue from before the last x only while the queue and
+// the loaded playlist stay as that x left them. After a later edit, a load
+// or a remote removal, the undo is refused and changes nothing.
+func TestPlaylistUndoRestoresOnlyTheLastEdit(t *testing.T) {
+	d := playlist.Track{Path: "/music/d.mp3"}
+	for _, tc := range []struct {
+		name string
+		// between runs after the x on b and before Ctrl+Z.
+		between func(t *testing.T, m *Model, lp *local.Provider)
+		refused bool
+		want    func(s queueOpState) bool
+	}{
+		{
+			name: "right after the edit",
+			want: func(s queueOpState) bool {
+				return s.queue == "a b c" && s.loaded == "Mix"
+			},
+		},
+		{
+			name: "after a Lua append",
+			between: func(t *testing.T, m *Model, _ *local.Provider) {
+				next, _ := m.Update(PluginQueueMsg{Op: "add_track", Track: d})
+				*m = next.(Model)
+			},
+			refused: true,
+			want: func(s queueOpState) bool {
+				return s.queue == "a c d" && s.saved == "a c" && s.loaded == ""
+			},
+		},
+		{
+			name: "after an IPC removal",
+			between: func(t *testing.T, m *Model, _ *local.Provider) {
+				if response := runV2(t, m, "queue.remove", ipc.Request{Index: 1}); !response.OK {
+					t.Fatalf("queue.remove = %+v", response)
+				}
+			},
+			refused: true,
+			want: func(s queueOpState) bool {
+				return s.queue == "a" && s.saved == "a" && s.loaded == "Mix"
+			},
+		},
+		{
+			name: "after an IPC move",
+			between: func(t *testing.T, m *Model, _ *local.Provider) {
+				if response := runV2(t, m, "queue.move", ipc.Request{Index: 0, To: 1}); !response.OK {
+					t.Fatalf("queue.move = %+v", response)
+				}
+			},
+			refused: true,
+			want: func(s queueOpState) bool {
+				return s.queue == "c a" && s.saved == "c a" && s.loaded == "Mix"
+			},
+		},
+		{
+			name: "after a load of another playlist",
+			between: func(t *testing.T, m *Model, lp *local.Provider) {
+				other := []playlist.Track{{Path: "/music/b.mp3"}, {Path: "/music/q.mp3"}}
+				if err := lp.SavePlaylist("Other", other); err != nil {
+					t.Fatal(err)
+				}
+				m.plManager = plManagerState{selPlaylist: "Other", tracks: other}
+				m.plMgrLoadAndPlay(0)
+			},
+			refused: true,
+			want: func(s queueOpState) bool {
+				return s.queue == "b q" && s.saved == "a c" && s.loaded == "Other"
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, lp, engine := queueOpModel(t, false, "Mix", 1)
+			next, _ := m.Update(tea.KeyPressMsg{Text: "x"})
+			m = next.(Model)
+			if !m.playlistUndo.active {
+				t.Fatal("x recorded no undo")
+			}
+			if tc.between != nil {
+				tc.between(t, &m, lp)
+			}
+			next, _ = m.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
+			m = next.(Model)
+			got := queueOpStateOf(t, m, lp, engine)
+			if got.undo || !tc.want(got) {
+				t.Fatalf("state after Ctrl+Z = %+v", got)
+			}
+			if restored := strings.HasPrefix(m.status.text, "Restored"); restored == tc.refused {
+				t.Fatalf("status = %q, want refused %v", m.status.text, tc.refused)
+			}
+			if tc.refused {
+				other, err := lp.Tracks("Other")
+				if err == nil && queueOpPaths(other) != "b q" {
+					t.Fatalf("Other = %q, want b q", queueOpPaths(other))
+				}
+			}
+		})
+	}
 }

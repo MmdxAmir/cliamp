@@ -20,9 +20,11 @@ const (
 )
 
 // replacePlaylist replaces the queue. It advances the queue generation, so a
-// feed or file browser replace that is still resolving is dropped.
+// feed or file browser replace that is still resolving is dropped. The undo
+// of the last queue edit goes, because it restores the old queue.
 func (m *Model) replacePlaylist(tracks []playlist.Track) {
 	nextRequest(&m.requests.queue)
+	m.playlistUndo = playlistUndo{}
 	if m.resumeSaver != nil {
 		tracks = playlist.WithPlaybackContext(tracks)
 	}
@@ -326,10 +328,26 @@ func (m *Model) queueTrackNext(track playlist.Track) tea.Cmd {
 	return m.rearmPreload()
 }
 
+// recordPlaylistUndo lets Ctrl+Z undo the queue edit that just ran. The undo
+// holds only while the queue and the loaded playlist stay as the edit left
+// them.
+func (m *Model) recordPlaylistUndo(undo playlistUndo) {
+	undo.active = true
+	undo.revision = m.playlist.Revision()
+	undo.loaded = m.loadedPlaylist
+	m.playlistUndo = undo
+}
+
 func (m *Model) undoPlaylistMutation() tea.Cmd {
 	undo := m.playlistUndo
 	if !undo.active {
 		m.status.Warning("Nothing to undo", statusTTLShort)
+		return nil
+	}
+	if undo.revision != m.playlist.Revision() || undo.loaded != m.loadedPlaylist {
+		// Restoring the snapshot would drop every change since the edit.
+		m.playlistUndo = playlistUndo{}
+		m.status.Warning("Can't undo: the playlist changed since the edit", statusTTLDefault)
 		return nil
 	}
 	if undo.persisted {

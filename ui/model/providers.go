@@ -570,10 +570,12 @@ func (m *Model) SetLoadedPlaylist(name string) {
 	m.playlistSource = ""
 }
 
-// clearLoadedPlaylist records that the queue mirrors no list.
+// clearLoadedPlaylist records that the queue mirrors no list. The undo of
+// the last queue edit goes, because it can write to the list.
 func (m *Model) clearLoadedPlaylist() {
 	m.loadedPlaylist = ""
 	m.playlistSource = ""
+	m.playlistUndo = playlistUndo{}
 }
 
 // setLoadedLocalPlaylist records the list that a provider load put in the

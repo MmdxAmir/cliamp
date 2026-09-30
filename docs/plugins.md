@@ -362,7 +362,8 @@ and `x` keys and of IPC:
 - When the queue mirrors a saved local playlist, `move` saves the new order to
   that playlist. `remove` removes the track from it too. Favorites is not a
   playlist file, so an edit of a loaded Favorites list changes only the queue.
-- `remove` records no undo, so it keeps the `Ctrl+Z` undo of the last TUI edit.
+- `add`, `move`, and `remove` record no undo. After one of them, `Ctrl+Z` does
+  not undo the last TUI edit, because that undo would drop the new change.
 - While the queue mirrors a saved local playlist, `remove` does not remove a
   track that a directory source of that playlist supplies. A removal of the
   playing track stops playback.
