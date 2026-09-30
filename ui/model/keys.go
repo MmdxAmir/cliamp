@@ -868,8 +868,7 @@ func (m *Model) saveTrack() tea.Cmd {
 		m.status.Warning("Nothing to save", statusTTLShort)
 		return nil
 	}
-	// tracksave downloads these tracks with yt-dlp, which can take minutes.
-	download := playlist.IsYouTubeURL(track.Path) || playlist.IsYTDL(track.Path)
+	download := tracksave.NeedsDownload(track)
 	if download {
 		m.status.Clear()
 		m.save.startDownload()

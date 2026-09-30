@@ -135,3 +135,31 @@ func TestSaveTrackKeyUsesTrackSaveRules(t *testing.T) {
 		})
 	}
 }
+
+// saveTrack shows the download activity only for the tracks that
+// tracksave.SaveTo downloads with yt-dlp. The command does not run, so no
+// yt-dlp process starts.
+func TestSaveTrackStartsDownloadForYTDLTracks(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want int
+	}{
+		{path: "https://www.youtube.com/watch?v=abc", want: 1},
+		{path: "https://soundcloud.com/artist/track", want: 1},
+		{path: "ytsearch1:lofi", want: 1},
+		{path: "https://radio.example/live.mp3", want: 0},
+		{path: "/music/song.mp3", want: 0},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			tracks := playlist.New()
+			tracks.Add(playlist.Track{Path: tc.path, Title: "Song"})
+			m := Model{playlist: tracks}
+			if cmd := m.saveTrack(); cmd == nil {
+				t.Fatal("saveTrack returned no command")
+			}
+			if m.save.pendingDownloads != tc.want {
+				t.Errorf("pendingDownloads = %d, want %d", m.save.pendingDownloads, tc.want)
+			}
+		})
+	}
+}
