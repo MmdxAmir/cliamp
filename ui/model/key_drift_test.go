@@ -4,11 +4,16 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
+	"reflect"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/bjarneo/cliamp/playlist"
 )
 
 // keyCodeNames gives the key name of each tea key code that a handler
@@ -153,6 +158,17 @@ func handlerKeys(t *testing.T, fd *ast.FuncDecl) []string {
 // handlerCalls returns the names of the m.handle...Key methods that fd calls.
 func handlerCalls(fd *ast.FuncDecl) []string {
 	var names []string
+	for _, name := range methodCalls(fd) {
+		if strings.HasPrefix(name, "handle") && strings.HasSuffix(name, "Key") {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// methodCalls returns the names of the methods that fd calls on m.
+func methodCalls(fd *ast.FuncDecl) []string {
+	var names []string
 	ast.Inspect(fd.Body, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -162,10 +178,8 @@ func handlerCalls(fd *ast.FuncDecl) []string {
 		if !ok {
 			return true
 		}
-		recv, ok := sel.X.(*ast.Ident)
-		name := sel.Sel.Name
-		if ok && recv.Name == "m" && strings.HasPrefix(name, "handle") && strings.HasSuffix(name, "Key") && !slices.Contains(names, name) {
-			names = append(names, name)
+		if recv, ok := sel.X.(*ast.Ident); ok && recv.Name == "m" && !slices.Contains(names, sel.Sel.Name) {
+			names = append(names, sel.Sel.Name)
 		}
 		return true
 	})
@@ -247,4 +261,173 @@ func shortcut(key string) string {
 	if got, want := handlerKeys(t, file.Decls[1].(*ast.FuncDecl)), []string{"S"}; !slices.Equal(got, want) {
 		t.Errorf("handlerKeys(shortcut) = %q, want %q", got, want)
 	}
+}
+
+// subKeyHandlers maps the handlers that serve another command mode than
+// the handler that calls them, such as the text field of an overlay. Any
+// other handler serves the mode of its caller.
+var subKeyHandlers = map[string]commandMode{
+	"handleKeymapSearchKey":          commandModeKeymapSearch,
+	"handlePlaylistPickerNewNameKey": commandModePlaylistPickerInput,
+	"handleFileBrowserSearchKey":     commandModeFileBrowserSearch,
+	"handleNavSearchKey":             commandModeNavSearch,
+	"handleThemeFilterKey":           commandModeThemePickerFilter,
+	"handleVisPickerFilterKey":       commandModeVisPickerFilter,
+	"handlePlMgrDirsKey":             commandModePlaylistManagerDirs,
+	"handlePlMgrNewNameKey":          commandModePlaylistManagerInput,
+	"handlePlMgrRenameKey":           commandModePlaylistManagerInput,
+	"handleSubsFilterKey":            commandModeSubsFilter,
+}
+
+// listKeys move the cursor or change the view size the same way in every
+// list. The keymap shows them once, in its player and library section.
+var listKeys = []string{"up", "down", "k", "j", "pgup", "pgdown", "ctrl+u", "ctrl+d", "home", "end", "g", "G", "ctrl+x"}
+
+// unlistedKeys holds the keys that a handler takes but that commandRegistry
+// does not list for the mode of the handler. The keymap and the help line do
+// not show them. Most are second keys for Esc or Enter, such as q, h and l.
+// The others are actions with no row yet. When a key gets a registry row,
+// delete it here.
+var unlistedKeys = map[string][]string{
+	"handleDeviceKey":            {"d"},
+	"handleFileBrowserKey":       {"o", "q", "/", "right", "l", "backspace", "left", "h", "~", ".", "space", "a", "w"},
+	"handleInfoKey":              {"i"},
+	"handleKeymapKey":            {"?", "q", "backspace", "h", "l"},
+	"handleLyricsKey":            {"y"},
+	"handleNavAlbumListKey":      {"l", "right", "s", "h", "left", "backspace"},
+	"handleNavArtistListKey":     {"l", "right", "h", "left", "backspace"},
+	"handleNavBrowserKey":        {"N", "ctrl+f"},
+	"handleNavGenreListKey":      {"l", "right", "h", "left", "backspace"},
+	"handleNavGenreSortKey":      {"l", "right", "h", "left", "backspace"},
+	"handleNavMenuKey":           {"l", "right", "N", "backspace", "b"},
+	"handleNavTrackListKey":      {"ctrl+h", "a", "q", "h", "left", "backspace"},
+	"handleNetSearchResultsKey":  {"ctrl+p", "ctrl+n", "a", "q"},
+	"handlePlMgrDirsKey":         {"y", "Y"},
+	"handlePlMgrFilterKey":       {"backspace"},
+	"handlePlMgrListKey":         {"y", "Y", "/", "l", "right", "w", "r", "d", "u", "p"},
+	"handlePlMgrTracksKey":       {"ctrl+h", "/", "p", "space", "s", "w", "o", "d", "u", "backspace", "h", "left"},
+	"handlePlaylistPickerKey":    {"backspace", "q"},
+	"handleProvPillKey":          {"left", "h", "right", "l", "space"},
+	"handleProvSearchKey":        {"ctrl+n", "ctrl+p"},
+	"handleProviderPaneKey":      {"y", "Y", "n", "space", "/", "o", "ctrl+j", "ctrl+f"},
+	"handleQueueKey":             {"?", "shift+up", "shift+down", "A"},
+	"handleSearchKey":            {"ctrl+n", "ctrl+p", "tab"},
+	"handleSpeedKey":             {"l", "h", "esc", "backspace"},
+	"handleSpotSearchResultsKey": {"ctrl+p", "ctrl+n", "a", "q", "p"},
+	"handleSubsKey":              {"?"},
+	"handleThemeKey":             {"q", "t"},
+	"handleVisPickerKey":         {"q", "ctrl+v"},
+}
+
+// keyHandlerModes returns the command mode of each handler that an overlay
+// or a focused area with its own mode reaches.
+func keyHandlerModes(t *testing.T, funcs map[string]*ast.FuncDecl) map[string]commandMode {
+	t.Helper()
+	roots := make(map[string]commandMode)
+	for name, mode := range focusKeyHandlers {
+		roots[name] = mode
+	}
+	for _, spec := range overlayStack {
+		name := runtime.FuncForPC(reflect.ValueOf(spec.key).Pointer()).Name()
+		name = name[strings.LastIndex(name, ".")+1:]
+		open := overlayOpeners[spec.screen]
+		if open == nil {
+			t.Fatalf("overlayOpeners has no opener for screen %d", spec.screen)
+		}
+		m := Model{playlist: playlist.New()}
+		open(&m)
+		roots[name], _ = m.commandContext()
+	}
+
+	modes := make(map[string]commandMode)
+	var visit func(name string, mode commandMode)
+	visit = func(name string, mode commandMode) {
+		if sub, ok := subKeyHandlers[name]; ok {
+			mode = sub
+		}
+		if prev, seen := modes[name]; seen {
+			if prev != mode {
+				t.Errorf("%s serves command modes %d and %d. Add it to subKeyHandlers.", name, prev, mode)
+			}
+			return
+		}
+		modes[name] = mode
+		for _, callee := range handlerCalls(lookupFunc(t, funcs, name)) {
+			visit(callee, mode)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(roots)) {
+		visit(name, roots[name])
+	}
+	return modes
+}
+
+// TestKeyHandlersMatchCommandRegistry is a drift guard for the overlays and
+// for the focused areas with their own command mode. Each key that a handler
+// takes needs a registry row in the mode of the handler, or an entry in
+// unlistedKeys. Each key that a registry row offers in such a mode needs a
+// handler of that mode. The keymap runs a row by sending its key.
+func TestKeyHandlersMatchCommandRegistry(t *testing.T) {
+	funcs := modelFuncs(t)
+	modes := keyHandlerModes(t, funcs)
+	editorKeys := handlerKeys(t, lookupFunc(t, funcs, "editText"))
+
+	taken := make(map[commandMode][]string)
+	handlers := make(map[commandMode][]string)
+	unlisted := make(map[string][]string)
+	for _, name := range slices.Sorted(maps.Keys(modes)) {
+		mode := modes[name]
+		fd := lookupFunc(t, funcs, name)
+		keys := handlerKeys(t, fd)
+		handlers[mode] = append(handlers[mode], name)
+		taken[mode] = append(taken[mode], keys...)
+		if slices.Contains(methodCalls(fd), "editText") {
+			taken[mode] = append(taken[mode], editorKeys...)
+		}
+		for _, key := range keys {
+			switch {
+			case registryLists(mode, key), slices.Contains(listKeys, key):
+			case slices.Contains(unlistedKeys[name], key):
+				unlisted[name] = append(unlisted[name], key)
+			default:
+				t.Errorf("%s takes %q, but commandRegistry has no row for it in mode %d. Add a row, or add the key to unlistedKeys.", name, key, mode)
+			}
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(unlistedKeys)) {
+		for _, key := range unlistedKeys[name] {
+			if !slices.Contains(unlisted[name], key) {
+				t.Errorf("unlistedKeys names %s %q, which has a registry row now or no handler. Delete it from unlistedKeys.", name, key)
+			}
+		}
+	}
+
+	// The handlers of the main mode are on the main key path, which
+	// TestReservedKeysCoversHandleKey checks.
+	delete(taken, commandModeMain)
+	for _, command := range commandRegistry {
+		if command.Mode == commandModeAny {
+			continue
+		}
+		for _, mode := range slices.Sorted(maps.Keys(taken)) {
+			if command.Mode&mode == 0 {
+				continue
+			}
+			for _, key := range command.Keys {
+				if !slices.Contains(taken[mode], key) {
+					t.Errorf("commandRegistry row %q %q offers %q, but no handler of mode %d takes it: %v", command.KeyLabel, command.Label, key, mode, handlers[mode])
+				}
+			}
+		}
+	}
+}
+
+// registryLists reports whether a registry row lists key in mode.
+func registryLists(mode commandMode, key string) bool {
+	for _, command := range commandRegistry {
+		if command.Mode&mode != 0 && slices.Contains(command.Keys, key) {
+			return true
+		}
+	}
+	return false
 }
