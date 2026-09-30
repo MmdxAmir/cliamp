@@ -350,8 +350,8 @@ func TestHeadlessLibraryRequests(t *testing.T) {
 	}
 }
 
-// A client that disconnects cancels its url.load request. The resolve then
-// stops with the context error, and a live request resolves the URL.
+// A job.cancel request or an IPC server shutdown cancels the request context,
+// which stops the resolve. A live request resolves the URL.
 func TestIPCURLUsesRequestContext(t *testing.T) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
