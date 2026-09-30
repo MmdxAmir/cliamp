@@ -44,6 +44,10 @@ shows the code for the main items.
 - [ ] For a browser sign-in, implement `playlist.Authenticator`. Pass the
   sign-in URL to an `authurl.Observer` behind a package function
   `SetAuthURLObserver`, as Spotify, Qobuz, Tidal and YouTube do.
+- [ ] For a provider that plays through yt-dlp and takes `cookies_from`, call
+  `resolve.SetYTDLCookiesForHost(host, cfg.CookiesFrom)` in `NewFromConfig`,
+  as `external/soundcloud/provider.go` does. yt-dlp then uses the browser
+  session of the user for that host.
 - [ ] Add table-driven tests that run against `httptest` servers.
 - [ ] `provider/types.go`: add a `ProviderMeta` key constant for the ID of a
   track, such as `MetaQobuzID = "qobuz.id"`. A key can hold only letters,
@@ -366,12 +370,18 @@ return player.ResolvedSource{URL: u, Buffered: true}, err
 If the provider needs the buffered download pipeline for stream URLs, such as
 Navidrome Subsonic endpoints, add its URL matcher to `isBufferedProviderURL` in
 `providers.go`. The matcher covers every provider, configured or not, because
-history, favorites and saved playlists keep these URLs:
+history, favorites and saved playlists keep these URLs. Append the matcher to
+the existing list. Do not remove the other matchers:
 
 ```go
 func isBufferedProviderURL(u string) bool {
     return navidrome.IsSubsonicStreamURL(u) ||
         jellyfin.IsStreamURL(u) ||
+        emby.IsStreamURL(u) ||
+        plex.IsStreamURL(u) ||
+        audiobookshelf.IsStreamURL(u) ||
+        lyrion.IsStreamURL(u) ||
+        yandex.IsStreamURL(u) ||
         myservice.IsStreamURL(u)
 }
 ```
