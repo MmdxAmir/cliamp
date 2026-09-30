@@ -203,7 +203,7 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 		items := make([]ipc.ProviderInfo, 0, len(m.providers))
 		for _, entry := range m.providers {
 			_, searchable := entry.Provider.(provider.Searcher)
-			if _, ok := entry.Provider.(provider.CatalogSearcher); ok {
+			if _, ok := entry.Provider.(stationSearcher); ok {
 				searchable = true
 			}
 			_, browseArtists := entry.Provider.(provider.ArtistBrowser)
@@ -540,43 +540,20 @@ type stationSearcher interface {
 	SearchStations(ctx context.Context, query string, limit int) ([]playlist.Track, error)
 }
 
-// ipcSearchProvider runs an IPC search on source. A station catalog with
-// SearchStations keeps the search of its pane. Another catalog search replaces
-// the pane search and clears it at the end.
+// ipcSearchProvider runs an IPC search on source with SearchTracks or
+// SearchStations. Neither one changes the search of the pane. A provider with
+// only a catalog search gets an error, because that search replaces the pane
+// search.
 func ipcSearchProvider(ctx context.Context, source playlist.Provider, query string, limit int) ([]playlist.Track, error) {
+	ctx, cancel := context.WithTimeout(requestContext(ctx), 30*time.Second)
+	defer cancel()
 	if searcher, ok := source.(provider.Searcher); ok {
-		ctx, cancel := context.WithTimeout(requestContext(ctx), 30*time.Second)
-		defer cancel()
 		return searcher.SearchTracks(ctx, query, limit)
 	}
 	if stations, ok := source.(stationSearcher); ok {
-		ctx, cancel := context.WithTimeout(requestContext(ctx), 30*time.Second)
-		defer cancel()
 		return stations.SearchStations(ctx, query, limit)
 	}
-	catalog, ok := source.(provider.CatalogSearcher)
-	if !ok {
-		return nil, fmt.Errorf("provider does not support search")
-	}
-	if _, err := catalog.SearchCatalog(query); err != nil {
-		return nil, err
-	}
-	defer catalog.ClearSearch()
-	lists, err := source.Playlists()
-	if err != nil {
-		return nil, err
-	}
-	if len(lists) > limit {
-		lists = lists[:limit]
-	}
-	tracks := make([]playlist.Track, 0, len(lists))
-	for _, list := range lists {
-		items, err := source.Tracks(list.ID)
-		if err == nil && len(items) > 0 {
-			tracks = append(tracks, items[0])
-		}
-	}
-	return tracks, nil
+	return nil, fmt.Errorf("provider does not support search")
 }
 
 func (m *Model) handleIPCProviderLoad(result ipcProviderLoadResult) tea.Cmd {

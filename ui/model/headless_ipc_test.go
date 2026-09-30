@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -356,71 +357,102 @@ func TestIPCTrackInfoConversion(t *testing.T) {
 	}
 }
 
-// A search on a station catalog runs the catalog search and clears it again.
-func TestHeadlessCatalogSearch(t *testing.T) {
-	prov := &stationCatalogProvider{commandsTestProvider: commandsTestProvider{name: "Catalog"}}
-	m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "radio", Name: "Radio", Provider: prov}})
-
-	response := runV2(t, &m, "provider.search", ipc.Request{Provider: "radio", Query: "station"})
-	if !response.OK || len(response.Tracks) != 1 || response.Tracks[0].Title != "Station" || prov.searching {
-		t.Fatalf("provider.search = %+v, searching %v", response, prov.searching)
-	}
-}
-
-// statelessStationProvider is a station catalog that can also search with no
-// pane state, as the radio provider does with SearchStations.
-type statelessStationProvider struct {
+// countingCatalogProvider is a station catalog that counts the catalog
+// searches and clears that change the search of its pane.
+type countingCatalogProvider struct {
 	stationCatalogProvider
 	catalogSearches int
 	clears          int
 	searches        []string
 }
 
-func (p *statelessStationProvider) SearchCatalog(query string) (int, error) {
+func (p *countingCatalogProvider) SearchCatalog(query string) (int, error) {
 	p.catalogSearches++
 	return p.stationCatalogProvider.SearchCatalog(query)
 }
-func (p *statelessStationProvider) ClearSearch() {
+func (p *countingCatalogProvider) ClearSearch() {
 	p.clears++
 	p.stationCatalogProvider.ClearSearch()
 }
-func (p *statelessStationProvider) SearchStations(_ context.Context, query string, limit int) ([]playlist.Track, error) {
-	p.searches = append(p.searches, fmt.Sprintf("%s/%d", query, limit))
+
+// statelessStationProvider is a station catalog that can also search with no
+// pane state, as the radio provider does with SearchStations.
+type statelessStationProvider struct{ *countingCatalogProvider }
+
+func (p statelessStationProvider) SearchStations(_ context.Context, query string, limit int) ([]playlist.Track, error) {
+	p.searches = append(p.searches, fmt.Sprintf("stations %s/%d", query, limit))
 	return []playlist.Track{{Path: "https://radio.example/jazz", Title: "Jazz", Stream: true}}, nil
 }
 
-// An IPC search on a provider with SearchStations leaves the pane search as
-// it is: the provider keeps its search rows and the pane keeps its query.
-func TestIPCStationSearchKeepsThePaneSearch(t *testing.T) {
-	prov := &statelessStationProvider{stationCatalogProvider: stationCatalogProvider{commandsTestProvider: commandsTestProvider{name: "Radio"}}}
-	m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "radio", Name: "Radio", Provider: prov}})
-	prov.searching = true
-	m.provSearch.query = "rock"
-	m.providerLists = []playlist.PlaylistInfo{{ID: "s:0", Name: "Rock FM"}}
+// trackSearchCatalogProvider is a catalog that also searches tracks, as the
+// podcast provider does with SearchTracks.
+type trackSearchCatalogProvider struct{ *countingCatalogProvider }
 
-	response := runV2(t, &m, "provider.search", ipc.Request{Provider: "radio", Query: "jazz", Limit: 5})
-	if !response.OK || len(response.Tracks) != 1 || response.Tracks[0].Title != "Jazz" {
-		t.Fatalf("provider.search = %+v", response)
-	}
-	if !slices.Equal(prov.searches, []string{"jazz/5"}) {
-		t.Fatalf("SearchStations calls = %v, want one for jazz", prov.searches)
-	}
-	if prov.catalogSearches != 0 || prov.clears != 0 || !prov.IsSearching() {
-		t.Fatalf("pane search changed: %d catalog searches, %d clears, searching %v", prov.catalogSearches, prov.clears, prov.IsSearching())
-	}
-	if m.provSearch.query != "rock" || len(m.providerLists) != 1 || m.providerLists[0].ID != "s:0" {
-		t.Fatalf("pane state = %q %+v, want the rock search rows", m.provSearch.query, m.providerLists)
+func (p trackSearchCatalogProvider) SearchTracks(_ context.Context, query string, limit int) ([]playlist.Track, error) {
+	p.searches = append(p.searches, fmt.Sprintf("tracks %s/%d", query, limit))
+	return []playlist.Track{{Path: "https://pod.example/jazz.mp3", Title: "Jazz"}}, nil
+}
+
+// An IPC search uses SearchTracks or SearchStations and leaves the pane search
+// as it is: the provider keeps its search rows and the pane keeps its query. A
+// provider with only a catalog search gets an error and no catalog search.
+func TestIPCProviderSearchKeepsThePaneSearch(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		wrap     func(*countingCatalogProvider) playlist.Provider
+		searches []string
+		wantErr  string
+	}{
+		{name: "SearchTracks", wrap: func(c *countingCatalogProvider) playlist.Provider {
+			return trackSearchCatalogProvider{c}
+		}, searches: []string{"tracks jazz/5"}},
+		{name: "SearchStations", wrap: func(c *countingCatalogProvider) playlist.Provider {
+			return statelessStationProvider{c}
+		}, searches: []string{"stations jazz/5"}},
+		{name: "catalog search only", wrap: func(c *countingCatalogProvider) playlist.Provider {
+			return c
+		}, wantErr: "provider does not support search"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			counts := &countingCatalogProvider{stationCatalogProvider: stationCatalogProvider{commandsTestProvider: commandsTestProvider{name: "Radio"}}}
+			m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "radio", Name: "Radio", Provider: tc.wrap(counts)}})
+			counts.searching = true
+			m.provSearch.query = "rock"
+			m.providerLists = []playlist.PlaylistInfo{{ID: "s:0", Name: "Rock FM"}}
+
+			list := runV2(t, &m, "provider.list", ipc.Request{})
+			if len(list.Providers) != 1 || list.Providers[0].Searchable != (tc.wantErr == "") {
+				t.Fatalf("provider.list = %+v, want searchable %v", list.Providers, tc.wantErr == "")
+			}
+			response := runV2(t, &m, "provider.search", ipc.Request{Provider: "radio", Query: "jazz", Limit: 5})
+			if tc.wantErr != "" {
+				if response.OK || !strings.Contains(response.Error, tc.wantErr) {
+					t.Fatalf("provider.search = %+v, want error %q", response, tc.wantErr)
+				}
+			} else if !response.OK || len(response.Tracks) != 1 || response.Tracks[0].Title != "Jazz" {
+				t.Fatalf("provider.search = %+v", response)
+			}
+			if !slices.Equal(counts.searches, tc.searches) {
+				t.Fatalf("searches = %v, want %v", counts.searches, tc.searches)
+			}
+			if counts.catalogSearches != 0 || counts.clears != 0 || !counts.IsSearching() {
+				t.Fatalf("pane search changed: %d catalog searches, %d clears, searching %v", counts.catalogSearches, counts.clears, counts.IsSearching())
+			}
+			if m.provSearch.query != "rock" || len(m.providerLists) != 1 || m.providerLists[0].ID != "s:0" {
+				t.Fatalf("pane state = %q %+v, want the rock search rows", m.provSearch.query, m.providerLists)
+			}
+		})
 	}
 }
 
 // The IPC search of the radio provider must take the SearchStations path. A
-// changed method set would fall back to the catalog path without an error.
+// changed method set would make every IPC radio search fail.
 var _ stationSearcher = (*radio.Provider)(nil)
 
 // An IPC search on the radio provider runs SearchStations under the request
 // context and keeps the pane search rows. The context is cancelled, so no
-// request leaves the process. The catalog path ignores the context, and the
-// proxy makes that path fail with a dial error.
+// request leaves the process. A request that ignores the context fails with a
+// dial error through the proxy.
 func TestIPCRadioSearchKeepsThePaneSearch(t *testing.T) {
 	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
 	for _, key := range []string{"HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"} {
