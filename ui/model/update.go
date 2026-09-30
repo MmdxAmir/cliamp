@@ -1,11 +1,8 @@
 package model
 
 import (
-	"fmt"
-
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/ui"
 )
@@ -148,51 +145,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ytdlBatchMsg:
-		// Discard stale responses from a previous batch session.
-		if msg.gen != m.ytdlBatch.gen {
-			return m, nil
-		}
-		m.ytdlBatch.loading = false
-		if msg.err != nil {
-			m.ytdlBatch.done = true
-			m.status.Errorf(statusTTLBatch, "Radio batch load failed: %v", msg.err)
-			return m, nil
-		}
-		if len(msg.tracks) == 0 {
-			m.ytdlBatch.done = true
-			return m, nil
-		}
-		m.appendTracks(msg.tracks...)
-		m.ytdlBatch.offset += len(msg.tracks)
-		if len(msg.tracks) < ytdlBatchSize {
-			m.ytdlBatch.done = true
-			return m, nil
-		}
-		// Immediately fetch the next batch.
-		m.ytdlBatch.loading = true
-		return m, fetchYTDLBatchCmd(m.ytdlBatch.gen, m.ytdlBatch.url, m.ytdlBatch.offset, ytdlBatchSize)
+		cmd := m.handleYTDLBatch(msg)
+		return m, cmd
 
 	case feedTrackResolvedMsg:
-		m.feedLoading = false
-		if msg.err != nil {
-			m.err = msg.err
-			return m, nil
-		}
-		if len(msg.tracks) == 0 {
-			m.status.Warning("No episodes found in feed.", statusTTLDefault)
-			return m, nil
-		}
-		m.retireTracksPaging()
-		m.replacePlaylist(msg.tracks)
-		m.clearLoadedPlaylist()
-		m.setHeaderStateFromTracks(msg.tracks)
-		m.plCursor = 0
-		m.plScroll = 0
-		m.applyHeightMode()
-		m.adjustScroll()
-		m.status.Showf(statusTTLDefault, "Loaded %d episode(s)", len(msg.tracks))
-		playCmd := m.playCurrentTrack()
-		return m, playCmd
+		cmd := m.handleFeedTrackResolved(msg)
+		return m, cmd
 
 	case subsEpisodesMsg:
 		cmd := m.handleSubsEpisodes(msg)
@@ -203,35 +161,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case feedsLoadedMsg:
-		m.feedLoading = false
-		if msg.err != nil {
-			m.err = msg.err
-			applog.Warn("load URLs: %v", msg.err)
-			return m, nil
-		}
-		if len(msg.tracks) > 0 {
-			m.appendTracks(msg.tracks...)
-			m.status.Showf(statusTTLDefault, "Loaded %d track(s)", len(msg.tracks))
-		} else {
-			m.status.Warning("No tracks found at URL.", statusTTLDefault)
-		}
-		if len(msg.tracks) > 0 {
-			// Set up incremental loading for YouTube Radio playlists.
-			// The source URLs are carried in the message so we don't
-			// need to re-scan pendingURLs (which misses interactive loads).
-			batchCmd := m.initYTDLBatch(msg.urls)
-			if msg.autoPlay && m.playlist.Len() > 0 && !m.player.IsPlaying() {
-				playCmd := m.playCurrentTrack()
-				if batchCmd != nil {
-					return m, tea.Batch(playCmd, batchCmd)
-				}
-				return m, playCmd
-			}
-			if batchCmd != nil {
-				return m, batchCmd
-			}
-		}
-		return m, nil
+		cmd := m.handleFeedsLoaded(msg)
+		return m, cmd
 
 	case netSearchResultsMsg:
 		m.handleNetSearchResults(msg)
@@ -250,64 +181,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case fbTracksResolvedMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			return m, nil
-		}
-		if len(msg.tracks) == 0 {
-			m.status.Warning("No audio files found", statusTTLDefault)
-			return m, nil
-		}
-		if msg.targetPlaylist != "" {
-			added, skipped, err := m.writeTracksToPlaylist(msg.targetPlaylist, msg.tracks)
-			if err != nil {
-				m.status.Errorf(statusTTLDefault, "Add failed: %s", err)
-			} else if skipped > 0 {
-				m.status.Warningf(statusTTLBatch, "Added %d to %q, skipped %d duplicates", added, msg.targetPlaylist, skipped)
-			} else if added > 0 {
-				m.status.Showf(statusTTLDefault, "Added %d to %q", added, msg.targetPlaylist)
-			} else {
-				m.status.Warningf(statusTTLDefault, "Nothing added to %q", msg.targetPlaylist)
-			}
-			m.refreshPlaylistManagerAfterWrite(msg.targetPlaylist)
-			// Track/dir counts in the provider pane come from Playlists();
-			// re-pull now that the file write has landed.
-			cmd := m.refreshPaneAfterLocalWrite()
-			return m, cmd
-		}
-		if msg.toPlaylist {
-			m.openPlaylistPicker(msg.tracks, fmt.Sprintf("%d tracks selected", len(msg.tracks)))
-			return m, nil
-		}
-		if msg.replace {
-			m.stopPlayback()
-			m.player.ClearPreload()
-			m.resetYTDLBatch()
-			m.retireTracksPaging()
-			m.replacePlaylist(msg.tracks)
-			m.clearLoadedPlaylist()
-			m.setHeaderStateFromTracks(msg.tracks)
-			m.plCursor = 0
-			m.plScroll = 0
-		} else {
-			m.appendTracks(msg.tracks...)
-		}
-		m.focus = focusPlaylist
-		m.applyHeightMode()
-		m.adjustScroll()
-		if msg.replace {
-			m.status.Successf(statusTTLDefault, "Replaced queue with %d track(s)", len(msg.tracks))
-		} else {
-			m.status.Successf(statusTTLDefault, "Added %d track(s)", len(msg.tracks))
-		}
-		if !m.player.IsPlaying() && m.playlist.Len() > 0 {
-			if msg.replace {
-				m.playlist.SetIndex(0)
-			}
-			cmd := m.playCurrentTrack()
-			return m, cmd
-		}
-		return m, nil
+		cmd := m.handleFBTracksResolved(msg)
+		return m, cmd
 
 	case streamPlayedMsg:
 		cmd := m.handleStreamPlayed(msg)
