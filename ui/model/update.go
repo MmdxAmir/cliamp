@@ -7,7 +7,6 @@ import (
 
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/playback"
-	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -125,95 +124,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case navArtistsLoadedMsg:
-		if !m.isCurrentNavRequest(msg.gen) {
-			return m, nil
-		}
-		m.navBrowser.loading = false
-		if msg.err != nil {
-			m.status.Errorf(statusTTLDefault, "Artist load failed: %s", msg.err)
-			return m, nil
-		}
-		m.navBrowser.artists = msg.artists
-		m.navBrowser.cursor = 0
-		m.navBrowser.scroll = 0
+		m.handleNavArtistsLoaded(msg)
 		return m, nil
 
 	case navAlbumsLoadedMsg:
-		if !m.isCurrentNavRequest(msg.gen) {
-			return m, nil
-		}
-		m.navBrowser.albumLoading = false
-		m.navBrowser.loading = false
-		if msg.err != nil {
-			m.status.Errorf(statusTTLDefault, "Album load failed: %s", msg.err)
-			return m, nil
-		}
-		if msg.offset == 0 {
-			// Fresh load (new sort or drill-in): replace the list.
-			m.navBrowser.albums = msg.albums
-			m.navBrowser.albumDone = false
-		} else {
-			// Lazy-load page: append.
-			m.navBrowser.albums = append(m.navBrowser.albums, msg.albums...)
-		}
-		if msg.isLast {
-			m.navBrowser.albumDone = true
-		}
-		if msg.offset == 0 {
-			m.navBrowser.cursor = 0
-			m.navBrowser.scroll = 0
-		}
-		if m.navBrowser.search != "" {
-			m.navUpdateSearch()
-		}
-		// If we just loaded the first page and it was a full menu → list transition,
-		// also clear the general loading flag.
+		m.handleNavAlbumsLoaded(msg)
 		return m, nil
 
 	case navGenresLoadedMsg:
-		if !m.isCurrentNavRequest(msg.gen) {
-			return m, nil
-		}
-		m.navBrowser.loading = false
-		if msg.err != nil {
-			m.status.Errorf(statusTTLDefault, "Genre load failed: %s", msg.err)
-			return m, nil
-		}
-		m.navBrowser.genres = msg.genres
-		m.navBrowser.cursor = 0
-		m.navBrowser.scroll = 0
+		m.handleNavGenresLoaded(msg)
 		return m, nil
 
 	case navTracksLoadedMsg:
-		if !m.isCurrentNavRequest(msg.gen) {
-			return m, nil
-		}
-		m.navBrowser.loading = false
-		if msg.err != nil {
-			m.status.Errorf(statusTTLDefault, "Track load failed: %s", msg.err)
-			return m, nil
-		}
-		if m.navBrowser.openInPlaylist {
-			if len(msg.tracks) == 0 {
-				m.status.Warning("No tracks found", statusTTLDefault)
-				return m, nil
-			}
-			m.retireTracksPaging()
-			m.replacePlayerPlaylist(msg.tracks)
-			m.activeProviderPlaylistID = ""
-			if pr, ok := m.navBrowser.prov.(playlist.RefreshablePlaylist); ok &&
-				m.isActiveProvider(m.navBrowser.prov.Name()) && pr.CanRefreshPlaylist(m.navBrowser.selAlbum.ID) {
-				m.activeProviderPlaylistID = m.navBrowser.selAlbum.ID
-			}
-			m.navBrowser.visible = false
-			m.status.Successf(statusTTLDefault, "Replaced queue with %d tracks", len(msg.tracks))
-			return m, nil
-		}
-		m.navBrowser.tracks = msg.tracks
-		m.setHeaderStateFromTracks(m.navBrowser.tracks)
-		m.navBrowser.cursor = 0
-		m.navBrowser.scroll = 0
-		m.navBrowser.screen = navBrowseScreenTracks
+		m.handleNavTracksLoaded(msg)
 		return m, nil
 
 	case catalogBatchMsg:
