@@ -11,7 +11,7 @@ func newTrackState(t *testing.T, state *StateProvider) *lua.LState {
 	L := lua.NewState()
 	t.Cleanup(L.Close)
 	cliamp := L.NewTable()
-	registerTrackAPI(L, cliamp, state)
+	registerTrackAPI(L, cliamp, fixed(state))
 	L.SetGlobal("cliamp", cliamp)
 	return L
 }

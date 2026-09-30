@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,11 @@ import (
 // newTestManager returns a Manager ready for testing (no disk I/O).
 func newTestManager() *Manager {
 	return newManager(defaultAllowedBinaries, nil)
+}
+
+// fixed returns a provider loader that always returns v.
+func fixed[T any](v *T) func() *T {
+	return func() *T { return v }
 }
 
 // setRenderTimeout sets renderTimeout until the test ends. A test that needs
@@ -674,6 +680,38 @@ func TestStateProviderDefaultsWhenNil(t *testing.T) {
 	}
 }
 
+// main.go sets the providers after the top-level chunks of the plugins ran,
+// so a timer can read a provider while a set runs. Run with -race.
+func TestSetProvidersWhilePluginsRun(t *testing.T) {
+	m := newTestManager()
+	p := loadTestPlugin(t, m, "race", `
+		plugin.register({name = "race", type = "hook", permissions = {"control"}})
+		cliamp.timer.every(0.001, function()
+			_G.vol = cliamp.player.volume()
+			cliamp.track.title()
+			cliamp.queue.count()
+			cliamp.message("tick")
+			cliamp.player.next()
+		end)
+	`)
+	defer m.Close()
+	var nexts atomic.Int32
+	for i := range 100 {
+		m.SetStateProvider(StateProvider{Volume: func() float64 { return float64(-i) }})
+		m.SetControlProvider(ControlProvider{Next: func() { nexts.Add(1) }})
+		m.SetUIProvider(UIProvider{ShowMessage: func(string, time.Duration) {}})
+		time.Sleep(200 * time.Microsecond)
+	}
+	deadline := time.Now().Add(time.Second)
+	for nexts.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the timer never reached the control provider")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	waitGlobal(t, p, "vol")
+}
+
 func TestTimerAfter(t *testing.T) {
 	m := newTestManager()
 	p := loadTestPlugin(t, m, "timer-test", `
@@ -1044,7 +1082,7 @@ func TestPlayerEQBands(t *testing.T) {
 			L := lua.NewState()
 			defer L.Close()
 			cliamp := L.NewTable()
-			registerPlayerAPI(L, cliamp, &tt.state)
+			registerPlayerAPI(L, cliamp, fixed(&tt.state))
 			L.SetGlobal("cliamp", cliamp)
 			if err := L.DoString(`_G.bands = cliamp.player.eq_bands()`); err != nil {
 				t.Fatal(err)

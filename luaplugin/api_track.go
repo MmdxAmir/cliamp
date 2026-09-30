@@ -3,10 +3,11 @@ package luaplugin
 import lua "github.com/yuin/gopher-lua"
 
 // registerTrackAPI adds the read-only cliamp.track.* table.
-func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
+func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, loadState func() *StateProvider) {
 	tbl := L.NewTable()
 
 	L.SetField(tbl, "title", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackTitle != nil {
 			L.Push(lua.LString(state.TrackTitle()))
 		} else {
@@ -16,6 +17,7 @@ func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
 	}))
 
 	L.SetField(tbl, "artist", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackArtist != nil {
 			L.Push(lua.LString(state.TrackArtist()))
 		} else {
@@ -25,6 +27,7 @@ func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
 	}))
 
 	L.SetField(tbl, "album", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackAlbum != nil {
 			L.Push(lua.LString(state.TrackAlbum()))
 		} else {
@@ -34,6 +37,7 @@ func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
 	}))
 
 	L.SetField(tbl, "genre", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackGenre != nil {
 			L.Push(lua.LString(state.TrackGenre()))
 		} else {
@@ -43,6 +47,7 @@ func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
 	}))
 
 	L.SetField(tbl, "year", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackYear != nil {
 			L.Push(lua.LNumber(state.TrackYear()))
 		} else {
@@ -52,6 +57,7 @@ func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
 	}))
 
 	L.SetField(tbl, "track_number", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackNumber != nil {
 			L.Push(lua.LNumber(state.TrackNumber()))
 		} else {
@@ -61,6 +67,7 @@ func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
 	}))
 
 	L.SetField(tbl, "path", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackPath != nil {
 			L.Push(lua.LString(state.TrackPath()))
 		} else {
@@ -70,6 +77,7 @@ func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
 	}))
 
 	L.SetField(tbl, "is_stream", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackIsStream != nil {
 			L.Push(lua.LBool(state.TrackIsStream()))
 		} else {
@@ -83,6 +91,7 @@ func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
 	// that are live now. A yt-dlp track flagged live stops counting once the
 	// player knows its duration, as the broadcast has become a recording.
 	L.SetField(tbl, "is_live", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackIsLive != nil {
 			L.Push(lua.LBool(state.TrackIsLive()))
 		} else {
@@ -92,6 +101,7 @@ func registerTrackAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider) {
 	}))
 
 	L.SetField(tbl, "duration_secs", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.TrackDuration != nil {
 			L.Push(lua.LNumber(state.TrackDuration()))
 		} else {

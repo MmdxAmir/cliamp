@@ -144,18 +144,18 @@ type EventPublisher interface {
 // Manager owns all loaded plugins and dispatches events to them.
 type Manager struct {
 	plugins      []*Plugin
-	hooks        map[string][]*luaHook          // event name -> handlers
-	keyBinds     map[string][]*luaHook          // key string -> handlers (global, non-overlay)
-	keyBindDescs map[string]KeyBinding          // key string -> UI overlay entry (only for binds that supplied a description)
-	reservedKeys map[string]bool                // core-reserved keys; plugins may not bind these
-	commands     map[string]map[string]*luaHook // plugin name -> command name -> handler
-	visPlugs     []*luaVis                      // Lua visualizers in registration order
-	visMap       map[string]*luaVis             // name -> Lua visualizer
-	namespaces   map[string]string              // event namespace -> owning plugin name
-	names        map[string]*Plugin             // display name -> plugin that registered it
-	state        StateProvider
-	control      ControlProvider
-	ui           UIProvider
+	hooks        map[string][]*luaHook           // event name -> handlers
+	keyBinds     map[string][]*luaHook           // key string -> handlers (global, non-overlay)
+	keyBindDescs map[string]KeyBinding           // key string -> UI overlay entry (only for binds that supplied a description)
+	reservedKeys map[string]bool                 // core-reserved keys; plugins may not bind these
+	commands     map[string]map[string]*luaHook  // plugin name -> command name -> handler
+	visPlugs     []*luaVis                       // Lua visualizers in registration order
+	visMap       map[string]*luaVis              // name -> Lua visualizer
+	namespaces   map[string]string               // event namespace -> owning plugin name
+	names        map[string]*Plugin              // display name -> plugin that registered it
+	state        atomic.Pointer[StateProvider]   // see SetStateProvider
+	control      atomic.Pointer[ControlProvider] // see SetControlProvider
+	ui           atomic.Pointer[UIProvider]      // see SetUIProvider
 	publisher    EventPublisher
 	timers       *timerManager
 	execs        *execManager
@@ -481,13 +481,14 @@ func (m *Manager) registerCliampAPI(L *lua.LState, p *Plugin) {
 	registerCryptoAPI(L, cliamp)
 	registerFSAPI(L, cliamp)
 	registerHTTPAPI(L, cliamp)
-	registerPlayerAPI(L, cliamp, &m.state)
-	registerTrackAPI(L, cliamp, &m.state)
+	loadState, loadCtrl := loadProvider(&m.state), loadProvider(&m.control)
+	registerPlayerAPI(L, cliamp, loadState)
+	registerTrackAPI(L, cliamp, loadState)
 	m.registerTimerAPI(L, cliamp, p)
-	registerQueueAPI(L, cliamp, &m.state, &m.control, p)
+	registerQueueAPI(L, cliamp, loadState, loadCtrl, p)
 	registerNotifyAPI(L, cliamp, p)
-	registerControlAPI(L, cliamp, &m.control, p)
-	registerMessageAPI(L, cliamp, &m.ui)
+	registerControlAPI(L, cliamp, loadCtrl, p)
+	registerMessageAPI(L, cliamp, loadProvider(&m.ui))
 	registerSleepAPI(L, cliamp)
 	m.registerExecAPI(L, cliamp, p)
 	L.SetGlobal("cliamp", cliamp)
@@ -592,20 +593,35 @@ func (m *Manager) SetEventPublisher(publisher EventPublisher) {
 }
 
 // SetStateProvider sets the function pointers used by the Lua API to
-// query live player/playlist state.
+// query live player/playlist state. It is safe to call while plugins run,
+// such as a timer that the top-level chunk of a plugin started.
 func (m *Manager) SetStateProvider(sp StateProvider) {
-	m.state = sp
+	m.state.Store(&sp)
 }
 
 // SetControlProvider sets the function pointers for player control.
-// Only plugins with permissions = {"control"} can use these.
+// Only plugins with permissions = {"control"} can use these. It is safe to
+// call while plugins run.
 func (m *Manager) SetControlProvider(cp ControlProvider) {
-	m.control = cp
+	m.control.Store(&cp)
 }
 
 // SetUIProvider sets the function pointers for UI output (status messages).
+// It is safe to call while plugins run.
 func (m *Manager) SetUIProvider(up UIProvider) {
-	m.ui = up
+	m.ui.Store(&up)
+}
+
+// loadProvider returns a func that loads the provider that p holds. Before
+// the first set, the func returns an empty provider. Each Lua API call loads
+// the provider once, so it sees one provider for the whole call.
+func loadProvider[T any](p *atomic.Pointer[T]) func() *T {
+	return func() *T {
+		if v := p.Load(); v != nil {
+			return v
+		}
+		return new(T)
+	}
 }
 
 // closeDrainBudget bounds the run of queued events in Close. After it ends,

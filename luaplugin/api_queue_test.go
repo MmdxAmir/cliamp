@@ -15,7 +15,7 @@ func newQueueState(t *testing.T, state *StateProvider, ctrl *ControlProvider, pe
 	t.Cleanup(L.Close)
 	cliamp := L.NewTable()
 	p := &Plugin{Name: "q", perms: perms}
-	registerQueueAPI(L, cliamp, state, ctrl, p)
+	registerQueueAPI(L, cliamp, fixed(state), fixed(ctrl), p)
 	L.SetGlobal("cliamp", cliamp)
 	return L
 }

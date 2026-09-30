@@ -5,7 +5,7 @@ import lua "github.com/yuin/gopher-lua"
 // registerControlAPI adds cliamp.player control methods (next, prev, play_pause,
 // stop, set_volume, set_speed, seek, toggle_mono, set_eq_band) to the cliamp table.
 // These are only functional if the plugin declared permissions = {"control"}.
-func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider, p *Plugin) {
+func registerControlAPI(L *lua.LState, cliamp *lua.LTable, loadCtrl func() *ControlProvider, p *Plugin) {
 	playerTbl := L.GetField(cliamp, "player")
 	tbl, ok := playerTbl.(*lua.LTable)
 	if !ok {
@@ -15,6 +15,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 	guard := func(name string) bool { return p.permitted(PermControl, "cliamp.player."+name) }
 
 	L.SetField(tbl, "next", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if guard("next") {
 			ctrl.Next()
 		}
@@ -22,6 +23,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 	}))
 
 	L.SetField(tbl, "prev", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if guard("prev") {
 			ctrl.Prev()
 		}
@@ -29,6 +31,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 	}))
 
 	L.SetField(tbl, "play_pause", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if guard("play_pause") {
 			ctrl.TogglePause()
 		}
@@ -36,6 +39,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 	}))
 
 	L.SetField(tbl, "stop", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if guard("stop") {
 			ctrl.Stop()
 		}
@@ -43,6 +47,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 	}))
 
 	L.SetField(tbl, "set_volume", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if !guard("set_volume") {
 			return 0
 		}
@@ -52,6 +57,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 	}))
 
 	L.SetField(tbl, "set_speed", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if !guard("set_speed") {
 			return 0
 		}
@@ -61,6 +67,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 	}))
 
 	L.SetField(tbl, "seek", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if !guard("seek") {
 			return 0
 		}
@@ -69,6 +76,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 	}))
 
 	L.SetField(tbl, "toggle_mono", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if guard("toggle_mono") {
 			ctrl.ToggleMono()
 		}
@@ -77,6 +85,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 
 	// set_eq_preset("name") or set_eq_preset("name", {band1, band2, ..., band10})
 	L.SetField(tbl, "set_eq_preset", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if !guard("set_eq_preset") {
 			return 0
 		}
@@ -101,6 +110,7 @@ func registerControlAPI(L *lua.LState, cliamp *lua.LTable, ctrl *ControlProvider
 	}))
 
 	L.SetField(tbl, "set_eq_band", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if !guard("set_eq_band") {
 			return 0
 		}

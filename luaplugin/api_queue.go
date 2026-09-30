@@ -15,12 +15,13 @@ import (
 // through the ControlProvider, which dispatches them onto the UI loop.
 //
 // All indices are 0-based, matching cliamp.queue.current().
-func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, ctrl *ControlProvider, p *Plugin) {
+func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, loadState func() *StateProvider, loadCtrl func() *ControlProvider, p *Plugin) {
 	tbl := L.NewTable()
 
 	// cliamp.queue.list() -> array of {title, artist, album, genre, year, path,
 	// duration, stream, index, queued}
 	L.SetField(tbl, "list", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		out := L.NewTable()
 		if state.QueueList != nil {
 			for i, e := range state.QueueList() {
@@ -44,6 +45,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 
 	// cliamp.queue.count() -> number of tracks
 	L.SetField(tbl, "count", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		n := 0
 		if state.PlaylistCount != nil {
 			n = state.PlaylistCount()
@@ -54,6 +56,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 
 	// cliamp.queue.current() -> 0-based index of the current track
 	L.SetField(tbl, "current", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		idx := 0
 		if state.CurrentIndex != nil {
 			idx = state.CurrentIndex()
@@ -64,6 +67,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 
 	// cliamp.queue.has_next() -> whether a playable track follows the current one
 	L.SetField(tbl, "has_next", L.NewFunction(func(L *lua.LState) int {
+		state := loadState()
 		if state.HasNext != nil {
 			L.Push(lua.LBool(state.HasNext()))
 		} else {
@@ -78,6 +82,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 	// cliamp.queue.add(track) -> true | nil, err — append the track a table
 	// describes, as given, without resolving its path.
 	L.SetField(tbl, "add", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		if t, ok := L.Get(1).(*lua.LTable); ok {
 			var track QueueTrack
 			var err error
@@ -105,6 +110,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 
 	// cliamp.queue.jump(index) — make index the current track and play it.
 	L.SetField(tbl, "jump", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		index := L.CheckInt(1)
 		if guard("jump") && ctrl.QueueJump != nil {
 			ctrl.QueueJump(index)
@@ -114,6 +120,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 
 	// cliamp.queue.remove(index) — remove the track at index.
 	L.SetField(tbl, "remove", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		index := L.CheckInt(1)
 		if guard("remove") && ctrl.QueueRemove != nil {
 			ctrl.QueueRemove(index)
@@ -123,6 +130,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, state *StateProvider, c
 
 	// cliamp.queue.move(from, to) — reorder a track.
 	L.SetField(tbl, "move", L.NewFunction(func(L *lua.LState) int {
+		ctrl := loadCtrl()
 		from := L.CheckInt(1)
 		to := L.CheckInt(2)
 		if guard("move") && ctrl.QueueMove != nil {
