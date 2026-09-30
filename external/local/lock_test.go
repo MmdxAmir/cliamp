@@ -82,6 +82,18 @@ func TestSeparateProvidersKeepConcurrentChanges(t *testing.T) {
 			wantRecurs: true,
 		},
 		{
+			name: "UpdatePlaylist",
+			setup: func(p *Provider, _ []string) error {
+				return p.SavePlaylist(name, nil)
+			},
+			op: func(p *Provider, _ []string, i int) error {
+				return p.UpdatePlaylist(name, func(tracks []playlist.Track) ([]playlist.Track, error) {
+					return append(tracks, track(0, i)), nil
+				})
+			},
+			wantTracks: 2 * n,
+		},
+		{
 			name:  "RemoveDirSource",
 			setup: addDirs,
 			op: func(p *Provider, dirs []string, i int) error {

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/sshurl"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/resolve"
 )
 
@@ -364,30 +366,34 @@ func PlaylistDedupe(name string) error {
 	if err != nil {
 		return err
 	}
-	tracks, err := prov.Tracks(name)
-	if err != nil {
-		return fmt.Errorf("loading playlist %q: %w", name, err)
-	}
-	seen := make(map[string]struct{}, len(tracks))
-	kept := tracks[:0]
-	removed := 0
-	for _, t := range tracks {
-		if _, ok := seen[t.Path]; ok {
-			removed++
-			fmt.Printf("  removed duplicate: %s\n", t.Path)
-			continue
+	var removed []string
+	err = prov.UpdatePlaylist(name, func(tracks []playlist.Track) ([]playlist.Track, error) {
+		seen := make(map[string]struct{}, len(tracks))
+		kept := tracks[:0]
+		for _, t := range tracks {
+			if _, ok := seen[t.Path]; ok {
+				removed = append(removed, t.Path)
+				continue
+			}
+			seen[t.Path] = struct{}{}
+			kept = append(kept, t)
 		}
-		seen[t.Path] = struct{}{}
-		kept = append(kept, t)
+		if len(removed) == 0 {
+			return nil, provider.ErrPlaylistUnchanged
+		}
+		return kept, nil
+	})
+	if err != nil {
+		return fmt.Errorf("deduplicating playlist %q: %w", name, err)
 	}
-	if removed == 0 {
+	if len(removed) == 0 {
 		fmt.Printf("No duplicates found in %q.\n", name)
 		return nil
 	}
-	if err := prov.SavePlaylist(name, kept); err != nil {
-		return fmt.Errorf("saving playlist %q: %w", name, err)
+	for _, path := range removed {
+		fmt.Printf("  removed duplicate: %s\n", path)
 	}
-	fmt.Printf("Removed %d duplicate tracks from %q.\n", removed, name)
+	fmt.Printf("Removed %d duplicate tracks from %q.\n", len(removed), name)
 	return nil
 }
 
@@ -397,15 +403,16 @@ func PlaylistSort(name, by string) error {
 	if err != nil {
 		return err
 	}
-	tracks, err := prov.Tracks(name)
+	var sortErr error
+	err = prov.UpdatePlaylist(name, func(tracks []playlist.Track) ([]playlist.Track, error) {
+		sortErr = sortTracks(tracks, by)
+		return tracks, sortErr
+	})
+	if sortErr != nil {
+		return sortErr
+	}
 	if err != nil {
-		return fmt.Errorf("loading playlist %q: %w", name, err)
-	}
-	if err := sortTracks(tracks, by); err != nil {
-		return err
-	}
-	if err := prov.SavePlaylist(name, tracks); err != nil {
-		return fmt.Errorf("saving playlist %q: %w", name, err)
+		return fmt.Errorf("sorting playlist %q: %w", name, err)
 	}
 	fmt.Printf("Sorted %q by %s.\n", name, normalizeSortKey(by))
 	if dirs, _ := prov.DirSources(name); len(dirs) > 0 {
@@ -440,21 +447,21 @@ func PlaylistDoctor(name string, fix bool) error {
 		if err != nil {
 			return fmt.Errorf("loading playlist %q: %w", plName, err)
 		}
-		kept := tracks[:0]
 		missing := 0
 		for _, t := range tracks {
 			if missingLocalFile(t) {
 				missing++
 				totalMissing++
 				fmt.Printf("  [%s] missing: %s\n", plName, t.Path)
-				if fix {
-					continue
-				}
 			}
-			kept = append(kept, t)
 		}
 		if fix && missing > 0 {
-			if err := prov.SavePlaylist(plName, kept); err != nil {
+			// Prune the tracks that are missing now, so a track that another
+			// writer added after the check above is kept.
+			err := prov.UpdatePlaylist(plName, func(tracks []playlist.Track) ([]playlist.Track, error) {
+				return slices.DeleteFunc(tracks, missingLocalFile), nil
+			})
+			if err != nil {
 				return fmt.Errorf("saving playlist %q: %w", plName, err)
 			}
 			fmt.Printf("Pruned %d missing tracks from %q.\n", missing, plName)
@@ -618,7 +625,9 @@ func PlaylistEnrich(name string, source string) error {
 		return fmt.Errorf("loading playlist %q: %w", name, err)
 	}
 
-	updated := 0
+	// The probes can take long, so they run before the locked update. found
+	// holds each enriched track by path.
+	found := make(map[string]playlist.Track)
 	dirSourced := 0
 	for i, t := range tracks {
 		if t.DirSourced {
@@ -658,10 +667,11 @@ func PlaylistEnrich(name string, source string) error {
 		}
 
 		if changed {
-			updated++
+			found[t.Path] = tracks[i]
 		}
 	}
 
+	updated := len(found)
 	if updated == 0 {
 		if dirSourced > 0 {
 			fmt.Println("All explicit tracks already enriched; directory-sourced tracks are read from their files at load time.")
@@ -671,7 +681,27 @@ func PlaylistEnrich(name string, source string) error {
 		return nil
 	}
 
-	if err := prov.SavePlaylist(name, tracks); err != nil {
+	// Fill only the fields that are still empty, so a change that another
+	// writer made during the probes is kept.
+	err = prov.UpdatePlaylist(name, func(current []playlist.Track) ([]playlist.Track, error) {
+		for i := range current {
+			e, ok := found[current[i].Path]
+			if !ok || current[i].DirSourced {
+				continue
+			}
+			if current[i].DurationSecs == 0 {
+				current[i].DurationSecs = e.DurationSecs
+			}
+			if current[i].Album == "" {
+				current[i].Album = e.Album
+			}
+			if current[i].Year == 0 {
+				current[i].Year = e.Year
+			}
+		}
+		return current, nil
+	})
+	if err != nil {
 		return fmt.Errorf("saving playlist %q: %w", name, err)
 	}
 

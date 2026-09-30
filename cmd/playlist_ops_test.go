@@ -337,6 +337,56 @@ func TestPlaylistDedupeAndSort(t *testing.T) {
 	}
 }
 
+// The write commands change a playlist in one locked update. A command
+// that finds nothing to change, or that fails, leaves the file as it is.
+func TestPlaylistWriteCommandsLeaveTheFileAlone(t *testing.T) {
+	tests := []struct {
+		name    string
+		run     func() error
+		wantErr bool
+	}{
+		{name: "dedupe without duplicates", run: func() error { return PlaylistDedupe("mix") }},
+		{name: "sort by an unknown key", run: func() error { return PlaylistSort("mix", "color") }, wantErr: true},
+		{name: "dedupe of Recently Played", run: func() error { return PlaylistDedupe("Recently Played") }, wantErr: true},
+		{name: "sort of Favorites", run: func() error { return PlaylistSort("Favorites", "title") }, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := setupTestEnv(t)
+			p, err := newProvider()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := p.SavePlaylist("mix", []playlist.Track{{Path: filepath.Join(home, "b.mp3"), Title: "B"}, {Path: filepath.Join(home, "a.mp3"), Title: "A"}}); err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(home, ".config", "cliamp", "playlists")
+			before, err := os.ReadFile(filepath.Join(dir, "mix.toml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := tt.run(); (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, want an error %v", err, tt.wantErr)
+			}
+			after, err := os.ReadFile(filepath.Join(dir, "mix.toml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(after) != string(before) {
+				t.Fatalf("mix.toml changed:\n%s", after)
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("playlist files = %v, want only mix.toml", entries)
+			}
+		})
+	}
+}
+
 func TestPlaylistDoctorFixPrunesMissing(t *testing.T) {
 	home := setupTestEnv(t)
 	a := filepath.Join(home, "a.mp3")

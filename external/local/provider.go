@@ -32,6 +32,7 @@ var (
 	_ provider.PlaylistPrepender        = (*Provider)(nil)
 	_ provider.PlaylistCreator          = (*Provider)(nil)
 	_ provider.PlaylistSaver            = (*Provider)(nil)
+	_ provider.PlaylistUpdater          = (*Provider)(nil)
 	_ provider.PlaylistDeleter          = (*Provider)(nil)
 	_ provider.PlaylistRenamer          = (*Provider)(nil)
 	_ provider.Searcher                 = (*Provider)(nil)
@@ -895,6 +896,36 @@ func (p *Provider) SavePlaylist(name string, tracks []playlist.Track) error {
 		return err
 	}
 	defer unlock()
+	return p.savePlaylist(name, tracks)
+}
+
+// UpdatePlaylist runs fn on the tracks of the named playlist and saves the
+// tracks that fn returns. The read, fn and the save run under the playlist
+// lock, so no other writer can change the file in between. fn gets the
+// tracks in document order. The tracks from directory sources carry no
+// tags, because the save drops them. When fn returns
+// provider.ErrPlaylistUnchanged, nothing is saved and the result is nil.
+// Implements provider.PlaylistUpdater.
+func (p *Provider) UpdatePlaylist(name string, fn func([]playlist.Track) ([]playlist.Track, error)) error {
+	if err := writable(name); err != nil {
+		return err
+	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	doc, err := p.loadDocByName(name)
+	if err != nil {
+		return err
+	}
+	tracks, err := fn(doc.expand(false))
+	if errors.Is(err, provider.ErrPlaylistUnchanged) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
 	return p.savePlaylist(name, tracks)
 }
 

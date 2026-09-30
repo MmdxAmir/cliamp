@@ -1,9 +1,10 @@
 package model
 
 import (
-	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -345,34 +346,25 @@ func (m *Model) removeSelectedFromPlaylist() {
 	var saved []playlist.Track
 	persisted := false
 	if loaded != "" {
-		if saver, ok := m.localProvider.(provider.PlaylistSaver); ok {
-			var err error
-			saved, err = m.localProvider.Tracks(loaded)
+		if updater, ok := m.localProvider.(provider.PlaylistUpdater); ok {
+			err := updater.UpdatePlaylist(loaded, func(tracks []playlist.Track) ([]playlist.Track, error) {
+				// Another writer or a new file in a directory source can
+				// have shifted indexes since the queue was loaded. Match the
+				// persisted explicit track by path so the wrong track is
+				// never removed.
+				savedIdx := slices.IndexFunc(tracks, func(candidate playlist.Track) bool {
+					return !candidate.DirSourced && candidate.Path == track.Path
+				})
+				if savedIdx < 0 {
+					return nil, fmt.Errorf("selected track is no longer in %q", loaded)
+				}
+				saved = cloneTracks(tracks)
+				return slices.Delete(tracks, savedIdx, savedIdx+1), nil
+			})
 			if err != nil {
 				m.status.Errorf(statusTTLDefault, "Remove failed: %s", err)
 				return
 			}
-			// saved rescans directory sources, so a new file could have shifted
-			// indexes since the queue was loaded. Match the persisted explicit
-			// track by path so the wrong track is never removed.
-			savedIdx := -1
-			for i, candidate := range saved {
-				if !candidate.DirSourced && candidate.Path == track.Path {
-					savedIdx = i
-					break
-				}
-			}
-			if savedIdx < 0 {
-				m.status.Errorf(statusTTLDefault, "Remove failed: selected track is no longer in %q", loaded)
-				return
-			}
-			original := cloneTracks(saved)
-			saved = append(saved[:savedIdx:savedIdx], saved[savedIdx+1:]...)
-			if err := saver.SavePlaylist(loaded, saved); err != nil {
-				m.status.Errorf(statusTTLDefault, "Remove failed: %s", err)
-				return
-			}
-			saved = original
 			persisted = true
 		}
 	}
@@ -518,9 +510,10 @@ func (m *Model) hasSourceResolver(path string) bool {
 
 // backfillLoadedPlaylistDuration records the decoded duration of a local
 // track that has none. It sets the duration in the queue at once. The
-// returned command writes it to the loaded playlist file, because Tracks
-// rescans the directory sources with tag reads. A track from a directory
-// source gets no command, because SavePlaylist never stores those tracks.
+// returned command writes it to the loaded playlist file through one locked
+// UpdatePlaylist, so a queue edit that saves at the same time is kept. A
+// track from a directory source gets no command, because the playlist file
+// never stores those tracks.
 func (m *Model) backfillLoadedPlaylistDuration(track playlist.Track) tea.Cmd {
 	name := m.writableLoadedPlaylist()
 	if name == "" || track.DurationSecs > 0 || track.Stream || playlist.IsURL(track.Path) || strings.HasPrefix(track.Path, "ssh://") {
@@ -530,7 +523,7 @@ func (m *Model) backfillLoadedPlaylistDuration(track playlist.Track) tea.Cmd {
 	if dur <= 0 {
 		return nil
 	}
-	saver, ok := m.localProvider.(provider.PlaylistSaver)
+	updater, ok := m.localProvider.(provider.PlaylistUpdater)
 	if !ok {
 		return nil
 	}
@@ -543,41 +536,19 @@ func (m *Model) backfillLoadedPlaylistDuration(track playlist.Track) tea.Cmd {
 	if track.DirSourced {
 		return nil
 	}
-	source := m.localProvider
 	return func() tea.Msg {
-		before := playlistDocument(source, name)
-		tracks, err := source.Tracks(name)
-		if err != nil {
-			return nil
-		}
-		for i := range tracks {
-			if tracks[i].DirSourced || tracks[i].Path != track.Path || tracks[i].DurationSecs != 0 {
-				continue
+		_ = updater.UpdatePlaylist(name, func(tracks []playlist.Track) ([]playlist.Track, error) {
+			for i := range tracks {
+				if tracks[i].DirSourced || tracks[i].Path != track.Path || tracks[i].DurationSecs != 0 {
+					continue
+				}
+				tracks[i].DurationSecs = dur
+				return tracks, nil
 			}
-			tracks[i].DurationSecs = dur
-			// A queue edit can save the file while Tracks scans. Skip the
-			// write then, so that the edit is kept.
-			if bytes.Equal(before, playlistDocument(source, name)) {
-				_ = saver.SavePlaylist(name, tracks)
-			}
-			return nil
-		}
+			return nil, provider.ErrPlaylistUnchanged
+		})
 		return nil
 	}
-}
-
-// playlistDocument returns the raw file of the named playlist, or nil when
-// the provider cannot give it.
-func playlistDocument(p playlist.Provider, name string) []byte {
-	documenter, ok := p.(provider.PlaylistDocumenter)
-	if !ok {
-		return nil
-	}
-	data, err := documenter.PlaylistDocument(name)
-	if err != nil {
-		return nil
-	}
-	return data
 }
 
 // beginPlaybackTrack centralizes metadata refresh and model state reset for a

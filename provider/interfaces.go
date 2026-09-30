@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/gopxl/beep/v2"
@@ -259,6 +260,19 @@ type PlaylistPrepender interface {
 type PlaylistSaver interface {
 	SavePlaylist(name string, tracks []playlist.Track) error
 }
+
+// PlaylistUpdater is implemented by providers that can change a saved
+// playlist in one read-modify-write that no other writer interleaves with.
+// UpdatePlaylist passes the current tracks of the playlist to fn and saves
+// the tracks that fn returns. fn runs while other writers wait, so keep slow
+// work, such as network calls, out of it.
+type PlaylistUpdater interface {
+	UpdatePlaylist(name string, fn func([]playlist.Track) ([]playlist.Track, error)) error
+}
+
+// ErrPlaylistUnchanged is returned by the fn of UpdatePlaylist when it made no
+// change. UpdatePlaylist then saves nothing and returns nil.
+var ErrPlaylistUnchanged = errors.New("playlist unchanged")
 
 // PlaylistCreator is implemented by providers that support creating new
 // playlists.

@@ -130,6 +130,72 @@ func TestV2ProviderLoadKeepsWriteBacksLocal(t *testing.T) {
 	}
 }
 
+// x on a row of a loaded playlist removes the track from the playlist file
+// in one locked update. A track that another writer added after the load
+// survives the removal, and Ctrl+Z puts the removed track back.
+func TestQueueRemoveUpdatesTheLoadedPlaylistFile(t *testing.T) {
+	a := playlist.Track{Path: "/music/a.mp3", Title: "A"}
+	b := playlist.Track{Path: "/music/b.mp3", Title: "B"}
+	added := playlist.Track{Path: "/music/added.mp3", Title: "Added"}
+	for _, tc := range []struct {
+		name      string
+		otherAdds bool // another writer adds a track after the load
+		wantMix   []string
+		wantUndo  []string
+	}{
+		{name: "only this writer", wantMix: []string{a.Path}, wantUndo: []string{a.Path, b.Path}},
+		// The undo save keeps the file order of the tracks it finds and
+		// puts the removed track after them.
+		{name: "another writer added a track", otherAdds: true, wantMix: []string{a.Path, added.Path}, wantUndo: []string{a.Path, added.Path, b.Path}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+			lp := local.New(nil, nil)
+			if err := lp.SavePlaylist("Mix", []playlist.Track{a, b}); err != nil {
+				t.Fatal(err)
+			}
+			m := Model{
+				player:        &playbackFakeEngine{},
+				playlist:      playlist.New(),
+				vis:           ui.NewVisualizer(44100),
+				provider:      lp,
+				localProvider: lp,
+				providers:     []provider.Entry{{Key: "local", Name: "Local", Provider: lp}},
+			}
+			if response := runV2(t, &m, "provider.load", ipc.Request{Provider: "local", Playlist: "Mix"}); !response.OK {
+				t.Fatalf("provider.load = %+v", response)
+			}
+			if tc.otherAdds {
+				if _, _, err := local.New(nil, nil).AddTracks("Mix", []playlist.Track{added}); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			m.focus = focusPlaylist
+			m.plCursor = 1
+			m.handleKey(tea.KeyPressMsg{Text: "x"})
+			if m.status.kind == feedbackError {
+				t.Fatalf("unexpected error: %s", m.status.text)
+			}
+			mix, err := lp.Tracks("Mix")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := trackPaths(mix); !reflect.DeepEqual(got, tc.wantMix) {
+				t.Fatalf("Mix after x = %v, want %v", got, tc.wantMix)
+			}
+
+			m.handleKey(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
+			if mix, err = lp.Tracks("Mix"); err != nil {
+				t.Fatal(err)
+			}
+			if got := trackPaths(mix); !reflect.DeepEqual(got, tc.wantUndo) {
+				t.Fatalf("Mix after undo = %v, want %v", got, tc.wantUndo)
+			}
+		})
+	}
+}
+
 // Favorites can hold a radio station, because f on a station row in a saved
 // playlist adds it there. A key load of Favorites keeps the list as the saved
 // list of the ♥ rule, so f on that row removes it from Favorites and does not
