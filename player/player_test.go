@@ -883,3 +883,44 @@ func TestPositionAndDurationRule(t *testing.T) {
 		})
 	}
 }
+
+// TestFirstPlayWritesCtrlUnderSpeakerLock checks, under -race, that the
+// first start publishes p.ctrl under the speaker lock. TogglePause and Stop
+// read it under that lock.
+func TestFirstPlayWritesCtrlUnderSpeakerLock(t *testing.T) {
+	p := &Player{sr: 1000, gapless: &gaplessStreamer{}, tapBufferFrames: 4096}
+	t.Cleanup(speaker.Clear)
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			speaker.Lock()
+			ctrl := p.ctrl
+			speaker.Unlock()
+			if ctrl != nil {
+				return
+			}
+			select {
+			case <-stop:
+				return
+			default:
+			}
+		}
+	}()
+	decoder := newPlaybackTestDecoder()
+	err := p.playPipelineForGeneration(&trackPipeline{decoder: decoder, stream: decoder}, 0)
+	close(stop)
+	<-done
+	if err != nil {
+		t.Fatalf("playPipelineForGeneration: %v", err)
+	}
+	speaker.Lock()
+	ctrl := p.ctrl
+	speaker.Unlock()
+	if ctrl == nil || !p.IsPlaying() {
+		t.Fatalf("after the first start: ctrl %v, playing %v", ctrl, p.IsPlaying())
+	}
+	p.suspended = true // Avoid a real speaker context in this lifecycle test.
+	p.Stop()
+}

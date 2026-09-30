@@ -272,6 +272,9 @@ func (p *Player) playPipelineForGeneration(tp *trackPipeline, generation uint64)
 		p.mu.Unlock()
 		speaker.Unlock()
 	} else {
+		// TogglePause and Stop read p.ctrl under the speaker lock, so the
+		// first start writes it under that lock too.
+		speaker.Lock()
 		p.mu.Lock()
 		p.gapless.Replace(tp.stream)
 		p.gaplessAdvance.Store(false)
@@ -286,17 +289,17 @@ func (p *Player) playPipelineForGeneration(tp *trackPipeline, generation uint64)
 
 		p.tap = newTap(s, p.tapBufferFrames, int(p.sr), p.speakerBufferFrames)
 		s = &volumeStreamer{s: p.tap, vol: &p.volume, mono: &p.mono, cachedDB: math.NaN()}
-		p.ctrl = &beep.Ctrl{Streamer: s}
+		ctrl := &beep.Ctrl{Streamer: s}
+		p.ctrl = ctrl
 		p.started = true
 		p.current = tp
 		p.nextPipeline = nil
 		p.playing.Store(true)
 		p.paused.Store(false)
 		p.mu.Unlock()
-	}
-
-	if !started {
-		speaker.Play(p.ctrl)
+		speaker.Unlock()
+		// speaker.Play takes the speaker lock itself.
+		speaker.Play(ctrl)
 	}
 	p.lifecycleMu.Unlock()
 	// Start API-based now-playing polling for streams without ICY metadata
