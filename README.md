@@ -124,6 +124,26 @@ Browse Apple's top 100 shows and 19 categories, search with `/` then `Enter`,
 and subscribe with `f`. No account or API key is needed.
 See the [Podcasts guide](docs/podcasts.md).
 
+## Remote Control
+
+Control a running cliamp from a script, a status bar, or a key binding:
+
+```sh
+cliamp toggle
+cliamp next
+cliamp status --json
+```
+
+Media keys work through MPRIS on Linux, Now Playing on macOS, and global
+hotkeys on Windows.
+
+Run `cliamp --daemon` to play without a TUI. Headless mode runs the same
+player as the TUI. It loads your Lua plugins, reports plays to Navidrome,
+Jellyfin, and the other providers that take play reports, and adds each track
+to Recently Played when the track starts. See
+[docs/headless.md](docs/headless.md) and
+[docs/remote-control.md](docs/remote-control.md).
+
 ## Radio
 
 Press `R` in the player to browse about 58,000 online radio stations in the [Radio Browser](https://www.radio-browser.info/) directory.
