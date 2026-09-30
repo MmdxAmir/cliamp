@@ -178,3 +178,47 @@ func TestCtrlRRefreshesTheActiveProvider(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleGlobalKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      tea.KeyPressMsg
+		tooSmall bool
+		keymap   bool
+		wantOK   bool
+		wantQuit bool
+		// wantKeymap is keymap.visible after the key.
+		wantKeymap bool
+	}{
+		{name: "ctrl+c quits", key: tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, wantOK: true, wantQuit: true},
+		{name: "ctrl+z undoes", key: tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl}, wantOK: true},
+		{name: "ctrl+k opens the keymap", key: tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}, wantOK: true, wantKeymap: true},
+		{name: "ctrl+k over the keymap goes on", key: tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}, keymap: true, wantKeymap: true},
+		{name: "q goes on", key: tea.KeyPressMsg{Text: "q"}},
+		{name: "q quits when too small", key: tea.KeyPressMsg{Text: "q"}, tooSmall: true, wantOK: true, wantQuit: true},
+		{name: "other keys stop when too small", key: tea.KeyPressMsg{Text: "x"}, tooSmall: true, wantOK: true},
+		{name: "ctrl+c quits when too small", key: tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, tooSmall: true, wantOK: true, wantQuit: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := keybindingTestModel()
+			m.keymap.visible = tt.keymap
+			if tt.tooSmall {
+				m.width, m.height = 39, 9
+				m.recomputeLayout()
+			}
+
+			_, ok := m.handleGlobalKey(tt.key)
+
+			if ok != tt.wantOK {
+				t.Errorf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if m.quitting != tt.wantQuit {
+				t.Errorf("quitting = %v, want %v", m.quitting, tt.wantQuit)
+			}
+			if m.keymap.visible != tt.wantKeymap {
+				t.Errorf("keymap.visible = %v, want %v", m.keymap.visible, tt.wantKeymap)
+			}
+		})
+	}
+}

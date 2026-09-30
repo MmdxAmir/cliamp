@@ -180,29 +180,13 @@ func normalizeShiftedLetter(msg tea.KeyPressMsg) tea.KeyPressMsg {
 }
 
 // handleKey processes a single key press and returns an optional command.
+// The global keys run first. Then the top overlay, the provider filter or
+// the focused area owns the key.
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	msg = normalizeShiftedLetter(msg)
 
-	if msg.String() == "ctrl+c" {
-		return m.quit()
-	}
-	if msg.String() == "ctrl+z" {
-		var cmd tea.Cmd
-		m.keepPlCursorRow(func() { cmd = m.undoPlaylistMutation() })
+	if cmd, ok := m.handleGlobalKey(msg); ok {
 		return cmd
-	}
-	if msg.String() == "ctrl+k" && !m.keymap.visible {
-		if m.fullVis {
-			m.exitFullVisualizer()
-		}
-		m.openKeymap()
-		return nil
-	}
-	if m.width > 0 && m.layout.tooSmall() {
-		if msg.String() == "q" {
-			return m.quit()
-		}
-		return nil
 	}
 	// The top overlay owns the keys.
 	if spec, ok := m.topOverlay(); ok {
@@ -224,143 +208,186 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 
-	if m.focus == focusProvider {
-		// The location question owns the keyboard until it is answered: it is
-		// a yes/no about the listener's own data, so it must not be dismissed
-		// by a stray key that happens to mean something else in this pane.
-		if m.provAskLoc {
-			switch msg.String() {
-			case "y", "Y", "enter":
-				return m.answerLocationPrompt(true)
-			case "n", "N", "esc":
-				return m.answerLocationPrompt(false)
-			}
-			return nil
-		}
-
-		if cmd, ok := m.providerShortcut(msg.String()); ok {
-			return cmd
-		}
-		switch msg.String() {
-		case "q":
-			return m.quit()
-		case "F":
-			if !m.openSubsOverlay() && m.luaMgr != nil {
-				m.luaMgr.EmitKey(msg.String())
-			}
-		case "l":
-			return m.loadLatestFromProviderList()
-		case "a":
-			return m.appendShowFromProviderList()
-		case "p":
-			if m.activeProviderKey() == providerKeyLocal && m.localProvider != nil {
-				m.openPlaylistManager()
-			}
-		case "up", "k":
-			m.providerMoveUp()
-		case "space":
-			return m.togglePlayPause()
-		case "down", "j":
-			m.providerMoveDown()
-			// Auto-load next catalog page when scrolling near the bottom.
-			return m.maybeLoadCatalogBatch()
-		case "enter":
-			if m.provSignIn {
-				if auth, ok := m.provider.(playlist.Authenticator); ok {
-					m.provSignIn = false
-					m.provLoading = true
-					m.err = nil
-					return authenticateProviderCmd(auth, m.provider.Name(), nextRequest(&m.requests.auth))
-				}
-			}
-			if len(m.providerLists) > 0 && !m.provLoading {
-				return m.openProviderList(m.provCursor)
-			}
-		case "tab", "shift+tab":
-			// Leave the content-first provider layout before choosing a control;
-			// the playback pane may be closed or too short to show every setting.
-			m.focus = focusPlaylist
-			m.recomputeLayout()
-			if msg.String() == "shift+tab" {
-				m.focus = m.previousMainFocus(focusPlaylist)
-			} else {
-				m.focus = m.nextMainFocus(focusPlaylist)
-			}
-		case "esc", "backspace", "b":
-			// Clear completed results or cancel a search still in flight.
-			if m.providerCatalogSearching() {
-				return m.restoreCatalog(m.provider.(provider.CatalogSearcher))
-			}
-			if m.playlist.Len() > 0 {
-				m.focus = focusPlaylist
-			}
-		case "/":
-			m.provSearch.active = true
-			m.provSearch.query = ""
-			m.provSearch.results = nil
-			m.provSearch.cursor = 0
-			m.provSearch.scroll = 0
-		case "ctrl+r":
-			return m.refreshActiveProvider(false)
-		case "f":
-			return m.toggleProviderFavorite()
-		case "o":
-			m.openFileBrowser()
-		case "N":
-			// Provider-pane browsing must stay scoped to the provider being
-			// viewed. Falling back to another registered browser can otherwise
-			// send (for example) Spotify's pane into Mixcloud.
-			if providerSupportsBrowse(m.provider) {
-				m.openNavBrowserWith(m.provider)
-			}
-		case "pgup", "ctrl+u":
-			m.providerPageUp()
-		case "pgdown", "ctrl+d":
-			m.providerPageDown()
-			return m.maybeLoadCatalogBatch()
-		case "g", "home":
-			m.providerToTop()
-		case "G", "end":
-			m.providerToBottom()
-			return m.maybeLoadCatalogBatch()
-		case "ctrl+j":
-			m.openJumpMode()
-		case "ctrl+x":
-			m.toggleExpandedView()
-		case "ctrl+f":
-			m.openProviderSearch()
-		}
-		return nil
-	}
-
-	if m.focus == focusSpeed {
+	switch m.focus {
+	case focusProvider:
+		return m.handleProviderPaneKey(msg)
+	case focusSpeed:
 		return m.handleSpeedKey(msg)
+	case focusProvPill:
+		return m.handleProvPillKey(msg)
 	}
+	return m.handleMainKey(msg)
+}
 
-	if m.focus == focusProvPill {
+// handleGlobalKey processes the keys that work over every overlay and focus:
+// quit, undo and the keymap. While the terminal is too small, it takes every
+// key and quits on q. ok is false when the key goes on to the overlays and
+// the focused area.
+func (m *Model) handleGlobalKey(msg tea.KeyPressMsg) (cmd tea.Cmd, ok bool) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m.quit(), true
+	case "ctrl+z":
+		m.keepPlCursorRow(func() { cmd = m.undoPlaylistMutation() })
+		return cmd, true
+	case "ctrl+k":
+		if !m.keymap.visible {
+			if m.fullVis {
+				m.exitFullVisualizer()
+			}
+			m.openKeymap()
+			return nil, true
+		}
+	}
+	if m.width > 0 && m.layout.tooSmall() {
+		if msg.String() == "q" {
+			return m.quit(), true
+		}
+		return nil, true
+	}
+	return nil, false
+}
+
+// handleProviderPaneKey processes a key press while the provider pane has
+// the focus.
+func (m *Model) handleProviderPaneKey(msg tea.KeyPressMsg) tea.Cmd {
+	// The location question owns the keyboard until it is answered: it is
+	// a yes/no about the listener's own data, so it must not be dismissed
+	// by a stray key that happens to mean something else in this pane.
+	if m.provAskLoc {
 		switch msg.String() {
-		case "q":
-			return m.quit()
-		case "left", "h":
-			if m.provPillIdx > 0 {
-				m.provPillIdx--
-			}
-		case "right", "l":
-			if m.provPillIdx < len(m.providers)-1 {
-				m.provPillIdx++
-			}
-		case "enter":
-			return m.switchProvider(m.provPillIdx)
-		case "tab":
-			m.focus = m.nextMainFocus(focusProvPill)
-		case "shift+tab", "esc", "backspace":
-			m.focus = m.previousMainFocus(focusProvPill)
-		case "space":
-			return m.togglePlayPause()
+		case "y", "Y", "enter":
+			return m.answerLocationPrompt(true)
+		case "n", "N", "esc":
+			return m.answerLocationPrompt(false)
 		}
 		return nil
 	}
 
+	if cmd, ok := m.providerShortcut(msg.String()); ok {
+		return cmd
+	}
+	switch msg.String() {
+	case "q":
+		return m.quit()
+	case "F":
+		if !m.openSubsOverlay() && m.luaMgr != nil {
+			m.luaMgr.EmitKey(msg.String())
+		}
+	case "l":
+		return m.loadLatestFromProviderList()
+	case "a":
+		return m.appendShowFromProviderList()
+	case "p":
+		if m.activeProviderKey() == providerKeyLocal && m.localProvider != nil {
+			m.openPlaylistManager()
+		}
+	case "up", "k":
+		m.providerMoveUp()
+	case "space":
+		return m.togglePlayPause()
+	case "down", "j":
+		m.providerMoveDown()
+		// Auto-load next catalog page when scrolling near the bottom.
+		return m.maybeLoadCatalogBatch()
+	case "enter":
+		if m.provSignIn {
+			if auth, ok := m.provider.(playlist.Authenticator); ok {
+				m.provSignIn = false
+				m.provLoading = true
+				m.err = nil
+				return authenticateProviderCmd(auth, m.provider.Name(), nextRequest(&m.requests.auth))
+			}
+		}
+		if len(m.providerLists) > 0 && !m.provLoading {
+			return m.openProviderList(m.provCursor)
+		}
+	case "tab", "shift+tab":
+		// Leave the content-first provider layout before choosing a control;
+		// the playback pane may be closed or too short to show every setting.
+		m.focus = focusPlaylist
+		m.recomputeLayout()
+		if msg.String() == "shift+tab" {
+			m.focus = m.previousMainFocus(focusPlaylist)
+		} else {
+			m.focus = m.nextMainFocus(focusPlaylist)
+		}
+	case "esc", "backspace", "b":
+		// Clear completed results or cancel a search still in flight.
+		if m.providerCatalogSearching() {
+			return m.restoreCatalog(m.provider.(provider.CatalogSearcher))
+		}
+		if m.playlist.Len() > 0 {
+			m.focus = focusPlaylist
+		}
+	case "/":
+		m.provSearch.active = true
+		m.provSearch.query = ""
+		m.provSearch.results = nil
+		m.provSearch.cursor = 0
+		m.provSearch.scroll = 0
+	case "ctrl+r":
+		return m.refreshActiveProvider(false)
+	case "f":
+		return m.toggleProviderFavorite()
+	case "o":
+		m.openFileBrowser()
+	case "N":
+		// Provider-pane browsing must stay scoped to the provider being
+		// viewed. Falling back to another registered browser can otherwise
+		// send (for example) Spotify's pane into Mixcloud.
+		if providerSupportsBrowse(m.provider) {
+			m.openNavBrowserWith(m.provider)
+		}
+	case "pgup", "ctrl+u":
+		m.providerPageUp()
+	case "pgdown", "ctrl+d":
+		m.providerPageDown()
+		return m.maybeLoadCatalogBatch()
+	case "g", "home":
+		m.providerToTop()
+	case "G", "end":
+		m.providerToBottom()
+		return m.maybeLoadCatalogBatch()
+	case "ctrl+j":
+		m.openJumpMode()
+	case "ctrl+x":
+		m.toggleExpandedView()
+	case "ctrl+f":
+		m.openProviderSearch()
+	}
+	return nil
+}
+
+// handleProvPillKey processes a key press while the source pills have the
+// focus.
+func (m *Model) handleProvPillKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "q":
+		return m.quit()
+	case "left", "h":
+		if m.provPillIdx > 0 {
+			m.provPillIdx--
+		}
+	case "right", "l":
+		if m.provPillIdx < len(m.providers)-1 {
+			m.provPillIdx++
+		}
+	case "enter":
+		return m.switchProvider(m.provPillIdx)
+	case "tab":
+		m.focus = m.nextMainFocus(focusProvPill)
+	case "shift+tab", "esc", "backspace":
+		m.focus = m.previousMainFocus(focusProvPill)
+	case "space":
+		return m.togglePlayPause()
+	}
+	return nil
+}
+
+// handleMainKey processes a key press for the playlist and the focused
+// playback controls. It forwards the keys that it does not handle to plugins.
+func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 	// Vim-style count prefix: a digit primes a pending percentage; the next `j`
 	// jumps there (e.g. `7j` → 70%). Any other key cancels and runs normally.
 	if s := msg.String(); m.focus == focusPlaylist && len(s) == 1 && s[0] >= '0' && s[0] <= '9' {
