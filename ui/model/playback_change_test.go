@@ -39,14 +39,10 @@ func (r *countingReporter) scrobbled() []string {
 }
 
 // changeEngine moves its position as a player does: a start plays from its
-// offset, a stop goes to 0 and a seek that works moves the position.
+// offset through startsAtOffset, a stop goes to 0 and a seek that works moves
+// the position.
 type changeEngine struct {
 	playbackFakeEngine
-}
-
-func (e *changeEngine) PlayAt(path string, dur, offset time.Duration) error {
-	e.position = offset
-	return e.playbackFakeEngine.PlayAt(path, dur, offset)
 }
 
 func (e *changeEngine) Stop() {
@@ -74,7 +70,7 @@ type playbackChange struct {
 // newPlaybackChange returns a Model that plays a.mp3 at 150 of 180 seconds,
 // past the scrobble threshold, with b.mp3 and c.mp3 after it.
 func newPlaybackChange() playbackChange {
-	engine := &changeEngine{playbackFakeEngine: playbackFakeEngine{playing: true, position: 150 * time.Second, duration: 180 * time.Second}}
+	engine := &changeEngine{playbackFakeEngine: playbackFakeEngine{playing: true, position: 150 * time.Second, duration: 180 * time.Second, startsAtOffset: true}}
 	reporter := &countingReporter{}
 	m := newColumnTestModel(100, 30)
 	m.playlist.Replace([]playlist.Track{
