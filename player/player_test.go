@@ -165,8 +165,8 @@ func TestClearPreloadDoesNotWaitForClose(t *testing.T) {
 			var decoder *blockingCloseDecoder
 			if tt.preload {
 				decoder = &blockingCloseDecoder{playbackTestDecoder: newPlaybackTestDecoder(), release: make(chan struct{})}
-				if err := p.preloadPipeline(&trackPipeline{decoder: decoder, stream: decoder}); err != nil {
-					t.Fatalf("preloadPipeline: %v", err)
+				if err := p.preloadPipelineForGeneration(&trackPipeline{decoder: decoder, stream: decoder}, 0); err != nil {
+					t.Fatalf("preloadPipelineForGeneration: %v", err)
 				}
 			}
 			generation := p.preloadGen.Load()
@@ -567,7 +567,7 @@ func TestPlayerBlockedNavStreamCanBeInterruptedBeforeSpeakerLock(t *testing.T) {
 					stream:  decoder,
 					format:  beep.Format{SampleRate: 100, NumChannels: 2, Precision: 2},
 				}
-				return p.playPipeline(tp)
+				return p.playPipelineForGeneration(tp, 0)
 			},
 		},
 	}

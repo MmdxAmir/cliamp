@@ -46,17 +46,13 @@ type playbackFakeEngine struct {
 	speed               float64 // 0 reads as the default speed 1.0
 }
 
-func (f *playbackFakeEngine) Play(path string, _ time.Duration) error {
+func (f *playbackFakeEngine) PlayAt(path string, _, offset time.Duration) error {
+	f.playAtOffsets = append(f.playAtOffsets, offset)
 	f.playing = true
 	f.paused = false
 	f.playCalls = append(f.playCalls, path)
 	return nil
 }
-func (f *playbackFakeEngine) PlayAt(path string, dur, offset time.Duration) error {
-	f.playAtOffsets = append(f.playAtOffsets, offset)
-	return f.Play(path, dur)
-}
-func (f *playbackFakeEngine) PlayYTDL(string, time.Duration) error { return nil }
 func (f *playbackFakeEngine) SetPlaybackGeneration(generation uint64) {
 	f.playGeneration = generation
 }
@@ -66,37 +62,16 @@ func (f *playbackFakeEngine) PlayAtForGeneration(path string, dur, offset time.D
 	}
 	return f.PlayAt(path, dur, offset)
 }
-func (f *playbackFakeEngine) PlayYTDLForGeneration(_ string, _ time.Duration, generation uint64) error {
-	if f.playGeneration != generation {
-		return nil
-	}
-	return nil
-}
-func (f *playbackFakeEngine) Preload(path string, _ time.Duration) error {
-	f.preloadCalls = append(f.preloadCalls, path)
-	return nil
-}
-func (f *playbackFakeEngine) PreloadYTDL(string, time.Duration) error { return nil }
 func (f *playbackFakeEngine) BeginPreload() uint64 {
 	f.preloadGeneration++
 	return f.preloadGeneration
 }
-func (f *playbackFakeEngine) PreloadForGeneration(path string, dur time.Duration, generation uint64) error {
-	if f.preloadGeneration != generation {
-		return nil
-	}
-	if f.preloadErr != nil {
-		f.preloadCalls = append(f.preloadCalls, path)
-		return f.preloadErr
-	}
-	return f.Preload(path, dur)
-}
-func (f *playbackFakeEngine) PreloadYTDLForGeneration(path string, _ time.Duration, generation uint64) error {
+func (f *playbackFakeEngine) PreloadForGeneration(path string, _ time.Duration, generation uint64) error {
 	if f.preloadGeneration != generation {
 		return nil
 	}
 	f.preloadCalls = append(f.preloadCalls, path)
-	return nil
+	return f.preloadErr
 }
 func (f *playbackFakeEngine) ClearPreload() {
 	f.clearPreloadCalls++

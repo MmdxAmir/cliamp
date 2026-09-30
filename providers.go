@@ -407,6 +407,7 @@ func (s *providerSet) registerPlayerHooks(p *player.Player) {
 	}
 
 	p.RegisterBufferedURLMatcher(isBufferedProviderURL)
+	p.RegisterYTDLMatcher(playlist.IsYTDL)
 
 	// Pull now-playing for stations that carry no inline ICY metadata (NTS, FIP).
 	p.RegisterStreamMetadataResolver(radiometa.Resolver)

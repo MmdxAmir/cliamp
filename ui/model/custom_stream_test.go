@@ -100,6 +100,9 @@ func TestPlayTrackStartsCustomURIOffUpdate(t *testing.T) {
 		// without the stream flag. The resolver still opens it over the
 		// network.
 		{name: "qobuz track from a saved list", path: "qobuz://track/42", wantAsync: true},
+		// The player routes a yt-dlp page to the yt-dlp chain inside the
+		// same start as every other source.
+		{name: "yt-dlp page", path: "https://www.youtube.com/watch?v=abc", wantAsync: true},
 		{name: "local file", path: "local.mp3", wantAsync: false},
 	}
 	for _, tt := range tests {

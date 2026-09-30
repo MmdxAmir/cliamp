@@ -93,10 +93,6 @@ func (p *nowPlayingEngine) PlayAtForGeneration(path string, duration, offset tim
 	return p.PlayAt(path, duration, offset)
 }
 
-func (p *nowPlayingEngine) PlayYTDLForGeneration(path string, duration time.Duration, gen uint64) error {
-	return p.PlayAtForGeneration(path, duration, 0, gen)
-}
-
 func TestPlayTrackEmitsPluginTrackChange(t *testing.T) {
 	for _, path := range []string{
 		"/music/local.flac",

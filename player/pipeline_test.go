@@ -342,6 +342,154 @@ func TestBuildPipelineRoutes(t *testing.T) {
 	}
 }
 
+// TestBuildSourceRoutes checks that buildSource sends a page URL that the
+// yt-dlp matcher claims to the yt-dlp chain, before any source resolver, and
+// every other path to buildPipeline at its offset.
+func TestBuildSourceRoutes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell fixtures")
+	}
+	fixtures := installPipelineRouteFixtures(t)
+	// The fake yt-dlp answers a duration probe with 90 s and otherwise writes
+	// page bytes for the fake ffmpeg.
+	writeExecutable(t, filepath.Join(fixtures, "yt-dlp"), `#!/bin/sh
+for arg do
+	if [ "$arg" = "--print" ]; then
+		printf '90\n'
+		exit 0
+	fi
+done
+printf 'page bytes'
+`)
+	wavData := testWAV(t)
+	tone := filepath.Join(fixtures, "tone.wav")
+	if err := os.WriteFile(tone, wavData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv := routeServer(t, wavData)
+	page := srv.URL + "/page"
+	claimPage := func(p *Player) { p.RegisterYTDLMatcher(func(u string) bool { return u == page }) }
+
+	tests := []struct {
+		name     string
+		path     string
+		known    time.Duration
+		offset   time.Duration
+		probe    bool
+		register func(t *testing.T, p *Player)
+		wantErr  string
+
+		wantDecoder  string
+		wantYTDL     bool
+		wantDuration time.Duration
+		wantPosition int
+	}{
+		{
+			name:         "yt-dlp page keeps its known duration",
+			path:         page,
+			known:        3 * time.Minute,
+			probe:        true,
+			register:     func(_ *testing.T, p *Player) { claimPage(p) },
+			wantDecoder:  "*player.ytdlPipeStreamer",
+			wantYTDL:     true,
+			wantDuration: 3 * time.Minute,
+		},
+		{
+			name:         "yt-dlp page probes a missing duration",
+			path:         page,
+			probe:        true,
+			register:     func(_ *testing.T, p *Player) { claimPage(p) },
+			wantDecoder:  "*player.ytdlPipeStreamer",
+			wantYTDL:     true,
+			wantDuration: 90 * time.Second,
+		},
+		{
+			name:        "yt-dlp preload does not probe",
+			path:        page,
+			register:    func(_ *testing.T, p *Player) { claimPage(p) },
+			wantDecoder: "*player.ytdlPipeStreamer",
+			wantYTDL:    true,
+		},
+		{
+			name:  "yt-dlp page ignores the offset",
+			path:  page,
+			known: time.Minute,
+			// The chain starts at 0. A resume seeks by restart later.
+			offset:       30 * time.Second,
+			register:     func(_ *testing.T, p *Player) { claimPage(p) },
+			wantDecoder:  "*player.ytdlPipeStreamer",
+			wantYTDL:     true,
+			wantDuration: time.Minute,
+		},
+		{
+			name: "yt-dlp matcher wins over an http source resolver",
+			path: page,
+			register: func(t *testing.T, p *Player) {
+				p.RegisterSourceResolver("http://", func(uri string) (ResolvedSource, error) {
+					t.Errorf("source resolver called for %s", uri)
+					return ResolvedSource{URL: uri}, nil
+				})
+				claimPage(p)
+			},
+			wantDecoder: "*player.ytdlPipeStreamer",
+			wantYTDL:    true,
+		},
+		{
+			name:    "page that no matcher claims opens over http",
+			path:    page,
+			wantErr: "play at 0s: open source: http status 404",
+		},
+		{
+			name:         "local file starts at the offset",
+			path:         tone,
+			known:        time.Minute,
+			offset:       5 * time.Millisecond,
+			register:     func(_ *testing.T, p *Player) { claimPage(p) },
+			wantDecoder:  "*wav.decoder",
+			wantDuration: time.Minute,
+			wantPosition: 220,
+		},
+		{
+			name:    "pipeline error names the offset",
+			path:    filepath.Join(fixtures, "missing.wav"),
+			offset:  2 * time.Second,
+			wantErr: "play at 2s: open source:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Player{sr: beep.SampleRate(44100), bitDepth: 16, resampleQuality: 1}
+			if tt.register != nil {
+				tt.register(t, p)
+			}
+
+			tp, err := p.buildSource(tt.path, tt.known, tt.offset, tt.probe)
+			if tt.wantErr != "" {
+				if tp != nil {
+					tp.close()
+				}
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("buildSource() error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("buildSource() error = %v", err)
+			}
+			defer tp.close()
+
+			got := fmt.Sprintf("decoder=%T ytdl=%v duration=%v position=%d",
+				tp.decoder, tp.ytdlSeek, tp.knownDuration, tp.decoder.Position())
+			want := fmt.Sprintf("decoder=%s ytdl=%v duration=%v position=%d",
+				tt.wantDecoder, tt.wantYTDL, tt.wantDuration, tt.wantPosition)
+			if got != want {
+				t.Errorf("pipeline:\n got %s\nwant %s", got, want)
+			}
+		})
+	}
+}
+
 // TestBuildPipelineSendsFFmpegFormatsPastNativeDecoders checks that every
 // extension that needs ffmpeg takes an ffmpeg route before the native
 // decoders, for local, HTTP and SSH sources.

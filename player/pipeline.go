@@ -182,6 +182,31 @@ func (p *Player) localFFmpegPipeline(path string) (*trackPipeline, error) {
 	}, nil
 }
 
+// buildSource opens path on the pipeline that its source needs. It is the one
+// place that routes a path. A page URL that the yt-dlp matcher claims plays
+// through the yt-dlp | ffmpeg chain, which starts at 0. Any other path goes
+// through buildPipeline and starts at offset when its decoder can seek.
+// knownDuration is the metadata duration (use 0 if unknown). With
+// probeDuration, a yt-dlp source with no known duration asks yt-dlp for one.
+func (p *Player) buildSource(path string, knownDuration, offset time.Duration, probeDuration bool) (*trackPipeline, error) {
+	if p.isYTDLURL(path) {
+		return p.buildYTDLSource(path, knownDuration, probeDuration)
+	}
+	tp, err := p.buildPipeline(path)
+	if err != nil {
+		return nil, fmt.Errorf("play at %v: %w", offset, err)
+	}
+	tp.setKnownDuration(knownDuration)
+	if offset > 0 && tp.seekable {
+		if sample := relativeSeekSample(tp, offset); sample > 0 {
+			// Ignored deliberately: a failed seek should start the track from
+			// the beginning, not refuse to play it.
+			_ = tp.decoder.Seek(sample)
+		}
+	}
+	return tp, nil
+}
+
 // buildPipeline opens and decodes a track, returning a ready-to-play pipeline.
 // bufferedPipeline, ffmpegURLPipeline and localFFmpegPipeline build the
 // routes that more than one source type shares.

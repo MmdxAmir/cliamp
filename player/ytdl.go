@@ -60,7 +60,7 @@ func probeYTDLDuration(pageURL string) time.Duration {
 	// WaitDelay ensures cmd.Output() doesn't hang indefinitely if the
 	// process is killed but I/O pipe goroutines haven't drained. Without
 	// this, a zombie yt-dlp child keeping stdout open can block Output()
-	// forever, which in turn blocks PlayYTDL and leaves the UI stuck at
+	// forever, which in turn blocks the start and leaves the UI stuck at
 	// "Buffering...".
 	cmd.WaitDelay = 3 * time.Second
 	out, err := cmd.Output()
@@ -427,6 +427,40 @@ func (p *Player) buildYTDLPipeline(pageURL string, startSec int) (*trackPipeline
 			streamOffset: time.Duration(startSec) * time.Second,
 		}, nil
 	}
+}
+
+// buildYTDLSource starts the yt-dlp | ffmpeg chain for pageURL at 0. With
+// probe and no known duration, it asks yt-dlp for the duration while the chain
+// starts.
+func (p *Player) buildYTDLSource(pageURL string, knownDuration time.Duration, probe bool) (*trackPipeline, error) {
+	probe = probe && knownDuration == 0
+	// Probe duration concurrently with pipeline setup so it doesn't delay playback.
+	probeCh := make(chan time.Duration, 1)
+	if probe {
+		go func() { probeCh <- probeYTDLDuration(pageURL) }()
+	}
+	tp, err := p.buildYTDLPipeline(pageURL, 0)
+	if err != nil {
+		return nil, err
+	}
+	if probe {
+		// The probe ran concurrently with buildYTDLPipeline. Try to
+		// collect the result, but don't block playback for more than 2s.
+		// A hung probeYTDLDuration (e.g. yt-dlp zombie keeping pipes
+		// open) previously blocked here forever, leaving the UI stuck
+		// at "Buffering...".
+		select {
+		case d := <-probeCh:
+			if d > 0 {
+				knownDuration = d
+			}
+		case <-time.After(2 * time.Second):
+			// Probe still running — start playback without duration.
+			// The seek bar won't show progress but audio plays immediately.
+		}
+	}
+	tp.knownDuration = knownDuration
+	return tp, nil
 }
 
 func prefillYTDLPipe(decoder *ytdlPipeStreamer) error {

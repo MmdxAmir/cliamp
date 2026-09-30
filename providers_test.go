@@ -2,7 +2,10 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +15,7 @@ import (
 
 	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/external/emby"
+	"github.com/bjarneo/cliamp/external/jellyfin"
 	"github.com/bjarneo/cliamp/external/navidrome"
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
@@ -189,6 +193,46 @@ func TestProviderSetUsesCapabilities(t *testing.T) {
 	set.Close()
 	if fake.closes != 1 {
 		t.Fatalf("Close calls = %d, want 1", fake.closes)
+	}
+}
+
+// A page URL that playlist.IsYTDL accepts opens through yt-dlp, also when a
+// Jellyfin server registers a source resolver for every https URL.
+func TestPlayerHooksSendYTDLPagesToYTDLP(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell fixtures")
+	}
+	bin := t.TempDir()
+	for name, body := range map[string]string{
+		"yt-dlp": "#!/bin/sh\necho 'ERROR: fake yt-dlp ran' >&2\nexit 1\n",
+		"ffmpeg": "#!/bin/sh\ncat >/dev/null\n",
+	} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// A request that reaches the network fails at once.
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+
+	set := &providerSet{entries: []provider.Entry{
+		{Key: "jellyfin", Name: "Jellyfin", Provider: jellyfin.NewFromConfig(config.JellyfinConfig{URL: "http://127.0.0.1:1", Token: "token", UserID: "user-1"})},
+	}}
+	engine := &player.Player{}
+	set.registerPlayerHooks(engine)
+	for _, op := range []struct {
+		name string
+		open func(path string) error
+	}{
+		{name: "play", open: func(path string) error { return engine.PlayAtForGeneration(path, time.Minute, 0, 1) }},
+		{name: "preload", open: func(path string) error { return engine.PreloadForGeneration(path, time.Minute, 1) }},
+	} {
+		t.Run(op.name, func(t *testing.T) {
+			err := op.open("https://www.youtube.com/watch?v=abc")
+			if err == nil || !strings.Contains(err.Error(), "fake yt-dlp ran") {
+				t.Fatalf("open error = %v, want the error of the fake yt-dlp", err)
+			}
+		})
 	}
 }
 

@@ -350,8 +350,9 @@ func (m *Model) undoPlaylistMutation() tea.Cmd {
 	return m.rearmPreload()
 }
 
-// playTrack plays a track, using async HTTP for streams and sync I/O for local files.
-// yt-dlp URLs are streamed via a piped yt-dlp | ffmpeg chain for instant playback.
+// playTrack plays a track, using async starts for streams and sync I/O for
+// local files. The player picks the pipeline, such as the yt-dlp | ffmpeg
+// chain for a yt-dlp page URL.
 func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 	m.pausedAt = time.Time{}
 	if track.Feed || playlist.IsFeed(track.Path) {
@@ -367,21 +368,11 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 	}
 	track, fetchCmd := m.beginPlaybackTrack(track)
 
-	// Stream yt-dlp URLs (YouTube, SoundCloud, Bandcamp, etc.) via pipe chain.
-	if playlist.IsYTDL(track.Path) {
-		m.buffering = true
-		m.bufferingAt = time.Now()
-		m.err = nil
-		dur := time.Duration(track.DurationSecs) * time.Second
-		if fetchCmd != nil {
-			return tea.Batch(playYTDLStreamCmd(m.player, track.Path, dur, m.requests.stream), fetchCmd)
-		}
-		return playYTDLStreamCmd(m.player, track.Path, dur, m.requests.stream)
-	}
 	dur := time.Duration(track.DurationSecs) * time.Second
-	// Custom URIs such as spotify: open over the network, which can take
-	// seconds. Start them off the Update goroutine like streams.
-	if track.Stream || m.isCustomStreamURI(track.Path) {
+	// yt-dlp page URLs (YouTube, SoundCloud, Bandcamp, etc.) and custom URIs
+	// such as spotify: open over the network, which can take seconds. Start
+	// them off the Update goroutine like streams.
+	if track.Stream || playlist.IsYTDL(track.Path) || m.isCustomStreamURI(track.Path) {
 		m.buffering = true
 		m.bufferingAt = time.Now()
 		m.err = nil
@@ -400,7 +391,7 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 		}
 	} else {
 		m.err = nil
-		// yt-dlp streams resume after streamPlayedMsg; local playback reaches
+		// Async starts resume after streamPlayedMsg; local playback reaches
 		// this branch, where applyResume performs the seek synchronously.
 		m.applyResume()
 		m.nowPlaying(track)

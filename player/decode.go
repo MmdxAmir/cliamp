@@ -307,6 +307,15 @@ func (p *Player) isBufferedURL(path string) bool {
 	return match != nil && match(path)
 }
 
+// isYTDLURL reports whether a registered matcher sends path to the yt-dlp
+// pipe chain.
+func (p *Player) isYTDLURL(path string) bool {
+	p.mu.Lock()
+	match := p.ytdlURLMatch
+	p.mu.Unlock()
+	return match != nil && match(path)
+}
+
 // decodeWithExt selects the native decoder using an explicit extension.
 // Extensions that need ffmpeg never reach it.
 func decodeWithExt(rc io.ReadCloser, ext string) (beep.StreamSeekCloser, beep.Format, error) {

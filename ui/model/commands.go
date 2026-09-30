@@ -104,14 +104,14 @@ type netSearchResultsMsg struct {
 	gen    uint64
 }
 
-// streamPlayedMsg signals that async stream Play() completed.
+// streamPlayedMsg signals that an async PlayAtForGeneration completed.
 type streamPlayedMsg struct {
 	path string
 	gen  uint64
 	err  error
 }
 
-// streamPreloadedMsg signals that async stream Preload() completed.
+// streamPreloadedMsg signals that an async PreloadForGeneration completed.
 type streamPreloadedMsg struct {
 	path string
 	gen  uint64
@@ -283,26 +283,6 @@ func preloadStreamCmd(p player.Engine, path string, knownDuration time.Duration,
 	return func() tea.Msg {
 		err := p.PreloadForGeneration(path, knownDuration, preloadGen)
 		return streamPreloadedMsg{path: path, gen: gen, err: err}
-	}
-}
-
-func preloadLocalCmd(p player.Engine, path string, knownDuration time.Duration, gen, preloadGen uint64) tea.Cmd {
-	return func() tea.Msg {
-		err := p.PreloadForGeneration(path, knownDuration, preloadGen)
-		return streamPreloadedMsg{path: path, gen: gen, err: err}
-	}
-}
-
-func playYTDLStreamCmd(p player.Engine, pageURL string, knownDuration time.Duration, gen uint64) tea.Cmd {
-	return func() tea.Msg {
-		return streamPlayedMsg{path: pageURL, gen: gen, err: p.PlayYTDLForGeneration(pageURL, knownDuration, gen)}
-	}
-}
-
-func preloadYTDLStreamCmd(p player.Engine, pageURL string, knownDuration time.Duration, gen, preloadGen uint64) tea.Cmd {
-	return func() tea.Msg {
-		err := p.PreloadYTDLForGeneration(pageURL, knownDuration, preloadGen)
-		return streamPreloadedMsg{path: pageURL, gen: gen, err: err}
 	}
 }
 
