@@ -140,31 +140,3 @@ func TestSetTrackOutOfBounds(t *testing.T) {
 		t.Fatal("tracks were modified by out-of-bounds SetTrack")
 	}
 }
-
-func TestToggleBookmark(t *testing.T) {
-	p := makePlaylist(3, false)
-
-	p.ToggleBookmark(0)
-	if !p.Tracks()[0].Bookmark {
-		t.Fatal("track 0 should be bookmarked")
-	}
-
-	p.ToggleBookmark(0) // toggle off
-	if p.Tracks()[0].Bookmark {
-		t.Fatal("track 0 should be unbookmarked")
-	}
-}
-
-func TestToggleBookmarkOutOfBounds(t *testing.T) {
-	p := makePlaylist(3, false)
-
-	// Should be no-op, not panic
-	p.ToggleBookmark(-1)
-	p.ToggleBookmark(5)
-
-	for i, track := range p.Tracks() {
-		if track.Bookmark {
-			t.Fatalf("track %d bookmarked by out-of-bounds ToggleBookmark", i)
-		}
-	}
-}

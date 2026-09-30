@@ -121,13 +121,6 @@ func TestRevisionIncrementsForStateChanges(t *testing.T) {
 			},
 		},
 		{
-			name: "toggle bookmark",
-			setup: func(p *Playlist) func() {
-				p.Add(Track{Title: "A"})
-				return func() { p.ToggleBookmark(0) }
-			},
-		},
-		{
 			name: "toggle shuffle",
 			setup: func(p *Playlist) func() {
 				p.Add(Track{Title: "A"})
@@ -301,12 +294,6 @@ func TestRevisionUnchangedByNoopMutations(t *testing.T) {
 			name: "set invalid track",
 			setup: func(p *Playlist) func() {
 				return func() { p.SetTrack(0, Track{Title: "A"}) }
-			},
-		},
-		{
-			name: "toggle invalid bookmark",
-			setup: func(p *Playlist) func() {
-				return func() { p.ToggleBookmark(0) }
 			},
 		},
 		{

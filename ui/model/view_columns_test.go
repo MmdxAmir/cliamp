@@ -254,9 +254,13 @@ func TestMarkerColumnsReserveOnlyWhatIsUsed(t *testing.T) {
 			want:  markerColumns{queue: true, favorite: true},
 		},
 		{
-			name:  "legacy bookmark reserves nothing",
-			setup: func(m *Model) { m.playlist.ToggleBookmark(1) },
-			want:  markerColumns{favorite: true},
+			name: "legacy bookmark reserves nothing",
+			setup: func(m *Model) {
+				track, _ := m.playlist.Track(1)
+				track.Bookmark = true
+				m.playlist.SetTrack(1, track)
+			},
+			want: markerColumns{favorite: true},
 		},
 		{
 			name:  "favorite track",

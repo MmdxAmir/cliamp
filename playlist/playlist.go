@@ -886,16 +886,6 @@ func (p *Playlist) OrderPosition(idx int) int {
 	return slices.Index(p.order, idx)
 }
 
-// ToggleBookmark flips the Bookmark flag on the track at the given index.
-func (p *Playlist) ToggleBookmark(idx int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if idx >= 0 && idx < len(p.tracks) {
-		p.tracks[idx].Bookmark = !p.tracks[idx].Bookmark
-		p.revision++
-	}
-}
-
 // ToggleShuffle enables or disables shuffle mode.
 // Uses Fisher-Yates shuffle, preserving the current track at position 0.
 func (p *Playlist) ToggleShuffle() {
