@@ -223,12 +223,20 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // handleGlobalKey processes the keys that work over every overlay and focus:
 // quit, undo and the keymap. While the terminal is too small, it takes every
-// key and quits on q. ok is false when the key goes on to the overlays and
-// the focused area.
+// key and quits on q or ctrl+c. The screen shows only the too-small notice
+// then, so no key may change hidden state. ok is false when the key goes on
+// to the overlays and the focused area.
 func (m *Model) handleGlobalKey(msg tea.KeyPressMsg) (cmd tea.Cmd, ok bool) {
-	switch msg.String() {
-	case "ctrl+c":
+	if msg.String() == "ctrl+c" {
 		return m.quit(), true
+	}
+	if m.width > 0 && m.layout.tooSmall() {
+		if msg.String() == "q" {
+			return m.quit(), true
+		}
+		return nil, true
+	}
+	switch msg.String() {
 	case "ctrl+z":
 		m.keepPlCursorRow(func() { cmd = m.undoPlaylistMutation() })
 		return cmd, true
@@ -240,12 +248,6 @@ func (m *Model) handleGlobalKey(msg tea.KeyPressMsg) (cmd tea.Cmd, ok bool) {
 			m.openKeymap()
 			return nil, true
 		}
-	}
-	if m.width > 0 && m.layout.tooSmall() {
-		if msg.String() == "q" {
-			return m.quit(), true
-		}
-		return nil, true
 	}
 	return nil, false
 }

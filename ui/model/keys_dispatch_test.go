@@ -381,6 +381,8 @@ func TestHandleGlobalKey(t *testing.T) {
 		{name: "q quits when too small", key: tea.KeyPressMsg{Text: "q"}, tooSmall: true, wantOK: true, wantQuit: true},
 		{name: "other keys stop when too small", key: tea.KeyPressMsg{Text: "x"}, tooSmall: true, wantOK: true},
 		{name: "ctrl+c quits when too small", key: tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, tooSmall: true, wantOK: true, wantQuit: true},
+		{name: "ctrl+z stops when too small", key: tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl}, tooSmall: true, wantOK: true},
+		{name: "ctrl+k stops when too small", key: tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}, tooSmall: true, wantOK: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
