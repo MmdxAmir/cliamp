@@ -12,8 +12,9 @@ import (
 
 // mainKeyPath lists the functions of the main key path: handleKey without
 // the overlays and the focused areas that own a command mode. The path ends
-// in the plugin forward of handleMainKey.
-var mainKeyPath = []string{"handleKey", "handleGlobalKey", "handleMainKey", "providerKeyForShortcut"}
+// in the plugin forward of handleMainKey. The test adds the keys of the
+// provider shortcut helpers through shortcutKeys.
+var mainKeyPath = []string{"handleKey", "handleGlobalKey", "handleMainKey"}
 
 // focusKeyHandlers maps the handlers that handleKey calls for a focused area
 // to the command mode of that area.
@@ -26,15 +27,18 @@ var focusKeyHandlers = map[string]commandMode{
 
 // TestReservedKeysCoversHandleKey is a drift guard. Every key that the main
 // key path handles must be in commandRegistry, so a plugin cannot bind a key
-// that cliamp takes before the plugin forward.
+// that cliamp takes before the plugin forward. The keys of shortcutKeys
+// count as keys of the function that calls the shortcut helper.
 func TestReservedKeysCoversHandleKey(t *testing.T) {
 	funcs := modelFuncs(t)
 	reserved := ReservedKeys()
 	for _, name := range mainKeyPath {
-		keys := handlerKeys(t, lookupFunc(t, funcs, name))
+		fd := lookupFunc(t, funcs, name)
+		keys := handlerKeys(t, fd)
 		if len(keys) == 0 {
 			t.Errorf("%s handles no keys. The walker cannot read it.", name)
 		}
+		keys = append(keys, shortcutKeys(t, funcs, methodCalls(fd))...)
 		var missing []string
 		for _, key := range keys {
 			if !reserved[key] {
@@ -44,13 +48,13 @@ func TestReservedKeysCoversHandleKey(t *testing.T) {
 		if len(missing) > 0 {
 			t.Errorf("%s handles keys that commandRegistry does not list: %q\nAdd them to command_registry.go so plugin binds cannot shadow them.", name, missing)
 		}
-	}
 
-	// Each handler that handleKey calls is on the main key path or owns the
-	// command mode of a focused area.
-	for _, callee := range handlerCalls(lookupFunc(t, funcs, "handleKey")) {
-		if !slices.Contains(mainKeyPath, callee) && focusKeyHandlers[callee] == 0 {
-			t.Errorf("handleKey calls %s. Add it to mainKeyPath or focusKeyHandlers.", callee)
+		// Each handler that the function calls is on the main key path or
+		// owns the command mode of a focused area.
+		for _, callee := range handlerCalls(fd) {
+			if !slices.Contains(mainKeyPath, callee) && focusKeyHandlers[callee] == 0 {
+				t.Errorf("%s calls %s. Add it to mainKeyPath or focusKeyHandlers.", name, callee)
+			}
 		}
 	}
 }
