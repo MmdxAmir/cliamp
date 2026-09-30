@@ -432,6 +432,10 @@ func v2Operations(headless, plugins bool) *ipc.OperationRegistry {
 	return operations
 }
 
+// v2ReplyTimeout bounds the wait for the Model to answer state.get and
+// spectrum.get.
+var v2ReplyTimeout = 3 * time.Second
+
 // newV2Dispatcher answers the V2 requests of the TUI and of headless mode.
 // send delivers a request to the Model, as prog.Send does. The plugin jobs
 // run against plugins.
@@ -446,7 +450,7 @@ func newV2Dispatcher(send func(tea.Msg), jobs *ipc.JobStore, plugins *luaplugin.
 				return result.Result, result.Error
 			case <-ctx.Done():
 				return ipc.V2Result{}, &ipc.V2Error{Code: ipc.V2ErrorCodeCanceled, Message: ipc.V2MessageCanceled}
-			case <-time.After(3 * time.Second):
+			case <-time.After(v2ReplyTimeout):
 				return ipc.V2Result{}, &ipc.V2Error{Code: ipc.V2ErrorCodeUnavailable, Message: ipc.V2MessageUnavailable}
 			}
 		}
