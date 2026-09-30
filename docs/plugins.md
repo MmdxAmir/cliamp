@@ -220,7 +220,7 @@ Up to 256 events and key presses can wait for one plugin. If a plugin falls furt
 | Event | Callback argument | When |
 |-------|-------------------|------|
 | `track.change` | `{title, artist, album, genre, year, path, duration, stream}` | New track starts successfully |
-| `track.scrobble` | Same + `{played_secs}` | You left a track that played at least 50% of its known duration: it ended, or you skipped, stopped, rewound with previous, or started another track. Each start of a track fires this at most once |
+| `track.scrobble` | Same + `{played_secs}` | You left a track that played at least 50% of its known duration: it ended, or you skipped, stopped, removed it from the queue, rewound with previous, or started another track. Each start of a track fires this at most once |
 | `playback.state` | `{status, title, artist, album, path, duration, stream, position}` | Once for each playback state change (play, pause, stop, seek, volume, track transition, new stream title), and once per second while a track plays. A message that changes nothing does not fire it |
 | `player.seek` | `{position, duration}` (seconds) | A seek completes |
 | `player.volume` | `{db}` | Volume changes |

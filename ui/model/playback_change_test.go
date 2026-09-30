@@ -96,6 +96,19 @@ func newPlaybackChange() playbackChange {
 	return playbackChange{m: m, engine: engine, notifier: notifier, reporter: reporter}
 }
 
+// playbackChangeNav returns a browser that shows the track d.mp3. With
+// confirm, it asks to replace the queue.
+func playbackChangeNav(confirm bool) navBrowserState {
+	return navBrowserState{
+		prov:           commandsTestProvider{name: "Browse"},
+		visible:        true,
+		mode:           navBrowseModeByAlbum,
+		screen:         navBrowseScreenTracks,
+		tracks:         []playlist.Track{{Title: "D", Path: "d.mp3"}},
+		confirmReplace: confirm,
+	}
+}
+
 // Each message that changes the playback state tells the media controls
 // once, and a message that changes nothing does not. Each message that
 // leaves the track that plays scrobbles it once.
@@ -140,6 +153,35 @@ func TestPlaybackChangesNotifyAndScrobbleOnce(t *testing.T) {
 		}, notify: true, scrobble: true},
 		{name: "a file browser replace", msg: func(*testing.T) tea.Msg {
 			return fbTracksResolvedMsg{tracks: []playlist.Track{{Title: "D", Path: "d.mp3"}}, replace: true}
+		}, notify: true, scrobble: true},
+		{name: "search play now", setup: func(c *playbackChange) {
+			c.m.netSearch = netSearchState{active: true, screen: netSearchResults, results: []playlist.Track{{Title: "D", Path: "d.mp3"}}}
+		}, msg: func(*testing.T) tea.Msg { return tea.KeyPressMsg{Code: tea.KeyEnter} }, notify: true, scrobble: true},
+		{name: "V2 track.play", msg: func(t *testing.T) tea.Msg {
+			return v2Request(t, "track.play", ipc.Request{Track: &ipc.TrackInfo{Path: "d.mp3"}})
+		}, notify: true, scrobble: true},
+		{name: "album play now", setup: func(c *playbackChange) { c.m.requests.spotAlbum = 1 },
+			msg: func(*testing.T) tea.Msg {
+				return spotAlbumTracksMsg{gen: 1, action: spotAlbumPlay, album: playlist.Track{Title: "Album"},
+					tracks: []playlist.Track{{Title: "D", Path: "d.mp3"}}}
+			}, notify: true, scrobble: true},
+		{name: "enter on a browser track", setup: func(c *playbackChange) { c.m.navBrowser = playbackChangeNav(false) },
+			msg: func(*testing.T) tea.Msg { return tea.KeyPressMsg{Code: tea.KeyEnter} }, notify: true, scrobble: true},
+		{name: "a browser replace", setup: func(c *playbackChange) { c.m.navBrowser = playbackChangeNav(true) },
+			msg: func(*testing.T) tea.Msg { return tea.KeyPressMsg{Code: tea.KeyEnter} }, notify: true, scrobble: true},
+		{name: "a playlist manager load", setup: func(c *playbackChange) {
+			c.m.plManager.visible = true
+			c.m.plManager.screen = plMgrScreenTracks
+			c.m.plManager.selPlaylist = "Mix"
+			c.m.plManager.tracks = []playlist.Track{{Title: "D", Path: "d.mp3"}}
+		}, msg: func(*testing.T) tea.Msg { return tea.KeyPressMsg{Code: tea.KeyEnter} }, notify: true, scrobble: true},
+		{name: "remove key on the playing row", setup: func(c *playbackChange) { c.m.focus = focusPlaylist },
+			msg: func(*testing.T) tea.Msg { return key("x") }, notify: true, scrobble: true},
+		{name: "V2 queue.remove of the playing row", msg: func(t *testing.T) tea.Msg {
+			return v2Request(t, "queue.remove", ipc.Request{Index: 0})
+		}, notify: true, scrobble: true},
+		{name: "plugin remove of the playing row", msg: func(*testing.T) tea.Msg {
+			return PluginQueueMsg{Op: "remove", Index: 0}
 		}, notify: true, scrobble: true},
 		{name: "a gapless advance", setup: func(c *playbackChange) {
 			c.engine.gaplessAdvanced = true
