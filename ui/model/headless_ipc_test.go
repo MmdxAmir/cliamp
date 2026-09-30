@@ -145,6 +145,27 @@ func TestHeadlessQueueAndPlayNextAreSeparate(t *testing.T) {
 	}
 }
 
+// The scripted playlist recipe of docs/headless.md: queue appends to an idle
+// daemon and starts nothing. play then starts the first queued track.
+func TestHeadlessScriptedQueueStartsWithPlay(t *testing.T) {
+	engine := &headlessEngine{}
+	m := newHeadlessModel(t, engine, nil)
+	for _, path := range []string{"/music/one.flac", "/music/two.flac"} {
+		if response := runV2(t, &m, "queue", ipc.Request{Path: path}); !response.OK {
+			t.Fatalf("queue %s = %+v", path, response)
+		}
+	}
+	if len(engine.playCalls) != 0 {
+		t.Fatalf("queue started %v, want nothing before play", engine.playCalls)
+	}
+	if response := runV2(t, &m, "play", ipc.Request{}); !response.OK {
+		t.Fatalf("play = %+v", response)
+	}
+	if len(engine.playCalls) != 1 || engine.playCalls[0] != "/music/one.flac" {
+		t.Fatalf("play started %v, want /music/one.flac", engine.playCalls)
+	}
+}
+
 func TestHeadlessQueueListIncludesMetadata(t *testing.T) {
 	m := newHeadlessModel(t, &headlessEngine{}, nil,
 		playlist.Track{Path: "/one.flac", Title: "One", Album: "Album", DurationSecs: 60},

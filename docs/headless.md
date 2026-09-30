@@ -169,14 +169,16 @@ XF86AudioNext
 
 ### Scripted playlists
 
-Build a queue from a script:
+Build a queue from a script, then start it with `cliamp play`. `--auto-play`
+starts only a queue that holds tracks at startup, so it does not help here.
 
 ```sh
-cliamp --daemon --auto-play &
+cliamp --daemon &
 sleep 1                                  # let the socket bind
 for f in $(find ~/Music/Albums/Daft\ Punk -name '*.flac' | sort); do
   cliamp queue "$f"
 done
+cliamp play                              # start the first track
 ```
 
 ### Remote control over SSH
