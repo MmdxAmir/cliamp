@@ -6,9 +6,11 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/ui"
 )
@@ -265,5 +267,50 @@ func TestSeekBarSeparatesFillFromRemainder(t *testing.T) {
 		if !strings.Contains(bar, want) {
 			t.Fatalf("half-played bar should show %q: %q", want, bar)
 		}
+	}
+}
+
+// A stop drops a seek that waits for its debounce or still runs. The seek
+// does not land on the stopped player, and the media controls get no
+// Seeked signal.
+func TestStopDropsASeek(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		seek func(m *Model) tea.Cmd
+	}{
+		{name: "debounced key seek", seek: func(m *Model) tea.Cmd {
+			return m.handleKey(tea.KeyPressMsg{Code: tea.KeyRight})
+		}},
+		{name: "running seek", seek: func(m *Model) tea.Cmd {
+			updated, cmd := m.Update(playback.SetPositionMsg{Position: time.Minute})
+			*m = updated.(Model)
+			return cmd
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := &playbackFakeEngine{playing: true, seekable: true, duration: time.Hour, position: 10 * time.Second}
+			m := streamSeekModel(eng)
+			notifier := &fakeNotifier{}
+			m.notifier = notifier
+			cmd := tc.seek(&m)
+
+			updated, _ := m.Update(playback.StopMsg{})
+			m = updated.(Model)
+			if m.seek.active || m.seek.inFlight || m.seek.pending || m.seek.timer != 0 {
+				t.Fatalf("seek state after the stop = %+v, want none", m.seek)
+			}
+			if tick := m.tickSeek(time.Duration(seekDebounceTicks) * ui.TickFast); tick != nil {
+				cmd = tick
+			}
+			if cmd != nil {
+				if msg, ok := cmd().(seekTickMsg); ok {
+					updated, _ = m.Update(msg)
+					m = updated.(Model)
+				}
+			}
+			if len(notifier.seeked) != 0 {
+				t.Fatalf("Seeked signals = %v, want none after the stop", notifier.seeked)
+			}
+		})
 	}
 }

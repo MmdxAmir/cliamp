@@ -79,6 +79,8 @@ func (m *Model) stopPlayback() (playlist.Track, bool) {
 		m.err = nil
 	}
 	m.reconnect = reconnectState{}
+	// A seek must not land on the stopped player.
+	m.resetSeek()
 	finished, started := m.playingTrack, m.playingTrackActive && m.playingTrackStarted
 	m.clearPlaybackTrack()
 	return finished, started

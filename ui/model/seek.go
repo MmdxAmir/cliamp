@@ -155,6 +155,21 @@ func (m *Model) seekCmd(target time.Duration, resume bool) tea.Cmd {
 	}
 }
 
+// resetSeek drops a seek that waits for its debounce or still runs, for a
+// new track or a stop. The seek generation moves on, so a seek that lands
+// later is ignored.
+func (m *Model) resetSeek() {
+	m.seek.active = false
+	m.seek.inFlight = false
+	m.seek.pending = false
+	m.seek.gen++
+	m.seek.timer = 0
+	m.seek.timerFor = 0
+	m.seek.grace = 0
+	m.seek.graceFor = 0
+	m.seek.rewind = false
+}
+
 func (m *Model) clampPosition(pos time.Duration) time.Duration {
 	if pos < 0 {
 		return 0
