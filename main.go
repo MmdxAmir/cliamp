@@ -191,8 +191,10 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 
 	if luaMgr != nil {
-		luaMgr.SetControlProvider(luaControlProvider(prog.Send))
-		luaMgr.SetUIProvider(luaUIProvider(prog.Send))
+		luaSend, stopLuaSend := newLuaSender(prog.Send)
+		defer stopLuaSend()
+		luaMgr.SetControlProvider(luaControlProvider(luaSend))
+		luaMgr.SetUIProvider(luaUIProvider(luaSend))
 	}
 
 	stopIPC, err := startIPC(prog, pluginBroker, luaMgr, daemon)

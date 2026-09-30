@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -52,5 +53,102 @@ func TestLuaControlProviderSendsMessages(t *testing.T) {
 				t.Fatalf("sent %#v, want %#v", got, want)
 			}
 		})
+	}
+}
+
+// blockingSend is a send func that waits until release is closed, as
+// prog.Send waits for the event loop. It records the messages in order.
+type blockingSend struct {
+	release chan struct{}
+	got     chan tea.Msg
+}
+
+func newBlockingSend(n int) *blockingSend {
+	return &blockingSend{release: make(chan struct{}), got: make(chan tea.Msg, n)}
+}
+
+func (b *blockingSend) send(msg tea.Msg) {
+	<-b.release
+	b.got <- msg
+}
+
+// A plugin calls a control or cliamp.message while it holds its lock. The
+// call must return while the event loop is busy, and the Model must get the
+// messages in the order that the plugin sent them.
+func TestLuaSenderDoesNotBlockAndKeepsOrder(t *testing.T) {
+	sink := newBlockingSend(3)
+	queue, stop := newLuaSender(sink.send)
+	defer stop()
+	ctrl := luaControlProvider(queue)
+	ui := luaUIProvider(queue)
+
+	done := make(chan struct{})
+	go func() {
+		ctrl.SetVolume(-20)
+		ui.ShowMessage("hello", time.Second)
+		ctrl.Next()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("a Lua control waited for the event loop")
+	}
+
+	close(sink.release)
+	want := []tea.Msg{
+		playback.SetVolumeMsg{VolumeDB: -20},
+		model.ShowStatusMsg{Text: "hello", Duration: time.Second},
+		playback.NextMsg{},
+	}
+	for i, w := range want {
+		select {
+		case got := <-sink.got:
+			if !reflect.DeepEqual(got, w) {
+				t.Fatalf("message %d = %#v, want %#v", i, got, w)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("message %d did not arrive", i)
+		}
+	}
+}
+
+// A full queue drops new messages instead of blocking the plugin. The
+// messages that arrive keep their order.
+func TestLuaSenderDropsWhenFull(t *testing.T) {
+	const n = luaSendQueueSize + 50
+	sink := newBlockingSend(n)
+	queue, stop := newLuaSender(sink.send)
+	defer stop()
+
+	done := make(chan struct{})
+	go func() {
+		for i := range n {
+			queue(playback.SeekMsg{Offset: time.Duration(i)})
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("a full queue blocked the plugin")
+	}
+
+	close(sink.release)
+	var got []int
+	for {
+		select {
+		case msg := <-sink.got:
+			got = append(got, int(msg.(playback.SeekMsg).Offset))
+			continue
+		case <-time.After(100 * time.Millisecond):
+		}
+		break
+	}
+	if len(got) < luaSendQueueSize || len(got) >= n {
+		t.Fatalf("got %d messages, want at least %d and fewer than %d", len(got), luaSendQueueSize, n)
+	}
+	if !slices.IsSorted(got) {
+		t.Fatalf("messages arrived out of order: %v", got)
 	}
 }

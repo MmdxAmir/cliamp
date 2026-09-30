@@ -492,7 +492,7 @@ cliamp.player.set_eq_band(1, 6)   -- set EQ band 1 to +6 dB (bands 1-10, -12 to 
 
 If a plugin does not declare `permissions = {"control"}`, these functions log a warning and do nothing.
 
-cliamp saves a speed change to `config.toml` after one second, as the speed keys do. A volume change updates the volume of the media controls at once.
+Each control returns at once. cliamp applies the controls in the order that the plugin calls them, on the same loop that handles the keys. Thus a read such as `cliamp.player.volume()` right after `set_volume` can still return the old value. cliamp saves a speed change to `config.toml` after one second, as the speed keys do. A volume change updates the volume of the media controls at once.
 
 ### cliamp.notify
 
@@ -555,7 +555,8 @@ cliamp.message("Syncing Library", 5)   -- show for 5 seconds
 
 This shows a temporary message in the status bar at the bottom of the UI. The
 duration is optional and uses seconds. Omit it to use the default TTL. cliamp
-limits durations above 60 seconds.
+limits durations above 60 seconds. The call returns at once, and cliamp shows
+the messages and applies the controls of a plugin in the order of the calls.
 
 ### cliamp.sleep
 

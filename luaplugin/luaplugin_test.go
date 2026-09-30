@@ -897,6 +897,47 @@ func TestRenderVisReturnsLastFrameWhenPluginBusy(t *testing.T) {
 	}
 }
 
+// A hook of a visualizer plugin calls a control that waits for the event
+// loop, as prog.Send does, while the event loop renders the same plugin.
+// RenderVis must return without the plugin lock, so the loop can read the
+// message and both sides go on.
+func TestVisualizerHookControlDuringRender(t *testing.T) {
+	setRenderTimeout(t, time.Second)
+	m := newTestManager()
+	calling := make(chan struct{})
+	loop := make(chan string) // unbuffered, as the Bubbletea message channel
+	m.SetControlProvider(ControlProvider{Next: func() {
+		close(calling)
+		loop <- "next"
+	}})
+	loadTestPlugin(t, m, "ctl-vis", `
+		local v = plugin.register({name = "ctl-vis", type = "visualizer", permissions = {"control"}})
+		function v:render(bands, frame) return "frame-" .. frame end
+		v:on("track.change", function() cliamp.player.next() end)
+	`)
+	m.finalizeVisualizers()
+	defer m.Close()
+
+	m.Emit(EventTrackChange, nil)
+	done := make(chan string, 1)
+	go func() {
+		// The hook holds the plugin lock from here until the loop reads
+		// the message. The event loop renders a frame first.
+		<-calling
+		m.RenderVis("ctl-vis", [10]float64{}, 8, 40, 1)
+		done <- <-loop
+	}()
+	select {
+	case msg := <-done:
+		if msg != "next" {
+			t.Fatalf("event loop read %q, want next", msg)
+		}
+	case <-time.After(2 * time.Second):
+		go func() { <-loop }() // free the hook, so Close does not wait for it
+		t.Fatal("the render and the control call waited for each other")
+	}
+}
+
 // A render that runs past renderTimeout stops, and RenderVis returns the last
 // frame.
 func TestRenderVisTimeout(t *testing.T) {

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/luaplugin"
 	"github.com/bjarneo/cliamp/player"
@@ -106,6 +108,50 @@ func luaControlProvider(send func(tea.Msg)) luaplugin.ControlProvider {
 			send(model.PluginQueueMsg{Op: "move", Index: from, To: to})
 		},
 	}
+}
+
+// luaSendQueueSize bounds the messages of Lua plugins that wait for the
+// event loop.
+const luaSendQueueSize = 256
+
+// newLuaSender returns a send func for the Lua providers and a stop func. A
+// plugin calls a control or cliamp.message while it holds its own lock, and
+// send, which is prog.Send, waits until the event loop reads the message.
+// The returned func only queues the message and returns at once. One
+// goroutine passes the queued messages to send in order, as mediactl does
+// for D-Bus calls. When the queue is full, the func drops the message and
+// logs a warning once until the queue accepts a message again.
+func newLuaSender(send func(tea.Msg)) (queue func(tea.Msg), stop func()) {
+	msgs := make(chan tea.Msg, luaSendQueueSize)
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case msg := <-msgs:
+				send(msg)
+			}
+		}
+	}()
+	var dropping atomic.Bool
+	queue = func(msg tea.Msg) {
+		select {
+		case msgs <- msg:
+			dropping.Store(false)
+		default:
+			if !dropping.Swap(true) {
+				applog.Warn("lua plugins: %d messages wait for the player, so cliamp drops new ones", luaSendQueueSize)
+			}
+		}
+	}
+	var stopped atomic.Bool
+	stop = func() {
+		if stopped.CompareAndSwap(false, true) {
+			close(done)
+		}
+	}
+	return queue, stop
 }
 
 // luaUIProvider lets Lua plugins show a status message.
