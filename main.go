@@ -344,14 +344,22 @@ func saveOnExit(final tea.Model, headless bool, resumeServer *embyapi.Provider) 
 	}
 
 	path, secs, playlistName := fm.ResumeState()
+	saveExitResume(path, secs, playlistName, fm.ResumeContext, resumeServer)
+}
+
+// saveExitResume saves the track and the position of the exit. When
+// resumeServer is set and path is a Jellyfin or Emby stream, it also saves
+// the list that resumeContext returns. A track with no position saves
+// nothing.
+func saveExitResume(path string, secs int, playlistName string, resumeContext func() ([]playlist.Track, int), resumeServer *embyapi.Provider) {
 	if path == "" || secs <= 0 {
 		return
 	}
 	if resumeServer != nil && embyapi.IsStreamURL(path) {
-		context, index := fm.ResumeContext()
+		tracks, index := resumeContext()
 		resume.SaveState(resume.State{
 			Path: path, PositionSec: secs, Playlist: playlistName,
-			Context: context, ContextIndex: index,
+			Context: tracks, ContextIndex: index,
 		})
 		return
 	}
