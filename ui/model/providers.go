@@ -570,6 +570,18 @@ func (m *Model) SetLoadedPlaylist(name string) {
 	m.playlistSource = ""
 }
 
+// renameLoadedPlaylist follows a rename of the local playlist oldName to
+// newName, so queue edits and their undo write to the renamed file.
+func (m *Model) renameLoadedPlaylist(oldName, newName string) {
+	if m.loadedPlaylist != oldName {
+		return
+	}
+	m.loadedPlaylist = newName
+	if m.playlistUndo.loaded == oldName {
+		m.playlistUndo.loaded = newName
+	}
+}
+
 // clearLoadedPlaylist records that the queue mirrors no list. The undo of
 // the last queue edit goes, because it can write to the list.
 func (m *Model) clearLoadedPlaylist() {

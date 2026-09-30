@@ -74,6 +74,14 @@ type ipcProviderLoadResult struct {
 	err      error
 }
 
+// ipcPlaylistRenamedMsg tells Update that an IPC rename of a playlist of the
+// named provider succeeded. Update follows the rename, then replies.
+type ipcPlaylistRenamedMsg struct {
+	provider         string
+	oldName, newName string
+	reply            chan ipc.Response
+}
+
 type ipcURLLoadResult struct {
 	request ipcURLRequest
 	tracks  []playlist.Track
@@ -244,7 +252,16 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 			request.Reply <- ipc.Response{OK: false, Error: "provider does not support playlist renaming"}
 			return nil
 		}
-		return ipcMutationCmd(request.Context, request.Reply, func() error { return renamer.RenamePlaylist(request.Playlist, request.NewName) })
+		return func() tea.Msg {
+			if request.Context != nil && request.Context.Err() != nil {
+				return nil
+			}
+			if err := renamer.RenamePlaylist(request.Playlist, request.NewName); err != nil {
+				request.Reply <- ipcResponseError(err)
+				return nil
+			}
+			return ipcPlaylistRenamedMsg{provider: entry.Provider.Name(), oldName: request.Playlist, newName: request.NewName, reply: request.Reply}
+		}
 	case "playlist.delete":
 		deleter, ok := entry.Provider.(provider.PlaylistDeleter)
 		if !ok {
@@ -560,6 +577,15 @@ func (m *Model) handleIPCProviderLoad(result ipcProviderLoadResult) tea.Cmd {
 	m.plCursor = 0
 	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks, m.trackFavoriteLookup(true)), Playlist: result.request.Playlist, Total: len(result.tracks)}
 	return m.playCurrentTrack()
+}
+
+// handleIPCPlaylistRenamed moves the loaded playlist to the new name when
+// the local provider renamed it, as the manager rename key does.
+func (m *Model) handleIPCPlaylistRenamed(msg ipcPlaylistRenamedMsg) {
+	if m.localProvider != nil && msg.provider == m.localProvider.Name() {
+		m.renameLoadedPlaylist(msg.oldName, msg.newName)
+	}
+	msg.reply <- ipc.Response{OK: true}
 }
 
 func requestContext(ctx context.Context) context.Context {

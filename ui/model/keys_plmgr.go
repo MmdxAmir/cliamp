@@ -653,9 +653,7 @@ func (m *Model) plMgrCommitRename() bool {
 		return false
 	}
 	m.status.Showf(statusTTLDefault, "Renamed %q to %q", oldName, newName)
-	if m.loadedPlaylist == oldName {
-		m.loadedPlaylist = newName
-	}
+	m.renameLoadedPlaylist(oldName, newName)
 	m.plMgrRefreshList()
 	return true
 }

@@ -551,3 +551,55 @@ func TestV2SnapshotNamesTheLoadedList(t *testing.T) {
 		})
 	}
 }
+
+// A rename of the loaded playlist, by the manager key or by IPC, moves the
+// loaded list to the new name. Ctrl+Z and later queue edits then write to
+// the renamed file and create no file under the old name.
+func TestRenameMovesTheLoadedPlaylist(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		rename func(t *testing.T, m *Model)
+	}{
+		{name: "manager key", rename: func(t *testing.T, m *Model) {
+			m.plManager.renameOldName, m.plManager.renameName = "Mix", "New"
+			if !m.plMgrCommitRename() {
+				t.Fatalf("rename failed: %s", m.plManager.inputErr)
+			}
+		}},
+		{name: "IPC", rename: func(t *testing.T, m *Model) {
+			if response := runV2(t, m, "playlist.rename", ipc.Request{Provider: "local", Playlist: "Mix", NewName: "New"}); !response.OK {
+				t.Fatalf("playlist.rename = %+v", response)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, lp, _ := queueOpModel(t, false, "Mix", 1)
+			next, _ := m.Update(tea.KeyPressMsg{Text: "x"})
+			m = next.(Model)
+			tc.rename(t, &m)
+			if m.loadedPlaylist != "New" {
+				t.Fatalf("loadedPlaylist = %q, want New", m.loadedPlaylist)
+			}
+			next, _ = m.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
+			m = next.(Model)
+			next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift})
+			m = next.(Model)
+			if m.status.kind == feedbackError {
+				t.Fatalf("unexpected error: %s", m.status.text)
+			}
+			if got := queueOpPaths(m.playlist.Tracks()); got != "a c b" {
+				t.Fatalf("queue = %q, want a c b", got)
+			}
+			saved, err := lp.Tracks("New")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := queueOpPaths(saved); got != "a c b" {
+				t.Fatalf("New = %q, want a c b", got)
+			}
+			if got := dirFiles(t, filepath.Join(os.Getenv("CLIAMP_CONFIG_DIR"), "playlists")); !reflect.DeepEqual(got, []string{"New.toml"}) {
+				t.Fatalf("playlist files = %v, want only New.toml", got)
+			}
+		})
+	}
+}
