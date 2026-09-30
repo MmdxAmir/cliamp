@@ -232,7 +232,8 @@ reordered, so `p` leaves them alone and reports them as skipped.
 
 Shift-letter keys switch providers. Playlist-manager track actions use lowercase
 or punctuation keys. `D` is the exception. It opens the directory-sources
-screen.
+screen. While a delete prompt waits for an answer, `y` or `Y` confirms and any
+other key cancels. The Shift-letter keys do not switch providers then.
 
 #### Directory sources screen (`D` from the tracks screen)
 

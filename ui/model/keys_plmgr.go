@@ -19,8 +19,9 @@ import (
 // handlePlaylistManagerKey dispatches keys to the active manager screen.
 func (m *Model) handlePlaylistManagerKey(msg tea.KeyPressMsg) tea.Cmd {
 	// Quick-switch (Shift+letter) jumps to another provider. Only honored when
-	// the manager isn't currently capturing text input (filter, new-name).
-	if m.plManager.screen != plMgrScreenNewName && m.plManager.screen != plMgrScreenRename && !m.plManager.filtering {
+	// the manager isn't currently capturing text input (filter, new-name) or
+	// waiting for a y/n answer, where Y confirms and other keys cancel.
+	if m.plManager.screen != plMgrScreenNewName && m.plManager.screen != plMgrScreenRename && !m.plManager.filtering && !m.plManager.confirmDel {
 		if cmd := m.quickSwitchProvider(msg.String()); cmd != nil {
 			return cmd
 		}

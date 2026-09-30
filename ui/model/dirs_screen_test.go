@@ -505,6 +505,74 @@ func TestPlMgrDirsRemoveConfirmFlow(t *testing.T) {
 	}
 }
 
+// A delete prompt owns every key. Y confirms it whether a yt provider is
+// configured or not, and another provider shortcut cancels it. Neither key
+// switches the provider or closes the manager.
+func TestPlMgrDeletePromptOwnsProviderShortcuts(t *testing.T) {
+	tests := []struct {
+		name        string
+		screen      plMgrScreenType
+		key         string
+		configured  []string // provider keys registered next to local
+		wantRemoved bool
+	}{
+		{name: "list Y without yt", screen: plMgrScreenList, key: "Y", wantRemoved: true},
+		{name: "list Y with yt", screen: plMgrScreenList, key: "Y", configured: []string{"yt"}, wantRemoved: true},
+		{name: "list S with spotify", screen: plMgrScreenList, key: "S", configured: []string{"spotify"}},
+		{name: "list S without spotify", screen: plMgrScreenList, key: "S"},
+		{name: "dirs Y without yt", screen: plMgrScreenDirs, key: "Y", wantRemoved: true},
+		{name: "dirs Y with yt", screen: plMgrScreenDirs, key: "Y", configured: []string{"yt"}, wantRemoved: true},
+		{name: "dirs S with spotify", screen: plMgrScreenDirs, key: "S", configured: []string{"spotify"}},
+		{name: "dirs S without spotify", screen: plMgrScreenDirs, key: "S"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m Model
+			var removed func() []string
+			if tt.screen == plMgrScreenList {
+				prov := &paneManageProvider{commandsTestProvider: commandsTestProvider{
+					name:  "Local",
+					lists: []playlist.PlaylistInfo{{ID: "music", Name: "music"}},
+				}}
+				m = newDirsScreenTestModel(t, prov)
+				m.plManager.screen = plMgrScreenList
+				m.plManager.playlists = prov.lists
+				removed = func() []string { return prov.deleted }
+			} else {
+				prov := &dirSourceTestProvider{
+					commandsTestProvider: commandsTestProvider{name: "Local"},
+					dirs:                 []playlist.DirSource{{Path: "/Music", Recursive: true}},
+				}
+				m = newDirsScreenTestModel(t, prov)
+				m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "D"}) // open dirs screen
+				removed = func() []string { return prov.removed }
+			}
+			for _, key := range tt.configured {
+				m.providers = append(m.providers, provider.Entry{Key: key, Name: key, Provider: commandsTestProvider{name: key}})
+			}
+
+			m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "d"}) // arm confirmation
+			if !m.plManager.confirmDel {
+				t.Fatal("confirmDel should be armed after 'd'")
+			}
+			m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: tt.key})
+
+			if got := len(removed()) == 1; got != tt.wantRemoved {
+				t.Errorf("removed = %v, want removed %v", removed(), tt.wantRemoved)
+			}
+			if m.plManager.confirmDel {
+				t.Error("confirmDel is still armed")
+			}
+			if !m.plManager.visible || m.plManager.screen != tt.screen {
+				t.Errorf("manager visible %v on screen %d, want it open on screen %d", m.plManager.visible, m.plManager.screen, tt.screen)
+			}
+			if got := m.provider.Name(); got != "Local" {
+				t.Errorf("provider = %q, want Local", got)
+			}
+		})
+	}
+}
+
 func TestFileBrowserDAddsDirSource(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
