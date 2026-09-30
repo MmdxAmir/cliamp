@@ -14,6 +14,7 @@ import (
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/theme"
 	"github.com/bjarneo/cliamp/ui"
 )
@@ -304,7 +305,7 @@ func TestV2LoadReadsLocalPlaylist(t *testing.T) {
 		playlist:      pl,
 		vis:           ui.NewVisualizer(44100),
 		localProvider: local,
-		providers:     []ProviderEntry{{Key: "local", Name: "Local", Provider: local}},
+		providers:     []provider.Entry{{Key: "local", Name: "Local", Provider: local}},
 	}
 
 	response := runV2(t, &m, "load", ipc.Request{Playlist: "Mix"})
@@ -408,7 +409,7 @@ func TestV2ProviderResponsesNameThePlaylistAndCount(t *testing.T) {
 	m := Model{
 		player:    &playbackFakeEngine{},
 		playlist:  playlist.New(),
-		providers: []ProviderEntry{{Key: "writable", Name: "Writable", Provider: prov}},
+		providers: []provider.Entry{{Key: "writable", Name: "Writable", Provider: prov}},
 	}
 
 	if response := runV2(t, &m, "provider.tracks", ipc.Request{Provider: "writable", Playlist: "Mix"}); !response.OK || response.Playlist != "Mix" || response.Total != 1 {

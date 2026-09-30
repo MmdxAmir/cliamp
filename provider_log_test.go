@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/bjarneo/cliamp/applog"
-	"github.com/bjarneo/cliamp/ui/model"
+	"github.com/bjarneo/cliamp/provider"
 )
 
 // readLog opens a fresh log file for the test and returns a func that reads
@@ -83,7 +83,7 @@ func TestLogYouTubeSkippedCoversAllThreeProviders(t *testing.T) {
 func TestLogProviderWiring(t *testing.T) {
 	readBack := readLog(t)
 
-	providers := []model.ProviderEntry{
+	providers := []provider.Entry{
 		{Key: "cliamp", Name: "cliamp radio"},
 		{Key: "radio", Name: "Radio"},
 		{Key: "spotify", Name: "Spotify"},

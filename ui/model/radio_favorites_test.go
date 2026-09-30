@@ -16,6 +16,7 @@ import (
 	"github.com/bjarneo/cliamp/external/radio"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 )
 
 func radioFavoriteTestModel(t *testing.T) (Model, *radio.Provider, []playlist.Track) {
@@ -40,7 +41,7 @@ func radioFavoriteTestModel(t *testing.T) (Model, *radio.Provider, []playlist.Tr
 	m.width, m.height = 180, 40
 	m.SetRadioFavorites(favorites)
 	m.provider = p
-	m.providers = append(m.providers, ProviderEntry{Key: "radio", Name: "Radio", Provider: p})
+	m.providers = append(m.providers, provider.Entry{Key: "radio", Name: "Radio", Provider: p})
 	m.provPillIdx = len(m.providers) - 1
 	m.catalogBatch.done = true // No network work during provider-list refresh.
 	return m, p, tracks

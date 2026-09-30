@@ -168,7 +168,7 @@ func keybindingTestModel() Model {
 		playlist: playlist.New(),
 		player:   &playbackFakeEngine{},
 		provider: local,
-		providers: []ProviderEntry{
+		providers: []provider.Entry{
 			{Key: "local", Name: "Local", Provider: local},
 			{Key: "yt", Name: "YouTube", Provider: commandsTestProvider{name: "YouTube"}},
 		},
@@ -196,7 +196,7 @@ func TestHandleKeyEnhancedShiftNOpensProviderBrowser(t *testing.T) {
 	browse := interactionBrowseProvider{commandsTestProvider{name: "Navidrome"}}
 	m := keybindingTestModel()
 	m.provider = browse
-	m.providers = append(m.providers, ProviderEntry{Key: "navidrome", Name: "Navidrome", Provider: browse})
+	m.providers = append(m.providers, provider.Entry{Key: "navidrome", Name: "Navidrome", Provider: browse})
 	msg := tea.KeyPressMsg{Code: 'n', ShiftedCode: 'N', Mod: tea.ModShift}
 
 	m.handleKey(msg)
@@ -216,7 +216,7 @@ func TestSwitchProviderOpensPreferredBrowseMode(t *testing.T) {
 		},
 	}
 	m := keybindingTestModel()
-	m.providers = append(m.providers, ProviderEntry{Key: "jellyfin", Name: "Jellyfin", Provider: jellyfin})
+	m.providers = append(m.providers, provider.Entry{Key: "jellyfin", Name: "Jellyfin", Provider: jellyfin})
 
 	cmd := m.switchToProvider("jellyfin")
 
@@ -298,8 +298,8 @@ func TestProviderPaneShiftNDoesNotOpenAnotherProviderBrowser(t *testing.T) {
 	m.focus = focusProvider
 	m.provider = spotify
 	m.providers = append(m.providers,
-		ProviderEntry{Key: "spotify", Name: "Spotify", Provider: spotify},
-		ProviderEntry{Key: "mixcloud", Name: "Mixcloud", Provider: mixcloud},
+		provider.Entry{Key: "spotify", Name: "Spotify", Provider: spotify},
+		provider.Entry{Key: "mixcloud", Name: "Mixcloud", Provider: mixcloud},
 	)
 
 	m.handleKey(tea.KeyPressMsg{Code: 'n', ShiftedCode: 'N', Mod: tea.ModShift})
@@ -325,7 +325,7 @@ func TestShiftNOnProviderTrackJumpsToItsArtist(t *testing.T) {
 	browse := trackArtistBrowseProvider{interactionBrowseProvider{commandsTestProvider{name: "Mixcloud"}}}
 	m := keybindingTestModel()
 	m.provider = browse
-	m.providers = append(m.providers, ProviderEntry{Key: "mixcloud", Name: "Mixcloud", Provider: browse})
+	m.providers = append(m.providers, provider.Entry{Key: "mixcloud", Name: "Mixcloud", Provider: browse})
 	m.focus = focusPlaylist
 	m.playlist.Add(playlist.Track{
 		Title: "A Show", Artist: "Creator Name",
@@ -356,7 +356,7 @@ func TestEscFromDirectTrackCreatorReturnsToPlaylist(t *testing.T) {
 	browse := trackArtistBrowseProvider{interactionBrowseProvider{commandsTestProvider{name: "Mixcloud"}}}
 	m := keybindingTestModel()
 	m.provider = browse
-	m.providers = append(m.providers, ProviderEntry{Key: "mixcloud", Name: "Mixcloud", Provider: browse})
+	m.providers = append(m.providers, provider.Entry{Key: "mixcloud", Name: "Mixcloud", Provider: browse})
 	m.focus = focusPlaylist
 	m.playlist.Add(playlist.Track{
 		Title: "A Show", Artist: "Creator Name",

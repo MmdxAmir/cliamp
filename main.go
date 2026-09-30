@@ -45,6 +45,7 @@ import (
 	"github.com/bjarneo/cliamp/mediactl"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/resolve"
 	"github.com/bjarneo/cliamp/theme"
 	"github.com/bjarneo/cliamp/ui"
@@ -179,7 +180,7 @@ var optionalProviders = []struct{ key, name string }{
 // logProviderWiring logs the final provider registry: one line per
 // registered provider, plus a skip line for each optional provider absent
 // from it. See issue #406.
-func logProviderWiring(providers []model.ProviderEntry) {
+func logProviderWiring(providers []provider.Entry) {
 	registered := make(map[string]bool, len(providers))
 	for _, p := range providers {
 		logProviderRegistered(p.Name, p.Key)
@@ -223,19 +224,19 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		applog.Info("copied %d bookmarks into favorites", added)
 	}
 
-	var providers []model.ProviderEntry
+	var providers []provider.Entry
 	// The cliamp radio channels come first: they are the view cliamp opens on.
-	providers = append(providers, model.ProviderEntry{Key: "cliamp", Name: "cliamp radio", Provider: radio.NewChannels()})
-	providers = append(providers, model.ProviderEntry{Key: "radio", Name: "Radio", Provider: radioProv})
+	providers = append(providers, provider.Entry{Key: "cliamp", Name: "cliamp radio", Provider: radio.NewChannels()})
+	providers = append(providers, provider.Entry{Key: "radio", Name: "Radio", Provider: radioProv})
 	if localProv != nil {
-		providers = append(providers, model.ProviderEntry{Key: "local", Name: "Local", Provider: localProv})
+		providers = append(providers, provider.Entry{Key: "local", Name: "Local", Provider: localProv})
 	} else {
 		logProviderSkipped("Local", "local", "config directory unavailable")
 	}
 	podcastProv := podcast.New(cfg.Podcast.Country)
 	// Flush per-episode listening state that the throttled writer still holds.
 	defer podcastProv.Close()
-	providers = append(providers, model.ProviderEntry{Key: "podcast", Name: "Podcasts", Provider: podcastProv})
+	providers = append(providers, provider.Entry{Key: "podcast", Name: "Podcasts", Provider: podcastProv})
 
 	var navClient *navidrome.NavidromeClient
 	if c := navidrome.NewFromConfig(cfg.Navidrome); c != nil {
@@ -244,7 +245,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		navClient = c
 	}
 	if navClient != nil {
-		providers = append(providers, model.ProviderEntry{Key: "navidrome", Name: "Navidrome", Provider: navClient})
+		providers = append(providers, provider.Entry{Key: "navidrome", Name: "Navidrome", Provider: navClient})
 	}
 
 	var lyrionClient *lyrion.Client
@@ -254,44 +255,44 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		lyrionClient = c
 	}
 	if lyrionClient != nil {
-		providers = append(providers, model.ProviderEntry{Key: "lyrion", Name: "Lyrion", Provider: lyrionClient})
+		providers = append(providers, provider.Entry{Key: "lyrion", Name: "Lyrion", Provider: lyrionClient})
 	}
 
 	if plexProv := plex.NewFromConfig(cfg.Plex); plexProv != nil {
-		providers = append(providers, model.ProviderEntry{Key: "plex", Name: "Plex", Provider: plexProv})
+		providers = append(providers, provider.Entry{Key: "plex", Name: "Plex", Provider: plexProv})
 	}
 
 	var jellyProv *jellyfin.Provider
 	if p := jellyfin.NewFromConfig(cfg.Jellyfin); p != nil {
 		jellyProv = p
-		providers = append(providers, model.ProviderEntry{Key: "jellyfin", Name: "Jellyfin", Provider: jellyProv})
+		providers = append(providers, provider.Entry{Key: "jellyfin", Name: "Jellyfin", Provider: jellyProv})
 	}
 
 	if embyProv := emby.NewFromConfig(cfg.Emby); embyProv != nil {
-		providers = append(providers, model.ProviderEntry{Key: "emby", Name: "Emby", Provider: embyProv})
+		providers = append(providers, provider.Entry{Key: "emby", Name: "Emby", Provider: embyProv})
 	}
 
 	if absProv := audiobookshelf.NewFromConfig(cfg.Audiobookshelf); absProv != nil {
-		providers = append(providers, model.ProviderEntry{Key: "audiobookshelf", Name: "Audiobookshelf", Provider: absProv})
+		providers = append(providers, provider.Entry{Key: "audiobookshelf", Name: "Audiobookshelf", Provider: absProv})
 	}
 
 	var spotifyProv *spotify.SpotifyProvider
 	if cfg.Spotify.IsSet() {
 		clientID := cfg.Spotify.ResolveClientID(spotify.DefaultClientID)
 		spotifyProv = spotify.New(nil, clientID, cfg.Spotify.Bitrate)
-		providers = append(providers, model.ProviderEntry{Key: "spotify", Name: "Spotify", Provider: spotifyProv})
+		providers = append(providers, provider.Entry{Key: "spotify", Name: "Spotify", Provider: spotifyProv})
 	}
 
 	var qobuzProv *qobuz.QobuzProvider
 	if cfg.Qobuz.IsSet() {
 		qobuzProv = qobuz.New(cfg.Qobuz.Quality)
-		providers = append(providers, model.ProviderEntry{Key: "qobuz", Name: "Qobuz", Provider: qobuzProv})
+		providers = append(providers, provider.Entry{Key: "qobuz", Name: "Qobuz", Provider: qobuzProv})
 	}
 
 	var tidalProv *tidal.TidalProvider
 	if cfg.Tidal.IsSet() {
 		tidalProv = tidal.New(cfg.Tidal.Quality, cfg.Tidal.ClientID, cfg.Tidal.ClientSecret)
-		providers = append(providers, model.ProviderEntry{Key: "tidal", Name: "Tidal", Provider: tidalProv})
+		providers = append(providers, provider.Entry{Key: "tidal", Name: "Tidal", Provider: tidalProv})
 	}
 
 	if scProv := soundcloud.NewFromConfig(soundcloud.Config{
@@ -299,7 +300,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		User:        cfg.SoundCloud.User,
 		CookiesFrom: cfg.SoundCloud.CookiesFrom,
 	}); scProv != nil {
-		providers = append(providers, model.ProviderEntry{Key: "soundcloud", Name: "SoundCloud", Provider: scProv})
+		providers = append(providers, provider.Entry{Key: "soundcloud", Name: "SoundCloud", Provider: scProv})
 	}
 
 	if mcProv := mixcloud.NewFromConfig(mixcloud.Config{
@@ -313,7 +314,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		StreamCreators: cfg.Mixcloud.StreamCreators,
 		SaveStyles:     config.SaveMixcloudStyles,
 	}); mcProv != nil {
-		providers = append(providers, model.ProviderEntry{Key: "mixcloud", Name: "Mixcloud", Provider: mcProv})
+		providers = append(providers, provider.Entry{Key: "mixcloud", Name: "Mixcloud", Provider: mcProv})
 	}
 
 	if neProv := netease.NewFromConfig(netease.Config{
@@ -321,7 +322,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		CookiesFrom: cfg.NetEase.CookiesFrom,
 		UserID:      cfg.NetEase.UserID,
 	}); neProv != nil {
-		providers = append(providers, model.ProviderEntry{Key: "netease", Name: "NetEase", Provider: neProv})
+		providers = append(providers, provider.Entry{Key: "netease", Name: "NetEase", Provider: neProv})
 	}
 
 	yaProv := yandex.NewFromConfig(yandex.Config{
@@ -329,7 +330,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		Token:   cfg.Yandex.Token,
 	})
 	if yaProv != nil {
-		providers = append(providers, model.ProviderEntry{Key: "yandex", Name: "Yandex Music", Provider: yaProv})
+		providers = append(providers, provider.Entry{Key: "yandex", Name: "Yandex Music", Provider: yaProv})
 	}
 
 	var closeYouTube func()
@@ -385,9 +386,9 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 				}
 				if all != nil {
 					providers = append(providers,
-						model.ProviderEntry{Key: "yt", Name: "YouTube (All)", Provider: all},
-						model.ProviderEntry{Key: "youtube", Name: "YouTube", Provider: video},
-						model.ProviderEntry{Key: "ytmusic", Name: "YouTube Music", Provider: music},
+						provider.Entry{Key: "yt", Name: "YouTube (All)", Provider: all},
+						provider.Entry{Key: "youtube", Name: "YouTube", Provider: video},
+						provider.Entry{Key: "ytmusic", Name: "YouTube Music", Provider: music},
 					)
 				}
 			} else {

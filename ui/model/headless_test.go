@@ -19,6 +19,7 @@ import (
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -68,7 +69,7 @@ func (p countingProvider) Playlists() ([]playlist.PlaylistInfo, error) {
 
 // newHeadlessModel builds a Model the way cliamp --daemon does: through New,
 // then SetHeadless, with no WindowSizeMsg. History goes to a temp directory.
-func newHeadlessModel(t *testing.T, engine player.Engine, providers []ProviderEntry, tracks ...playlist.Track) Model {
+func newHeadlessModel(t *testing.T, engine player.Engine, providers []provider.Entry, tracks ...playlist.Track) Model {
 	t.Helper()
 	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
 	style, width := ui.FrameStyle, ui.PanelWidth
@@ -107,7 +108,7 @@ func TestHeadlessInitSkipsScreenCommands(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := &atomic.Int32{}
 			prov := countingProvider{commandsTestProvider{name: "Counting"}, calls}
-			m := newHeadlessModel(t, &headlessEngine{}, []ProviderEntry{{Key: "counting", Name: "Counting", Provider: prov}})
+			m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "counting", Name: "Counting", Provider: prov}})
 			m.headless = tc.headless
 
 			msgs := initMessages(t, m)
@@ -217,7 +218,7 @@ func TestHeadlessSpectrumAnalyzesOnRequest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := &headlessEngine{tone: true}
 			engine.playing = true
-			providers := []ProviderEntry{{Key: "local", Name: "Local", Provider: commandsTestProvider{name: "Local"}}}
+			providers := []provider.Entry{{Key: "local", Name: "Local", Provider: commandsTestProvider{name: "Local"}}}
 			m := newHeadlessModel(t, engine, providers, playlist.Track{Path: "/music/one.flac", Title: "One"})
 			if tc.providerFirst {
 				// run starts an empty queue in the provider pane before it
@@ -263,7 +264,7 @@ func TestHeadlessTrackStartSkipsProviderPaneRefresh(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := &atomic.Int32{}
 			prov := countingProvider{commandsTestProvider{name: "Counting"}, calls}
-			m := newHeadlessModel(t, &headlessEngine{}, []ProviderEntry{{Key: "counting", Name: "Counting", Provider: prov}},
+			m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "counting", Name: "Counting", Provider: prov}},
 				playlist.Track{Path: "/music/one.flac", Title: "One"})
 			m.headless = tc.headless
 

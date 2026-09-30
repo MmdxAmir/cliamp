@@ -12,6 +12,7 @@ import (
 	"github.com/bjarneo/cliamp/internal/plugintrust"
 	"github.com/bjarneo/cliamp/luaplugin"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 )
 
 // nowPlayingProv records ReportNowPlaying calls, which nowPlaying issues
@@ -114,7 +115,7 @@ func TestPlayTrackEmitsPluginTrackChange(t *testing.T) {
 					m := Model{player: engine, playlist: pl, luaMgr: mgr}
 					if reporter {
 						prov := &nowPlayingProv{reports: make(chan playlist.Track, 1)}
-						m.providers = []ProviderEntry{{Key: "p", Name: "P", Provider: prov}}
+						m.providers = []provider.Entry{{Key: "p", Name: "P", Provider: prov}}
 					}
 					cmd := m.playTrack(track)
 					if track.Stream && outcome != "buffering" {
@@ -187,7 +188,7 @@ func TestPlayTrackFiresNowPlayingForEverySource(t *testing.T) {
 			m := Model{
 				player:    &playbackFakeEngine{},
 				playlist:  pl,
-				providers: []ProviderEntry{{Key: "p", Name: "P", Provider: prov}},
+				providers: []provider.Entry{{Key: "p", Name: "P", Provider: prov}},
 			}
 			cmd := m.playTrack(track)
 			if track.Stream {

@@ -132,7 +132,7 @@ func newDirsScreenTestModel(prov playlist.Provider) Model {
 		playlist:      playlist.New(),
 		localProvider: prov,
 		provider:      prov,
-		providers:     []ProviderEntry{{Key: "local", Name: "Local", Provider: prov}},
+		providers:     []provider.Entry{{Key: "local", Name: "Local", Provider: prov}},
 		favMgr:        favMgr,
 		vis:           ui.NewVisualizer(48000),
 		plManager: plManagerState{
@@ -333,7 +333,7 @@ func TestPlMgrDeleteSkipsPaneFetchWhenRemoteActive(t *testing.T) {
 	}}
 	remote := &commandsTestProvider{name: "Navidrome", lists: []playlist.PlaylistInfo{{ID: "nd", Name: "nd"}}}
 	m := newDirsScreenTestModel(local)
-	m.providers = append(m.providers, ProviderEntry{Key: "navidrome", Name: "Navidrome", Provider: remote})
+	m.providers = append(m.providers, provider.Entry{Key: "navidrome", Name: "Navidrome", Provider: remote})
 	m.provPillIdx = 1
 	m.provider = remote
 	m.plManager.screen = plMgrScreenList
@@ -663,7 +663,7 @@ func TestProviderPanePUsesLocalProviderKey(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: tc.display}}
 			m := newDirsScreenTestModel(prov)
-			m.providers = []ProviderEntry{{Key: tc.key, Name: tc.display, Provider: prov}}
+			m.providers = []provider.Entry{{Key: tc.key, Name: tc.display, Provider: prov}}
 			m.focus = focusProvider
 			m.plManager.visible = false
 

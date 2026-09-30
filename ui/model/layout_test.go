@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/theme"
 	"github.com/bjarneo/cliamp/ui"
 )
@@ -81,12 +82,12 @@ func TestResponsiveViewsFitTerminal(t *testing.T) {
 	// state matters for the same reason at the full tier.
 	variants := []struct {
 		name      string
-		providers []ProviderEntry
+		providers []provider.Entry
 		hidePane  bool
 	}{
-		{name: "one provider", providers: []ProviderEntry{{Name: "Local"}}},
-		{name: "many providers", providers: []ProviderEntry{{Name: "Local"}, {Name: "Radio"}, {Name: "Navidrome"}}},
-		{name: "many providers, pane closed", providers: []ProviderEntry{{Name: "Local"}, {Name: "Radio"}}, hidePane: true},
+		{name: "one provider", providers: []provider.Entry{{Name: "Local"}}},
+		{name: "many providers", providers: []provider.Entry{{Name: "Local"}, {Name: "Radio"}, {Name: "Navidrome"}}},
+		{name: "many providers, pane closed", providers: []provider.Entry{{Name: "Local"}, {Name: "Radio"}}, hidePane: true},
 	}
 
 	for _, size := range []struct{ width, height int }{
@@ -161,7 +162,7 @@ func TestExpandedPlaylistWithoutVisualizerFillsTerminal(t *testing.T) {
 			for i := 16; i < 100; i++ {
 				m.playlist.Add(playlist.Track{Path: fmt.Sprintf("/tmp/track-%d.mp3", i), Title: "Track"})
 			}
-			m.providers = []ProviderEntry{{Name: "Local"}, {Name: "Radio"}}
+			m.providers = []provider.Entry{{Name: "Local"}, {Name: "Radio"}}
 			m.vis.Mode = ui.VisNone
 			m.heightExpanded = true
 			m.recomputeLayout()
@@ -487,7 +488,7 @@ func TestLongUnicodeContentFitsTerminal(t *testing.T) {
 			track.Title = strings.Repeat("界e\u0301", 48)
 			track.Album = strings.Repeat("https://provider.example/playlist/", 8)
 			m.playlist.SetTrack(0, track)
-			m.providers = []ProviderEntry{
+			m.providers = []provider.Entry{
 				{Name: strings.Repeat("Very Long Provider ", 8)},
 				{Name: "Local"},
 			}

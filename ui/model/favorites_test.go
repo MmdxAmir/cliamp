@@ -11,6 +11,7 @@ import (
 
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 )
 
 // fakeTrackFavoriter is a provider.TrackFavoriter that owns tracks whose
@@ -262,7 +263,7 @@ func TestTrackFavoriteSyncRouting(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m, store := favoriteKeyTestModel(t)
 			fake := &fakeTrackFavoriter{commandsTestProvider: commandsTestProvider{name: "Fake"}, prefix: "fake:", err: tc.err}
-			m.providers = append(m.providers, ProviderEntry{Key: "fake", Name: "Fake", Provider: fake})
+			m.providers = append(m.providers, provider.Entry{Key: "fake", Name: "Fake", Provider: fake})
 			if tc.active {
 				m.provider = fake
 			}
@@ -308,7 +309,7 @@ func TestTrackFavoriteSyncRouting(t *testing.T) {
 func TestTrackFavoriteSyncKeepsLastState(t *testing.T) {
 	m, store := favoriteKeyTestModel(t)
 	fake := &fakeTrackFavoriter{commandsTestProvider: commandsTestProvider{name: "Fake"}, prefix: "fake:"}
-	m.providers = append(m.providers, ProviderEntry{Key: "fake", Name: "Fake", Provider: fake})
+	m.providers = append(m.providers, provider.Entry{Key: "fake", Name: "Fake", Provider: fake})
 	track := playlist.Track{Path: "fake:track:1", Title: "Song"}
 
 	first, err := m.toggleTrackFavorite(track)
@@ -364,7 +365,7 @@ func TestIPCTrackInfoBookmarkReportsFavorite(t *testing.T) {
 
 	// A command that runs later uses the favorites captured when it was made.
 	prov := fixedTracksProvider{commandsTestProvider{name: "Fixed"}, []playlist.Track{{Path: "/playlist.mp3"}, legacy}}
-	m.providers = append(m.providers, ProviderEntry{Key: "fixed", Name: "Fixed", Provider: prov})
+	m.providers = append(m.providers, provider.Entry{Key: "fixed", Name: "Fixed", Provider: prov})
 	reply := make(chan ipc.Response, 1)
 	cmd := m.handleIPCLibrary(ipcLibraryRequest{Op: "provider.tracks", Provider: "fixed", Playlist: "any", Reply: reply})
 	m.favSet = nil

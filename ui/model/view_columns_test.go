@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -16,7 +17,7 @@ import (
 // settings pane renders every row it can.
 func newColumnTestModel(width, height int) Model {
 	m := newLayoutTestModel(width, height)
-	m.providers = []ProviderEntry{{Name: "Local"}, {Name: "Navidrome"}, {Name: "Radio"}}
+	m.providers = []provider.Entry{{Name: "Local"}, {Name: "Navidrome"}, {Name: "Radio"}}
 	m.eqPresetIdx = 1
 	m.applyEQPreset()
 	m.recomputeLayout()
@@ -123,18 +124,18 @@ func TestTwoColumnBodyRowsMatch(t *testing.T) {
 func TestSettingsPaneRows(t *testing.T) {
 	tests := []struct {
 		name      string
-		providers []ProviderEntry
+		providers []provider.Entry
 		want      []string
 		absent    []string
 	}{
 		{
 			name:      "multiple providers",
-			providers: []ProviderEntry{{Name: "Local"}, {Name: "Navidrome"}},
+			providers: []provider.Entry{{Name: "Local"}, {Name: "Navidrome"}},
 			want:      []string{"EQ", "[Rock]", "VOL", "+0dB", "SRC", "[Local] 1/2", "SPD", "[1x]", "SHF", "RPT"},
 		},
 		{
 			name:      "single provider",
-			providers: []ProviderEntry{{Name: "Local"}},
+			providers: []provider.Entry{{Name: "Local"}},
 			want:      []string{"EQ", "VOL", "SPD", "SHF", "RPT"},
 			absent:    []string{"SRC"},
 		},

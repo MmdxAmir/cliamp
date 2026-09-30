@@ -11,6 +11,7 @@ import (
 	"github.com/gopxl/beep/v2"
 
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -55,7 +56,7 @@ func newCustomStreamModel(player *playbackFakeEngine) Model {
 		player:    player,
 		playlist:  p,
 		provider:  prov,
-		providers: []ProviderEntry{{Key: "spotify", Name: "Spotify", Provider: prov}},
+		providers: []provider.Entry{{Key: "spotify", Name: "Spotify", Provider: prov}},
 		vis:       ui.NewVisualizer(float64(player.SampleRate())),
 	}
 	m.SetVisualizer("none")

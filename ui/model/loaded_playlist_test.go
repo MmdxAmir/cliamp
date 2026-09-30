@@ -14,6 +14,7 @@ import (
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -92,7 +93,7 @@ func TestV2ProviderLoadKeepsWriteBacksLocal(t *testing.T) {
 				vis:           ui.NewVisualizer(44100),
 				provider:      lp,
 				localProvider: lp,
-				providers: []ProviderEntry{
+				providers: []provider.Entry{
 					{Key: "local", Name: "Local", Provider: lp},
 					{Key: "navidrome", Name: "Navidrome", Provider: navidrome},
 				},
@@ -204,7 +205,7 @@ func TestV2SnapshotNamesTheLoadedList(t *testing.T) {
 				playlist:      playlist.New(),
 				vis:           ui.NewVisualizer(44100),
 				localProvider: local,
-				providers: []ProviderEntry{
+				providers: []provider.Entry{
 					{Key: "local", Name: "Local", Provider: local},
 					{Key: "navidrome", Name: "Navidrome", Provider: navidrome},
 				},

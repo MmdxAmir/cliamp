@@ -164,7 +164,7 @@ Register the provider in the `run()` function in `main.go`:
 ```go
 if cfg.Jellyfin.URL != "" && cfg.Jellyfin.Token != "" {
     jfProv := jellyfin.New(cfg.Jellyfin.URL, cfg.Jellyfin.Token)
-    providers = append(providers, ui.ProviderEntry{
+    providers = append(providers, provider.Entry{
         Key: "jellyfin", Name: "Jellyfin", Provider: jfProv,
     })
 }

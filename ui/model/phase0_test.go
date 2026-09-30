@@ -129,7 +129,7 @@ func TestNavigationTrackReplaceWinsOverRadioShortcut(t *testing.T) {
 		playlist: p,
 		provider: current,
 		vis:      ui.NewVisualizer(float64(player.SampleRate())),
-		providers: []ProviderEntry{
+		providers: []provider.Entry{
 			{Key: "radio", Name: "Radio", Provider: commandsTestProvider{name: "Radio"}},
 		},
 		navBrowser: navBrowserState{

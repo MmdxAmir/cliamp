@@ -304,7 +304,7 @@ func TestHeadlessStreamTitleFields(t *testing.T) {
 }
 
 func TestHeadlessLibraryRequests(t *testing.T) {
-	providers := []ProviderEntry{{Key: "test", Name: "Test", Provider: libraryTestProvider{commandsTestProvider{name: "Test"}}}}
+	providers := []provider.Entry{{Key: "test", Name: "Test", Provider: libraryTestProvider{commandsTestProvider{name: "Test"}}}}
 	for _, tc := range []struct {
 		op     string
 		params ipc.Request
@@ -356,7 +356,7 @@ func TestIPCTrackInfoConversion(t *testing.T) {
 // A search on a station catalog runs the catalog search and clears it again.
 func TestHeadlessCatalogSearch(t *testing.T) {
 	prov := &stationCatalogProvider{commandsTestProvider: commandsTestProvider{name: "Catalog"}}
-	m := newHeadlessModel(t, &headlessEngine{}, []ProviderEntry{{Key: "radio", Name: "Radio", Provider: prov}})
+	m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "radio", Name: "Radio", Provider: prov}})
 
 	response := runV2(t, &m, "provider.search", ipc.Request{Provider: "radio", Query: "station"})
 	if !response.OK || len(response.Tracks) != 1 || response.Tracks[0].Title != "Station" || prov.searching {
@@ -366,7 +366,7 @@ func TestHeadlessCatalogSearch(t *testing.T) {
 
 func TestHeadlessProviderFavoriteAndCatalog(t *testing.T) {
 	prov := &stationCatalogProvider{commandsTestProvider: commandsTestProvider{name: "Catalog"}}
-	m := newHeadlessModel(t, &headlessEngine{}, []ProviderEntry{{Key: "radio", Name: "Radio", Provider: prov}})
+	m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "radio", Name: "Radio", Provider: prov}})
 
 	if response := runV2(t, &m, "provider.favorite", ipc.Request{Provider: "radio", Playlist: "c:station"}); !response.OK || prov.favorite != "c:station" {
 		t.Fatalf("provider.favorite = %+v, provider favorite %q", response, prov.favorite)
@@ -381,7 +381,7 @@ func TestHeadlessProviderFavoriteAndCatalog(t *testing.T) {
 
 func TestHeadlessPlaylistMutations(t *testing.T) {
 	prov := &writableTestProvider{commandsTestProvider: commandsTestProvider{name: "Writable"}, removed: -1}
-	m := newHeadlessModel(t, &headlessEngine{}, []ProviderEntry{{Key: "local", Name: "Local", Provider: prov}})
+	m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "local", Name: "Local", Provider: prov}})
 	track := ipc.TrackInfo{Path: "/song.flac"}
 	for _, tc := range []struct {
 		op     string
@@ -416,7 +416,7 @@ func TestHeadlessBookmarkSyncsOwningProvider(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
 			fake := &fakeTrackFavoriter{commandsTestProvider: commandsTestProvider{name: "Fake"}, prefix: "fake:"}
-			m := newHeadlessModel(t, &headlessEngine{}, []ProviderEntry{
+			m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{
 				{Key: "local", Name: "Local", Provider: store},
 				{Key: "fake", Name: "Fake", Provider: fake},
 			})

@@ -10,6 +10,7 @@ import (
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -129,7 +130,7 @@ func TestPlaylistManagerTrackSortUsesLowercaseKey(t *testing.T) {
 		playlist:      playlist.New(),
 		localProvider: local,
 		provider:      local,
-		providers: []ProviderEntry{
+		providers: []provider.Entry{
 			{Key: "spotify", Name: "Spotify", Provider: commandsTestProvider{name: "Spotify"}},
 		},
 		vis: ui.NewVisualizer(float64(player.SampleRate())),

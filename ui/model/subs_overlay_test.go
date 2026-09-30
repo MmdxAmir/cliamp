@@ -509,7 +509,7 @@ func TestOverlayLoadsThroughTheSubscriptionProvider(t *testing.T) {
 	other := &albumOnlyProv{} // active, loads albums but keeps no subscriptions
 	m := &Model{
 		provider:  other,
-		providers: []ProviderEntry{{Name: "Other", Provider: other}, {Name: "Podcasts", Provider: podcasts}},
+		providers: []provider.Entry{{Name: "Other", Provider: other}, {Name: "Podcasts", Provider: podcasts}},
 		playlist:  playlist.New(),
 	}
 

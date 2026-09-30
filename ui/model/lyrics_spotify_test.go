@@ -7,6 +7,7 @@ import (
 
 	"github.com/bjarneo/cliamp/lyrics"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 )
 
 type fakeSpotifyLyricFetcher struct {
@@ -52,7 +53,7 @@ func TestFetchTrackLyricsCmdEmbeddedBeatsSpotify(t *testing.T) {
 
 func TestSpotifyLyricFetcherFromProviders(t *testing.T) {
 	m := Model{
-		providers: []ProviderEntry{
+		providers: []provider.Entry{
 			{Key: "radio", Name: "Radio"},
 			{Key: "spotify", Name: "Spotify", Provider: &fakeSpotifyProvider{}},
 		},
@@ -62,7 +63,7 @@ func TestSpotifyLyricFetcherFromProviders(t *testing.T) {
 	}
 
 	m2 := Model{
-		providers: []ProviderEntry{
+		providers: []provider.Entry{
 			{Key: "radio", Name: "Radio"},
 			{Key: "spotify", Name: "Spotify"}, // not configured → nil Provider
 		},

@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -86,7 +87,7 @@ func TestProviderIndicatorProgressivelyShowsNeighbors(t *testing.T) {
 	oldPanelWidth := ui.PanelWidth
 	t.Cleanup(func() { ui.PanelWidth = oldPanelWidth })
 	m := Model{
-		providers:   []ProviderEntry{{Name: "Radio"}, {Name: "Spotify"}, {Name: "Local"}},
+		providers:   []provider.Entry{{Name: "Radio"}, {Name: "Spotify"}, {Name: "Local"}},
 		provPillIdx: 1,
 	}
 

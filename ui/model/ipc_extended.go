@@ -502,7 +502,7 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 	}
 }
 
-func ipcProviderPlaylistInfos(entry ProviderEntry) ([]ipc.PlaylistInfo, error) {
+func ipcProviderPlaylistInfos(entry provider.Entry) ([]ipc.PlaylistInfo, error) {
 	lists, err := entry.Provider.Playlists()
 	if err != nil {
 		return nil, err
@@ -659,13 +659,13 @@ func (m *Model) handleIPCHistory(request ipcHistoryRequest) tea.Cmd {
 	}
 }
 
-func (m *Model) ipcProvider(key string) (ProviderEntry, bool) {
+func (m *Model) ipcProvider(key string) (provider.Entry, bool) {
 	for _, entry := range m.providers {
 		if strings.EqualFold(entry.Key, key) {
 			return entry, true
 		}
 	}
-	return ProviderEntry{}, false
+	return provider.Entry{}, false
 }
 
 // ipcTrackInfos converts tracks for IPC. favorite reports the ♥ state of a

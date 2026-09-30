@@ -266,13 +266,6 @@ const (
 	navBrowseScreenTracks                            // final song list in any mode
 )
 
-// ProviderEntry pairs a display name with a key and provider implementation.
-type ProviderEntry struct {
-	Key      string            // config key: "radio", "navidrome", "spotify"
-	Name     string            // display name: "Radio", "Navidrome", "Spotify"
-	Provider playlist.Provider // nil if not configured
-}
-
 // statusTTL* constants define how long a status message is shown.
 const (
 	statusTTLShort   statusTTL = statusTTL(2 * time.Second)         // brief confirmations
@@ -325,14 +318,14 @@ type Model struct {
 	provCursor              int
 	provScroll              int
 	provLoading             bool
-	provSignIn              bool            // true when provider needs interactive sign-in
-	provAskLoc              bool            // true while the location question is on screen
-	provAuthURL             string          // OAuth URL to display while interactive auth is in flight
-	openDefaultProviderOnce bool            // open the provider's preferred hierarchy after Init
-	providers               []ProviderEntry // all available providers
-	provPillIdx             int             // selected pill index
-	eqPresetIdx             int             // -1 = custom, 0+ = index into eqPresets
-	eqCustomLabel           string          // non-empty = plugin-defined preset label (shown instead of "Custom")
+	provSignIn              bool             // true when provider needs interactive sign-in
+	provAskLoc              bool             // true while the location question is on screen
+	provAuthURL             string           // OAuth URL to display while interactive auth is in flight
+	openDefaultProviderOnce bool             // open the provider's preferred hierarchy after Init
+	providers               []provider.Entry // all available providers
+	provPillIdx             int              // selected pill index
+	eqPresetIdx             int              // -1 = custom, 0+ = index into eqPresets
+	eqCustomLabel           string           // non-empty = plugin-defined preset label (shown instead of "Custom")
 	eqCustomBands           [eqBandCount]float64
 
 	// Overlay / feature state (see state.go for struct definitions)
