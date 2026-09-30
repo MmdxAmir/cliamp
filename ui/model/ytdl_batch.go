@@ -39,7 +39,7 @@ func (m *Model) initYTDLBatch(urls []string) tea.Cmd {
 		if list == "" {
 			continue
 		}
-		if playlist.NormalizeHost(parsed.Hostname()) == "music.youtube.com" || strings.HasPrefix(list, "RD") {
+		if playlist.IsYouTubeMusicURL(u) || strings.HasPrefix(list, "RD") {
 			m.ytdlBatch.gen++
 			m.ytdlBatch.url = u
 			m.ytdlBatch.offset = resolve.YTDLRadioInitialItems
