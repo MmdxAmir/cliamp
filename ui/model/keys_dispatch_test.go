@@ -75,6 +75,7 @@ func TestProviderShortcutsSwitchFromEveryFocus(t *testing.T) {
 // overlay returns after the switch even when the switch has no command. A
 // provider that is not configured only closes the overlays.
 func TestQuickSwitchProviderTakesEveryShortcut(t *testing.T) {
+	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
 	// A Radio with an active search starts no catalog load, so the switch to
 	// it has no command.
 	searching := radio.New(radio.Options{Country: radio.CountryDeclined})
