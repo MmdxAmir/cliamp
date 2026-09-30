@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -143,14 +144,17 @@ func TestPlayTrackStartsSlowSourcesOffUpdate(t *testing.T) {
 }
 
 // TestPlayTrackResumeSeeksOnlyWhenStartMissedHint checks that a start at the
-// resume hint spends the hint without a second seek, and that a yt-dlp page,
-// which starts at 0, resumes through a seek command.
+// resume hint spends the hint without a second seek, that a yt-dlp page,
+// which starts at 0, resumes through a seek command, and that a native local
+// file whose start seek failed seeks in place.
 func TestPlayTrackResumeSeeksOnlyWhenStartMissedHint(t *testing.T) {
 	tests := []struct {
 		name           string
 		track          playlist.Track
 		ytdl           bool // the player starts the page at 0 and seeks by restart
+		startMissed    bool // the start seek failed, so the file plays from 0
 		wantAsync      bool
+		wantSeeks      []time.Duration // Seek calls in Update
 		wantResumeSeek bool
 	}{
 		// ffmpeg already starts at the hint, and a second seek would start
@@ -158,10 +162,11 @@ func TestPlayTrackResumeSeeksOnlyWhenStartMissedHint(t *testing.T) {
 		{name: "local ffmpeg file", track: playlist.Track{Title: "Book", Path: "/books/book.m4b"}, wantAsync: true},
 		{name: "yt-dlp page", track: playlist.Track{Title: "Show", Path: "https://www.mixcloud.com/creator/show/", Stream: true}, ytdl: true, wantAsync: true, wantResumeSeek: true},
 		{name: "native local file", track: playlist.Track{Title: "Song", Path: "/music/song.mp3"}},
+		{name: "native local file, start seek failed", track: playlist.Track{Title: "Song", Path: "/music/song.mp3"}, startMissed: true, wantSeeks: []time.Duration{10 * time.Minute}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			player := &playbackFakeEngine{seekable: true, ytdlSeek: tt.ytdl, startsAtOffset: !tt.ytdl, duration: time.Hour}
+			player := &playbackFakeEngine{seekable: true, ytdlSeek: tt.ytdl, startsAtOffset: !tt.ytdl && !tt.startMissed, duration: time.Hour}
 			m := newCustomStreamModel(player)
 			m.SetResume(tt.track.Path, 600)
 
@@ -178,8 +183,8 @@ func TestPlayTrackResumeSeeksOnlyWhenStartMissedHint(t *testing.T) {
 			if len(player.playAtOffsets) != 1 || player.playAtOffsets[0] != 10*time.Minute {
 				t.Fatalf("PlayAt offsets = %v, want [10m0s]", player.playAtOffsets)
 			}
-			if len(player.seekCalls) != 0 {
-				t.Fatalf("Seek calls in Update = %v, want none", player.seekCalls)
+			if !slices.Equal(player.seekCalls, tt.wantSeeks) {
+				t.Fatalf("Seek calls in Update = %v, want %v", player.seekCalls, tt.wantSeeks)
 			}
 			if !tt.wantResumeSeek {
 				if m.resume.path != "" || m.resume.secs != 0 {
