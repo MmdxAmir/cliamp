@@ -30,29 +30,48 @@ func (q *reportQueue) waitIdle(t *testing.T) {
 }
 
 // The reports run one at a time, in the order they were added, also when
-// an early report is slow.
+// an early report is slow. A progress report that still waits is dropped
+// when a newer progress report of the same track arrives.
 func TestReportQueueKeepsOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
 		slow  int // the report that sleeps
 		count int
+		// progress names the track of each progress report and is "" for
+		// the other reports. With progress, the first report waits until
+		// every report is added.
+		progress []string
+		// want is the order of the reports that run. nil means each report
+		// in the add order.
+		want []int
 	}{
 		{name: "one report", slow: -1, count: 1},
 		{name: "fast reports", slow: -1, count: 50},
 		{name: "a slow first report", slow: 0, count: 20},
 		{name: "a slow middle report", slow: 10, count: 20},
+		{name: "stale progress reports", slow: -1, count: 7,
+			progress: []string{"", "a.mp3", "", "a.mp3", "b.mp3", "", "a.mp3"},
+			want:     []int{0, 2, 4, 5, 6}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var q reportQueue
 			var mu sync.Mutex
 			var order []int
 			var running, overlap atomic.Int32
+			added := make(chan struct{})
 			for i := range tt.count {
-				q.add(func() {
+				progress := ""
+				if tt.progress != nil {
+					progress = tt.progress[i]
+				}
+				q.add(progress, func() {
 					if running.Add(1) > 1 {
 						overlap.Add(1)
 					}
 					defer running.Add(-1)
+					if i == 0 && tt.progress != nil {
+						<-added
+					}
 					if i == tt.slow {
 						time.Sleep(20 * time.Millisecond)
 					}
@@ -61,26 +80,30 @@ func TestReportQueueKeepsOrder(t *testing.T) {
 					mu.Unlock()
 				})
 			}
+			close(added)
 			q.waitIdle(t)
 			if overlap.Load() != 0 {
 				t.Fatal("two reports ran at the same time")
 			}
-			if len(order) != tt.count {
-				t.Fatalf("ran %d reports, want %d", len(order), tt.count)
-			}
-			for i, got := range order {
-				if got != i {
-					t.Fatalf("order = %v, want the add order", order)
+			want := tt.want
+			if want == nil {
+				for i := range tt.count {
+					want = append(want, i)
 				}
+			}
+			if !slices.Equal(order, want) {
+				t.Fatalf("order = %v, want %v", order, want)
 			}
 		})
 	}
 }
 
 // orderReporter records each report as "kind path". The first report
-// sleeps, so a report that does not wait for it would finish first.
+// waits for hold, so the reports after it wait in the queue, and a report
+// that does not wait for it would finish first.
 type orderReporter struct {
 	plainProv
+	hold    chan struct{}
 	mu      sync.Mutex
 	reports []string
 }
@@ -90,7 +113,7 @@ func (r *orderReporter) record(kind string, track playlist.Track) {
 	first := len(r.reports) == 0
 	r.mu.Unlock()
 	if first {
-		time.Sleep(20 * time.Millisecond)
+		<-r.hold
 	}
 	r.mu.Lock()
 	r.reports = append(r.reports, kind+" "+track.Path)
@@ -109,31 +132,37 @@ func (r *orderReporter) ReportScrobble(track playlist.Track, _, _ time.Duration,
 	return nil
 }
 
-func (r *orderReporter) ReportProgress(track playlist.Track, _ time.Duration) error {
-	r.record("progress", track)
+func (r *orderReporter) ReportProgress(track playlist.Track, position time.Duration) error {
+	r.record("progress "+position.String(), track)
 	return nil
 }
 
 // The provider gets the now-playing, progress and scrobble reports of a
 // track, and the next now-playing report, in the order the Model sent them.
+// A newer progress report of the track replaces one that still waits.
 func TestPlaybackReportsKeepOrder(t *testing.T) {
 	a := playlist.Track{Title: "A", Path: "a.mp3", DurationSecs: 60}
 	b := playlist.Track{Title: "B", Path: "b.mp3", DurationSecs: 60}
-	reporter := &orderReporter{}
+	reporter := &orderReporter{hold: make(chan struct{})}
+	engine := &playbackFakeEngine{playing: true, position: 20 * time.Second, duration: time.Minute}
 	m := Model{
-		player:             &playbackFakeEngine{playing: true, position: 40 * time.Second, duration: time.Minute},
+		player:             engine,
 		playlist:           playlist.New(),
 		providers:          []provider.Entry{{Key: "p", Name: "P", Provider: reporter}},
 		playingTrack:       a,
 		playingTrackActive: true,
 	}
+	now := time.Now()
 	m.nowPlaying(a)
-	m.tickProgressReport(time.Now())
+	m.tickProgressReport(now)
+	engine.position = 40 * time.Second
+	m.tickProgressReport(now.Add(progressReportInterval))
 	m.maybeScrobble(a, 40*time.Second, time.Minute)
 	m.nowPlaying(b)
+	close(reporter.hold)
 	m.reports.waitIdle(t)
 
-	want := []string{"now-playing a.mp3", "progress a.mp3", "scrobble a.mp3", "now-playing b.mp3"}
+	want := []string{"now-playing a.mp3", "progress 40s a.mp3", "scrobble a.mp3", "now-playing b.mp3"}
 	reporter.mu.Lock()
 	defer reporter.mu.Unlock()
 	if !slices.Equal(reporter.reports, want) {

@@ -183,7 +183,7 @@ func (m *Model) nowPlaying(track playlist.Track) {
 	}
 	canSeek := m.player.Seekable()
 	position := m.player.Position()
-	m.queueReport(func() {
+	m.queueReport("", func() {
 		if err := reporter.ReportNowPlaying(track, position, canSeek); err != nil {
 			applog.Warn("now-playing report failed for %q: %v", track.Title, err)
 		}
@@ -191,12 +191,14 @@ func (m *Model) nowPlaying(track playlist.Track) {
 }
 
 // queueReport runs report on the report queue, after the reports that
-// Update added before it.
-func (m *Model) queueReport(report func()) {
+// Update added before it. progress is the track path of a progress report,
+// which a newer progress report of that track replaces while it waits. The
+// other reports pass "".
+func (m *Model) queueReport(progress string, report func()) {
 	if m.reports == nil {
 		m.reports = &reportQueue{}
 	}
-	m.reports.add(report)
+	m.reports.add(progress, report)
 }
 
 // recordListenedTrack adds a starting track to local history and refreshes
@@ -248,7 +250,7 @@ func (m *Model) maybeScrobble(track playlist.Track, elapsed, duration time.Durat
 		return
 	}
 	canSeek := m.player.Seekable()
-	m.queueReport(func() {
+	m.queueReport("", func() {
 		if err := reporter.ReportScrobble(track, elapsed, duration, canSeek); err != nil {
 			applog.Warn("scrobble failed for %q: %v", track.Title, err)
 		}
@@ -306,7 +308,7 @@ func (m *Model) tickProgressReport(now time.Time) {
 	}
 	m.lastProgressReport = now
 	position := m.player.Position()
-	m.queueReport(func() {
+	m.queueReport(track.Path, func() {
 		if err := reporter.ReportProgress(track, position); err != nil {
 			applog.Warn("progress report failed for %q: %v", track.Title, err)
 		}
