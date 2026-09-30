@@ -37,6 +37,8 @@ func (m *Model) quit() tea.Cmd {
 
 	m.flushPendingSpeedSave()
 	m.flushPendingEQSave()
+	// Quit leaves the track that plays, as s does, so it can scrobble.
+	m.leaveTrack(m.player.PositionAndDuration())
 	m.player.Close()
 	m.clearPlaybackTrack()
 	m.quitting = true

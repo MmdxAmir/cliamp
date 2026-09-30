@@ -128,6 +128,8 @@ func TestPlaybackChangesNotifyAndScrobbleOnce(t *testing.T) {
 		{name: "stop key", msg: func(*testing.T) tea.Msg { return key("s") }, notify: true, scrobble: true},
 		{name: "stop message", msg: func(*testing.T) tea.Msg { return playback.StopMsg{} }, notify: true, scrobble: true},
 		{name: "V2 stop", msg: func(t *testing.T) tea.Msg { return v2Request(t, "stop", ipc.Request{}) }, notify: true, scrobble: true},
+		{name: "quit key", msg: func(*testing.T) tea.Msg { return key("q") }, scrobble: true},
+		{name: "quit message", msg: func(*testing.T) tea.Msg { return playback.QuitMsg{} }, scrobble: true},
 		{name: "V2 queue.play", msg: func(t *testing.T) tea.Msg { return v2Request(t, "queue.play", ipc.Request{Index: 2}) }, notify: true, scrobble: true},
 		{name: "V2 queue.clear", msg: func(t *testing.T) tea.Msg { return v2Request(t, "queue.clear", ipc.Request{}) }, notify: true, scrobble: true},
 		{name: "plugin jump", msg: func(*testing.T) tea.Msg { return PluginQueueMsg{Op: "jump", Index: 2} }, notify: true, scrobble: true},
