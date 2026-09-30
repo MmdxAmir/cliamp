@@ -299,7 +299,7 @@ func pluginsCommand() *cli.Command {
 					if len(args) < 2 {
 						return fmt.Errorf("usage: cliamp plugins call <plugin> <command> [args...]")
 					}
-					resp, err := ipcSendLong("plugin.call", ipc.Request{
+					resp, err := ipcSendWithin("plugin.call", ipc.Request{
 						Name: args[0],
 						Sub:  args[1],
 						Args: args[2:],
@@ -850,7 +850,7 @@ func loadCommand() *cli.Command {
 			if c.Args().Len() == 0 {
 				return fmt.Errorf("usage: cliamp load \"Playlist Name\"")
 			}
-			_, err := ipcSend("load", ipc.Request{Playlist: c.Args().First()})
+			_, err := ipcSendWithin("load", ipc.Request{Playlist: c.Args().First()}, ipcLoadWait)
 			return err
 		},
 	}
@@ -1119,9 +1119,9 @@ func remoteCommand() *cli.Command {
 				Name:  "state",
 				Usage: "print the complete runtime snapshot as JSON",
 				Action: func(ctx context.Context, c *cli.Command) error {
-					response, err := ipc.SendV2(ipc.DefaultSocketPath(), ipc.V2Request{ID: json.RawMessage(`"cliamp"`), Method: "state.get"})
+					response, err := sendV2(ipc.V2Request{Method: "state.get"})
 					if err != nil {
-						return userIPCError(err)
+						return err
 					}
 					return printV2Response(response)
 				},
@@ -1130,9 +1130,9 @@ func remoteCommand() *cli.Command {
 				Name:  "capabilities",
 				Usage: "print available v2 operations as JSON",
 				Action: func(ctx context.Context, c *cli.Command) error {
-					response, err := ipc.SendV2(ipc.DefaultSocketPath(), ipc.V2Request{ID: json.RawMessage(`"cliamp"`), Method: "capabilities"})
+					response, err := sendV2(ipc.V2Request{Method: "capabilities"})
 					if err != nil {
-						return userIPCError(err)
+						return err
 					}
 					return printV2Response(response)
 				},
@@ -1153,14 +1153,13 @@ func remoteCommand() *cli.Command {
 					if !json.Valid(params) {
 						return fmt.Errorf("--params must be a JSON value")
 					}
-					response, err := ipc.SendV2(ipc.DefaultSocketPath(), ipc.V2Request{
-						ID:        json.RawMessage(`"cliamp"`),
+					response, err := sendV2(ipc.V2Request{
 						Method:    "operation.submit",
 						Operation: c.Args().First(),
 						Params:    params,
 					})
 					if err != nil {
-						return userIPCError(err)
+						return err
 					}
 					if err := v2ResponseError(response); err != nil {
 						return err
@@ -1182,9 +1181,9 @@ func remoteCommand() *cli.Command {
 					if c.Args().Len() == 0 {
 						return fmt.Errorf("usage: cliamp remote job <job-id>")
 					}
-					response, err := ipc.SendV2(ipc.DefaultSocketPath(), ipc.V2Request{ID: json.RawMessage(`"cliamp"`), Method: "job.get", JobID: c.Args().First()})
+					response, err := sendV2(ipc.V2Request{Method: "job.get", JobID: c.Args().First()})
 					if err != nil {
-						return userIPCError(err)
+						return err
 					}
 					return printV2Response(response)
 				},
@@ -1197,9 +1196,9 @@ func remoteCommand() *cli.Command {
 					if c.Args().Len() == 0 {
 						return fmt.Errorf("usage: cliamp remote cancel <job-id>")
 					}
-					response, err := ipc.SendV2(ipc.DefaultSocketPath(), ipc.V2Request{ID: json.RawMessage(`"cliamp"`), Method: "job.cancel", JobID: c.Args().First()})
+					response, err := sendV2(ipc.V2Request{Method: "job.cancel", JobID: c.Args().First()})
 					if err != nil {
-						return userIPCError(err)
+						return err
 					}
 					return printV2Response(response)
 				},
@@ -1212,7 +1211,7 @@ func remoteCommand() *cli.Command {
 					if c.Args().Len() == 0 {
 						return fmt.Errorf("usage: cliamp remote events runtime.state [runtime.job]")
 					}
-					stream, err := ipc.SubscribeV2(ipc.DefaultSocketPath(), json.RawMessage(`"cliamp"`), c.Args().Slice())
+					stream, err := ipc.SubscribeV2(ipc.DefaultSocketPath(), json.RawMessage(cliRequestID), c.Args().Slice())
 					if err != nil {
 						return userIPCError(err)
 					}
@@ -1235,58 +1234,5 @@ func remoteCommand() *cli.Command {
 				},
 			},
 		},
-	}
-}
-
-func printV2Response(response ipc.V2Response) error {
-	if err := v2ResponseError(response); err != nil {
-		return err
-	}
-	return json.NewEncoder(os.Stdout).Encode(response)
-}
-
-func v2ResponseError(response ipc.V2Response) error {
-	if response.OK {
-		return nil
-	}
-	if response.Error == nil {
-		return fmt.Errorf("remote operation failed")
-	}
-	if response.Error.Detail != "" {
-		return fmt.Errorf("remote operation failed (%s): %s (%s)", response.Error.Code, response.Error.Message, response.Error.Detail)
-	}
-	return fmt.Errorf("remote operation failed (%s): %s", response.Error.Code, response.Error.Message)
-}
-
-func waitForV2Job(ctx context.Context, jobID string) (ipc.V2Response, error) {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		response, err := ipc.SendV2(ipc.DefaultSocketPath(), ipc.V2Request{ID: json.RawMessage(`"cliamp"`), Method: "job.get", JobID: jobID})
-		if err != nil {
-			return ipc.V2Response{}, userIPCError(err)
-		}
-		if err := v2ResponseError(response); err != nil {
-			return ipc.V2Response{}, err
-		}
-		if response.Job != nil {
-			switch response.Job.State {
-			case ipc.JobSucceeded:
-				return response, nil
-			case ipc.JobFailed, ipc.JobCanceled:
-				if response.Job.Error != nil {
-					if response.Job.Error.Detail != "" {
-						return ipc.V2Response{}, fmt.Errorf("job %s (%s): %s (%s)", response.Job.State, response.Job.Error.Code, response.Job.Error.Message, response.Job.Error.Detail)
-					}
-					return ipc.V2Response{}, fmt.Errorf("job %s (%s): %s", response.Job.State, response.Job.Error.Code, response.Job.Error.Message)
-				}
-				return ipc.V2Response{}, fmt.Errorf("job %s", response.Job.State)
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return ipc.V2Response{}, ctx.Err()
-		case <-ticker.C:
-		}
 	}
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -532,100 +531,6 @@ func wireMediaCtl(prog *tea.Program) (*mediactl.Service, error) {
 	}
 	go prog.Send(model.AttachNotifier(svc))
 	return svc, nil
-}
-
-// userIPCError renders ipc.ErrNotRunning as the wording users see. The ipc
-// package returns a bare sentinel, so all CLI copy stays in the command layer.
-func userIPCError(err error) error {
-	if errors.Is(err, ipc.ErrNotRunning) {
-		return fmt.Errorf("cliamp is not running (no socket at %s)", ipc.DefaultSocketPath())
-	}
-	return err
-}
-
-func ipcSend(operation string, params ipc.Request) (ipc.Response, error) {
-	return ipcSendWithContext(context.Background(), operation, params)
-}
-
-// ipcSendLong waits for a V2 job under the supplied deadline. Plugin commands
-// can legitimately run for minutes (for example, yt-dlp downloads).
-func ipcSendLong(operation string, params ipc.Request, deadline time.Duration) (ipc.Response, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), deadline)
-	defer cancel()
-	return ipcSendWithContext(ctx, operation, params)
-}
-
-func ipcSendWithContext(ctx context.Context, operation string, params ipc.Request) (ipc.Response, error) {
-	raw, err := json.Marshal(params)
-	if err != nil {
-		return ipc.Response{}, fmt.Errorf("marshal %s parameters: %w", operation, err)
-	}
-	response, err := ipc.SendV2(ipc.DefaultSocketPath(), ipc.V2Request{
-		ID:        json.RawMessage(`"cliamp"`),
-		Method:    "operation.submit",
-		Operation: operation,
-		Params:    raw,
-	})
-	if err != nil {
-		return ipc.Response{}, userIPCError(err)
-	}
-	if err := v2ResponseError(response); err != nil {
-		return ipc.Response{}, err
-	}
-	if response.Job == nil {
-		return ipc.Response{}, fmt.Errorf("%s returned no job", operation)
-	}
-	response, err = waitForV2Job(ctx, response.Job.ID)
-	if err != nil {
-		return ipc.Response{}, err
-	}
-	if response.Job == nil {
-		return ipc.Response{}, fmt.Errorf("%s completed without a job", operation)
-	}
-	var result ipc.Response
-	if err := json.Unmarshal(response.Job.Result, &result); err != nil {
-		return ipc.Response{}, fmt.Errorf("decode %s result: %w", operation, err)
-	}
-	if !result.OK {
-		return result, fmt.Errorf("%s", result.Error)
-	}
-	return result, nil
-}
-
-func ipcState() (ipc.RuntimeSnapshot, error) {
-	response, err := ipc.SendV2(ipc.DefaultSocketPath(), ipc.V2Request{ID: json.RawMessage(`"cliamp"`), Method: "state.get"})
-	if err != nil {
-		return ipc.RuntimeSnapshot{}, userIPCError(err)
-	}
-	if err := v2ResponseError(response); err != nil {
-		return ipc.RuntimeSnapshot{}, err
-	}
-	if response.Snapshot == nil {
-		return ipc.RuntimeSnapshot{}, fmt.Errorf("state response has no snapshot")
-	}
-	return *response.Snapshot, nil
-}
-
-func stateResult(snapshot ipc.RuntimeSnapshot) ipc.Response {
-	return ipc.Response{
-		OK:         true,
-		State:      snapshot.State,
-		Track:      snapshot.Track,
-		Position:   snapshot.Position,
-		Duration:   snapshot.Duration,
-		Volume:     snapshot.Volume,
-		Playlist:   snapshot.Playlist,
-		Index:      snapshot.Index,
-		Total:      snapshot.Total,
-		Visualizer: snapshot.Visualizer,
-		Shuffle:    snapshot.Shuffle,
-		Repeat:     snapshot.Repeat,
-		Mono:       snapshot.Mono,
-		Speed:      snapshot.Speed,
-		EQPreset:   snapshot.EQPreset,
-		Theme:      snapshot.Theme,
-		EQBands:    snapshot.EQBands,
-	}
 }
 
 func main() {

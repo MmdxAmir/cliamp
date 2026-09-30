@@ -277,4 +277,6 @@ cliamp remote events runtime.state      # v2 event stream
 
 `cliamp volume` sets an absolute level. A sign does not make the value relative, so `cliamp volume +3` sets the volume to +3 dB. To step the volume up or down, submit `volume.adjust` with `cliamp remote call`. A negative value lowers the volume. Both forms clamp the result to the range `volume_min` to +6 dB.
 
+Each command waits up to 30 seconds for its result. `cliamp load` waits up to 5 minutes and `cliamp plugins call` up to 6 minutes. After that time the command fails with an error, and cliamp continues the operation. `cliamp remote call --wait` waits until the job ends.
+
 See [remote-control.md](remote-control.md) for the protocol specification.
