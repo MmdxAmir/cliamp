@@ -605,13 +605,11 @@ func (m *Model) reconnectYTDLOnUnpause() tea.Cmd {
 	m.player.CancelSeekYTDL()
 	m.status.Activity("Reconnecting stream...", statusTTLMedium)
 
-	p := m.player
+	// The Update loop unpauses after the reconnect, and only when the same
+	// track still plays. A skip or a stop can come first.
+	p, gen, seekGen := m.player, m.requests.stream, m.seek.gen
 	return func() tea.Msg {
-		err := p.SeekYTDL(0)
-		if err == nil {
-			p.TogglePause()
-		}
-		return ytdlUnpauseReconnectMsg{err: err}
+		return ytdlUnpauseReconnectMsg{err: p.SeekYTDL(0), gen: gen, seekGen: seekGen}
 	}
 }
 

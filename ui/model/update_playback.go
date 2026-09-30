@@ -77,19 +77,29 @@ func (m *Model) handleSeekTick(msg seekTickMsg) tea.Cmd {
 }
 
 // handleYTDLUnpauseReconnect ends the seek state after a yt-dlp stream
-// reconnects on unpause.
+// reconnects on unpause, and unpauses the track. A track that started since
+// then owns the seek state, and a stop keeps the engine stopped.
 func (m *Model) handleYTDLUnpauseReconnect(msg ytdlUnpauseReconnectMsg) {
+	if msg.seekGen != m.seek.gen {
+		return
+	}
 	m.seek.active = false
 	m.seek.timer = 0
 	m.seek.timerFor = 0
 	m.seek.grace = 10
 	m.seek.graceFor = 0
+	if msg.gen != m.requests.stream {
+		return
+	}
 	if msg.err != nil {
 		m.err = msg.err
-	} else {
-		m.err = nil
-		m.pausedAt = time.Time{}
+		return
 	}
+	m.err = nil
+	if m.player.IsPaused() {
+		m.togglePlayerPause()
+	}
+	m.pausedAt = time.Time{}
 }
 
 // handleStreamPlayed finishes the start of a stream. It retries a drained

@@ -21,7 +21,13 @@ type seekTickMsg struct {
 	gen    uint64
 }
 
-type ytdlUnpauseReconnectMsg struct{ err error }
+// ytdlUnpauseReconnectMsg reports a yt-dlp reconnect on unpause. gen holds
+// the stream generation and seekGen holds the seek generation at its start.
+type ytdlUnpauseReconnectMsg struct {
+	err     error
+	gen     uint64
+	seekGen uint64
+}
 
 // doSeek handles a seek keypress. Seeks that restart a decoder accumulate into
 // one target and debounce; local files seek immediately.

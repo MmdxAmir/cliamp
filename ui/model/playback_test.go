@@ -564,11 +564,109 @@ func TestTogglePlayPauseReconnectsLongPausedYTDLAtCurrentPosition(t *testing.T) 
 	if len(player.seekYTDLCalls) != 1 || player.seekYTDLCalls[0] != 0 {
 		t.Fatalf("seekYTDLCalls = %v, want [0]", player.seekYTDLCalls)
 	}
-	if player.paused {
-		t.Fatal("player stayed paused after reconnect command")
+	if !player.paused {
+		t.Fatal("reconnect command unpaused the player, want the Update loop to do it")
 	}
 	if !m.seek.active || m.seek.targetPos != 90*time.Second {
 		t.Fatalf("seek state = active:%v target:%s, want active target 1m30s", m.seek.active, m.seek.targetPos)
+	}
+}
+
+// The unpause of a yt-dlp reconnect belongs to the track that it reconnected.
+// A skip or a stop while yt-dlp restarts keeps the engine and the seek state
+// that the skip or the stop left.
+func TestYTDLUnpauseReconnectFollowsThePlayback(t *testing.T) {
+	var second tea.Cmd
+	tests := []struct {
+		name           string
+		during         func(m *Model)
+		wantPlaying    bool
+		wantPaused     bool
+		wantSeekActive bool
+		wantSeekTimer  int
+		wantPath       string
+	}{
+		{
+			name:        "reconnect lands",
+			during:      func(*Model) {},
+			wantPlaying: true,
+			wantPath:    "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+		},
+		{
+			name: "skip during the reconnect",
+			during: func(m *Model) {
+				m.skipNext()
+				// A debounced seek waits on the new track.
+				m.seek.active = true
+				m.seek.timer = seekDebounceTicks
+			},
+			wantPlaying:    true,
+			wantSeekActive: true,
+			wantSeekTimer:  seekDebounceTicks,
+			wantPath:       "two.mp3",
+		},
+		{
+			name:   "stop during the reconnect",
+			during: func(m *Model) { m.stopByUser() },
+		},
+		{
+			name:        "second unpause during the reconnect",
+			during:      func(m *Model) { second = m.togglePlayPause() },
+			wantPlaying: true,
+			wantPath:    "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			player := &playbackFakeEngine{playing: true, paused: true, ytdlSeek: true, position: 90 * time.Second}
+			p := playlist.New()
+			p.Replace([]playlist.Track{
+				{Title: "One", Path: "https://music.youtube.com/watch?v=dQw4w9WgXcQ", Stream: true, DurationSecs: 180},
+				{Title: "Two", Path: "two.mp3"},
+			})
+			p.SetIndex(0)
+			m := Model{
+				player:   player,
+				playlist: p,
+				vis:      ui.NewVisualizer(float64(player.SampleRate())),
+				pausedAt: time.Now().Add(-ytdlReconnectPauseThreshold),
+			}
+			m.setPlaybackTrack(p.Tracks()[0])
+
+			cmd := m.togglePlayPause()
+			if cmd == nil {
+				t.Fatal("togglePlayPause() = nil, want reconnect command")
+			}
+			second = nil
+			tt.during(&m)
+			for _, c := range []tea.Cmd{cmd, second} {
+				if c == nil {
+					continue
+				}
+				msg, ok := c().(ytdlUnpauseReconnectMsg)
+				if !ok {
+					t.Fatal("reconnect command did not return ytdlUnpauseReconnectMsg")
+				}
+				m.handleYTDLUnpauseReconnect(msg)
+			}
+
+			if player.playing != tt.wantPlaying || player.paused != tt.wantPaused {
+				t.Fatalf("engine = playing %v paused %v, want playing %v paused %v",
+					player.playing, player.paused, tt.wantPlaying, tt.wantPaused)
+			}
+			if m.seek.active != tt.wantSeekActive || m.seek.timer != tt.wantSeekTimer {
+				t.Fatalf("seek = active %v timer %d, want active %v timer %d",
+					m.seek.active, m.seek.timer, tt.wantSeekActive, tt.wantSeekTimer)
+			}
+			if tt.wantPlaying {
+				if track, _ := m.currentPlaybackTrack(); track.Path != tt.wantPath {
+					t.Fatalf("playing %q, want %q", track.Path, tt.wantPath)
+				}
+				if !m.pausedAt.IsZero() {
+					t.Fatal("pausedAt still set, want it cleared for the playing track")
+				}
+			}
+		})
 	}
 }
 
