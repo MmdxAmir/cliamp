@@ -560,7 +560,7 @@ p:<span class="k">on</span>(<span class="s">"track.change"</span>, <span class="
         </div>
         <div class="api-i">
           <div class="sig">cliamp.queue.move(from, to) · cliamp.queue.remove(i)</div>
-          <div class="d">Edit the queue by the rules of the keys and IPC. A move waits for shuffle to be off, and a loaded saved playlist gets the same edit.</div>
+          <div class="d">Edit the queue by the rules of the keys and IPC. While shuffle is on, a move changes nothing. A loaded saved playlist gets the same edit.</div>
         </div>
         <div class="api-i">
           <div class="sig">p:bind("ctrl+n", fn) · p:command("name", fn)</div>
