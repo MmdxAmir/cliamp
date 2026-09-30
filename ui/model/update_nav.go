@@ -47,8 +47,6 @@ func (m *Model) handleNavAlbumsLoaded(msg navAlbumsLoadedMsg) {
 	if m.navBrowser.search != "" {
 		m.navUpdateSearch()
 	}
-	// If we just loaded the first page and it was a full menu → list transition,
-	// also clear the general loading flag.
 }
 
 // handleNavGenresLoaded shows the genre list in the nav browser.
