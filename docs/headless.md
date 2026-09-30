@@ -199,4 +199,4 @@ cliamp --daemon --auto-play http://radio.cliamp.stream/lofi/stream
 ## Notes
 
 - The daemon and TUI share one Unix socket. Only one cliamp instance can run for a user. A second instance cannot bind to the socket, and a daemon exits with an error.
-- cliamp resolves feed, M3U, and yt-dlp arguments in the background after start. If a URL fails, the daemon keeps running with the tracks that loaded. Check `cliamp status`, and look in `~/.config/cliamp/cliamp.log` for the error.
+- cliamp resolves feed, M3U, PLS, and yt-dlp arguments in the background after start. If one of these URLs fails, cliamp adds none of them. The daemon keeps running with the local files and the direct stream URLs. Check `cliamp status`, and look in `~/.config/cliamp/cliamp.log` for the error.
