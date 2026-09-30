@@ -256,7 +256,7 @@ local p = plugin.register({
 })
 
 -- Listed in the Ctrl+K overlay under "— plugins —":
-p:bind("x", "Extract chapters", function(key) ... end)
+p:bind("ctrl+n", "Extract chapters", function(key) ... end)
 
 -- Not listed (hidden binding):
 p:bind("ctrl+e", function(key) ... end)
