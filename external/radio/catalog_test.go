@@ -1,6 +1,7 @@
 package radio
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -74,15 +75,46 @@ func TestStationsSuccess(t *testing.T) {
 	}
 }
 
-func TestStationsBodyTooLarge(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("[" + strings.Repeat(" ", maxCatalogBody) + "]"))
-	}))
-	defer srv.Close()
-	installCatalogClient(t, srv.URL)
+func TestBodyTooLarge(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name  string
+		limit int
+		fetch func(srv *httptest.Server) error
+	}{
+		{name: "stations", limit: maxCatalogBody, fetch: func(*httptest.Server) error {
+			_, err := Stations(StationQuery{Name: "jazz"})
+			return err
+		}},
+		{name: "channels", limit: maxChannelsBody, fetch: func(srv *httptest.Server) error {
+			_, err := fetchChannels(ctx, srv.Client(), srv.URL)
+			return err
+		}},
+		{name: "channel tracks", limit: maxChannelTracksBody, fetch: func(srv *httptest.Server) error {
+			_, err := fetchChannelTracks(ctx, srv.Client(), srv.URL)
+			return err
+		}},
+		{name: "track statistics", limit: maxStatsBody, fetch: func(*httptest.Server) error {
+			_, err := FetchTrackStatistics(ctx)
+			return err
+		}},
+		{name: "statistics", limit: maxStatsBody, fetch: func(srv *httptest.Server) error {
+			_, _, err := fetchStatistics(ctx, srv.Client(), srv.URL)
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("[" + strings.Repeat(" ", tt.limit) + "]"))
+			}))
+			defer srv.Close()
+			installCatalogClient(t, srv.URL)
 
-	if _, err := Stations(StationQuery{Name: "jazz"}); !errors.Is(err, httpclient.ErrTooLarge) {
-		t.Fatalf("Stations() error = %v, want httpclient.ErrTooLarge", err)
+			if err := tt.fetch(srv); !errors.Is(err, httpclient.ErrTooLarge) {
+				t.Fatalf("error = %v, want httpclient.ErrTooLarge", err)
+			}
+		})
 	}
 }
 

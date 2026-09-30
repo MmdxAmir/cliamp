@@ -259,7 +259,7 @@ func FetchTags() ([]Tag, error) {
 
 // fetchJSON reads a JSON document from the Radio Browser API under ctx.
 func fetchJSON(ctx context.Context, u string, out any) error {
-	if err := getJSON(ctx, catalogClient, u, out); err != nil {
+	if err := getJSON(ctx, catalogClient, u, maxCatalogBody, out); err != nil {
 		return fmt.Errorf("radio-browser: %w", err)
 	}
 	return nil
@@ -270,15 +270,15 @@ func fetchJSON(ctx context.Context, u string, out any) error {
 const maxCatalogBody = 16 << 20
 
 // getJSON performs one GET under ctx and decodes the response body. A body
-// over maxCatalogBody returns httpclient.ErrTooLarge. Callers wrap the error
+// over limit bytes returns httpclient.ErrTooLarge. Callers wrap the error
 // with the name of the service they were talking to.
-func getJSON(ctx context.Context, client *http.Client, u string, out any) error {
+func getJSON(ctx context.Context, client *http.Client, u string, limit int64, out any) error {
 	resp, err := get(ctx, client, u)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	return httpclient.ReadJSON(resp.Body, maxCatalogBody, out)
+	return httpclient.ReadJSON(resp.Body, limit, out)
 }
 
 // get performs one GET as cliamp and fails on any status but 200. Callers
