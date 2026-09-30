@@ -253,6 +253,37 @@ func TestStreamPlayedNeedsAuthAsksForSignIn(t *testing.T) {
 	}
 }
 
+// TestStreamPlayedFailureStatus checks that a failed start shows the gated
+// hint only for a source that can gate a track.
+func TestStreamPlayedFailureStatus(t *testing.T) {
+	tests := []struct {
+		name      string
+		path      string
+		wantGated bool
+	}{
+		{name: "yt-dlp page", path: "https://www.youtube.com/watch?v=abc", wantGated: true},
+		// A local file fails to start, for example, when ffmpeg is missing.
+		{name: "local ffmpeg format", path: "/music/local.m4a"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			player := &playbackFakeEngine{playErr: errors.New("decode: ffmpeg is required")}
+			m := newCustomStreamModel(player)
+
+			msg := streamPlayedFrom(t, m.playTrack(playlist.Track{Title: "Song", Path: tt.path}))
+			updated, _ := m.Update(msg)
+			m = updated.(Model)
+
+			if m.err == nil {
+				t.Fatal("err = nil, want the start error")
+			}
+			if gotGated := strings.Contains(m.status.text, "gated"); gotGated != tt.wantGated {
+				t.Fatalf("status = %q, want gated hint %v", m.status.text, tt.wantGated)
+			}
+		})
+	}
+}
+
 func TestProviderAuthFailureKeepsSignInPrompt(t *testing.T) {
 	m := newCustomStreamModel(&playbackFakeEngine{})
 	gen := nextRequest(&m.requests.auth)
