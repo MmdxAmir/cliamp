@@ -25,15 +25,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, loadState func() *State
 		out := L.NewTable()
 		if state.QueueList != nil {
 			for i, e := range state.QueueList() {
-				row := L.NewTable()
-				row.RawSetString("title", lua.LString(e.Title))
-				row.RawSetString("artist", lua.LString(e.Artist))
-				row.RawSetString("album", lua.LString(e.Album))
-				row.RawSetString("genre", lua.LString(e.Genre))
-				row.RawSetString("year", lua.LNumber(e.Year))
-				row.RawSetString("path", lua.LString(e.Path))
-				row.RawSetString("duration", lua.LNumber(e.Duration))
-				row.RawSetString("stream", lua.LBool(e.Stream))
+				row := dataToTable(L, TrackData(e.Track))
 				row.RawSetString("index", lua.LNumber(e.Index))
 				row.RawSetString("queued", lua.LBool(e.Queued))
 				out.RawSetInt(i+1, row)
@@ -84,7 +76,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, loadState func() *State
 	L.SetField(tbl, "add", L.NewFunction(func(L *lua.LState) int {
 		ctrl := loadCtrl()
 		if t, ok := L.Get(1).(*lua.LTable); ok {
-			var track QueueTrack
+			var track Track
 			var err error
 			switch {
 			case !guard("add"):
@@ -92,7 +84,7 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, loadState func() *State
 			case ctrl.QueueAddTrack == nil:
 				err = fmt.Errorf("unavailable")
 			default:
-				track, err = queueTrackFromTable(t)
+				track, err = trackFromTable(t)
 			}
 			if err != nil {
 				return pushErr(L, "queue.add: "+err.Error())
@@ -146,12 +138,11 @@ func registerQueueAPI(L *lua.LState, cliamp *lua.LTable, loadState func() *State
 // every platform, and a duration this long still fits a time.Duration.
 const maxTrackNumber = math.MaxInt32
 
-// queueTrackFromTable reads a track table in the shape plugins receive in
-// events ({title, artist, album, genre, year, path, duration, stream}).
+// trackFromTable reads a track table, the shape that trackFields names.
 // Only path is required. Other keys are ignored, so a table from an event or
 // from queue.list can be passed straight back.
-func queueTrackFromTable(t *lua.LTable) (QueueTrack, error) {
-	var track QueueTrack
+func trackFromTable(t *lua.LTable) (Track, error) {
+	var track Track
 	path, ok := t.RawGetString("path").(lua.LString)
 	if !ok || strings.TrimSpace(string(path)) == "" {
 		return track, fmt.Errorf("path must be a non-empty string")

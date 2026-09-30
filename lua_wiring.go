@@ -27,24 +27,20 @@ func luaStateProvider(p *player.Player, pl *playlist.Playlist) luaplugin.StatePr
 			}
 			return "playing"
 		},
-		Position:      func() float64 { return p.Position().Seconds() },
-		Duration:      func() float64 { return p.Duration().Seconds() },
-		Volume:        func() float64 { return p.Volume() },
-		Speed:         func() float64 { return p.Speed() },
-		Mono:          func() bool { return p.Mono() },
-		RepeatMode:    func() string { return pl.Repeat().String() },
-		Shuffle:       func() bool { return pl.Shuffled() },
-		EQBands:       func() [10]float64 { return p.EQBands() },
-		TrackTitle:    func() string { t, _ := pl.Current(); return t.Title },
-		TrackArtist:   func() string { t, _ := pl.Current(); return t.Artist },
-		TrackAlbum:    func() string { t, _ := pl.Current(); return t.Album },
-		TrackGenre:    func() string { t, _ := pl.Current(); return t.Genre },
-		TrackYear:     func() int { t, _ := pl.Current(); return t.Year },
-		TrackNumber:   func() int { t, _ := pl.Current(); return t.TrackNumber },
-		TrackPath:     func() string { t, _ := pl.Current(); return t.Path },
-		TrackIsStream: func() bool { t, _ := pl.Current(); return t.Stream },
-		TrackIsLive:   func() bool { t, _ := pl.Current(); return model.PlaysLive(t, p) },
-		TrackDuration: func() int { t, _ := pl.Current(); return t.DurationSecs },
+		Position:   func() float64 { return p.Position().Seconds() },
+		Duration:   func() float64 { return p.Duration().Seconds() },
+		Volume:     func() float64 { return p.Volume() },
+		Speed:      func() float64 { return p.Speed() },
+		Mono:       func() bool { return p.Mono() },
+		RepeatMode: func() string { return pl.Repeat().String() },
+		Shuffle:    func() bool { return pl.Shuffled() },
+		EQBands:    func() [10]float64 { return p.EQBands() },
+		CurrentTrack: func() luaplugin.Track {
+			t, _ := pl.Current()
+			track := luaTrack(t)
+			track.Live = model.PlaysLive(t, p)
+			return track
+		},
 		PlaylistCount: func() int { return pl.Len() },
 		CurrentIndex:  func() int { return pl.Index() },
 		HasNext:       pl.HasNext,
@@ -53,16 +49,9 @@ func luaStateProvider(p *player.Player, pl *playlist.Playlist) luaplugin.StatePr
 			out := make([]luaplugin.QueueEntry, len(tracks))
 			for i, t := range tracks {
 				out[i] = luaplugin.QueueEntry{
-					Title:    t.Title,
-					Artist:   t.Artist,
-					Album:    t.Album,
-					Genre:    t.Genre,
-					Year:     t.Year,
-					Path:     t.Path,
-					Duration: t.DurationSecs,
-					Stream:   t.Stream,
-					Index:    i,
-					Queued:   pl.QueuePosition(i) > 0, // 1-based; 0 means not queued
+					Track:  luaTrack(t),
+					Index:  i,
+					Queued: pl.QueuePosition(i) > 0, // 1-based; 0 means not queued
 				}
 			}
 			return out
@@ -92,7 +81,7 @@ func luaControlProvider(send func(tea.Msg)) luaplugin.ControlProvider {
 		QueueAdd: func(path string) {
 			send(model.PluginQueueMsg{Op: "add", Path: path})
 		},
-		QueueAddTrack: func(t luaplugin.QueueTrack) {
+		QueueAddTrack: func(t luaplugin.Track) {
 			send(model.PluginQueueMsg{Op: "add_track", Track: playlist.Track{
 				Path: t.Path, Title: t.Title, Artist: t.Artist, Album: t.Album,
 				Genre: t.Genre, Year: t.Year, DurationSecs: t.Duration, Stream: t.Stream,
@@ -107,6 +96,14 @@ func luaControlProvider(send func(tea.Msg)) luaplugin.ControlProvider {
 		QueueMove: func(from, to int) {
 			send(model.PluginQueueMsg{Op: "move", Index: from, To: to})
 		},
+	}
+}
+
+// luaTrack returns t as Lua plugins see it, with no live flag.
+func luaTrack(t playlist.Track) luaplugin.Track {
+	return luaplugin.Track{
+		Title: t.Title, Artist: t.Artist, Album: t.Album, Genre: t.Genre, Path: t.Path,
+		Year: t.Year, Number: t.TrackNumber, Duration: t.DurationSecs, Stream: t.Stream,
 	}
 }
 

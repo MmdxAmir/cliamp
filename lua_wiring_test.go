@@ -37,7 +37,7 @@ func TestLuaControlProviderSendsMessages(t *testing.T) {
 		{
 			"queue.add track",
 			func(c luaplugin.ControlProvider) {
-				c.QueueAddTrack(luaplugin.QueueTrack{Path: "/a.mp3", Title: "A", Artist: "B", Album: "C", Genre: "D", Year: 1999, Duration: 60, Stream: true})
+				c.QueueAddTrack(luaplugin.Track{Path: "/a.mp3", Title: "A", Artist: "B", Album: "C", Genre: "D", Year: 1999, Duration: 60, Stream: true})
 			},
 			model.PluginQueueMsg{Op: "add_track", Track: playlist.Track{Path: "/a.mp3", Title: "A", Artist: "B", Album: "C", Genre: "D", Year: 1999, DurationSecs: 60, Stream: true}},
 		},

@@ -558,10 +558,9 @@ func TestClose(t *testing.T) {
 func TestManagerWithStateProvider(t *testing.T) {
 	m := newTestManager()
 	m.SetStateProvider(StateProvider{
-		PlayerState: func() string { return "playing" },
-		Volume:      func() float64 { return -3.5 },
-		TrackTitle:  func() string { return "Angel" },
-		TrackArtist: func() string { return "Massive Attack" },
+		PlayerState:  func() string { return "playing" },
+		Volume:       func() float64 { return -3.5 },
+		CurrentTrack: func() Track { return Track{Title: "Angel", Artist: "Massive Attack"} },
 	})
 
 	p := loadTestPlugin(t, m, "state-test", `

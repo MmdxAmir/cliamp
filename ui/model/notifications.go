@@ -66,15 +66,22 @@ func (m *Model) resolveTrackDisplay(track playlist.Track) (artist, title string)
 
 // trackToMap builds a metadata map from a track for Lua plugin events.
 func trackToMap(track playlist.Track) map[string]any {
-	return map[string]any{
-		"title":    track.Title,
-		"artist":   track.Artist,
-		"album":    track.Album,
-		"genre":    track.Genre,
-		"year":     track.Year,
-		"path":     track.Path,
-		"duration": track.DurationSecs,
-		"stream":   track.Stream,
+	return luaplugin.TrackData(pluginTrack(track))
+}
+
+// pluginTrack returns track as Lua plugins see it. It leaves Live unset,
+// because that depends on the engine.
+func pluginTrack(track playlist.Track) luaplugin.Track {
+	return luaplugin.Track{
+		Title:    track.Title,
+		Artist:   track.Artist,
+		Album:    track.Album,
+		Genre:    track.Genre,
+		Path:     track.Path,
+		Year:     track.Year,
+		Number:   track.TrackNumber,
+		Duration: track.DurationSecs,
+		Stream:   track.Stream,
 	}
 }
 

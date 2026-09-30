@@ -27,8 +27,8 @@ func TestQueueReads(t *testing.T) {
 		HasNext:       func() bool { return true },
 		QueueList: func() []QueueEntry {
 			return []QueueEntry{
-				{Title: "A", Artist: "X", Path: "/a.mp3", Index: 0, Queued: false},
-				{Title: "B", Artist: "Y", Path: "/b.mp3", Index: 1, Queued: true},
+				{Track: Track{Title: "A", Artist: "X", Path: "/a.mp3"}, Index: 0, Queued: false},
+				{Track: Track{Title: "B", Artist: "Y", Path: "/b.mp3"}, Index: 1, Queued: true},
 			}
 		},
 	}
@@ -156,11 +156,11 @@ func TestQueueMutatorArgsForwarded(t *testing.T) {
 }
 
 func TestQueueAddTrackTable(t *testing.T) {
-	var got []QueueTrack
+	var got []Track
 	var gotPaths []string
 	ctrl := &ControlProvider{
 		QueueAdd:      func(p string) { gotPaths = append(gotPaths, p) },
-		QueueAddTrack: func(tr QueueTrack) { got = append(got, tr) },
+		QueueAddTrack: func(tr Track) { got = append(got, tr) },
 	}
 	L := newQueueState(t, &StateProvider{}, ctrl, map[string]bool{PermControl: true})
 	if err := L.DoString(`
@@ -177,7 +177,7 @@ func TestQueueAddTrackTable(t *testing.T) {
 	if L.GetGlobal("ok") != lua.LTrue || L.GetGlobal("minimal") != lua.LTrue {
 		t.Fatalf("add returned %v, %v; want true, true", L.GetGlobal("ok"), L.GetGlobal("minimal"))
 	}
-	want := []QueueTrack{
+	want := []Track{
 		{Path: "spotify:track:69kOkLUCkxIZYexIgSG8rq", Title: "Get Lucky", Artist: "Daft Punk",
 			Album: "Random Access Memories", Genre: "Disco", Year: 2013, Duration: 369},
 		{Path: "tidal://track/1"},
@@ -207,7 +207,7 @@ func TestQueueAddTrackTableRejectsBadInput(t *testing.T) {
 	for name, table := range cases {
 		t.Run(name, func(t *testing.T) {
 			called := false
-			ctrl := &ControlProvider{QueueAddTrack: func(QueueTrack) { called = true }}
+			ctrl := &ControlProvider{QueueAddTrack: func(Track) { called = true }}
 			L := newQueueState(t, &StateProvider{}, ctrl, map[string]bool{PermControl: true})
 			if err := L.DoString(`_G.ok, _G.err = cliamp.queue.add(` + table + `)`); err != nil {
 				t.Fatal(err)
@@ -227,7 +227,7 @@ func TestQueueAddTrackTableRejectsBadInput(t *testing.T) {
 
 func TestQueueAddTrackTableRequiresControl(t *testing.T) {
 	called := false
-	ctrl := &ControlProvider{QueueAddTrack: func(QueueTrack) { called = true }}
+	ctrl := &ControlProvider{QueueAddTrack: func(Track) { called = true }}
 	L := newQueueState(t, &StateProvider{}, ctrl, nil)
 	if err := L.DoString(`_G.ok, _G.err = cliamp.queue.add({ path = "/a.mp3" })`); err != nil {
 		t.Fatal(err)
@@ -245,13 +245,13 @@ func TestQueueAddTrackTableRequiresControl(t *testing.T) {
 // Tidal, whose non-HTTP paths would otherwise be queued as non-streams.
 func TestQueueListRowRoundTripsThroughAdd(t *testing.T) {
 	state := &StateProvider{QueueList: func() []QueueEntry {
-		return []QueueEntry{{
+		return []QueueEntry{{Track: Track{
 			Title: "Song", Artist: "X", Album: "Y", Genre: "Jazz", Year: 1959,
-			Path: "tidal://track/1", Duration: 200, Stream: true, Index: 0,
-		}}
+			Path: "tidal://track/1", Duration: 200, Stream: true,
+		}}}
 	}}
-	var got []QueueTrack
-	ctrl := &ControlProvider{QueueAddTrack: func(tr QueueTrack) { got = append(got, tr) }}
+	var got []Track
+	ctrl := &ControlProvider{QueueAddTrack: func(tr Track) { got = append(got, tr) }}
 	L := newQueueState(t, state, ctrl, map[string]bool{PermControl: true})
 	if err := L.DoString(`_G.ok, _G.err = cliamp.queue.add(cliamp.queue.list()[1])`); err != nil {
 		t.Fatal(err)
@@ -259,7 +259,7 @@ func TestQueueListRowRoundTripsThroughAdd(t *testing.T) {
 	if L.GetGlobal("ok") != lua.LTrue {
 		t.Fatalf("add(list row) = %v, %v", L.GetGlobal("ok"), L.GetGlobal("err"))
 	}
-	want := QueueTrack{Path: "tidal://track/1", Title: "Song", Artist: "X", Album: "Y", Genre: "Jazz", Year: 1959, Duration: 200, Stream: true}
+	want := Track{Path: "tidal://track/1", Title: "Song", Artist: "X", Album: "Y", Genre: "Jazz", Year: 1959, Duration: 200, Stream: true}
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("queued %+v, want %+v", got, want)
 	}

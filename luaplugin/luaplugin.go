@@ -60,20 +60,27 @@ type StateProvider struct {
 	RepeatMode    func() string // "off", "all", "one"
 	Shuffle       func() bool
 	EQBands       func() [10]float64
-	TrackTitle    func() string
-	TrackArtist   func() string
-	TrackAlbum    func() string
-	TrackGenre    func() string
-	TrackYear     func() int
-	TrackNumber   func() int
-	TrackPath     func() string
-	TrackIsStream func() bool
-	TrackIsLive   func() bool // live stream with no track boundary
-	TrackDuration func() int  // seconds
+	CurrentTrack  func() Track // the track of cliamp.track.*; the zero Track when there is none
 	PlaylistCount func() int
 	CurrentIndex  func() int          // 0-based
 	HasNext       func() bool         // a track follows in play order (queue, repeat, shuffle)
 	QueueList     func() []QueueEntry // full playlist in play order
+}
+
+// Track is a track as plugins see it. cliamp.track.* reads every field.
+// Track tables, which events, cliamp.queue.list rows and cliamp.queue.add
+// share, carry the fields that trackFields names.
+type Track struct {
+	Title    string
+	Artist   string
+	Album    string
+	Genre    string
+	Path     string
+	Year     int
+	Number   int // track number
+	Duration int // seconds
+	Stream   bool
+	Live     bool // live stream with no track boundary
 }
 
 // QueueEntry is one track in the playlist as exposed to plugins via
@@ -81,16 +88,9 @@ type StateProvider struct {
 // true when the track sits in the explicit play-next queue. The track fields
 // match event track tables, so a row can be passed back to cliamp.queue.add.
 type QueueEntry struct {
-	Title    string
-	Artist   string
-	Album    string
-	Genre    string
-	Year     int
-	Path     string
-	Duration int // seconds
-	Stream   bool
-	Index    int
-	Queued   bool
+	Track
+	Index  int
+	Queued bool
 }
 
 // ControlProvider supplies write access to player controls.
@@ -108,25 +108,11 @@ type ControlProvider struct {
 	Prev        func()                                // injected via prog.Send
 	// Queue mutators, all injected via prog.Send so the model's Update loop
 	// applies them and keeps derived state (cursor, current index) consistent.
-	QueueAdd      func(path string)      // resolve path/URL and append
-	QueueAddTrack func(track QueueTrack) // append a described track as given
-	QueueJump     func(index int)        // make index current and play it
-	QueueRemove   func(index int)        // remove track at index
-	QueueMove     func(from, to int)     // reorder
-}
-
-// QueueTrack is a track a plugin describes with a table passed to
-// cliamp.queue.add. Its fields mirror the track tables plugins receive in
-// events, and it is queued as given, without resolving the path.
-type QueueTrack struct {
-	Path     string
-	Title    string
-	Artist   string
-	Album    string
-	Genre    string
-	Year     int
-	Duration int // seconds
-	Stream   bool
+	QueueAdd      func(path string)  // resolve path/URL and append
+	QueueAddTrack func(track Track)  // append a track table as given, without resolving its path
+	QueueJump     func(index int)    // make index current and play it
+	QueueRemove   func(index int)    // remove track at index
+	QueueMove     func(from, to int) // reorder
 }
 
 // UIProvider supplies callbacks that surface plugin output in the TUI.

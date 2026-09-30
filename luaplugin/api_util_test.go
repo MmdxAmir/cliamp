@@ -20,7 +20,7 @@ func TestPermissionDenials(t *testing.T) {
 	m.SetControlProvider(ControlProvider{
 		Next:          func() { calls++ },
 		QueueJump:     func(int) { calls++ },
-		QueueAddTrack: func(QueueTrack) { calls++ },
+		QueueAddTrack: func(Track) { calls++ },
 	})
 	p := loadTestPlugin(t, m, "denied", `
 		_G.p = plugin.register({name = "denied", type = "hook"})
