@@ -165,7 +165,7 @@ func TestLuaStateProviderReadsPublishedState(t *testing.T) {
 	published := model.PluginState{
 		Status: "paused", Volume: -12, Speed: 1.25, Mono: true, Repeat: "All", Shuffle: true,
 		EQBands: [10]float64{3}, Track: luaplugin.Track{Title: "B", Live: true},
-		Count: 2, Index: 1, HasNext: true, Queue: queue,
+		Count: 2, Index: 1, HasNext: true, Queue: func() []luaplugin.QueueEntry { return queue },
 	}
 	sp := luaStateProvider(fakeClock{position: 90 * time.Second, duration: 180 * time.Second},
 		func() model.PluginState { return published })
@@ -193,5 +193,9 @@ func TestLuaStateProviderReadsPublishedState(t *testing.T) {
 		if !reflect.DeepEqual(tt.got, tt.want) {
 			t.Errorf("%s = %#v, want %#v", tt.name, tt.got, tt.want)
 		}
+	}
+	empty := luaStateProvider(fakeClock{}, func() model.PluginState { return model.PluginState{} })
+	if got := empty.QueueList(); got != nil {
+		t.Errorf("queue of a state with no Queue = %#v, want nil", got)
 	}
 }

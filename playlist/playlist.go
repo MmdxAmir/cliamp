@@ -837,6 +837,15 @@ func (p *Playlist) Tracks() []Track {
 	return cloneTracks(p.tracks)
 }
 
+// TracksAndQueue returns an independent snapshot of all tracks and the track
+// indices of the play-next queue in queue order. It reads both under one
+// lock, so the indices always refer to the returned tracks.
+func (p *Playlist) TracksAndQueue() ([]Track, []int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return cloneTracks(p.tracks), slices.Clone(p.queue)
+}
+
 // Track returns an independent copy of the track at index.
 func (p *Playlist) Track(index int) (Track, bool) {
 	p.mu.Lock()

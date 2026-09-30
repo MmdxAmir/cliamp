@@ -33,7 +33,12 @@ func luaStateProvider(clock engineClock, load func() model.PluginState) luaplugi
 		PlaylistCount: func() int { return load().Count },
 		CurrentIndex:  func() int { return load().Index },
 		HasNext:       func() bool { return load().HasNext },
-		QueueList:     func() []luaplugin.QueueEntry { return load().Queue },
+		QueueList: func() []luaplugin.QueueEntry {
+			if queue := load().Queue; queue != nil {
+				return queue()
+			}
+			return nil
+		},
 	}
 }
 

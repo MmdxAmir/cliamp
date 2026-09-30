@@ -63,8 +63,8 @@ func TestPluginStateReportsThePlayingTrack(t *testing.T) {
 				if s.Status != "playing" || s.Count != 2 || s.Index != 0 {
 					t.Errorf("status, count, index = %q, %d, %d; want playing, 2, 0", s.Status, s.Count, s.Index)
 				}
-				if len(s.Queue) != 2 || s.Queue[0].Title != "New 1" || s.Queue[1].Title != "New 2" {
-					t.Errorf("queue = %+v, want the new list", s.Queue)
+				if queue := s.Queue(); len(queue) != 2 || queue[0].Title != "New 1" || queue[1].Title != "New 2" {
+					t.Errorf("queue = %+v, want the new list", queue)
 				}
 			},
 		},
@@ -95,8 +95,8 @@ func TestPluginStateReportsThePlayingTrack(t *testing.T) {
 				if s.Status != "stopped" || !s.HasNext {
 					t.Errorf("status, has next = %q, %v; want stopped, true", s.Status, s.HasNext)
 				}
-				if len(s.Queue) != 2 || s.Queue[0].Queued || !s.Queue[1].Queued || s.Queue[1].Index != 1 {
-					t.Errorf("queue = %+v, want B queued at index 1", s.Queue)
+				if queue := s.Queue(); len(queue) != 2 || queue[0].Queued || !queue[1].Queued || queue[1].Index != 1 {
+					t.Errorf("queue = %+v, want B queued at index 1", queue)
 				}
 			},
 		},
@@ -122,8 +122,8 @@ func TestPluginStateLoaderWithoutPlugins(t *testing.T) {
 	updated, _ := m.Update(pluginStateTestMsg{})
 	m = updated.(Model)
 	got := m.PluginStateLoader()()
-	if got.Status != "stopped" || got.Speed != 1 {
-		t.Fatalf("PluginStateLoader()() = %+v, want stopped at speed 1", got)
+	if got.Status != "stopped" || got.Speed != 1 || got.Queue() != nil {
+		t.Fatalf("PluginStateLoader()() = %+v, want stopped at speed 1 with no queue", got)
 	}
 }
 
@@ -135,15 +135,28 @@ func TestPluginStateRebuildsQueueOnPlaylistChange(t *testing.T) {
 		playlist.Track{Title: "B", Path: "b.mp3"})
 	m.publishPluginState()
 	load := m.PluginStateLoader()
-	first := load().Queue
+	first := load().Queue()
 	m.publishPluginState()
-	if second := load().Queue; &second[0] != &first[0] {
+	if second := load().Queue(); &second[0] != &first[0] {
 		t.Fatal("the queue was built again with no playlist change")
 	}
 	m.playlist.Add(playlist.Track{Title: "C", Path: "c.mp3"})
 	m.publishPluginState()
-	if third := load().Queue; len(third) != 3 || third[2].Title != "C" {
+	if third := load().Queue(); len(third) != 3 || third[2].Title != "C" {
 		t.Fatalf("queue = %+v, want the added track", third)
+	}
+}
+
+// A publish does not copy the playlist. The first read of the queue builds
+// the rows from the playlist at that time.
+func TestPluginStateBuildsQueueOnFirstRead(t *testing.T) {
+	m := newPluginStateModel(&playbackFakeEngine{},
+		playlist.Track{Title: "A", Path: "a.mp3"},
+		playlist.Track{Title: "B", Path: "b.mp3"})
+	m.publishPluginState()
+	m.playlist.Add(playlist.Track{Title: "C", Path: "c.mp3"})
+	if queue := m.PluginStateLoader()().Queue(); len(queue) != 3 || queue[2].Title != "C" {
+		t.Fatalf("queue = %+v, want the playlist at the first read", queue)
 	}
 }
 
@@ -163,7 +176,7 @@ func TestPluginStateConcurrentReads(t *testing.T) {
 			defer wg.Done()
 			for !stop.Load() {
 				s := load()
-				for _, e := range s.Queue {
+				for _, e := range s.Queue() {
 					_ = e.Title
 				}
 				_ = s.Track.Title

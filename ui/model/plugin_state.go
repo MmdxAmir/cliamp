@@ -1,6 +1,11 @@
 package model
 
-import "github.com/bjarneo/cliamp/luaplugin"
+import (
+	"sync"
+
+	"github.com/bjarneo/cliamp/luaplugin"
+	"github.com/bjarneo/cliamp/playlist"
+)
 
 // PluginState is the playback state that Lua plugins read. The Model
 // publishes a new PluginState before it sends a plugin event and at the end
@@ -20,11 +25,14 @@ type PluginState struct {
 	Count   int
 	Index   int
 	HasNext bool
-	// Queue is the playlist. The states share it until the playlist
-	// changes, so a caller must not change it.
-	Queue []luaplugin.QueueEntry
+	// Queue returns the playlist. The first call builds the rows on the
+	// goroutine of the caller, from the playlist at that time, so an Update
+	// does not copy a long playlist that no plugin reads. The states share
+	// the rows until the playlist changes, so a caller must not change
+	// them. A state from PluginStateLoader always has a Queue.
+	Queue func() []luaplugin.QueueEntry
 
-	revision uint64 // the playlist revision that Queue shows
+	revision uint64 // the playlist revision at publish
 }
 
 // PluginStateLoader returns a func that loads the state that the Model
@@ -39,12 +47,12 @@ func (m *Model) PluginStateLoader() func() PluginState {
 				return *state
 			}
 		}
-		return PluginState{Status: "stopped", Speed: 1}
+		return PluginState{Status: "stopped", Speed: 1, Queue: func() []luaplugin.QueueEntry { return nil }}
 	}
 }
 
-// publishPluginState stores the state that Lua plugins read. It rebuilds
-// the queue only when the playlist revision changed.
+// publishPluginState stores the state that Lua plugins read. It makes a new
+// Queue only when the playlist revision changed.
 func (m *Model) publishPluginState() {
 	if m.pluginState == nil || m.player == nil || m.playlist == nil {
 		return
@@ -69,18 +77,19 @@ func (m *Model) publishPluginState() {
 	if prev := m.pluginState.Load(); prev != nil && prev.revision == state.revision {
 		state.Queue = prev.Queue
 	} else {
-		state.Queue = m.pluginQueue()
+		pl := m.playlist
+		state.Queue = sync.OnceValue(func() []luaplugin.QueueEntry { return pluginQueue(pl) })
 	}
 	m.pluginState.Store(state)
 }
 
-// pluginQueue returns the playlist as cliamp.queue.list reports it.
-func (m *Model) pluginQueue() []luaplugin.QueueEntry {
-	queued := make(map[int]bool)
-	for _, entry := range m.playlist.QueueEntries() {
-		queued[entry.TrackIndex] = true
+// pluginQueue returns pl as cliamp.queue.list reports it.
+func pluginQueue(pl *playlist.Playlist) []luaplugin.QueueEntry {
+	tracks, playNext := pl.TracksAndQueue()
+	queued := make(map[int]bool, len(playNext))
+	for _, index := range playNext {
+		queued[index] = true
 	}
-	tracks := m.playlist.Tracks()
 	queue := make([]luaplugin.QueueEntry, len(tracks))
 	for i, track := range tracks {
 		queue[i] = luaplugin.QueueEntry{Track: pluginTrack(track), Index: i, Queued: queued[i]}
