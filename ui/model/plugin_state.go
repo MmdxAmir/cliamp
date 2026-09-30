@@ -3,10 +3,11 @@ package model
 import "github.com/bjarneo/cliamp/luaplugin"
 
 // PluginState is the playback state that Lua plugins read. The Model
-// publishes a new PluginState at the end of each Update, so a plugin never
-// sees a state in the middle of an Update. Track is the track that plays, as
-// the plugin events and the media controls report it. The engine position
-// is not in it, because it moves between Updates.
+// publishes a new PluginState before it sends a plugin event and at the end
+// of each Update, so an event hook sees the change that its event reports.
+// Track is the track that plays, as the plugin events and the media controls
+// report it. The engine position is not in it, because it moves between
+// Updates.
 type PluginState struct {
 	Status  string // "playing", "paused" or "stopped"
 	Volume  float64

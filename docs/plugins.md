@@ -240,6 +240,8 @@ In `playback.state`, `status` is `"playing"`, `"paused"`, or `"stopped"`. In `pl
 
 cliamp sends `player.*` and `queue.change` events by comparing state after each UI update. They cover every source, including a keypress, IPC, MPRIS, or another plugin.
 
+An event hook sees the state that includes the change that the event reports. For example, `cliamp.track.title()` in a `track.change` hook returns the title of the track that started.
+
 ## Plugin object methods
 
 The object from `plugin.register(...)` provides these methods in addition to `:on()` and `:config()`:

@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/luaplugin"
@@ -179,5 +180,65 @@ func TestPluginStateConcurrentReads(t *testing.T) {
 	wg.Wait()
 	if got := load().Count; got != 201 {
 		t.Fatalf("count = %d, want 201", got)
+	}
+}
+
+// A hook runs on the plugin goroutine while Update goes on, and it must read
+// the state that includes the change its event reports. No Update runs in
+// these cases, so the hook would read the old state if the Model published
+// the state only at the end of Update.
+func TestPluginHookReadsTheChangeOfItsEvent(t *testing.T) {
+	b := playlist.Track{Title: "B", Path: "b.mp3"}
+	tests := []struct {
+		event  string
+		report string // a Lua expression over the event data ev
+		emit   func(m *Model, engine *playbackFakeEngine)
+		want   string
+	}{
+		{luaplugin.EventTrackChange, `ev.title .. "|" .. cliamp.track.title()`, func(m *Model, _ *playbackFakeEngine) {
+			m.playlist.SetIndex(1)
+			m.setPlaybackTrack(b)
+			m.nowPlaying(b)
+		}, "B|B"},
+		{luaplugin.EventPlaybackState, `ev.status .. "|" .. cliamp.player.state()`, func(m *Model, engine *playbackFakeEngine) {
+			engine.paused = true
+			m.notifyAll()
+		}, "paused|paused"},
+		{luaplugin.EventQueueChange, `ev.count .. "|" .. cliamp.queue.count()`, func(m *Model, _ *playbackFakeEngine) {
+			m.playlist.Add(playlist.Track{Title: "C", Path: "c.mp3"})
+			m.emitPluginEvents()
+		}, "3|3"},
+		{luaplugin.EventPlaybackStop, `cliamp.player.state()`, func(m *Model, _ *playbackFakeEngine) {
+			m.stopByUser()
+		}, "stopped"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.event, func(t *testing.T) {
+			mgr, reports, _ := newReportTestPlugin(t, tt.event, tt.report)
+			a := playlist.Track{Title: "A", Path: "a.mp3"}
+			engine := &playbackFakeEngine{playing: true}
+			m := newPluginStateModel(engine, a, b)
+			m.luaMgr = mgr
+			m.pluginEmit = &pluginEmitState{}
+			m.setPlaybackTrack(a)
+			load := m.PluginStateLoader()
+			mgr.SetStateProvider(luaplugin.StateProvider{
+				PlayerState:   func() string { return load().Status },
+				CurrentTrack:  func() luaplugin.Track { return load().Track },
+				PlaylistCount: func() int { return load().Count },
+			})
+			m.emitPluginEvents()
+			m.publishPluginState()
+
+			tt.emit(&m, engine)
+			select {
+			case got := <-reports:
+				if got != tt.want {
+					t.Fatalf("hook read %q, want %q", got, tt.want)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatalf("the %s hook did not run", tt.event)
+			}
+		})
 	}
 }

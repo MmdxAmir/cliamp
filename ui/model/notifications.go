@@ -37,7 +37,7 @@ func (m *Model) notifyPlugins() {
 	data["title"] = title
 	data["artist"] = artist
 	data["position"] = m.player.Position().Seconds()
-	m.luaMgr.Emit(luaplugin.EventPlaybackState, data)
+	m.emitPlugin(luaplugin.EventPlaybackState, data)
 }
 
 // playerStatus returns the player state that Lua plugins see: "playing",
@@ -134,7 +134,7 @@ func (m *Model) stopByUser() {
 func (m *Model) nowPlaying(track playlist.Track) {
 	m.playingTrackStarted = true
 	if m.luaMgr != nil && m.luaMgr.HasHook(luaplugin.EventTrackChange) {
-		m.luaMgr.Emit(luaplugin.EventTrackChange, trackToMap(track))
+		m.emitPlugin(luaplugin.EventTrackChange, trackToMap(track))
 	}
 
 	reporter := m.findPlaybackReporter(track)
@@ -191,7 +191,7 @@ func (m *Model) maybeScrobble(track playlist.Track, elapsed, duration time.Durat
 	if m.luaMgr != nil && pastThreshold && m.luaMgr.HasHook(luaplugin.EventTrackScrobble) {
 		data := trackToMap(track)
 		data["played_secs"] = elapsed.Seconds()
-		m.luaMgr.Emit(luaplugin.EventTrackScrobble, data)
+		m.emitPlugin(luaplugin.EventTrackScrobble, data)
 	}
 
 	reporter := m.findPlaybackReporter(track)

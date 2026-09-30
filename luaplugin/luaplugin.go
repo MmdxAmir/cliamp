@@ -50,8 +50,8 @@ type Plugin struct {
 // StateProvider supplies read-only access to player/playlist state.
 // Functions are set by the caller after model construction so the Lua API
 // can query state without importing the ui package. main.go reads the state
-// that the Model publishes after each Update. Plugin goroutines call the
-// functions, so each one must be safe for concurrent use.
+// that the Model publishes before each event and after each Update. Plugin
+// goroutines call the functions, so each one must be safe for concurrent use.
 type StateProvider struct {
 	PlayerState   func() string  // "playing", "paused", "stopped"
 	Position      func() float64 // seconds

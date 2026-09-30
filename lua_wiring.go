@@ -14,9 +14,10 @@ import (
 )
 
 // luaStateProvider gives Lua plugins read access to the playback state. The
-// values come from the state that the Model publishes after each Update, so
-// cliamp.track.* reports the track that plays. Position and Duration read
-// the engine clock, which moves between Updates.
+// values come from the state that the Model publishes before each plugin
+// event and after each Update, so cliamp.track.* reports the track that
+// plays. Position and Duration read the engine clock, which moves between
+// Updates.
 func luaStateProvider(clock engineClock, load func() model.PluginState) luaplugin.StateProvider {
 	return luaplugin.StateProvider{
 		PlayerState:   func() string { return load().Status },

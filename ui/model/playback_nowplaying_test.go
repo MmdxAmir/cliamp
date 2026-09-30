@@ -26,6 +26,13 @@ type nowPlayingProv struct {
 // through cliamp.message as "path\nartist\ntitle".
 func newEventTestPlugin(t *testing.T, event string) (*luaplugin.Manager, <-chan string, func()) {
 	t.Helper()
+	return newReportTestPlugin(t, event, `ev.path .. "\n" .. ev.artist .. "\n" .. ev.title`)
+}
+
+// newReportTestPlugin loads a plugin whose hook for event sends report, a Lua
+// expression over the event data ev, through cliamp.message.
+func newReportTestPlugin(t *testing.T, event, report string) (*luaplugin.Manager, <-chan string, func()) {
+	t.Helper()
 	configDir := t.TempDir()
 	t.Setenv("CLIAMP_CONFIG_DIR", configDir)
 	pluginDir := filepath.Join(configDir, "plugins")
@@ -35,10 +42,10 @@ func newEventTestPlugin(t *testing.T, event string) (*luaplugin.Manager, <-chan 
 	pluginPath := filepath.Join(pluginDir, "event-spy.lua")
 	script := fmt.Sprintf(`
 local p = plugin.register({name = "event-spy", type = "hook"})
-p:on(%q, function(track)
-    cliamp.message(track.path .. "\n" .. track.artist .. "\n" .. track.title)
+p:on(%q, function(ev)
+    cliamp.message(%s)
 end)
-`, event)
+`, event, report)
 	if err := os.WriteFile(pluginPath, []byte(script), 0o644); err != nil {
 		t.Fatal(err)
 	}
