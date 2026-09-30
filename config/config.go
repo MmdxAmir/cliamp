@@ -1047,7 +1047,7 @@ func (c *Config) setTopLevel(key, val string) {
 // save updates only the given key in the existing config file, preserving
 // all other content, comments, and formatting. If the key doesn't exist,
 // it is appended. If no config file exists, one is created with just that key.
-// value is the TOML text of the value. The typed savers SaveString, SaveBool,
+// The file always ends with a newline. value is the TOML text of the value. The typed savers SaveString, SaveBool,
 // SaveFloat and SaveFloats format it.
 func save(key, value string) error {
 	if strings.ContainsAny(key+value, "\r\n") {
@@ -1104,8 +1104,17 @@ func save(key, value string) error {
 			}
 		}
 		if !inserted {
-			lines = append(lines, line)
+			// A final newline leaves an empty last element. The key goes
+			// before it, so it does not land after a blank line.
+			end := len(lines)
+			if lines[end-1] == "" {
+				end--
+			}
+			lines = slices.Insert(lines, end, line)
 		}
+	}
+	if lines[len(lines)-1] != "" {
+		lines = append(lines, "") // end the file with one newline
 	}
 
 	return fileutil.WriteFileAtomic(path, []byte(strings.Join(lines, "\n")), 0o600)

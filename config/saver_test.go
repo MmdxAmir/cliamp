@@ -117,6 +117,64 @@ func TestSaveDoesNotMatchKeyInSection(t *testing.T) {
 	}
 }
 
+// TestSaveEndsWithNewline checks that a saved key lands next to the other
+// top-level keys and that the file ends with one newline.
+func TestSaveEndsWithNewline(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial string
+		want    string
+	}{
+		{
+			name:    "appended with a final newline",
+			initial: "shuffle = true\n",
+			want:    "shuffle = true\nrepeat = \"All\"\n",
+		},
+		{
+			name:    "appended without a final newline",
+			initial: "shuffle = true",
+			want:    "shuffle = true\nrepeat = \"All\"\n",
+		},
+		{
+			name:    "appended after a kept blank line",
+			initial: "shuffle = true\n\n",
+			want:    "shuffle = true\n\nrepeat = \"All\"\n",
+		},
+		{
+			name:    "appended to an empty file",
+			initial: "",
+			want:    "repeat = \"All\"\n",
+		},
+		{
+			name:    "inserted before a section with a final newline",
+			initial: "shuffle = true\n[radio]\ncountry = \"none\"\n",
+			want:    "shuffle = true\nrepeat = \"All\"\n[radio]\ncountry = \"none\"\n",
+		},
+		{
+			name:    "inserted before a section without a final newline",
+			initial: "shuffle = true\n[radio]\ncountry = \"none\"",
+			want:    "shuffle = true\nrepeat = \"All\"\n[radio]\ncountry = \"none\"\n",
+		},
+		{
+			name:    "replaced without a final newline",
+			initial: "repeat = \"Off\"",
+			want:    "repeat = \"All\"\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := withHome(t)
+			writeConfig(t, home, tt.initial)
+			if err := SaveString("repeat", "All"); err != nil {
+				t.Fatalf("SaveString: %v", err)
+			}
+			if got := readConfig(t, home); got != tt.want {
+				t.Errorf("config = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSaveNavidromeSortCreatesSection(t *testing.T) {
 	home := withHome(t)
 
