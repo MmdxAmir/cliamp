@@ -142,6 +142,62 @@ func TestPlayTrackStartsSlowSourcesOffUpdate(t *testing.T) {
 	}
 }
 
+// TestPlayTrackResumeSeeksOnlyWhenStartMissedHint checks that a start at the
+// resume hint spends the hint without a second seek, and that a yt-dlp page,
+// which starts at 0, resumes through a seek command.
+func TestPlayTrackResumeSeeksOnlyWhenStartMissedHint(t *testing.T) {
+	tests := []struct {
+		name           string
+		track          playlist.Track
+		ytdl           bool // the player starts the page at 0 and seeks by restart
+		wantAsync      bool
+		wantResumeSeek bool
+	}{
+		// ffmpeg already starts at the hint, and a second seek would start
+		// a new ffmpeg in Update.
+		{name: "local ffmpeg file", track: playlist.Track{Title: "Book", Path: "/books/book.m4b"}, wantAsync: true},
+		{name: "yt-dlp page", track: playlist.Track{Title: "Show", Path: "https://www.mixcloud.com/creator/show/", Stream: true}, ytdl: true, wantAsync: true, wantResumeSeek: true},
+		{name: "native local file", track: playlist.Track{Title: "Song", Path: "/music/song.mp3"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			player := &playbackFakeEngine{seekable: true, ytdlSeek: tt.ytdl, startsAtOffset: !tt.ytdl, duration: time.Hour}
+			m := newCustomStreamModel(player)
+			m.SetResume(tt.track.Path, 600)
+
+			cmd := m.playTrack(tt.track)
+			if tt.wantAsync {
+				msg := streamPlayedFrom(t, cmd)
+				// The track plays on while the start message waits.
+				player.position += 200 * time.Millisecond
+				updated, next := m.Update(msg)
+				m = updated.(Model)
+				cmd = next
+			}
+
+			if len(player.playAtOffsets) != 1 || player.playAtOffsets[0] != 10*time.Minute {
+				t.Fatalf("PlayAt offsets = %v, want [10m0s]", player.playAtOffsets)
+			}
+			if len(player.seekCalls) != 0 {
+				t.Fatalf("Seek calls in Update = %v, want none", player.seekCalls)
+			}
+			if !tt.wantResumeSeek {
+				if m.resume.path != "" || m.resume.secs != 0 {
+					t.Fatalf("resume = %+v, want the hint cleared", m.resume)
+				}
+				return
+			}
+			if !m.seek.active {
+				t.Fatal("seek.active = false, want a pending resume seek")
+			}
+			msg := runSeekCmd(t, cmd)
+			if !msg.resume || msg.target != 10*time.Minute {
+				t.Fatalf("resume seek = %+v, want a resume at 10m0s", msg)
+			}
+		})
+	}
+}
+
 func TestPreloadNextWaitsForLeadTimeOnSourceResolverURI(t *testing.T) {
 	tests := []struct {
 		name        string

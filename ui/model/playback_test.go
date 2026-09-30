@@ -48,6 +48,7 @@ type playbackFakeEngine struct {
 	mono                bool
 	streamTitle         string
 	playErr             error // PlayAt and PlayAtForGeneration fail with it
+	startsAtOffset      bool  // PlayAt moves position to its offset, as a seekable decoder does
 }
 
 func (f *playbackFakeEngine) PlayAt(path string, _, offset time.Duration) error {
@@ -55,6 +56,9 @@ func (f *playbackFakeEngine) PlayAt(path string, _, offset time.Duration) error 
 		return f.playErr
 	}
 	f.playAtOffsets = append(f.playAtOffsets, offset)
+	if f.startsAtOffset {
+		f.position = offset
+	}
 	f.playing = true
 	f.paused = false
 	f.playCalls = append(f.playCalls, path)

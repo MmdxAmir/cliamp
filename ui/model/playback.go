@@ -393,8 +393,9 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 		}
 	} else {
 		m.err = nil
-		// Async starts resume after streamPlayedMsg; local playback reaches
-		// this branch, where applyResume performs the seek synchronously.
+		// Async starts resume after streamPlayedMsg. A native local file
+		// started at the hint, so applyResume seeks here only when that
+		// start seek failed.
 		m.applyResume()
 		m.nowPlaying(track)
 		return tea.Batch(m.preloadNext(), fetchCmd, m.backfillLoadedPlaylistDuration(track))
@@ -655,9 +656,10 @@ func (m *Model) clearResume(track playlist.Track) {
 	}
 }
 
-// applyResume seeks to the saved resume position if the current track matches.
-// A seek that restarts a decoder, as for yt-dlp or a network stream, runs in
-// the returned command so the network never blocks Update.
+// applyResume seeks to the saved resume position if the current track matches
+// and playback did not already start there. A seek that restarts a decoder, as
+// for yt-dlp or a network stream, runs in the returned command so the network
+// never blocks Update.
 func (m *Model) applyResume() tea.Cmd {
 	// secs == 0 is indistinguishable from "never played"; skip resume.
 	if m.resume.path == "" || m.resume.secs <= 0 {
@@ -679,6 +681,12 @@ func (m *Model) applyResume() tea.Cmd {
 		return nil
 	}
 	target := m.clampPosition(time.Duration(m.resume.secs) * time.Second)
+	// A seekable decoder already started at the hint. A second seek would
+	// restart a local ffmpeg decoder in Update, so spend the hint here.
+	if (m.player.Position() - target).Abs() <= time.Second {
+		m.clearResume(track)
+		return nil
+	}
 	if m.needsDebouncedSeek() {
 		m.seek.active = true
 		m.seek.inFlight = true
