@@ -16,14 +16,14 @@ import (
 // context has no deadline.
 func TestWebRequestsTimeOut(t *testing.T) {
 	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
-	originalTransport := http.DefaultTransport
-	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		<-req.Context().Done()
-		return nil, req.Context().Err()
-	})
-	t.Cleanup(func() { http.DefaultTransport = originalTransport })
 	originalClient := webHTTPClient
-	webHTTPClient = &http.Client{Timeout: 50 * time.Millisecond}
+	webHTTPClient = &http.Client{
+		Timeout: 50 * time.Millisecond,
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		}),
+	}
 	t.Cleanup(func() { webHTTPClient = originalClient })
 
 	staticSession := func() *Session {

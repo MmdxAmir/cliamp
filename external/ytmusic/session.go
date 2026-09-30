@@ -13,6 +13,7 @@ import (
 	"github.com/bjarneo/cliamp/internal/authurl"
 	"github.com/bjarneo/cliamp/internal/browser"
 	"github.com/bjarneo/cliamp/internal/credstore"
+	"github.com/bjarneo/cliamp/internal/httpclient"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -42,7 +43,7 @@ const CallbackPort = 19873
 
 // oauthHTTPClient sends OAuth token requests. The timeout stops a stalled
 // token endpoint from blocking a provider call without limit.
-var oauthHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var oauthHTTPClient = httpclient.NewAPI(30 * time.Second)
 
 // oauthContext makes oauth2 send its token requests through oauthHTTPClient.
 func oauthContext(ctx context.Context) context.Context {
@@ -129,11 +130,15 @@ func newSessionFromStored(ctx context.Context, clientID, clientSecret string, cr
 
 // newTokenSession builds a Session around token. ctx bounds only the service
 // setup. oauth2 keeps the context of a token source for every later refresh,
-// so the token source gets a context that does not end.
+// so the token source gets a context that does not end. The Data API client
+// sends its requests through the transport of oauthHTTPClient, so they
+// follow the same proxy rules. It does not use the timeout of
+// oauthHTTPClient.
 func newTokenSession(ctx context.Context, clientID, clientSecret string, token *oauth2.Token, cacheIdentity string) (*Session, error) {
 	ts := googleOAuthConfig(clientID, clientSecret).TokenSource(oauthContext(context.Background()), token)
 
-	svc, err := youtube.NewService(ctx, option.WithTokenSource(ts))
+	apiClient := &http.Client{Transport: &oauth2.Transport{Base: oauthHTTPClient.Transport, Source: ts}}
+	svc, err := youtube.NewService(ctx, option.WithHTTPClient(apiClient))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic: create service: %w", err)
 	}

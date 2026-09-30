@@ -52,15 +52,9 @@ func (s *Session) trackLyrics(ctx context.Context, trackID string) ([]lyrics.Lin
 		return nil, lyrics.ErrNotFound
 	}
 
-	s.mu.RLock()
-	ts := s.tokenSource
-	s.mu.RUnlock()
-	if ts == nil {
-		return nil, fmt.Errorf("spotify: web api token unavailable, run 'cliamp spotify reset' and sign in again: %w", playlist.ErrNeedsAuth)
-	}
-	tok, err := ts.Token()
+	token, err := s.bearer(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("refresh access token: %w", err)
+		return nil, err
 	}
 
 	u := "https://spclient.wg.spotify.com/color-lyrics/v2/track/" + url.PathEscape(trackID)
@@ -69,11 +63,11 @@ func (s *Session) trackLyrics(ctx context.Context, trackID string) ([]lyrics.Lin
 		return nil, fmt.Errorf("build spotify lyrics request: %w", err)
 	}
 	// The color-lyrics endpoint rejects tokens without this platform marker.
-	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("app-platform", "WebPlayer")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := webHTTPClient.Do(req)
+	resp, err := s.webClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("spotify lyrics request: %w", err)
 	}

@@ -178,6 +178,27 @@ log_level = "DEBUG"
 low_power = false
 `
 
+// goldenListComments puts a # comment after each list key. A # inside a
+// quoted item stays in the item. A comment after an unquoted last item stays
+// part of that item, as for any unquoted string.
+const goldenListComments = `
+eq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]   # bass up
+
+[plex]
+url = "http://plex.local:32400"
+token = "plex-token"
+libraries = ["Music", "Jazz # Blues"] # two libraries
+
+[mixcloud]
+enabled = true
+styles = ['ambient', "deep-house"]	# tab before the comment
+
+[audiobookshelf]
+url = "https://abs.example.com"
+token = "abs-token"
+libraries = Audiobooks, Podcasts # unquoted
+`
+
 // TestLoadGolden loads whole config files and compares every Config field,
 // so a parser change cannot move a value without a test failure.
 func TestLoadGolden(t *testing.T) {
@@ -355,6 +376,16 @@ func TestLoadGolden(t *testing.T) {
 		Libraries: []string{"Audiobooks", "Podcasts"},
 	}
 
+	listsWant := defaultConfig()
+	listsWant.EQ = [10]float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	listsWant.Plex = PlexConfig{URL: "http://plex.local:32400", Token: "plex-token", Libraries: []string{"Music", "Jazz # Blues"}}
+	listsWant.Mixcloud = MixcloudConfig{Enabled: true, Styles: []string{"ambient", "deep-house"}, StylesSet: true}
+	listsWant.Audiobookshelf = AudiobookshelfConfig{
+		URL:       "https://abs.example.com",
+		Token:     "abs-token",
+		Libraries: []string{"Audiobooks", "Podcasts # unquoted"},
+	}
+
 	tests := []struct {
 		name string
 		data string
@@ -364,6 +395,7 @@ func TestLoadGolden(t *testing.T) {
 		{"example with every setting turned on", uncommentExample(example), allWant},
 		{"example plus every provider section", example + goldenSections, sectionsWant},
 		{"every top-level key", goldenTopLevel, topWant},
+		{"comments after lists", goldenListComments, listsWant},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

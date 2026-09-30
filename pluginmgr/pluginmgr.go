@@ -19,11 +19,12 @@ import (
 
 	"github.com/bjarneo/cliamp/internal/appdir"
 	"github.com/bjarneo/cliamp/internal/fileutil"
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/internal/plugintrust"
 	"github.com/bjarneo/cliamp/luaplugin"
 )
 
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+var httpClient = httpclient.NewAPI(30 * time.Second)
 
 const maxPluginSize = 1 << 20 // 1 MB
 

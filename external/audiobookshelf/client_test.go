@@ -605,3 +605,14 @@ func TestDialErrorGetsNetdiagHint(t *testing.T) {
 		})
 	}
 }
+
+func TestPingRejectsOversizedBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"libraries":[{"id":"` + strings.Repeat("x", maxResponseBody) + `"}]}`))
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "token", "", "", nil).Ping(); !errors.Is(err, httpclient.ErrTooLarge) {
+		t.Fatalf("Ping() error = %v, want httpclient.ErrTooLarge", err)
+	}
+}

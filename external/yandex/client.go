@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 const (
@@ -24,6 +26,9 @@ const (
 	dlTimeout      = 30 * time.Second
 	timestampFmt   = "2006-01-02T15:04:05.999Z"
 )
+
+// downloadInfoClient fetches the download info documents, which need no token.
+var downloadInfoClient = httpclient.NewAPI(dlTimeout)
 
 // fullDownloadInfoGuard validates the API-provided download info URL before
 // it is fetched (token-free). Tests override it to point at httptest servers.
@@ -49,7 +54,7 @@ type client struct {
 
 func newClient(token string) *client {
 	return &client{
-		http:    &http.Client{Timeout: apiTimeout},
+		http:    httpclient.NewAPI(apiTimeout),
 		token:   token,
 		apiBase: defaultAPIBase,
 	}
@@ -405,8 +410,7 @@ func (c *client) fullDownloadInfo(ctx context.Context, infoURL string) (fullDown
 	req.Header.Set("X-Yandex-Music-Client", "YandexMusicAndroid/24024312")
 	req.Header.Set("User-Agent", "okhttp/4.12.0")
 
-	dl := &http.Client{Timeout: dlTimeout}
-	resp, err := dl.Do(req)
+	resp, err := downloadInfoClient.Do(req)
 	if err != nil {
 		return full, err
 	}

@@ -285,12 +285,12 @@ cliamp reads a subset of TOML. These rules apply to every key:
 - Single quotes are literal. cliamp decodes no escapes inside them.
 - An unquoted string also works. cliamp keeps all of its text, including a `#`.
 - A bool is `true` or `false` in any letter case. `1` and `0` also work. cliamp ignores any other value and keeps the default.
-- To add a comment at the end of a line, put whitespace and then `#`. This works after a quoted string, a number, a bool, or a section header such as `[navidrome]`. After an unquoted string, the `#` and the text after it stay part of the value.
-- A comment after a list, such as `eq` or `libraries`, does not work. Put that comment on its own line.
+- To add a comment at the end of a line, put whitespace and then `#`. This works after a quoted string, a number, a bool, a list in square brackets such as `eq` or `libraries`, or a section header such as `[navidrome]`. After an unquoted string, the `#` and the text after it stay part of the value. This rule also applies to an unquoted last string item of a list without square brackets, such as `libraries = Music, Jazz # x`.
 
 ```toml
 volume = -6                       # quieter start
 shuffle = True                    # any letter case
+eq = [3, 2, 0, 0, 0, 0, 0, 0, 1, 2]  # custom curve
 initial_directory = 'D:\Music'    # single quotes keep backslashes
 
 [navidrome]                       # home server
@@ -379,7 +379,7 @@ provider = "cliamp"
 
 The default, `cliamp`, opens on the cliamp radio channels. See [radio.md](radio.md#cliamp-radio).
 
-Valid values: `cliamp` (default), `radio`, `podcast`, `navidrome`, `lyrion`, `plex`, `jellyfin`, `emby`, `spotify`, `qobuz`, `tidal`, `soundcloud`, `mixcloud`, `netease`, `yandex`, `audiobookshelf`, `yt`, `youtube`, `ytmusic`.
+Valid values: `cliamp` (default), `radio`, `podcast`, `navidrome`, `lyrion`, `plex`, `jellyfin`, `emby`, `spotify`, `qobuz`, `tidal`, `soundcloud`, `mixcloud`, `netease`, `yandex`, `audiobookshelf`, `yt`, `youtube`, `ytmusic`. The `--provider` flag also accepts `abs` for `audiobookshelf`.
 
 You can also override this setting on the CLI: `cliamp --provider jellyfin`.
 
@@ -583,3 +583,38 @@ expanded. Missing directories are created. Mount external drives first because
 cliamp does not check mount status. The IPC `save` operation uses the same
 directory, in the TUI and in headless mode. Files remain ordinary local audio
 files and are not automatically substituted into online playlists.
+
+## Proxy
+
+cliamp reads the proxy variables `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and
+`NO_PROXY`. The lowercase names also work. Audio streams, provider API and
+sign-in requests, lyrics, radio and podcast directories, feeds, remote
+playlists, plugin installs and `cliamp upgrade` use them.
+
+```sh
+ALL_PROXY=socks5h://127.0.0.1:1080 cliamp
+HTTPS_PROXY=http://proxy.example:3128 cliamp
+```
+
+- `HTTP_PROXY` applies to `http://` requests, and `HTTPS_PROXY` applies to
+  `https://` requests.
+- `ALL_PROXY` applies when the variable for the scheme is not set. Audio
+  streams use `ALL_PROXY` only for a `socks5://` or `socks5h://` proxy.
+- `NO_PROXY` lists the hosts that cliamp connects to directly. cliamp does not
+  send a request for `localhost` or a loopback address through a proxy.
+- API requests accept a user and password in a SOCKS5 proxy URL, such as
+  `socks5h://user:pass@proxy.example:1080`. Audio streams refuse a SOCKS5 proxy
+  URL with a user and password, because SOCKS5 sends them as clear text.
+- yt-dlp reads these variables itself.
+- ffmpeg opens HLS streams, and remote streams in a format that cliamp does
+  not decode itself. ffmpeg reads only the lowercase `http_proxy` and
+  `no_proxy` variables. It uses only an `http://` proxy, and it ignores
+  `HTTPS_PROXY`, `ALL_PROXY` and SOCKS5 proxies.
+- The Spotify playback connection and the `cliamp.http` Lua plugin API do not
+  follow these rules.
+
+To send the ffmpeg streams through a proxy too, also set `http_proxy`:
+
+```sh
+HTTPS_PROXY=http://proxy.example:3128 http_proxy=http://proxy.example:3128 cliamp
+```

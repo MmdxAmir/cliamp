@@ -99,7 +99,7 @@ func (p *QobuzProvider) ensureClient() (*client, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	c, err := newClientSilent(ctx)
+	c, err := newClientSilent(ctx, apiBaseURL)
 	if err != nil {
 		applog.Debug("qobuz: silent auth failed, prompting sign-in: %v", err)
 		return nil, playlist.ErrNeedsAuth

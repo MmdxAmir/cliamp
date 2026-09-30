@@ -3,6 +3,7 @@ package ytmusic
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -203,6 +204,8 @@ func TestDoOAuthReturnsAuthorizationError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", attempt, err)
 		}
+		// Read the whole body, so the client can keep the connection.
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 
 		select {

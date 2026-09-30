@@ -1,6 +1,7 @@
 package plex
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -598,5 +599,16 @@ func TestClientSendsUserAgent(t *testing.T) {
 	}
 	if got != httpclient.UserAgent {
 		t.Errorf("User-Agent = %q, want %q", got, httpclient.UserAgent)
+	}
+}
+
+func TestPingRejectsOversizedBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"MediaContainer":{"friendlyName":"` + strings.Repeat("x", maxResponseBody) + `"}}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestClient(srv).Ping(); !errors.Is(err, httpclient.ErrTooLarge) {
+		t.Fatalf("Ping() error = %v, want httpclient.ErrTooLarge", err)
 	}
 }

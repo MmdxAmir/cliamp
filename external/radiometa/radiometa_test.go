@@ -3,8 +3,10 @@ package radiometa
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -157,6 +159,7 @@ func TestGetJSON(t *testing.T) {
 	}{
 		{name: "decodes a 200 body", status: http.StatusOK, body: `{"title":"Song"}`, want: "Song"},
 		{name: "fails on a non-200 status", status: http.StatusServiceUnavailable, body: `{}`, wantErr: true},
+		{name: "fails on a body over the limit", status: http.StatusOK, body: `{"title":"` + strings.Repeat("x", maxMetaBody) + `"}`, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -175,6 +178,9 @@ func TestGetJSON(t *testing.T) {
 			err := getJSON(context.Background(), srv.URL, &got)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("getJSON() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.status == http.StatusOK && tt.wantErr && !errors.Is(err, httpclient.ErrTooLarge) {
+				t.Errorf("getJSON() error = %v, want httpclient.ErrTooLarge", err)
 			}
 			if got.Title != tt.want {
 				t.Errorf("Title = %q, want %q", got.Title, tt.want)

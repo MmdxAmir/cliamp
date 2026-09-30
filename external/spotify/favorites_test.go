@@ -7,16 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/oauth2"
-
 	"github.com/bjarneo/cliamp/playlist"
 )
 
 // stubLibrary serves the Web API with status and records each request.
 func stubLibrary(t *testing.T, status int, requests *[]*http.Request) *SpotifyProvider {
 	t.Helper()
-	originalTransport := http.DefaultTransport
-	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	rt := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		*requests = append(*requests, req)
 		return &http.Response{
 			StatusCode: status,
@@ -26,8 +23,7 @@ func stubLibrary(t *testing.T, status int, requests *[]*http.Request) *SpotifyPr
 			Request:    req,
 		}, nil
 	})
-	t.Cleanup(func() { http.DefaultTransport = originalTransport })
-	sess := &Session{tokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "token"})}
+	sess := stubSession(rt)
 	return New(sess, "client", 320)
 }
 
@@ -50,6 +46,7 @@ func TestCanFavoriteTrack(t *testing.T) {
 }
 
 func TestSetTrackFavorite(t *testing.T) {
+	t.Parallel()
 	const uri = "spotify:track:4uLU6hMCjMI75M1A2tKUQC"
 	for _, tc := range []struct {
 		name       string
@@ -98,6 +95,7 @@ func TestSetTrackFavorite(t *testing.T) {
 }
 
 func TestSetTrackFavoriteRejectsOtherTracks(t *testing.T) {
+	t.Parallel()
 	var requests []*http.Request
 	p := stubLibrary(t, http.StatusOK, &requests)
 	if err := p.SetTrackFavorite(context.Background(), playlist.Track{Path: "spotify:episode:1"}, true); err == nil {

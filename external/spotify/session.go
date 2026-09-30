@@ -16,6 +16,7 @@ import (
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/internal/authurl"
 	"github.com/bjarneo/cliamp/internal/browser"
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/playlist"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -48,7 +49,7 @@ func callbackAddress() string {
 
 // webHTTPClient sends Web API, lyrics and OAuth token requests. The timeout
 // stops a stalled connection from blocking its caller without limit.
-var webHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var webHTTPClient = httpclient.NewAPI(30 * time.Second)
 
 // oauthContext makes oauth2 send its token requests through webHTTPClient.
 func oauthContext(ctx context.Context) context.Context {
@@ -70,6 +71,15 @@ type Session struct {
 	devID       string
 	clientID    string             // Spotify Developer app client ID
 	tokenSource oauth2.TokenSource // auto-refreshing OAuth2 token source
+	web         *http.Client       // Web API and lyrics client, or nil for webHTTPClient
+}
+
+// webClient returns the client for Web API and lyrics requests.
+func (s *Session) webClient() *http.Client {
+	if s.web != nil {
+		return s.web
+	}
+	return webHTTPClient
 }
 
 type streamContextTransport struct {
@@ -464,8 +474,12 @@ func performOAuth2PKCEFlows(ctx context.Context, flows []oauthFlow) ([]*oauth2.T
 	}
 
 	callbackCh := make(chan oauthCallback, len(flows))
+	// Close each connection after its response. The browser then cannot
+	// send the callback of a later sign-in to this server after it stops.
+	srv := &http.Server{Handler: oauthCallbackHandler(pending, callbackCh)}
+	srv.SetKeepAlivesEnabled(false)
 	go func() {
-		if err := http.Serve(lis, oauthCallbackHandler(pending, callbackCh)); err != nil && !errors.Is(err, net.ErrClosed) {
+		if err := srv.Serve(lis); err != nil && !errors.Is(err, net.ErrClosed) {
 			applog.UserError("spotify: auth callback server error: %v", err)
 		}
 	}()

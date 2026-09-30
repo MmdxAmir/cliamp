@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bjarneo/cliamp/internal/httpclient"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -99,7 +100,7 @@ func NewFromConfig(cfg Config) *Provider {
 func New(cfg Config) *Provider {
 	return &Provider{
 		apiBase:     defaultAPIBase,
-		httpClient:  &http.Client{Timeout: apiTimeout},
+		httpClient:  httpclient.NewAPI(apiTimeout),
 		cookiesFrom: strings.TrimSpace(cfg.CookiesFrom),
 		userID:      strings.TrimSpace(cfg.UserID),
 	}

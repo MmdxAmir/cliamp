@@ -30,9 +30,10 @@ var ErrPlaylistUnchanged = errors.New("playlist unchanged")
 // directory sources set it so the UI can flag them in the list. A zero value
 // means "none/unknown" and the UI hides the indicator.
 //
-// Favorite is optional: a provider sets it on a row that the user favorited,
-// such as a favorite radio station or a subscribed podcast show. The IPC
-// playlist list reports it.
+// Favorite is optional: a provider sets it on a row of its favorites
+// section, such as a favorite radio station or a subscribed podcast show.
+// Other rows of the same station or show do not set it. The IPC playlist
+// list reports it.
 type PlaylistInfo struct {
 	ID             string
 	Name           string

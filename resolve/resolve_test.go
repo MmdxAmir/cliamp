@@ -501,17 +501,20 @@ func TestResolveM3UCapsBody(t *testing.T) {
 	for i := 0; hls.Len() <= maxPlaylistBody; i++ {
 		fmt.Fprintf(&hls, "#EXTINF:6.0,\nsegment_%08d.ts\n", i)
 	}
+	live := hls.String()
 	hls.WriteString("#EXT-X-ENDLIST\n")
 
 	tests := []struct {
-		name       string
-		body       string
-		wantErr    bool
-		wantTracks int
+		name         string
+		body         string
+		wantErr      bool
+		wantTracks   int
+		wantRealtime bool
 	}{
 		{name: "plain under the cap", body: plain(10), wantTracks: 10},
 		{name: "plain over the cap", body: plain(30000), wantErr: true},
-		{name: "hls over the cap", body: hls.String(), wantTracks: 1},
+		{name: "hls vod over the cap", body: hls.String(), wantTracks: 1},
+		{name: "hls live over the cap", body: live, wantTracks: 1, wantRealtime: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -540,6 +543,9 @@ func TestResolveM3UCapsBody(t *testing.T) {
 			for i, tr := range tracks {
 				if !playlist.IsURL(tr.Path) {
 					t.Fatalf("tracks[%d].Path = %q, want a URL", i, tr.Path)
+				}
+				if tr.Realtime != tt.wantRealtime {
+					t.Errorf("tracks[%d].Realtime = %v, want %v", i, tr.Realtime, tt.wantRealtime)
 				}
 			}
 		})
@@ -621,7 +627,8 @@ func TestClassifyRemote(t *testing.T) {
 }
 
 // TestURLContextCancelsRemoteFetch pins that URLContext stops a slow remote
-// resolve when the caller cancels, well before the 30 s client limit.
+// resolve or feed sniff when the caller cancels, well before the client
+// limits of 30 s and 5 s.
 func TestURLContextCancelsRemoteFetch(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping Unix shell script test on Windows")
@@ -637,12 +644,16 @@ func TestURLContextCancelsRemoteFetch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldClient := httpClient
+	oldClient, oldSniff := httpClient, sniffClient
 	httpClient = &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: rewriteHostTransport{target: target, rt: http.DefaultTransport},
 	}
-	t.Cleanup(func() { httpClient = oldClient })
+	sniffClient = &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: rewriteHostTransport{target: target, rt: http.DefaultTransport},
+	}
+	t.Cleanup(func() { httpClient, sniffClient = oldClient, oldSniff })
 
 	tmpDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmpDir, "yt-dlp"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
@@ -656,6 +667,7 @@ func TestURLContextCancelsRemoteFetch(t *testing.T) {
 		"https://example.com/podcast.rss",
 		"https://www.xiaoyuzhoufm.com/episode/abc123",
 		"ytsearch:slow query",
+		"https://example.com/live", // no resolver claims it, so Args sniffs it
 	} {
 		t.Run(rawURL, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())

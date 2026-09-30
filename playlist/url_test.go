@@ -279,6 +279,28 @@ func TestIsXiaoyuzhouEpisode(t *testing.T) {
 	}
 }
 
+func TestNormalizeHost(t *testing.T) {
+	tests := []struct {
+		host string
+		want string
+	}{
+		{"youtube.com", "youtube.com"},
+		{" WWW.YouTube.COM ", "youtube.com"},
+		{"m.youtube.com", "youtube.com"},
+		{"www.m.example.com", "example.com"},
+		{"m.www.example.com", "www.example.com"},
+		{"music.163.com", "music.163.com"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.host, func(t *testing.T) {
+			if got := NormalizeHost(tt.host); got != tt.want {
+				t.Errorf("NormalizeHost(%q) = %q, want %q", tt.host, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestHostOf(t *testing.T) {
 	tests := []struct {
 		path   string

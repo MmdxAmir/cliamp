@@ -110,18 +110,10 @@ func (p *SpotifyProvider) webAPIWithRetry(ctx context.Context, method, path stri
 // So if there is no OAuth2 token source, fail loudly with ErrNeedsAuth
 // rather than attempting the call with the wrong token.
 func (s *Session) webAPIOnce(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string) (*http.Response, error) {
-	s.mu.RLock()
-	ts := s.tokenSource
-	s.mu.RUnlock()
-
-	if ts == nil {
-		return nil, fmt.Errorf("spotify: web api token unavailable, sign in again: %w", playlist.ErrNeedsAuth)
-	}
-	tok, err := ts.Token()
+	token, err := s.bearer(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("refresh access token: %w", err)
+		return nil, err
 	}
-	token := tok.AccessToken
 
 	u, _ := url.Parse("https://api.spotify.com")
 	u = u.JoinPath(path)
@@ -139,7 +131,28 @@ func (s *Session) webAPIOnce(ctx context.Context, method, path string, query url
 		req.Header.Set("Content-Type", contentType)
 	}
 
-	return webHTTPClient.Do(req)
+	return s.webClient().Do(req)
+}
+
+// bearer returns the OAuth2 access token for Web API and lyrics requests. The
+// token source refreshes an expired token. When ctx has ended, bearer returns
+// ctx.Err() and sends no refresh request. A session without a token source
+// returns playlist.ErrNeedsAuth.
+func (s *Session) bearer(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	s.mu.RLock()
+	ts := s.tokenSource
+	s.mu.RUnlock()
+	if ts == nil {
+		return "", fmt.Errorf("spotify: web api token unavailable, sign in again: %w", playlist.ErrNeedsAuth)
+	}
+	tok, err := ts.Token()
+	if err != nil {
+		return "", fmt.Errorf("refresh access token: %w", err)
+	}
+	return tok.AccessToken, nil
 }
 
 // maxRateLimitWait is the longest Retry-After that webAPIWithRetry waits for.

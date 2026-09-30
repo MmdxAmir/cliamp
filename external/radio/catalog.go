@@ -4,7 +4,6 @@ package radio
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -266,15 +265,20 @@ func fetchJSON(ctx context.Context, u string, out any) error {
 	return nil
 }
 
-// getJSON performs one GET under ctx and decodes the response body. Callers
-// wrap the error with the name of the service they were talking to.
+// maxCatalogBody limits a Radio Browser response. The full tag index is the
+// largest one.
+const maxCatalogBody = 16 << 20
+
+// getJSON performs one GET under ctx and decodes the response body. A body
+// over maxCatalogBody returns httpclient.ErrTooLarge. Callers wrap the error
+// with the name of the service they were talking to.
 func getJSON(ctx context.Context, client *http.Client, u string, out any) error {
 	resp, err := get(ctx, client, u)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	return json.NewDecoder(resp.Body).Decode(out)
+	return httpclient.ReadJSON(resp.Body, maxCatalogBody, out)
 }
 
 // get performs one GET as cliamp and fails on any status but 200. Callers

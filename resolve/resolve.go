@@ -40,30 +40,17 @@ func SetYTDLCookiesForHost(host, browser string) {
 	ytdlcookies.SetForHost(host, browser)
 }
 
-// httpClient is used for feed and M3U resolution. It has a generous but
-// finite timeout to prevent hanging on unresponsive servers.
-var httpClient = &http.Client{
-	Timeout:   30 * time.Second,
-	Transport: &uaTransport{rt: http.DefaultTransport},
-}
+// httpClient is used for feed, M3U and YouTube page resolution. It has a
+// generous but finite timeout to prevent hanging on unresponsive servers.
+// httpclient.NewAPI sends the cliamp User-Agent and follows the proxy
+// variables.
+var httpClient = httpclient.NewAPI(30 * time.Second)
 
 // sniffClient probes content types during Args classification, which runs on
 // the startup path before the TUI launches. It uses a short timeout so a slow
 // or unresponsive server can stall startup by at most a few seconds rather
 // than the 30s the feed/M3U client allows.
-var sniffClient = &http.Client{
-	Timeout:   5 * time.Second,
-	Transport: &uaTransport{rt: http.DefaultTransport},
-}
-
-// uaTransport injects the cliamp User-Agent header into every request.
-type uaTransport struct{ rt http.RoundTripper }
-
-func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.Header.Set("User-Agent", httpclient.UserAgent)
-	return t.rt.RoundTrip(req)
-}
+var sniffClient = httpclient.NewAPI(5 * time.Second)
 
 // Result holds the output of Args: instantly-resolved tracks and
 // remote URLs (feeds, M3U) that need async HTTP fetching.
@@ -113,12 +100,17 @@ func classifyRemote(u string) remoteKind {
 // Args separates CLI arguments into immediately-resolved local tracks
 // and pending remote URLs (feeds, M3U) that require HTTP fetching.
 func Args(args []string) (Result, error) {
+	return argsContext(context.Background(), args)
+}
+
+// argsContext is Args with caller-controlled cancellation of the feed sniff.
+func argsContext(ctx context.Context, args []string) (Result, error) {
 	var r Result
 	var files []string
 
 	for _, arg := range args {
 		if playlist.IsURL(arg) {
-			if classifyRemote(arg) != kindStream || sniffFeedURL(arg) {
+			if classifyRemote(arg) != kindStream || sniffFeedURL(ctx, arg) {
 				r.Pending = append(r.Pending, arg)
 			} else {
 				files = append(files, arg)
@@ -165,11 +157,12 @@ func Args(args []string) (Result, error) {
 // goes to Feed. Use URL for input that has not been classified yet,
 // such as an address typed interactively.
 func Remote(urls []string) ([]playlist.Track, error) {
-	return remote(context.Background(), urls)
+	return RemoteContext(context.Background(), urls)
 }
 
-// remote is Remote with caller-controlled cancellation.
-func remote(ctx context.Context, urls []string) ([]playlist.Track, error) {
+// RemoteContext is Remote with caller-controlled cancellation. ctx covers
+// each fetch and each yt-dlp run.
+func RemoteContext(ctx context.Context, urls []string) ([]playlist.Track, error) {
 	var tracks []playlist.Track
 	for _, u := range urls {
 		switch classifyRemote(u) {
@@ -260,17 +253,22 @@ func URL(rawURL string) ([]playlist.Track, error) {
 	return URLContext(context.Background(), rawURL)
 }
 
-// URLContext is URL with caller-controlled cancellation. ctx covers the fetch
-// of a feed, a remote playlist or a video page. The feed sniff of a URL that
-// no resolver claims keeps its own 5 s limit.
+// URLContext is URL with caller-controlled cancellation. ctx covers the feed
+// sniff of a URL that no resolver claims, and the fetch of a feed, a remote
+// playlist or a video page. The sniff also keeps its own 5 s limit.
 func URLContext(ctx context.Context, rawURL string) ([]playlist.Track, error) {
-	result, err := Args([]string{rawURL})
+	result, err := argsContext(ctx, []string{rawURL})
 	if err != nil {
+		return nil, err
+	}
+	// A cancelled sniff finds no feed. Stop here, so the URL does not come
+	// back as a plain stream.
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	tracks := result.Tracks
 	if len(result.Pending) > 0 {
-		pending, err := remote(ctx, result.Pending)
+		pending, err := RemoteContext(ctx, result.Pending)
 		if err != nil {
 			return nil, err
 		}
@@ -305,10 +303,10 @@ func hasListParam(rawURL string) bool {
 	return u.Query().Get("list") != ""
 }
 
-// sniffFeedURL does a HEAD request and returns true if the Content-Type
-// indicates an RSS/Atom feed. Used as a fallback when the URL has no
-// recognizable file extension (e.g. https://feeds.megaphone.fm/GLT1412515089).
-func sniffFeedURL(rawURL string) bool {
+// sniffFeedURL does a HEAD request under ctx and returns true if the
+// Content-Type indicates an RSS/Atom feed. Used as a fallback when the URL has
+// no recognizable file extension (e.g. https://feeds.megaphone.fm/GLT1412515089).
+func sniffFeedURL(ctx context.Context, rawURL string) bool {
 	// URLs with a known audio extension are never feeds — skip the
 	// network round-trip to avoid misclassification when CDNs return
 	// unexpected Content-Types for HEAD requests.
@@ -318,7 +316,11 @@ func sniffFeedURL(rawURL string) bool {
 		}
 	}
 
-	resp, err := sniffClient.Head(rawURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := sniffClient.Do(req)
 	if err != nil {
 		return false
 	}
@@ -456,6 +458,10 @@ func httpGet(ctx context.Context, rawURL string) (*http.Response, error) {
 // generous safety bound.
 const maxPlaylistBody = 1 << 20
 
+// maxHLSScan caps how much of an HLS body past maxPlaylistBody
+// hasHLSEndList reads to find #EXT-X-ENDLIST.
+const maxHLSScan = 16 << 20
+
 // resolveM3U fetches an M3U/M3U8 URL. HLS playlists (master or media) are a
 // single live/VOD stream — not a track list — so the original URL is handed to
 // the player, where ffmpeg resolves the relative chunklist/segment URIs and
@@ -487,7 +493,7 @@ func resolveM3U(ctx context.Context, m3uURL string) ([]playlist.Track, error) {
 		t := playlist.TrackFromPath(m3uURL) // Stream=true; title derived from URL
 		// #EXT-X-ENDLIST only appears in media playlists, so VOD behind a
 		// master playlist is conservatively treated as live.
-		t.Realtime = !bytes.Contains(body, []byte("#EXT-X-ENDLIST"))
+		t.Realtime = !hasHLSEndList(body, resp.Body)
 		return []playlist.Track{t}, nil
 	}
 
@@ -531,6 +537,34 @@ func resolvePLS(ctx context.Context, plsURL string) ([]playlist.Track, error) {
 	return filterRemoteEntries(plsEntriesToTracks(entries)), nil
 }
 
+// hasHLSEndList reports whether an HLS body holds #EXT-X-ENDLIST. head is the
+// part of the body already read, and rest is the unread part. A long VOD
+// media playlist puts the tag past maxPlaylistBody, so the check reads up to
+// maxHLSScan bytes of rest in chunks and does not keep them. A read error
+// ends the scan, and the stream then counts as live.
+func hasHLSEndList(head []byte, rest io.Reader) bool {
+	tag := []byte("#EXT-X-ENDLIST")
+	if bytes.Contains(head, tag) {
+		return true
+	}
+	// buf starts with the last len(tag)-1 bytes read so far, so a tag split
+	// across two reads is found.
+	buf := make([]byte, len(tag)-1+32<<10)
+	carry := copy(buf, head[max(0, len(head)-len(tag)+1):])
+	rest = io.LimitReader(rest, maxHLSScan)
+	for {
+		n, err := rest.Read(buf[carry:])
+		window := buf[:carry+n]
+		if bytes.Contains(window, tag) {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+		carry = copy(buf, window[max(0, len(window)-len(tag)+1):])
+	}
+}
+
 // isHLSPlaylist reports whether an M3U body is an HLS playlist (master or media)
 // rather than a plain list of media URLs. HLS is identified by its #EXT-X-* tags.
 func isHLSPlaylist(body []byte) bool {
@@ -567,7 +601,8 @@ const YTDLRadioInitialItems = 20
 // For playlist URLs it enumerates all entries natively; for single video URLs
 // it returns a single track with metadata from the YouTube API.
 func resolveYouTube(ctx context.Context, pageURL string) ([]playlist.Track, error) {
-	client := youtube.Client{}
+	// The library sets its own User-Agent on each request.
+	client := youtube.Client{HTTPClient: httpClient}
 
 	// Only attempt playlist resolution if the URL contains a "list=" parameter,
 	// avoiding a wasted API call for single-video URLs (the common case).
@@ -750,6 +785,13 @@ func parseYTDLTracks(r io.Reader) ([]playlist.Track, int, error) {
 // DownloadYTDL downloads a single track via yt-dlp to the given directory
 // and returns the output file path. Uses yt-dlp's default naming template.
 func DownloadYTDL(pageURL, saveDir string) (string, error) {
+	return DownloadYTDLContext(context.Background(), pageURL, saveDir)
+}
+
+// DownloadYTDLContext is DownloadYTDL with caller-controlled cancellation. A
+// cancel stops yt-dlp. It sets no time limit of its own, because a download
+// can take minutes.
+func DownloadYTDLContext(ctx context.Context, pageURL, saveDir string) (string, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return "", fmt.Errorf("yt-dlp not found in PATH")
 	}
@@ -765,11 +807,15 @@ func DownloadYTDL(pageURL, saveDir string) (string, error) {
 		args = append(args, "--cookies-from-browser", browser)
 	}
 	args = append(args, "--", pageURL)
-	cmd := exec.Command("yt-dlp", args...)
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	cmd.WaitDelay = 3 * time.Second
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	stdout, err := cmd.Output()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", fmt.Errorf("yt-dlp: download %s: %w", pageURL, ctxErr)
+		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg != "" {
 			return "", fmt.Errorf("yt-dlp: %s", msg)
