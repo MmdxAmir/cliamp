@@ -245,14 +245,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Auto-fetch lyrics when the stream song changes and lyrics overlay is open.
 			if m.lyrics.visible && !m.lyrics.loading {
 				if artist, song, ok := splitStreamTitle(title); ok {
-					q := artist + "\n" + song
-					if q != m.lyrics.query {
+					track, _ := m.currentPlaybackTrack()
+					if q := lyricsLookupKey(track, artist, song); q != m.lyrics.query {
 						m.lyrics.query = q
 						m.lyrics.loading = true
 						m.lyrics.lines = nil
 						m.lyrics.err = nil
 						m.lyrics.scroll = 0
-						lyricCmd = fetchLyricsCmd(artist, song, q, nextRequest(&m.requests.lyrics))
+						lyricCmd = m.fetchLyricsForTrack(track, artist, song)
 					}
 				}
 			}

@@ -54,7 +54,8 @@ type ipcSaveRequest struct {
 }
 
 type ipcLyricsRequest struct {
-	Reply chan ipc.Response
+	Context context.Context
+	Reply   chan ipc.Response
 }
 
 type ipcHistoryRequest struct {
@@ -576,18 +577,19 @@ func ipcPage[T any](items []T, offset, limit, max int) ([]T, int) {
 	return items[offset:end], total
 }
 
+// handleIPCLyrics looks up the lyrics of the track that plays in the same
+// order and with the same artist and title as the lyrics overlay.
 func (m *Model) handleIPCLyrics(request ipcLyricsRequest) tea.Cmd {
 	track, idx := m.currentPlaybackTrack()
 	if idx < 0 {
 		request.Reply <- ipc.Response{OK: false, Error: "no current track"}
 		return nil
 	}
+	artist, title := m.lyricsArtistTitle()
+	lookups := lyricsLookups(track, m.trackLyricsSources())
+	ctx := requestContext(request.Context)
 	return func() tea.Msg {
-		lines := lyrics.ParseEmbedded(track.EmbeddedLyrics)
-		var err error
-		if len(lines) == 0 {
-			lines, err = lyrics.Fetch(track.Artist, track.Title)
-		}
+		lines, err := lyrics.Lookup(ctx, track.EmbeddedLyrics, artist, title, lookups...)
 		if err != nil {
 			request.Reply <- ipc.Response{OK: false, Error: err.Error()}
 			return nil

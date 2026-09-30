@@ -1,6 +1,7 @@
 package lyrics
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +27,16 @@ type Line struct {
 
 // httpClient is reused across all lyrics API calls.
 var httpClient = httpclient.NewAPI(10 * time.Second)
+
+// The base URLs of the LRCLIB and NetEase APIs. Tests point them at a local
+// server.
+var (
+	lrclibBaseURL  = "https://lrclib.net"
+	neteaseBaseURL = "http://music.163.com"
+)
+
+// sourceTimeout limits each Source that Lookup calls.
+const sourceTimeout = 10 * time.Second
 
 // maxResponseBody limits API responses to 2 MB.
 const maxResponseBody = 2 << 20
@@ -71,13 +82,36 @@ func cleanQuery(str string) string {
 	return strings.TrimSpace(s)
 }
 
-// Fetch requests lyrics for the given artist and title.
+// Source finds the lyrics of one track in one place, such as the API of the
+// provider that owns the track. It returns ErrNotFound when it has none.
+type Source func(ctx context.Context) ([]Line, error)
+
+// Lookup returns the lyrics of a track. It tries the embedded lyrics first,
+// then each source in order, then LRCLIB and NetEase with artist and title.
+// A source that fails is skipped. When no step finds lyrics, Lookup returns
+// the last LRCLIB or NetEase error, so a network failure does not read as
+// ErrNotFound. When both answer that they have none, it returns ErrNotFound.
+func Lookup(ctx context.Context, embedded, artist, title string, sources ...Source) ([]Line, error) {
+	if lines := ParseEmbedded(embedded); len(lines) > 0 {
+		return lines, nil
+	}
+	for _, source := range sources {
+		sourceCtx, cancel := context.WithTimeout(ctx, sourceTimeout)
+		lines, err := source(sourceCtx)
+		cancel()
+		if err == nil && len(lines) > 0 {
+			return lines, nil
+		}
+	}
+	return fetch(ctx, artist, title)
+}
+
+// fetch requests lyrics for the given artist and title.
 // It tries LRCLIB first, then falls back to NetEase Cloud Music.
-// Returns ErrNotFound if neither source has lyrics.
 //
 // For YouTube/SoundCloud tracks where Artist is the uploader and Title
 // contains "Artist - Song", the title is split to build a better query.
-func Fetch(artist, title string) ([]Line, error) {
+func fetch(ctx context.Context, artist, title string) ([]Line, error) {
 	if artist == "" && title == "" {
 		return nil, ErrNotFound
 	}
@@ -99,18 +133,19 @@ func Fetch(artist, title string) ([]Line, error) {
 		query = artist + " " + title
 	}
 
-	// Try LRCLIB first.
-	lines, err := fetchLRCLIB(query)
-	if err == nil && len(lines) > 0 {
-		return lines, nil
+	var lastErr error
+	for _, source := range []func(context.Context, string) ([]Line, error){fetchLRCLIB, fetchNetEase} {
+		lines, err := source(ctx, query)
+		if err == nil && len(lines) > 0 {
+			return lines, nil
+		}
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			lastErr = err
+		}
 	}
-
-	// Fallback to NetEase Cloud Music.
-	lines, err = fetchNetEase(query)
-	if err == nil && len(lines) > 0 {
-		return lines, nil
+	if lastErr != nil {
+		return nil, lastErr
 	}
-
 	return nil, ErrNotFound
 }
 
@@ -132,14 +167,13 @@ func ParseEmbedded(data string) []Line {
 	return lines
 }
 
-func fetchLRCLIB(query string) ([]Line, error) {
-	searchURL := fmt.Sprintf("https://lrclib.net/api/search?q=%s", url.QueryEscape(query))
+func fetchLRCLIB(ctx context.Context, query string) ([]Line, error) {
+	searchURL := lrclibBaseURL + "/api/search?q=" + url.QueryEscape(query)
 
-	req, err := http.NewRequest("GET", searchURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "cliamp")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -179,13 +213,13 @@ func fetchLRCLIB(query string) ([]Line, error) {
 	return nil, ErrNotFound
 }
 
-func fetchNetEase(query string) ([]Line, error) {
+func fetchNetEase(ctx context.Context, query string) ([]Line, error) {
 	data := url.Values{}
 	data.Set("s", query)
 	data.Set("type", "1")
 	data.Set("limit", "1")
 
-	req, err := http.NewRequest("POST", "http://music.163.com/api/search/get/web", strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, neteaseBaseURL+"/api/search/get/web", strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -212,13 +246,21 @@ func fetchNetEase(query string) ([]Line, error) {
 	}
 
 	songID := searchRes.Result.Songs[0].Id
-	lyricURL := fmt.Sprintf("http://music.163.com/api/song/lyric?id=%d&lv=1&kv=1&tv=-1", songID)
+	lyricURL := fmt.Sprintf("%s/api/song/lyric?id=%d&lv=1&kv=1&tv=-1", neteaseBaseURL, songID)
 
-	lresp, err := httpClient.Get(lyricURL)
+	lreq, err := http.NewRequestWithContext(ctx, http.MethodGet, lyricURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	lresp, err := httpClient.Do(lreq)
 	if err != nil {
 		return nil, err
 	}
 	defer lresp.Body.Close()
+
+	if lresp.StatusCode != 200 {
+		return nil, fmt.Errorf("netease: %s", lresp.Status)
+	}
 
 	var lyricRes ncmLyricResponse
 	if err := json.NewDecoder(io.LimitReader(lresp.Body, maxResponseBody)).Decode(&lyricRes); err != nil {

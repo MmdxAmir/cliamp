@@ -258,30 +258,10 @@ func resolveURLCmd(rawURL string, autoPlay bool) tea.Cmd {
 	}
 }
 
-func fetchLyricsCmd(artist, title, query string, gen uint64) tea.Cmd {
-	return func() tea.Msg {
-		lines, err := lyrics.Fetch(artist, title)
-		return lyricsLoadedMsg{lines: lines, err: err, query: query, gen: gen}
-	}
-}
-
 func fetchTrackLyricsCmd(track playlist.Track, artist, title, query string, gen uint64, sources []trackLyricsSource) tea.Cmd {
+	lookups := lyricsLookups(track, sources)
 	return func() tea.Msg {
-		if lines := lyrics.ParseEmbedded(track.EmbeddedLyrics); len(lines) > 0 {
-			return lyricsLoadedMsg{lines: lines, query: query, gen: gen}
-		}
-		// Provider tracks, such as Spotify tracks: synced lyrics straight from
-		// the provider before the generic artist/title lookup. Failures fall
-		// through silently.
-		for _, source := range sources {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			lines, err := source.TrackLyrics(ctx, track)
-			cancel()
-			if err == nil && len(lines) > 0 {
-				return lyricsLoadedMsg{lines: lines, query: query, gen: gen}
-			}
-		}
-		lines, err := lyrics.Fetch(artist, title)
+		lines, err := lyrics.Lookup(context.Background(), track.EmbeddedLyrics, artist, title, lookups...)
 		return lyricsLoadedMsg{lines: lines, err: err, query: query, gen: gen}
 	}
 }

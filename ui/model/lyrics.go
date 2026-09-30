@@ -30,6 +30,18 @@ func (m Model) trackLyricsSources() []trackLyricsSource {
 	return sources
 }
 
+// lyricsLookups returns the lyrics lookups of sources for track, in the
+// order of sources.
+func lyricsLookups(track playlist.Track, sources []trackLyricsSource) []lyrics.Source {
+	lookups := make([]lyrics.Source, 0, len(sources))
+	for _, source := range sources {
+		lookups = append(lookups, func(ctx context.Context) ([]lyrics.Line, error) {
+			return source.TrackLyrics(ctx, track)
+		})
+	}
+	return lookups
+}
+
 // lyricsArtistTitle resolves the best artist and title for a lyrics lookup.
 // For streams with ICY metadata ("Artist - Song"), it parses the stream title.
 // For regular tracks, it uses the track's metadata fields.
