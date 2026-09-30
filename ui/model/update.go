@@ -244,7 +244,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notifyAll()
 			// Auto-fetch lyrics when the stream song changes and lyrics overlay is open.
 			if m.lyrics.visible && !m.lyrics.loading {
-				if artist, song, ok := strings.Cut(title, " - "); ok {
+				if artist, song, ok := splitStreamTitle(title); ok {
 					q := artist + "\n" + song
 					if q != m.lyrics.query {
 						m.lyrics.query = q

@@ -55,17 +55,38 @@ func (m *Model) playerStatus() string {
 // resolveTrackDisplay returns the display artist and title, applying ICY
 // stream title override for radio streams.
 func (m *Model) resolveTrackDisplay(track playlist.Track) (artist, title string) {
+	return streamDisplay(track, m.streamTitle)
+}
+
+// streamDisplay returns the artist and title to show for track while its
+// stream sends streamTitle. A title in the form "Artist - Title" replaces
+// both. A title without the separator replaces the title. A title with the
+// separator and an empty part keeps the track values, so a broken tag does
+// not show.
+func streamDisplay(track playlist.Track, streamTitle string) (artist, title string) {
 	artist, title = track.Artist, track.Title
-	if m.streamTitle != "" && track.Stream {
-		if a, t, ok := strings.Cut(m.streamTitle, " - "); ok {
-			if t != "" {
-				artist, title = a, t
-			}
-		} else {
-			title = m.streamTitle
-		}
+	if streamTitle == "" || !track.Stream {
+		return artist, title
 	}
-	return
+	if a, t, ok := splitStreamTitle(streamTitle); ok {
+		return a, t
+	}
+	if !strings.Contains(streamTitle, " - ") {
+		title = streamTitle
+	}
+	return artist, title
+}
+
+// splitStreamTitle splits an ICY stream title such as "Artist - Title" at
+// the first " - ". It trims both parts and reports false unless both are
+// set. Every surface that shows or looks up a stream song uses this rule.
+func splitStreamTitle(s string) (artist, title string, ok bool) {
+	artist, title, ok = strings.Cut(s, " - ")
+	artist, title = strings.TrimSpace(artist), strings.TrimSpace(title)
+	if !ok || artist == "" || title == "" {
+		return "", "", false
+	}
+	return artist, title, true
 }
 
 // trackToMap builds a metadata map from a track for Lua plugin events.

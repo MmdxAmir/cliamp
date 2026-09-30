@@ -3,7 +3,6 @@ package model
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -41,8 +40,8 @@ func (m *Model) lyricsArtistTitle() (artist, title string) {
 	}
 	// For streams, prefer the live ICY stream title which updates per-song.
 	if m.streamTitle != "" && track.Stream {
-		if a, t, ok := strings.Cut(m.streamTitle, " - "); ok {
-			return strings.TrimSpace(a), strings.TrimSpace(t)
+		if a, t, ok := splitStreamTitle(m.streamTitle); ok {
+			return a, t
 		}
 	}
 	return track.Artist, track.Title
