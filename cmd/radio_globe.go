@@ -63,6 +63,7 @@ func globeTheme(name string) theme.Theme {
 }
 
 type globeStyles struct {
+	colors  ui.Palette
 	palette globe.Palette
 	title   lipgloss.Style
 	dim     lipgloss.Style
@@ -72,23 +73,24 @@ type globeStyles struct {
 }
 
 func globeStylesFromTheme(t theme.Theme) globeStyles {
-	ui.ApplyThemeColors(t)
+	p := ui.PaletteFor(t)
 	fg := func(c color.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
 	sgr := func(c color.Color) ansi.Style { return ansi.Style{}.ForegroundColor(c) }
 	return globeStyles{
-		title:  fg(ui.ColorTitle).Bold(true),
-		dim:    fg(ui.ColorDim),
-		accent: fg(ui.ColorAccent),
-		text:   fg(ui.ColorText),
-		warn:   fg(ui.ColorWarning),
+		colors: p,
+		title:  fg(p.Title).Bold(true),
+		dim:    fg(p.Dim),
+		accent: fg(p.Accent),
+		text:   fg(p.Text),
+		warn:   fg(p.Warning),
 		palette: globe.Palette{
-			Grid:    sgr(ui.ColorDim).Faint(),
-			Rim:     sgr(ui.ColorAccent).Faint(),
-			Land:    sgr(ui.ColorDim),
-			Lit:     sgr(ui.ColorText),
-			Mark:    sgr(ui.ColorAccent).Bold(),
-			MarkFar: sgr(ui.ColorAccent).Faint(),
-			Label:   sgr(ui.ColorAccent),
+			Grid:    sgr(p.Dim).Faint(),
+			Rim:     sgr(p.Accent).Faint(),
+			Land:    sgr(p.Dim),
+			Lit:     sgr(p.Text),
+			Mark:    sgr(p.Accent).Bold(),
+			MarkFar: sgr(p.Accent).Faint(),
+			Label:   sgr(p.Accent),
 		},
 	}
 }
@@ -320,9 +322,9 @@ func (m *globeModel) View() tea.View {
 	}
 	v := tea.NewView(m.frame)
 	v.AltScreen = true
-	if ui.ColorBackground != nil {
-		v.BackgroundColor = ui.ColorBackground
-		v.ForegroundColor = ui.ColorText
+	if c := m.styles.colors; c.Background != nil {
+		v.BackgroundColor = c.Background
+		v.ForegroundColor = c.Text
 	}
 	return v
 }
