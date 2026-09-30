@@ -12,7 +12,10 @@ cliamp --mono track.mp3               # downmix to mono
 cliamp --no-mono track.mp3            # force stereo
 cliamp --auto-play ~/Music            # start playback immediately
 cliamp --playlist "Blade Runner"      # load a local TOML playlist (add --auto-play to start playback)
+cliamp --provider podcast             # open on one provider for this session
 ```
+
+`--provider` overrides `provider` in config.toml. It accepts the values in [Default Provider](configuration.md#default-provider), plus `abs` for `audiobookshelf`. Run `cliamp --help` to see the list.
 
 ## Audio engine
 
@@ -33,6 +36,7 @@ cliamp --audio-device NAME track.mp3      # use one output device for this sessi
 cliamp --simplified ~/Music                  # no visualizer or playlist
 cliamp --expanded ~/Music                    # start with the playlist expanded (Ctrl+X state)
 cliamp --eq-preset "Bass Boost" ~/Music
+cliamp --visualizer Wave ~/Music             # start with one visualizer mode
 cliamp --visualizer-60fps ~/Music            # smoother visualizer animation (higher CPU use)
 ```
 
@@ -77,6 +81,12 @@ Search for and play a track from the command line. This requires [yt-dlp](https:
 ```sh
 cliamp search "never gonna give you up"       # search YouTube
 cliamp search-sc "lofi beats"                  # search SoundCloud
+```
+
+To play only one video of a YouTube URL with a `list=` parameter, add `--no-expand-playlist`. `--expand-playlist` loads the whole playlist, which is the default. See [YouTube Music](youtube-music.md).
+
+```sh
+cliamp --no-expand-playlist 'https://www.youtube.com/watch?v=VIDEO&list=PLAYLIST'
 ```
 
 Press `Ctrl+F` in the player for context-aware search. cliamp uses the active provider search when available. Otherwise, it searches YouTube.

@@ -100,15 +100,20 @@ func TestLogProviderWiring(t *testing.T) {
 		}
 	}
 
-	// Spotify is in optionalProviders but is registered above, so it must
-	// not also be logged as skipped.
+	// Spotify is optional but is registered above, so it must not also be
+	// logged as skipped.
 	if strings.Contains(got, "key=spotify reason=not configured") {
 		t.Errorf("registered provider spotify was also logged as skipped: %s", got)
 	}
 
 	// Every other optional provider is absent from the registry, so each
 	// must be logged as skipped with "not configured".
-	wantSkips := len(optionalProviders) - 1
+	wantSkips := -1
+	for _, pk := range providerKeys {
+		if pk.optional {
+			wantSkips++
+		}
+	}
 	if n := strings.Count(got, "reason=not configured"); n != wantSkips {
 		t.Errorf("expected %d not-configured skips, got %d: %s", wantSkips, n, got)
 	}

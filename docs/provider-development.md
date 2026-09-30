@@ -163,7 +163,7 @@ Add the provider to `buildProviders` in `providers.go`:
 
 ```go
 if p := jellyfin.NewFromConfig(cfg.Jellyfin); p != nil {
-    add("jellyfin", "Jellyfin", p)
+    add("jellyfin", p)
 }
 ```
 
@@ -189,10 +189,17 @@ func isBufferedProviderURL(u string) bool {
 }
 ```
 
-### 5. Add a `--provider` flag value
+### 5. Add a provider key
 
-In the `main.go` help text, add the provider key to the `--provider` line. Users
-can then set it as the default.
+Add the key and the display name to `providerKeys` in `providers.go`. The
+`--provider` flag and its help text then accept the key. `buildProviders`
+takes the display name from the table. Set
+`optional` when the provider registers only when it is configured. The log
+then names the provider when it is not configured.
+
+```go
+{key: "jellyfin", name: "Jellyfin", optional: true},
+```
 
 ## What the UI Does Automatically
 

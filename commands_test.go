@@ -59,20 +59,73 @@ func TestInverseBoolFlags(t *testing.T) {
 	}
 }
 
-func TestPodcastProviderFlag(t *testing.T) {
-	app := buildApp()
-	var got config.Overrides
-	app.Action = func(_ context.Context, c *cli.Command) error {
-		var err error
-		got, err = overridesFromFlags(c)
-		return err
+// Every key and alias in providerKeys parses through --provider in any case,
+// and the flag help names each one. An unknown value fails with a message
+// that names every key. A key missing from the table would make
+// --provider and the provider config key fail for a provider that works.
+func TestProviderFlag(t *testing.T) {
+	parse := func(t *testing.T, value string) (config.Overrides, error) {
+		t.Helper()
+		app := buildApp()
+		var got config.Overrides
+		var flagErr error
+		app.Action = func(_ context.Context, c *cli.Command) error {
+			got, flagErr = overridesFromFlags(c)
+			return nil
+		}
+		if err := app.Run(t.Context(), []string{"cliamp", "--provider", value}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		return got, flagErr
 	}
-	if err := app.Run(t.Context(), []string{"cliamp", "--provider", "podcast"}); err != nil {
-		t.Fatal(err)
+
+	type flagCase struct{ value, want string }
+	var cases []flagCase
+	for _, pk := range providerKeys {
+		cases = append(cases, flagCase{pk.key, pk.key}, flagCase{strings.ToUpper(pk.key), pk.key})
+		if pk.alias != "" {
+			cases = append(cases, flagCase{pk.alias, pk.key})
+		}
 	}
-	if got.Provider == nil || *got.Provider != "podcast" {
-		t.Fatalf("provider = %v, want podcast", got.Provider)
+	for _, tc := range cases {
+		t.Run(tc.value, func(t *testing.T) {
+			got, err := parse(t, tc.value)
+			if err != nil {
+				t.Fatalf("--provider %s rejected: %v", tc.value, err)
+			}
+			if got.Provider == nil || *got.Provider != tc.want {
+				t.Fatalf("provider = %v, want %s", got.Provider, tc.want)
+			}
+		})
 	}
+
+	t.Run("unknown", func(t *testing.T) {
+		_, err := parse(t, "winamp")
+		if err == nil || !strings.HasSuffix(err.Error(), `(got "winamp")`) {
+			t.Fatalf("error = %v, want a --provider error", err)
+		}
+		for _, pk := range providerKeys {
+			if !strings.Contains(err.Error(), pk.key) {
+				t.Errorf("error %q does not name %s", err, pk.key)
+			}
+		}
+	})
+
+	t.Run("help", func(t *testing.T) {
+		var usage string
+		for _, f := range buildApp().Flags {
+			if sf, ok := f.(*cli.StringFlag); ok && sf.Name == "provider" {
+				usage = sf.Usage
+			}
+		}
+		for _, pk := range providerKeys {
+			for _, value := range []string{pk.key, pk.alias} {
+				if value != "" && !slices.Contains(strings.Split(strings.TrimPrefix(usage, "default provider: "), ", "), value) {
+					t.Errorf("--provider help %q does not name %s", usage, value)
+				}
+			}
+		}
+	})
 }
 
 func TestRadioCommandFlags(t *testing.T) {

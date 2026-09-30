@@ -47,6 +47,80 @@ type providerSet struct {
 	radioFavorites *radio.Favorites
 }
 
+// providerKey is one provider that --provider and the provider config key
+// accept.
+type providerKey struct {
+	key   string // the value of --provider and of the provider config key
+	alias string // a short form of key that --provider also accepts
+	name  string // the display name in the provider list
+	// optional marks a provider that registers only when it is configured.
+	// The log names each optional provider that is not configured.
+	optional bool
+}
+
+// providerKeys lists the providers that --provider accepts, in help order.
+// The flag help, the flag check, the provider names and the log of skipped
+// providers all come from this table. The local provider is not a
+// --provider value.
+var providerKeys = []providerKey{
+	{key: "cliamp", name: "cliamp radio"},
+	{key: "radio", name: "Radio"},
+	{key: "podcast", name: "Podcasts"},
+	{key: "navidrome", name: "Navidrome", optional: true},
+	{key: "lyrion", name: "Lyrion", optional: true},
+	{key: "plex", name: "Plex", optional: true},
+	{key: "jellyfin", name: "Jellyfin", optional: true},
+	{key: "emby", name: "Emby", optional: true},
+	{key: "spotify", name: "Spotify", optional: true},
+	{key: "qobuz", name: "Qobuz", optional: true},
+	{key: "tidal", name: "Tidal", optional: true},
+	{key: "soundcloud", name: "SoundCloud", optional: true},
+	{key: "mixcloud", name: "Mixcloud", optional: true},
+	{key: "netease", name: "NetEase", optional: true},
+	{key: "yandex", name: "Yandex Music", optional: true},
+	{key: "audiobookshelf", alias: "abs", name: "Audiobookshelf", optional: true},
+	{key: "yt", name: "YouTube (All)"},
+	{key: "youtube", name: "YouTube"},
+	{key: "ytmusic", name: "YouTube Music"},
+}
+
+// providerName returns the display name of the provider key.
+func providerName(key string) string {
+	for _, pk := range providerKeys {
+		if pk.key == key {
+			return pk.name
+		}
+	}
+	return key
+}
+
+// providerFlagUsage returns the help text of --provider.
+func providerFlagUsage() string {
+	var values []string
+	for _, pk := range providerKeys {
+		values = append(values, pk.key)
+		if pk.alias != "" {
+			values = append(values, pk.alias)
+		}
+	}
+	return "default provider: " + strings.Join(values, ", ")
+}
+
+// parseProviderKey returns the provider key that the --provider value v
+// names. It accepts a key or an alias in any case.
+func parseProviderKey(v string) (string, error) {
+	v = strings.ToLower(v)
+	keys := make([]string, len(providerKeys))
+	for i, pk := range providerKeys {
+		if v == pk.key || (pk.alias != "" && v == pk.alias) {
+			return pk.key, nil
+		}
+		keys[i] = pk.key
+	}
+	last := len(keys) - 1
+	return "", fmt.Errorf("--provider must be %s, or %s (got %q)", strings.Join(keys[:last], ", "), keys[last], v)
+}
+
 // buildProviders creates the providers that cfg enables. The public
 // providers are always available. The account providers register when they
 // are configured. interactive allows the yt-dlp install prompt.
@@ -65,57 +139,57 @@ func buildProviders(cfg config.Config, interactive bool) *providerSet {
 		applog.Info("copied %d bookmarks into favorites", added)
 	}
 
-	add := func(key, name string, p playlist.Provider) {
-		s.entries = append(s.entries, provider.Entry{Key: key, Name: name, Provider: p})
+	add := func(key string, p playlist.Provider) {
+		s.entries = append(s.entries, provider.Entry{Key: key, Name: providerName(key), Provider: p})
 	}
 	// The cliamp radio channels come first: they are the view cliamp opens on.
-	add("cliamp", "cliamp radio", radio.NewChannels())
-	add("radio", "Radio", radioProv)
+	add("cliamp", radio.NewChannels())
+	add("radio", radioProv)
 	if s.local != nil {
-		add("local", "Local", s.local)
+		s.entries = append(s.entries, provider.Entry{Key: "local", Name: "Local", Provider: s.local})
 	} else {
 		logProviderSkipped("Local", "local", "config directory unavailable")
 	}
-	add("podcast", "Podcasts", podcast.New(cfg.Podcast.Country))
+	add("podcast", podcast.New(cfg.Podcast.Country))
 
 	if c := navidrome.NewFromConfig(cfg.Navidrome); c != nil {
-		add("navidrome", "Navidrome", c)
+		add("navidrome", c)
 	} else if c := navidrome.NewFromEnv(cfg.Navidrome); c != nil {
-		add("navidrome", "Navidrome", c)
+		add("navidrome", c)
 	}
 	if c := lyrion.NewFromConfig(cfg.Lyrion); c != nil {
-		add("lyrion", "Lyrion", c)
+		add("lyrion", c)
 	} else if c := lyrion.NewFromEnv(); c != nil {
-		add("lyrion", "Lyrion", c)
+		add("lyrion", c)
 	}
 	if p := plex.NewFromConfig(cfg.Plex); p != nil {
-		add("plex", "Plex", p)
+		add("plex", p)
 	}
 	if p := jellyfin.NewFromConfig(cfg.Jellyfin); p != nil {
-		add("jellyfin", "Jellyfin", p)
+		add("jellyfin", p)
 	}
 	if p := emby.NewFromConfig(cfg.Emby); p != nil {
-		add("emby", "Emby", p)
+		add("emby", p)
 	}
 	if p := audiobookshelf.NewFromConfig(cfg.Audiobookshelf); p != nil {
-		add("audiobookshelf", "Audiobookshelf", p)
+		add("audiobookshelf", p)
 	}
 	if cfg.Spotify.IsSet() {
 		clientID := cfg.Spotify.ResolveClientID(spotify.DefaultClientID)
-		add("spotify", "Spotify", spotify.New(nil, clientID, cfg.Spotify.Bitrate))
+		add("spotify", spotify.New(nil, clientID, cfg.Spotify.Bitrate))
 	}
 	if cfg.Qobuz.IsSet() {
-		add("qobuz", "Qobuz", qobuz.New(cfg.Qobuz.Quality))
+		add("qobuz", qobuz.New(cfg.Qobuz.Quality))
 	}
 	if cfg.Tidal.IsSet() {
-		add("tidal", "Tidal", tidal.New(cfg.Tidal.Quality, cfg.Tidal.ClientID, cfg.Tidal.ClientSecret))
+		add("tidal", tidal.New(cfg.Tidal.Quality, cfg.Tidal.ClientID, cfg.Tidal.ClientSecret))
 	}
 	if p := soundcloud.NewFromConfig(soundcloud.Config{
 		Enabled:     cfg.SoundCloud.Enabled,
 		User:        cfg.SoundCloud.User,
 		CookiesFrom: cfg.SoundCloud.CookiesFrom,
 	}); p != nil {
-		add("soundcloud", "SoundCloud", p)
+		add("soundcloud", p)
 	}
 	if p := mixcloud.NewFromConfig(mixcloud.Config{
 		Enabled:        cfg.Mixcloud.Enabled,
@@ -128,20 +202,20 @@ func buildProviders(cfg config.Config, interactive bool) *providerSet {
 		StreamCreators: cfg.Mixcloud.StreamCreators,
 		SaveStyles:     config.SaveMixcloudStyles,
 	}); p != nil {
-		add("mixcloud", "Mixcloud", p)
+		add("mixcloud", p)
 	}
 	if p := netease.NewFromConfig(netease.Config{
 		Enabled:     cfg.NetEase.Enabled,
 		CookiesFrom: cfg.NetEase.CookiesFrom,
 		UserID:      cfg.NetEase.UserID,
 	}); p != nil {
-		add("netease", "NetEase", p)
+		add("netease", p)
 	}
 	if p := yandex.NewFromConfig(yandex.Config{
 		Enabled: cfg.Yandex.Enabled,
 		Token:   cfg.Yandex.Token,
 	}); p != nil {
-		add("yandex", "Yandex Music", p)
+		add("yandex", p)
 	}
 	s.entries = append(s.entries, youTubeEntries(cfg, interactive)...)
 
@@ -206,9 +280,9 @@ func youTubeEntries(cfg config.Config, interactive bool) []provider.Entry {
 		all, video, music = p.All, p.Video, p.Music
 	}
 	return []provider.Entry{
-		{Key: "yt", Name: "YouTube (All)", Provider: all},
-		{Key: "youtube", Name: "YouTube", Provider: video},
-		{Key: "ytmusic", Name: "YouTube Music", Provider: music},
+		{Key: "yt", Name: providerName("yt"), Provider: all},
+		{Key: "youtube", Name: providerName("youtube"), Provider: video},
+		{Key: "ytmusic", Name: providerName("ytmusic"), Provider: music},
 	}
 }
 
@@ -398,9 +472,9 @@ func logProviderSkipped(name, key, reason string) {
 // logYouTubeSkipped records the skip reason for all three YouTube providers
 // (All, video, music), since they register or skip as one group.
 func logYouTubeSkipped(reason string) {
-	logProviderSkipped("YouTube (All)", "yt", reason)
-	logProviderSkipped("YouTube", "youtube", reason)
-	logProviderSkipped("YouTube Music", "ytmusic", reason)
+	for _, key := range []string{"yt", "youtube", "ytmusic"} {
+		logProviderSkipped(providerName(key), key, reason)
+	}
 }
 
 // offerYTDLPInstall asks on in whether to install yt-dlp now. It asks only
@@ -435,37 +509,19 @@ func isCharDevice(f *os.File) bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-// optionalProviders lists the providers that register only when configured
-// and skip with a plain "not configured" reason. YouTube and Local are not
-// listed here: they have their own specific skip reasons.
-var optionalProviders = []struct{ key, name string }{
-	{"navidrome", "Navidrome"},
-	{"lyrion", "Lyrion"},
-	{"plex", "Plex"},
-	{"jellyfin", "Jellyfin"},
-	{"emby", "Emby"},
-	{"audiobookshelf", "Audiobookshelf"},
-	{"spotify", "Spotify"},
-	{"qobuz", "Qobuz"},
-	{"tidal", "Tidal"},
-	{"soundcloud", "SoundCloud"},
-	{"mixcloud", "Mixcloud"},
-	{"netease", "NetEase"},
-	{"yandex", "Yandex Music"},
-}
-
 // logProviderWiring logs the final provider registry: one line per
 // registered provider, plus a skip line for each optional provider absent
-// from it. See issue #406.
+// from it. YouTube and Local are not optional: they log their own specific
+// skip reasons. See issue #406.
 func logProviderWiring(providers []provider.Entry) {
 	registered := make(map[string]bool, len(providers))
 	for _, p := range providers {
 		logProviderRegistered(p.Name, p.Key)
 		registered[p.Key] = true
 	}
-	for _, p := range optionalProviders {
-		if !registered[p.key] {
-			logProviderSkipped(p.name, p.key, "not configured")
+	for _, pk := range providerKeys {
+		if pk.optional && !registered[pk.key] {
+			logProviderSkipped(pk.name, pk.key, "not configured")
 		}
 	}
 }

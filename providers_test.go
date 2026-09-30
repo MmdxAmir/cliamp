@@ -61,6 +61,9 @@ func TestBuildProviders(t *testing.T) {
 				if e.Provider == nil {
 					t.Errorf("entry %q has no provider", e.Key)
 				}
+				if e.Key != "local" && !slices.ContainsFunc(providerKeys, func(pk providerKey) bool { return pk.key == e.Key }) {
+					t.Errorf("entry %q is not in providerKeys, so --provider rejects it", e.Key)
+				}
 				keys = append(keys, e.Key)
 			}
 			if !slices.Equal(keys, tt.want) {
