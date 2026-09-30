@@ -25,6 +25,10 @@ func TestWriteHistory(t *testing.T) {
 		Track:    playlist.Track{Path: "/music/a.mp3", Title: "A"},
 		PlayedAt: now.Add(-2 * time.Hour),
 	}
+	restricted := history.Entry{
+		Track:    playlist.Track{Path: "https://www.mixcloud.com/creator/show/", Title: "Show", Stream: true, Restricted: true},
+		PlayedAt: now.Add(-time.Hour),
+	}
 	tests := []struct {
 		name       string
 		entries    []history.Entry
@@ -60,6 +64,20 @@ func TestWriteHistory(t *testing.T) {
     "played_at": "2026-09-30T10:00:00Z",
     "path": "/music/a.mp3",
     "title": "A"
+  }
+]
+`,
+		},
+		{
+			name:       "json marks a restricted track",
+			entries:    []history.Entry{restricted},
+			jsonOutput: true,
+			want: `[
+  {
+    "played_at": "2026-09-30T11:00:00Z",
+    "path": "https://www.mixcloud.com/creator/show/",
+    "title": "Show",
+    "restricted": true
   }
 ]
 `,

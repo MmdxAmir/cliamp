@@ -262,7 +262,8 @@ override another provider session.
 
 Shows that Mixcloud flags as exclusive have an `[E]` suffix in the cliamp UI.
 cliamp saves the flag as `restricted = true` in playlists, Favorites and
-Recently Played, and IPC track output reports it as `restricted`. The suffix
+Recently Played. IPC track output and `cliamp history --json` report it as
+`restricted`. The suffix
 is not added to titles in exported playlists, IPC output, or Now Playing
 metadata. It is a warning, not an automatic skip. A signed-in user
 may have access through a subscription. Another account gets the Mixcloud

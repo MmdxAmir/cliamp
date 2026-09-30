@@ -27,7 +27,8 @@ cliamp history clear          # wipe the history file
 The relative timestamp, such as `3m ago` or `yesterday`, uses local time. The
 JSON output uses `played_at` in RFC 3339 UTC for portability. A JSON entry also
 holds a `provider_meta` object when the track has provider keys, such as
-`navidrome.id`.
+`navidrome.id`. An entry holds `"restricted": true` when its provider can
+refuse to play the track, such as an exclusive Mixcloud show.
 
 ## File format
 

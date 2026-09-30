@@ -40,6 +40,7 @@ func writeHistory(w io.Writer, entries []history.Entry, jsonOutput bool, now tim
 			TrackNumber  int               `json:"track_number,omitempty"`
 			DurationSecs int               `json:"duration_secs,omitempty"`
 			ProviderMeta map[string]string `json:"provider_meta,omitempty"`
+			Restricted   bool              `json:"restricted,omitempty"`
 		}
 		out := make([]jsonEntry, len(entries))
 		for i, e := range entries {
@@ -54,6 +55,7 @@ func writeHistory(w io.Writer, entries []history.Entry, jsonOutput bool, now tim
 				TrackNumber:  e.Track.TrackNumber,
 				DurationSecs: e.Track.DurationSecs,
 				ProviderMeta: e.Track.ProviderMeta,
+				Restricted:   e.Track.Restricted,
 			}
 		}
 		enc := json.NewEncoder(w)
