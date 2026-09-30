@@ -299,10 +299,10 @@ func (m Model) ThemeName() string {
 
 // Init starts the tick timer and requests the terminal size. A headless
 // Model skips the size and the provider pane, which only a screen shows.
+// main.go configures the Model after New, so app.start publishes the plugin
+// state again before its hooks run.
 func (m Model) Init() tea.Cmd {
-	if m.luaMgr != nil {
-		m.luaMgr.Emit(luaplugin.EventAppStart, nil)
-	}
+	m.emitPlugin(luaplugin.EventAppStart, nil)
 	cmds := []tea.Cmd{tickCmd()}
 	if !m.headless {
 		cmds = append(cmds, func() tea.Msg { return tea.RequestWindowSize() })

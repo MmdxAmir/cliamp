@@ -255,3 +255,32 @@ func TestPluginHookReadsTheChangeOfItsEvent(t *testing.T) {
 		})
 	}
 }
+
+// main.go configures the Model after New, and no Update runs before the
+// app.start hook. The hook must read the configured track and EQ.
+func TestAppStartHookReadsTheConfiguredModel(t *testing.T) {
+	mgr, reports, _ := newReportTestPlugin(t, luaplugin.EventAppStart,
+		`cliamp.queue.current() .. "|" .. cliamp.player.eq_bands()[1]`)
+	pl := playlist.New()
+	pl.Replace([]playlist.Track{{Title: "A", Path: "a.mp3"}, {Title: "B", Path: "b.mp3"}})
+	pl.SetIndex(0)
+	m := New(&playbackFakeEngine{}, pl, nil, "", nil, nil, mgr, nil)
+	load := m.PluginStateLoader()
+	mgr.SetStateProvider(luaplugin.StateProvider{
+		CurrentIndex: func() int { return load().Index },
+		EQBands:      func() [10]float64 { return load().EQBands },
+	})
+
+	m.SetInitialTrack(1)
+	bands := [10]float64{4}
+	m.SetEQPreset("", &bands)
+	m.Init()
+	select {
+	case got := <-reports:
+		if got != "1|4" {
+			t.Fatalf("hook read %q, want %q", got, "1|4")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the app.start hook did not run")
+	}
+}
