@@ -327,6 +327,28 @@ func (m *Model) overlayOpen(screen topLevelScreen) bool {
 	return false
 }
 
+// overlayContentFirst reports whether the overlay that shows screen gives its
+// list the frame. Like overlayOpen, it is a method so the layout can check it
+// on each frame. The visualizer picker keeps the playback chrome for live
+// previews. The queue keeps it too: it holds the same tracks as the playlist
+// and reads as a view of it.
+func (m *Model) overlayContentFirst(screen topLevelScreen) bool {
+	switch screen {
+	case screenKeymap, screenDevicePicker, screenFileBrowser, screenNavBrowser,
+		screenThemePicker, screenSubs, screenSearch:
+		return true
+	case screenPlaylistPicker:
+		return m.plPicker.screen == plPickerChoose
+	case screenSearchOverlay:
+		return m.searchOverlay.screen == searchOverlayResults || m.searchOverlay.screen == searchOverlayPlaylist
+	case screenPlaylistManager:
+		return m.plManager.screen == plMgrScreenList || m.plManager.screen == plMgrScreenTracks
+	case screenNetSearch:
+		return m.netSearch.screen == netSearchResults
+	}
+	return false
+}
+
 // topOverlay returns the open overlay nearest the top of overlayStack.
 func (m *Model) topOverlay() (overlaySpec, bool) {
 	for _, spec := range overlayStack {

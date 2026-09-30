@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/ui"
 )
 
 // overlayOpeners sets the flag that opens each overlay in overlayStack.
@@ -120,6 +121,16 @@ func TestOverlayRoutesAgree(t *testing.T) {
 						t.Errorf("%s = %q, want %q", name, got, w)
 					}
 				}
+			}
+
+			// The top overlay alone decides the frame, whatever lies under it.
+			alone := Model{width: 80, height: 30}
+			overlayOpeners[want](&alone)
+			m.width, m.height = 80, 30
+			m.recomputeLayout()
+			alone.recomputeLayout()
+			if m.layout != alone.layout {
+				t.Errorf("layout = %+v, want %+v as with the top overlay alone", m.layout, alone.layout)
 			}
 
 			// An overlay with no context leaves the main screen context.
@@ -254,6 +265,38 @@ func TestGlobalKeysReachEveryOverlay(t *testing.T) {
 			m.handleKey(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
 			if got := m.activeScreen(); got != screenKeymap {
 				t.Fatalf("Ctrl+K over screen %d gave screen %d, want the keymap", spec.screen, got)
+			}
+		})
+	}
+}
+
+// The playlist picker opens over the playlist manager to name a new
+// playlist. Its name screen keeps the visualizer, as it does alone.
+func TestPickerNameScreenKeepsTheVisualizerOverTheManager(t *testing.T) {
+	tests := []struct {
+		name  string
+		under func(m *Model)
+	}{
+		{name: "alone", under: func(*Model) {}},
+		{name: "over the manager tracks", under: func(m *Model) {
+			m.plManager = plManagerState{visible: true, screen: plMgrScreenTracks}
+		}},
+		{name: "over the manager list", under: func(m *Model) {
+			m.plManager = plManagerState{visible: true, screen: plMgrScreenList}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := Model{width: 80, height: 30, playlist: playlist.New(), vis: ui.NewVisualizer(44100)}
+			tt.under(&m)
+			m.plPicker = playlistPickerState{visible: true, screen: plPickerNewName}
+			m.recomputeLayout()
+
+			if m.usesContentFirstLayout() {
+				t.Fatal("usesContentFirstLayout() = true, want the playback chrome")
+			}
+			if m.layout.visualizerRows == 0 {
+				t.Fatal("visualizerRows = 0, want the visualizer kept")
 			}
 		})
 	}
