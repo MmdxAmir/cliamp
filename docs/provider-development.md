@@ -157,35 +157,36 @@ url = "https://jellyfin.example.com"
 token = "your-api-key"
 ```
 
-### 4. Register in main.go
+### 4. Register in providers.go
 
-Register the provider in the `run()` function in `main.go`:
+Add the provider to `buildProviders` in `providers.go`:
 
 ```go
-if cfg.Jellyfin.URL != "" && cfg.Jellyfin.Token != "" {
-    jfProv := jellyfin.New(cfg.Jellyfin.URL, cfg.Jellyfin.Token)
-    providers = append(providers, provider.Entry{
-        Key: "jellyfin", Name: "Jellyfin", Provider: jfProv,
-    })
+if p := jellyfin.NewFromConfig(cfg.Jellyfin); p != nil {
+    add("jellyfin", "Jellyfin", p)
 }
 ```
 
-If the provider needs a custom audio pipeline, such as Spotify `spotify:` URIs,
-register a streamer factory:
+You do not register the capabilities that follow. `providers.go` finds them in
+the provider list:
 
-```go
-if cs, ok := myProv.(provider.CustomStreamer); ok {
-    for _, scheme := range cs.URISchemes() {
-        p.RegisterStreamerFactory(scheme, cs.NewStreamer)
-    }
-}
-```
+- For each provider that implements `CustomStreamer`, cliamp registers
+  `NewStreamer` for each scheme that `URISchemes` returns.
+- At shutdown, cliamp calls `Close` on each provider that implements `Closer`.
+
+If the provider resolves its own URI scheme when playback starts, such as
+Qobuz `qobuz://` URIs, add a case to `registerPlayerHooks` in `providers.go`.
 
 If the provider needs the buffered download pipeline for stream URLs, such as
-Navidrome Subsonic endpoints, register a URL matcher:
+Navidrome Subsonic endpoints, add its URL matcher to `isBufferedProviderURL` in
+`providers.go`:
 
 ```go
-p.RegisterBufferedURLMatcher(jellyfin.IsStreamURL)
+func isBufferedProviderURL(u string) bool {
+    return navidrome.IsSubsonicStreamURL(u) ||
+        jellyfin.IsStreamURL(u) ||
+        myprovider.IsStreamURL(u)
+}
 ```
 
 ### 5. Add a `--provider` flag value

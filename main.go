@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,24 +17,8 @@ import (
 
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/config"
-	"github.com/bjarneo/cliamp/external/audiobookshelf"
-	"github.com/bjarneo/cliamp/external/emby"
 	"github.com/bjarneo/cliamp/external/jellyfin"
-	"github.com/bjarneo/cliamp/external/local"
-	"github.com/bjarneo/cliamp/external/lyrion"
-	"github.com/bjarneo/cliamp/external/mixcloud"
-	"github.com/bjarneo/cliamp/external/navidrome"
-	"github.com/bjarneo/cliamp/external/netease"
-	"github.com/bjarneo/cliamp/external/plex"
-	"github.com/bjarneo/cliamp/external/podcast"
-	"github.com/bjarneo/cliamp/external/qobuz"
 	"github.com/bjarneo/cliamp/external/radio"
-	"github.com/bjarneo/cliamp/external/radiometa"
-	"github.com/bjarneo/cliamp/external/soundcloud"
-	"github.com/bjarneo/cliamp/external/spotify"
-	"github.com/bjarneo/cliamp/external/tidal"
-	"github.com/bjarneo/cliamp/external/yandex"
-	"github.com/bjarneo/cliamp/external/ytmusic"
 	"github.com/bjarneo/cliamp/internal/appdir"
 	"github.com/bjarneo/cliamp/internal/appmeta"
 	"github.com/bjarneo/cliamp/internal/playback"
@@ -45,7 +28,6 @@ import (
 	"github.com/bjarneo/cliamp/mediactl"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/resolve"
 	"github.com/bjarneo/cliamp/theme"
 	"github.com/bjarneo/cliamp/ui"
@@ -59,139 +41,6 @@ const (
 	defaultUIFPS  = 20
 	lowPowerUIFPS = 5
 )
-
-// isBufferedProviderURL reports whether u is a provider stream endpoint that
-// needs the buffered download pipeline rather than the live-stream one. These
-// are finite files with a known length, so buffering gives seeking and gapless
-// playback.
-func isBufferedProviderURL(u string) bool {
-	return navidrome.IsSubsonicStreamURL(u) ||
-		jellyfin.IsStreamURL(u) ||
-		emby.IsStreamURL(u) ||
-		plex.IsStreamURL(u) ||
-		qobuz.IsStreamURL(u) ||
-		tidal.IsStreamURL(u) ||
-		audiobookshelf.IsStreamURL(u) ||
-		lyrion.IsStreamURL(u) ||
-		yandex.IsStreamURL(u)
-}
-
-func restoreJellyfinContext(state resume.State, prov *jellyfin.Provider) ([]playlist.Track, int, string, bool) {
-	if prov == nil || len(state.Context) == 0 {
-		return nil, 0, "", false
-	}
-	index := state.ContextIndex
-	if index < 0 || index >= len(state.Context) || state.Context[index].Path != state.Path {
-		index = -1
-		for i, track := range state.Context {
-			if track.Path == state.Path {
-				index = i
-				break
-			}
-		}
-	}
-	if index < 0 {
-		return nil, 0, "", false
-	}
-	if _, ok := prov.RestoreTrack(state.Context[index]); !ok {
-		return nil, 0, "", false
-	}
-
-	tracks := append([]playlist.Track(nil), state.Context...)
-	for i, track := range tracks {
-		if restored, ok := prov.RestoreTrack(track); ok {
-			tracks[i] = restored
-		}
-	}
-	return tracks, index, tracks[index].Path, true
-}
-
-// logProviderRegistered records that a provider joined the active set. It
-// writes to the log file only, so it never disturbs the TUI. See issue #406.
-func logProviderRegistered(name, key string) {
-	applog.Info("provider registered: name=%s key=%s", name, key)
-}
-
-// logProviderSkipped records why a provider did not register. It writes to
-// the log file only, so it never disturbs the TUI. See issue #406.
-func logProviderSkipped(name, key, reason string) {
-	applog.Info("provider skipped: name=%s key=%s reason=%s", name, key, reason)
-}
-
-// logYouTubeSkipped records the skip reason for all three YouTube providers
-// (All, video, music), since they register or skip as one group.
-func logYouTubeSkipped(reason string) {
-	logProviderSkipped("YouTube (All)", "yt", reason)
-	logProviderSkipped("YouTube", "youtube", reason)
-	logProviderSkipped("YouTube Music", "ytmusic", reason)
-}
-
-// offerYTDLPInstall asks on in whether to install yt-dlp now. It asks only
-// when interactive is true. A bare Enter, y or yes in any case confirms. Any
-// other answer, EOF or a read error skips the install. So a start with stdin
-// at /dev/null, as under systemd, never installs a package.
-func offerYTDLPInstall(interactive bool, in io.Reader, out io.Writer) bool {
-	if !interactive {
-		return false
-	}
-	fmt.Fprint(out, "Press Enter to install it now, or type n and press Enter to skip... ")
-	answer, err := bufio.NewReader(in).ReadString('\n')
-	if err == nil {
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			return true
-		}
-	} else {
-		// EOF leaves the cursor on the prompt line.
-		fmt.Fprintln(out)
-	}
-	fmt.Fprint(out, "Skipped. YouTube providers are disabled.\n\n")
-	return false
-}
-
-// isCharDevice reports whether f is a character device, such as a terminal.
-// A pipe or a regular file is not. The null device is also a character
-// device, so a start with stdin at /dev/null shows the install prompt. The
-// EOF that follows skips the install.
-func isCharDevice(f *os.File) bool {
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}
-
-// optionalProviders lists the providers that register only when configured
-// and skip with a plain "not configured" reason. YouTube and Local are not
-// listed here: they have their own specific skip reasons.
-var optionalProviders = []struct{ key, name string }{
-	{"navidrome", "Navidrome"},
-	{"lyrion", "Lyrion"},
-	{"plex", "Plex"},
-	{"jellyfin", "Jellyfin"},
-	{"emby", "Emby"},
-	{"audiobookshelf", "Audiobookshelf"},
-	{"spotify", "Spotify"},
-	{"qobuz", "Qobuz"},
-	{"tidal", "Tidal"},
-	{"soundcloud", "SoundCloud"},
-	{"mixcloud", "Mixcloud"},
-	{"netease", "NetEase"},
-	{"yandex", "Yandex Music"},
-}
-
-// logProviderWiring logs the final provider registry: one line per
-// registered provider, plus a skip line for each optional provider absent
-// from it. See issue #406.
-func logProviderWiring(providers []provider.Entry) {
-	registered := make(map[string]bool, len(providers))
-	for _, p := range providers {
-		logProviderRegistered(p.Name, p.Key)
-		registered[p.Key] = true
-	}
-	for _, p := range optionalProviders {
-		if !registered[p.key] {
-			logProviderSkipped(p.name, p.key, "not configured")
-		}
-	}
-}
 
 func run(overrides config.Overrides, positional []string, daemon, visualizer60FPS bool) error {
 	cfg, err := config.Load()
@@ -209,208 +58,8 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		applog.Info("cliamp starting (version=%s level=%s)", appmeta.Version(), appliedLevel)
 	}
 
-	// Public providers are always available; account providers register when configured.
-	radioFavorites := radio.LoadFavorites()
-	radioProv := radio.New(radio.Options{
-		Favorites:   radioFavorites,
-		Country:     cfg.Radio.Country,
-		SaveCountry: config.SaveRadioCountry,
-	})
-	localProv := local.New()
-	// Bookmarks became favorites. Copy the old bookmarks one time.
-	if added, err := localProv.MigrateBookmarks(); err != nil {
-		applog.Warn("bookmark migration: %v", err)
-	} else if added > 0 {
-		applog.Info("copied %d bookmarks into favorites", added)
-	}
-
-	var providers []provider.Entry
-	// The cliamp radio channels come first: they are the view cliamp opens on.
-	providers = append(providers, provider.Entry{Key: "cliamp", Name: "cliamp radio", Provider: radio.NewChannels()})
-	providers = append(providers, provider.Entry{Key: "radio", Name: "Radio", Provider: radioProv})
-	if localProv != nil {
-		providers = append(providers, provider.Entry{Key: "local", Name: "Local", Provider: localProv})
-	} else {
-		logProviderSkipped("Local", "local", "config directory unavailable")
-	}
-	podcastProv := podcast.New(cfg.Podcast.Country)
-	// Flush per-episode listening state that the throttled writer still holds.
-	defer podcastProv.Close()
-	providers = append(providers, provider.Entry{Key: "podcast", Name: "Podcasts", Provider: podcastProv})
-
-	var navClient *navidrome.NavidromeClient
-	if c := navidrome.NewFromConfig(cfg.Navidrome); c != nil {
-		navClient = c
-	} else if c := navidrome.NewFromEnv(cfg.Navidrome); c != nil {
-		navClient = c
-	}
-	if navClient != nil {
-		providers = append(providers, provider.Entry{Key: "navidrome", Name: "Navidrome", Provider: navClient})
-	}
-
-	var lyrionClient *lyrion.Client
-	if c := lyrion.NewFromConfig(cfg.Lyrion); c != nil {
-		lyrionClient = c
-	} else if c := lyrion.NewFromEnv(); c != nil {
-		lyrionClient = c
-	}
-	if lyrionClient != nil {
-		providers = append(providers, provider.Entry{Key: "lyrion", Name: "Lyrion", Provider: lyrionClient})
-	}
-
-	if plexProv := plex.NewFromConfig(cfg.Plex); plexProv != nil {
-		providers = append(providers, provider.Entry{Key: "plex", Name: "Plex", Provider: plexProv})
-	}
-
-	var jellyProv *jellyfin.Provider
-	if p := jellyfin.NewFromConfig(cfg.Jellyfin); p != nil {
-		jellyProv = p
-		providers = append(providers, provider.Entry{Key: "jellyfin", Name: "Jellyfin", Provider: jellyProv})
-	}
-
-	if embyProv := emby.NewFromConfig(cfg.Emby); embyProv != nil {
-		providers = append(providers, provider.Entry{Key: "emby", Name: "Emby", Provider: embyProv})
-	}
-
-	if absProv := audiobookshelf.NewFromConfig(cfg.Audiobookshelf); absProv != nil {
-		providers = append(providers, provider.Entry{Key: "audiobookshelf", Name: "Audiobookshelf", Provider: absProv})
-	}
-
-	var spotifyProv *spotify.SpotifyProvider
-	if cfg.Spotify.IsSet() {
-		clientID := cfg.Spotify.ResolveClientID(spotify.DefaultClientID)
-		spotifyProv = spotify.New(nil, clientID, cfg.Spotify.Bitrate)
-		providers = append(providers, provider.Entry{Key: "spotify", Name: "Spotify", Provider: spotifyProv})
-	}
-
-	var qobuzProv *qobuz.QobuzProvider
-	if cfg.Qobuz.IsSet() {
-		qobuzProv = qobuz.New(cfg.Qobuz.Quality)
-		providers = append(providers, provider.Entry{Key: "qobuz", Name: "Qobuz", Provider: qobuzProv})
-	}
-
-	var tidalProv *tidal.TidalProvider
-	if cfg.Tidal.IsSet() {
-		tidalProv = tidal.New(cfg.Tidal.Quality, cfg.Tidal.ClientID, cfg.Tidal.ClientSecret)
-		providers = append(providers, provider.Entry{Key: "tidal", Name: "Tidal", Provider: tidalProv})
-	}
-
-	if scProv := soundcloud.NewFromConfig(soundcloud.Config{
-		Enabled:     cfg.SoundCloud.Enabled,
-		User:        cfg.SoundCloud.User,
-		CookiesFrom: cfg.SoundCloud.CookiesFrom,
-	}); scProv != nil {
-		providers = append(providers, provider.Entry{Key: "soundcloud", Name: "SoundCloud", Provider: scProv})
-	}
-
-	if mcProv := mixcloud.NewFromConfig(mixcloud.Config{
-		Enabled:        cfg.Mixcloud.Enabled,
-		Username:       cfg.Mixcloud.Username,
-		AccessToken:    cfg.Mixcloud.AccessToken,
-		CookiesFrom:    cfg.Mixcloud.CookiesFrom,
-		Styles:         cfg.Mixcloud.Styles,
-		StylesSet:      cfg.Mixcloud.StylesSet,
-		MaxItems:       cfg.Mixcloud.MaxItems,
-		StreamCreators: cfg.Mixcloud.StreamCreators,
-		SaveStyles:     config.SaveMixcloudStyles,
-	}); mcProv != nil {
-		providers = append(providers, provider.Entry{Key: "mixcloud", Name: "Mixcloud", Provider: mcProv})
-	}
-
-	if neProv := netease.NewFromConfig(netease.Config{
-		Enabled:     cfg.NetEase.Enabled,
-		CookiesFrom: cfg.NetEase.CookiesFrom,
-		UserID:      cfg.NetEase.UserID,
-	}); neProv != nil {
-		providers = append(providers, provider.Entry{Key: "netease", Name: "NetEase", Provider: neProv})
-	}
-
-	yaProv := yandex.NewFromConfig(yandex.Config{
-		Enabled: cfg.Yandex.Enabled,
-		Token:   cfg.Yandex.Token,
-	})
-	if yaProv != nil {
-		providers = append(providers, provider.Entry{Key: "yandex", Name: "Yandex Music", Provider: yaProv})
-	}
-
-	var closeYouTube func()
-	var ytOAuth *ytmusic.Providers // set when YouTube signs in through OAuth
-	ytWanted := cfg.YouTubeMusic.IsSet()
-	if !ytWanted {
-		switch cfg.Provider {
-		case "yt", "youtube", "ytmusic":
-			ytWanted = true
-		}
-	}
-	if !ytWanted {
-		logYouTubeSkipped("not configured")
-	} else {
-		ytClientID := strings.TrimSpace(cfg.YouTubeMusic.ClientID)
-		ytClientSecret := strings.TrimSpace(cfg.YouTubeMusic.ClientSecret)
-		hasOAuth := ytClientID != "" && ytClientSecret != ""
-		hasCookies := strings.TrimSpace(cfg.YouTubeMusic.CookiesFrom) != ""
-		if hasCookies {
-			for _, host := range []string{"youtube.com", "youtu.be", "music.youtube.com"} {
-				resolve.SetYTDLCookiesForHost(host, cfg.YouTubeMusic.CookiesFrom)
-			}
-		}
-
-		if !hasOAuth && !hasCookies {
-			fmt.Fprintf(os.Stderr, "YouTube: no credentials available (configure client_id/client_secret or cookies_from in config.toml)\n")
-			logYouTubeSkipped("no credentials available")
-		} else {
-			if !player.YTDLPAvailable() {
-				fmt.Fprintf(os.Stderr, "\nYouTube requires yt-dlp for audio playback.\n")
-				fmt.Fprintf(os.Stderr, "Install command: %s\n\n", player.YtdlpInstallHint())
-				if offerYTDLPInstall(!daemon && isCharDevice(os.Stdin), os.Stdin, os.Stderr) {
-					fmt.Fprintf(os.Stderr, "Installing yt-dlp...\n")
-					if err := player.InstallYTDLP(); err != nil {
-						fmt.Fprintf(os.Stderr, "Installation failed: %v\n", err)
-						fmt.Fprintf(os.Stderr, "YouTube providers disabled. Install manually and restart.\n\n")
-					} else {
-						fmt.Fprintf(os.Stderr, "yt-dlp installed successfully!\n\n")
-					}
-				}
-			}
-			if player.YTDLPAvailable() {
-				var all, video, music playlist.Provider
-				if hasOAuth {
-					oauthProviders := ytmusic.New(nil, ytClientID, ytClientSecret, hasCookies)
-					all, video, music = oauthProviders.All, oauthProviders.Video, oauthProviders.Music
-					closeYouTube = oauthProviders.Music.Close
-					ytOAuth = &oauthProviders
-				} else if hasCookies {
-					cookieProviders := ytmusic.NewCookieProviders(cfg.YouTubeMusic.CookiesFrom)
-					all, video, music = cookieProviders.All, cookieProviders.Video, cookieProviders.Music
-					closeYouTube = cookieProviders.Music.Close
-				}
-				if all != nil {
-					providers = append(providers,
-						provider.Entry{Key: "yt", Name: "YouTube (All)", Provider: all},
-						provider.Entry{Key: "youtube", Name: "YouTube", Provider: video},
-						provider.Entry{Key: "ytmusic", Name: "YouTube Music", Provider: music},
-					)
-				}
-			} else {
-				logYouTubeSkipped("yt-dlp not available")
-			}
-		}
-	}
-
-	logProviderWiring(providers)
-
-	if spotifyProv != nil {
-		defer spotifyProv.Close()
-	}
-	if qobuzProv != nil {
-		defer qobuzProv.Close()
-	}
-	if tidalProv != nil {
-		defer tidalProv.Close()
-	}
-	if closeYouTube != nil {
-		defer closeYouTube()
-	}
+	providers := buildProviders(cfg, !daemon && isCharDevice(os.Stdin))
+	defer providers.Close()
 
 	if len(positional) > 0 && (positional[0] == "search" || positional[0] == "search-sc") {
 		if len(positional) == 1 {
@@ -446,8 +95,8 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	resumeState := resume.Load()
 
 	pl := playlist.New()
-	if cfg.Playlist != "" && localProv != nil {
-		tracks, err := localProv.Tracks(cfg.Playlist)
+	if cfg.Playlist != "" && providers.local != nil {
+		tracks, err := providers.local.Tracks(cfg.Playlist)
 		if err != nil {
 			return fmt.Errorf("playlist %q: %w", cfg.Playlist, err)
 		}
@@ -463,6 +112,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 	pl.Add(resolved.Tracks...)
 
+	jellyProv := providers.jellyfin()
 	restoredJellyfinChoice := false
 	restoredJellyfinIndex := 0
 	restoredResumePath := ""
@@ -500,61 +150,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 	defer p.Close()
 
-	if spotifyProv != nil {
-		p.RegisterStreamerFactory("spotify:", spotifyProv.NewStreamer)
-	}
-
-	if yaProv != nil {
-		// Yandex tracks carry yandex:track: URIs; the provider resolves them
-		// to a fresh signed stream URL when playback starts.
-		p.RegisterSourceResolver(yandex.TrackURIPrefix, func(uri string) (player.ResolvedSource, error) {
-			u, err := yaProv.ResolveSource(uri)
-			if err != nil {
-				return player.ResolvedSource{}, fmt.Errorf("resolve Yandex source: %w", err)
-			}
-			return player.ResolvedSource{URL: u}, nil
-		})
-	}
-
-	if qobuzProv != nil {
-		// Qobuz tracks carry qobuz:// URIs. The provider resolves them to a
-		// fresh signed URL when playback starts.
-		p.RegisterSourceResolver(qobuz.TrackURIPrefix, func(uri string) (player.ResolvedSource, error) {
-			u, err := qobuzProv.ResolveSource(uri)
-			return player.ResolvedSource{URL: u}, err
-		})
-	}
-
-	if tidalProv != nil {
-		// Tidal tracks carry tidal:// URIs; the provider resolves them to a
-		// fresh signed URL or DASH segment list when playback starts.
-		p.RegisterSourceResolver(tidal.TrackURIPrefix, func(uri string) (player.ResolvedSource, error) {
-			u, segments, err := tidalProv.ResolveSource(uri)
-			return player.ResolvedSource{URL: u, Segments: segments}, err
-		})
-	}
-
-	if lyrionClient != nil {
-		p.RegisterSourceResolver(lyrion.TrackURIPrefix, func(uri string) (player.ResolvedSource, error) {
-			u, segments, err := lyrionClient.ResolveSource(uri)
-			return player.ResolvedSource{URL: u, Segments: segments}, err
-		})
-	}
-
-	if jellyProv != nil {
-		// Refresh restored Jellyfin URLs without changing logical playlist paths.
-		for _, scheme := range []string{"http://", "https://"} {
-			p.RegisterSourceResolver(scheme, func(rawURL string) (player.ResolvedSource, error) {
-				u, err := jellyProv.ResolveSource(rawURL)
-				return player.ResolvedSource{URL: u}, err
-			})
-		}
-	}
-
-	p.RegisterBufferedURLMatcher(isBufferedProviderURL)
-
-	// Pull now-playing for stations that carry no inline ICY metadata (NTS, FIP).
-	p.RegisterStreamMetadataResolver(radiometa.Resolver)
+	providers.registerPlayerHooks(p)
 
 	cfg.ApplyPlayer(p)
 	cfg.ApplyPlaylist(pl)
@@ -574,8 +170,8 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		defer luaMgr.Close()
 	}
 
-	m := model.New(p, pl, providers, defaultProvider, localProv, themes, luaMgr, config.SaveFunc{})
-	m.SetRadioFavorites(radioFavorites)
+	m := model.New(p, pl, providers.entries, defaultProvider, providers.local, themes, luaMgr, config.SaveFunc{})
+	m.SetRadioFavorites(providers.radioFavorites)
 	if defaultProvider == "jellyfin" && jellyProv != nil {
 		m.SetResumeSaver(func(track playlist.Track, positionSec int, context []playlist.Track, contextIndex int) {
 			if _, ok := jellyProv.RestoreTrack(track); !ok {
@@ -729,35 +325,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		defer stopSignals()
 	}
 
-	if spotifyProv != nil {
-		spotify.SetAuthURLObserver(func(u string) {
-			prog.Send(model.ProvAuthURLMsg{ProviderName: spotifyProv.Name(), URL: u})
-		})
-		defer spotify.SetAuthURLObserver(nil)
-	}
-	if qobuzProv != nil {
-		qobuz.SetAuthURLObserver(func(u string) {
-			prog.Send(model.ProvAuthURLMsg{ProviderName: qobuzProv.Name(), URL: u})
-		})
-		defer qobuz.SetAuthURLObserver(nil)
-	}
-	if tidalProv != nil {
-		tidal.SetAuthURLObserver(func(u string) {
-			prog.Send(model.ProvAuthURLMsg{ProviderName: tidalProv.Name(), URL: u})
-		})
-		defer tidal.SetAuthURLObserver(nil)
-	}
-	if ytOAuth != nil {
-		// The three YouTube providers share one sign-in. The model shows the
-		// URL only for the provider that is active.
-		ytNames := []string{ytOAuth.All.Name(), ytOAuth.Video.Name(), ytOAuth.Music.Name()}
-		ytmusic.SetAuthURLObserver(func(u string) {
-			for _, name := range ytNames {
-				prog.Send(model.ProvAuthURLMsg{ProviderName: name, URL: u})
-			}
-		})
-		defer ytmusic.SetAuthURLObserver(nil)
-	}
+	defer providers.observeAuthURLs(prog.Send)()
 
 	svc, svcErr := wireMediaCtl(prog)
 	if svcErr != nil {

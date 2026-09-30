@@ -13,6 +13,7 @@ import (
 	"github.com/bjarneo/cliamp/external/jellyfin"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 )
 
 func TestJellyfinSourceResolutionForPlayAndPreload(t *testing.T) {
@@ -56,13 +57,8 @@ func TestJellyfinSourceResolutionForPlayAndPreload(t *testing.T) {
 	}
 
 	engine := &player.Player{}
-	for _, scheme := range []string{"http://", "https://"} {
-		engine.RegisterSourceResolver(scheme, func(rawURL string) (player.ResolvedSource, error) {
-			u, err := prov.ResolveSource(rawURL)
-			return player.ResolvedSource{URL: u}, err
-		})
-	}
-	engine.RegisterBufferedURLMatcher(jellyfin.IsStreamURL)
+	set := &providerSet{entries: []provider.Entry{{Key: "jellyfin", Name: "Jellyfin", Provider: prov}}}
+	set.registerPlayerHooks(engine)
 	for _, tt := range []struct {
 		name string
 		open func() error
