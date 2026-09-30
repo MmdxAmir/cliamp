@@ -49,8 +49,8 @@ security:
 	govulncheck ./...
 
 ci: fmt-check tidy-check vet staticcheck security
-	go test -count=1 -race ./...
-	$(MAKE) coverage
+	go test -count=1 -race -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
 	shellcheck site/install.sh
 	git diff --exit-code
 
