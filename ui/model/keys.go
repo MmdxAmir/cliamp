@@ -18,10 +18,11 @@ func (m *Model) quit() tea.Cmd {
 	// - local files (not stream)
 	// - HTTP streams with known duration (podcast MP3s)
 	// - finite Mixcloud shows (yt-dlp tracks with a counted PCM position)
-	// Other yt-dlp sites and real-time live streams remain excluded.
+	// Other yt-dlp sites and live streams remain excluded. The live check
+	// is currentPlaybackIsLive, so a stream the player finds live counts.
 	if track, _ := m.currentPlaybackTrack(); track.Path != "" &&
 		(!playlist.IsYTDL(track.Path) || playlist.IsMixcloudURL(track.Path)) &&
-		!track.IsLive() &&
+		!m.currentPlaybackIsLive(track) &&
 		m.player.IsPlaying() && !m.buffering && !m.player.GaplessAdvanced() {
 		if secs := int(m.player.Position().Seconds()); secs > 0 {
 			context, contextIndex := m.playbackContextFor(track)

@@ -321,6 +321,36 @@ func TestQuitCapturesMixcloudResumePosition(t *testing.T) {
 	}
 }
 
+// Quit keeps a resume position only for a track that can seek back to it. A
+// live stream has no position to return to, also when only the player knows
+// that it is live.
+func TestQuitResumeSkipsLiveStreams(t *testing.T) {
+	tests := []struct {
+		name   string
+		track  playlist.Track
+		engine playbackFakeEngine
+		want   bool
+	}{
+		{name: "local file", track: playlist.Track{Path: "/music/song.flac"}, want: true},
+		{name: "podcast stream", track: playlist.Track{Path: "https://cdn.example.com/ep.mp3", Stream: true}, engine: playbackFakeEngine{duration: time.Hour}, want: true},
+		{name: "radio station", track: playlist.Track{Path: "https://radio.example.com/live", Stream: true, Realtime: true}},
+		{name: "stream the player found live", track: playlist.Track{Path: "https://radio.example.com/live", Stream: true}, engine: playbackFakeEngine{live: true}},
+		{name: "youtube video", track: playlist.Track{Path: "https://www.youtube.com/watch?v=a", Stream: true}, engine: playbackFakeEngine{duration: time.Hour}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := tt.engine
+			engine.playing, engine.position = true, 42*time.Second
+			m := Model{player: &engine, playingTrack: tt.track, playingTrackActive: true}
+
+			m.quit()
+			if saved := m.exitResume.path == tt.track.Path && m.exitResume.secs == 42; saved != tt.want {
+				t.Fatalf("exit resume = (%q, %d), want saved %v", m.exitResume.path, m.exitResume.secs, tt.want)
+			}
+		})
+	}
+}
+
 // The quit message of media controls and headless signals keeps the resume
 // position, as the q key does.
 func TestQuitMsgCapturesResumePosition(t *testing.T) {
