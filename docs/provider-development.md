@@ -110,8 +110,9 @@ the provider list.
   wizard. `body` returns the keys that setup writes with `config.SaveSection`.
   `owned` lists every key that setup manages. `TestSetupBodyRoundTrip` in
   `cmd/setup_roundtrip_test.go` fails until the section has a case.
-- [ ] `commands.go`: add a `providerCredsCommand` for `cliamp <name> reset`
-  when the provider keeps a credentials file.
+- [ ] `commands.go`: when the provider keeps a credentials file, add a
+  `<name>Command()` that returns `providerCredsCommand(...)` for
+  `cliamp <name> reset`. Add it to the `Commands` list of `buildApp`.
 - [ ] `resolve/` and `playlist/url.go`: add URL detection when users can
   paste links of the service.
 
