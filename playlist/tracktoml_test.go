@@ -100,6 +100,22 @@ func TestTrackTOMLRoundTrip(t *testing.T) {
 			want: Track{Path: "http://radio.example.com/live", Title: "Live", Stream: true},
 		},
 		{
+			// Providers resolve these URIs over the network at play time.
+			name: "provider URI keeps its stream flag",
+			in:   Track{Path: "qobuz://track/42", Title: "Q", Stream: true},
+			want: Track{Path: "qobuz://track/42", Title: "Q", Stream: true},
+		},
+		{
+			name: "provider URI without the flag stays off",
+			in:   Track{Path: "spotify:track:abc", Title: "S"},
+			want: Track{Path: "spotify:track:abc", Title: "S"},
+		},
+		{
+			name: "a stream flag round-trips at any other path",
+			in:   Track{Path: "/music/a.mp3", Stream: true},
+			want: Track{Path: "/music/a.mp3", Stream: true},
+		},
+		{
 			name: "empty meta map loads as nil",
 			in:   Track{Path: "/a.mp3", ProviderMeta: map[string]string{}},
 			want: Track{Path: "/a.mp3"},
@@ -152,6 +168,29 @@ provider_meta.radio.name = "Station"
 		if got := b.String(); got != want {
 			t.Fatalf("WriteTrackTOML:\n got:\n%s\nwant:\n%s", got, want)
 		}
+	}
+}
+
+// An HTTP path is always a stream, so only a stream at another path writes
+// the stream key.
+func TestWriteTrackTOMLStreamKey(t *testing.T) {
+	tests := []struct {
+		name  string
+		track Track
+		want  bool
+	}{
+		{name: "provider URI stream", track: Track{Path: "tidal://track/7", Stream: true}, want: true},
+		{name: "HTTP stream", track: Track{Path: "https://radio.example/live", Stream: true}},
+		{name: "provider URI without the flag", track: Track{Path: "spotify:track:abc"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b strings.Builder
+			WriteTrackTOML(&b, tt.track)
+			if got := strings.Contains(b.String(), "stream = true\n"); got != tt.want {
+				t.Fatalf("stream key written = %v, want %v:\n%s", got, tt.want, b.String())
+			}
+		})
 	}
 }
 

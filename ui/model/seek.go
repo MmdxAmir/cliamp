@@ -67,13 +67,15 @@ func (m *Model) seekRelative(d time.Duration, debounceTicks int) tea.Cmd {
 }
 
 // needsDebouncedSeek reports whether seeking restarts a decoder, making a burst
-// of keypresses worth summing into one.
+// of keypresses worth summing into one. A provider URI that the player
+// resolves at play time is a stream, also when an older favorites, history
+// or playlist file reloaded it without the stream flag.
 func (m *Model) needsDebouncedSeek() bool {
 	if m.player.IsYTDLSeek() {
 		return true
 	}
 	track, _ := m.currentPlaybackTrack()
-	return track.Stream && m.player.Seekable()
+	return (track.Stream || m.hasSourceResolver(track.Path)) && m.player.Seekable()
 }
 
 func (m *Model) seekAbsolute(target time.Duration) tea.Cmd {

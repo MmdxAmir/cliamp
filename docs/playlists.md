@@ -125,6 +125,7 @@ Each `[[track]]` section supports these keys:
 | `year` | No | Release year |
 | `track_number` | No | Track number |
 | `duration_secs` | No | Duration in seconds |
+| `stream` | No | Treat a provider URI, such as `qobuz://track/42`, as a network stream. cliamp writes it for provider tracks. HTTP and HTTPS paths are always streams. |
 | `realtime` | No | Treat an HTTP URL as live radio. Reconnect after pause or disconnect. |
 | `feed` | No | Treat the URL as an RSS or podcast feed. cliamp resolves it before playback. |
 | `provider_meta.<key>` | No | Provider data, such as `provider_meta.navidrome.id` or `provider_meta.podcast.guid`. cliamp uses it to scrobble, to sync favorites, and to recognize stations and podcast episodes. The `<key>` holds only letters, digits, `.`, `_` and `-`. cliamp does not save a key with other characters. |

@@ -40,6 +40,11 @@ func WriteTrackTOML(w io.Writer, t Track) {
 	if t.DurationSecs != 0 {
 		fmt.Fprintf(w, "duration_secs = %d\n", t.DurationSecs)
 	}
+	// An HTTP path is always a stream. A provider URI, such as a qobuz://
+	// track, keeps the flag in the file.
+	if t.Stream && !IsURL(t.Path) {
+		fmt.Fprintln(w, "stream = true")
+	}
 	if t.Feed {
 		fmt.Fprintln(w, "feed = true")
 	}
@@ -78,8 +83,9 @@ func validMetaKey(k string) bool {
 
 // TrackFromTOML builds a Track from the unquoted fields of one TOML section,
 // as tomlutil.ParseSections passes them. It ignores keys it does not know, so
-// a store can keep its own keys in the same section. Stream follows from the
-// path. ProviderMeta stays nil when the section has no provider_meta keys.
+// a store can keep its own keys in the same section. Stream is set for an
+// HTTP path and for the stream key. ProviderMeta stays nil when the section
+// has no provider_meta keys.
 func TrackFromTOML(f map[string]string) Track {
 	t := Track{
 		Path:        f["path"],
@@ -91,7 +97,7 @@ func TrackFromTOML(f map[string]string) Track {
 		Realtime:    f["realtime"] == "true",
 		AlbumArtURL: f["album_art_url"],
 	}
-	t.Stream = IsURL(t.Path)
+	t.Stream = IsURL(t.Path) || f["stream"] == "true"
 	if n, err := strconv.Atoi(f["year"]); err == nil {
 		t.Year = n
 	}

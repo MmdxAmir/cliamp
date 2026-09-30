@@ -42,11 +42,11 @@ year = 1979
 duration_secs = 208
 ```
 
-An entry can also hold `feed = true`, `realtime = true`, `album_art_url` and
-`provider_meta.<key>` lines, as `favorites.toml` does. With these keys, a
-Navidrome or Jellyfin track that you replay from Recently Played still
-scrobbles and shows its cover, and cliamp still recognizes a radio station or
-a podcast episode.
+An entry can also hold `stream = true`, `feed = true`, `realtime = true`,
+`album_art_url` and `provider_meta.<key>` lines, as `favorites.toml` does.
+With these keys, a Navidrome or Jellyfin track that you replay from Recently
+Played still scrobbles and shows its cover, and cliamp still recognizes a
+radio station or a podcast episode.
 
 The default limit is 200 entries. cliamp removes the oldest entries first.
 

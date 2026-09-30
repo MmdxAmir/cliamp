@@ -3,6 +3,8 @@ package model
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +12,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/gopxl/beep/v2"
 
+	"github.com/bjarneo/cliamp/external/local"
+	"github.com/bjarneo/cliamp/favorites"
+	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
@@ -200,5 +205,102 @@ func TestProviderAuthFailureKeepsSignInPrompt(t *testing.T) {
 	}
 	if m.provSignIn || !m.provLoading || m.err != nil {
 		t.Fatalf("after retry: provSignIn = %v, provLoading = %v, err = %v", m.provSignIn, m.provLoading, m.err)
+	}
+}
+
+// Favorites, Recently Played and saved playlists keep provider tracks that
+// open over the network at play time, such as qobuz:// tracks. A reloaded
+// track must start and seek off the Update goroutine. This also holds for a
+// file that an older version wrote without the stream key.
+func TestReloadedResolverTracksStayOffUpdate(t *testing.T) {
+	prefixes := []string{"qobuz://track/", "tidal://track/", "yandex:track:", "lyrion://track/"}
+	stores := []struct {
+		name string
+		// reload saves track, lets strip edit the file and loads the track back.
+		reload func(t *testing.T, track playlist.Track, strip func(path string)) playlist.Track
+	}{
+		{name: "favorites", reload: func(t *testing.T, track playlist.Track, strip func(string)) playlist.Track {
+			path := filepath.Join(t.TempDir(), "favorites.toml")
+			if _, err := favorites.NewAt(path).Toggle(track); err != nil {
+				t.Fatal(err)
+			}
+			strip(path)
+			tracks, err := favorites.NewAt(path).Tracks()
+			if err != nil || len(tracks) != 1 {
+				t.Fatalf("favorites = %+v, %v", tracks, err)
+			}
+			return tracks[0]
+		}},
+		{name: "history", reload: func(t *testing.T, track playlist.Track, strip func(string)) playlist.Track {
+			path := filepath.Join(t.TempDir(), "history.toml")
+			if err := history.NewAt(path).Record(track, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			strip(path)
+			tracks, err := history.NewAt(path).Tracks(0)
+			if err != nil || len(tracks) != 1 {
+				t.Fatalf("history = %+v, %v", tracks, err)
+			}
+			return tracks[0]
+		}},
+		{name: "saved playlist", reload: func(t *testing.T, track playlist.Track, strip func(string)) playlist.Track {
+			dir := t.TempDir()
+			t.Setenv("CLIAMP_CONFIG_DIR", dir)
+			if err := local.New(nil, nil).SavePlaylist("Mix", []playlist.Track{track}); err != nil {
+				t.Fatal(err)
+			}
+			strip(filepath.Join(dir, "playlists", "Mix.toml"))
+			tracks, err := local.New(nil, nil).Tracks("Mix")
+			if err != nil || len(tracks) != 1 {
+				t.Fatalf("Mix = %+v, %v", tracks, err)
+			}
+			return tracks[0]
+		}},
+	}
+	keep := func(string) {}
+	for _, store := range stores {
+		for _, legacy := range []bool{false, true} {
+			for _, prefix := range prefixes {
+				name := fmt.Sprintf("%s/%s/legacy=%v", store.name, prefix, legacy)
+				t.Run(name, func(t *testing.T) {
+					strip := keep
+					if legacy {
+						strip = func(path string) {
+							data, err := os.ReadFile(path)
+							if err != nil {
+								t.Fatal(err)
+							}
+							if err := os.WriteFile(path, []byte(strings.ReplaceAll(string(data), "stream = true\n", "")), 0o644); err != nil {
+								t.Fatal(err)
+							}
+						}
+					}
+					saved := playlist.Track{Path: prefix + "1", Title: "Song", Stream: true, DurationSecs: 200}
+					track := store.reload(t, saved, strip)
+					if track.Stream == legacy {
+						t.Fatalf("reloaded Stream = %v, want %v", track.Stream, !legacy)
+					}
+
+					player := &playbackFakeEngine{seekable: true, duration: 200 * time.Second}
+					m := newCustomStreamModel(player)
+					m.player = sourceResolverEngine{player, prefixes}
+					m.playlist.Replace([]playlist.Track{track})
+					m.playlist.SetIndex(0)
+
+					cmd := m.playTrack(track)
+					if len(player.playCalls) != 0 || !m.buffering {
+						t.Fatalf("playTrack opened the track in Update: play calls %v, buffering %v", player.playCalls, m.buffering)
+					}
+					if msg := streamPlayedFrom(t, cmd); msg.path != track.Path {
+						t.Fatalf("async start = %+v, want %s", msg, track.Path)
+					}
+
+					seek := m.seekAbsolute(30 * time.Second)
+					if len(player.seekCalls) != 0 || seek == nil {
+						t.Fatalf("the seek ran in Update: seek calls %v, command %v", player.seekCalls, seek != nil)
+					}
+				})
+			}
+		}
 	}
 }
