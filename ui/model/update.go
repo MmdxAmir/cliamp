@@ -1094,6 +1094,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notifyAll()
 		return m, nil
 
+	case playback.SetSpeedMsg:
+		m.setSpeed(msg.Ratio)
+		return m, nil
+
+	case playback.ToggleMonoMsg:
+		m.player.ToggleMono()
+		return m, nil
+
 	case playback.StopMsg:
 		m.stopByUser()
 		m.notifyAll()

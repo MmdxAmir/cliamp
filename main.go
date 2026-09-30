@@ -191,7 +191,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	}
 
 	if luaMgr != nil {
-		luaMgr.SetControlProvider(luaControlProvider(p, prog.Send))
+		luaMgr.SetControlProvider(luaControlProvider(prog.Send))
 		luaMgr.SetUIProvider(luaUIProvider(prog.Send))
 	}
 

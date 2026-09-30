@@ -492,6 +492,8 @@ cliamp.player.set_eq_band(1, 6)   -- set EQ band 1 to +6 dB (bands 1-10, -12 to 
 
 If a plugin does not declare `permissions = {"control"}`, these functions log a warning and do nothing.
 
+cliamp saves a speed change to `config.toml` after one second, as the speed keys do. A volume change updates the volume of the media controls at once.
+
 ### cliamp.notify
 
 ```lua

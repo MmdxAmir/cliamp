@@ -68,14 +68,15 @@ func luaStateProvider(p *player.Player, pl *playlist.Playlist) luaplugin.StatePr
 	}
 }
 
-// luaControlProvider gives Lua plugins control of playback. Most controls
-// send a message to the Model through send.
-func luaControlProvider(p *player.Player, send func(tea.Msg)) luaplugin.ControlProvider {
+// luaControlProvider gives Lua plugins control of playback. Each control
+// sends a message to the Model through send, so the Update loop makes every
+// player change, tells the media controls and saves the settings.
+func luaControlProvider(send func(tea.Msg)) luaplugin.ControlProvider {
 	return luaplugin.ControlProvider{
-		SetVolume:   func(db float64) { p.SetVolume(db) },
-		SetSpeed:    func(ratio float64) { p.SetSpeed(ratio) },
+		SetVolume:   func(db float64) { send(playback.SetVolumeMsg{VolumeDB: db}) },
+		SetSpeed:    func(ratio float64) { send(playback.SetSpeedMsg{Ratio: ratio}) },
 		SetEQBand:   func(band int, db float64) { send(model.SetEQBandMsg{Band: band, Gain: db}) },
-		ToggleMono:  func() { p.ToggleMono() },
+		ToggleMono:  func() { send(playback.ToggleMonoMsg{}) },
 		TogglePause: func() { send(playback.PlayPauseMsg{}) },
 		Stop:        func() { send(playback.StopMsg{}) },
 		Seek: func(secs float64) {

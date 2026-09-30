@@ -115,7 +115,13 @@ func (m *Model) saveSpeed() {
 }
 
 func (m *Model) changeSpeed(delta float64) {
-	m.player.SetSpeed(m.player.Speed() + delta)
+	m.setSpeed(m.player.Speed() + delta)
+}
+
+// setSpeed changes the playback speed now and saves it after
+// speedSaveDebounce, so a run of changes writes the config once.
+func (m *Model) setSpeed(ratio float64) {
+	m.player.SetSpeed(ratio)
 	m.speedSaveAfter = speedSaveDebounce
 }
 

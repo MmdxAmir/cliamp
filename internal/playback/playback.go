@@ -15,6 +15,10 @@ type (
 		Position time.Duration
 	}
 	SetVolumeMsg struct{ VolumeDB float64 }
+	SetSpeedMsg  struct{ Ratio float64 }
+	// ToggleMonoMsg flips mono output. It toggles and does not set a value,
+	// so two toggles that a sender queues before Update runs cancel out.
+	ToggleMonoMsg struct{}
 )
 
 type Status string
