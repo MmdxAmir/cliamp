@@ -574,3 +574,51 @@ func TestAdvanceTickUnitsClearsElapsedWhenCounterCompletes(t *testing.T) {
 		t.Fatalf("elapsed after completion = %v, want 0", elapsed)
 	}
 }
+
+// TestTickReconnect checks when the scheduled reconnect restarts the track
+// and ends the tick early, and that only a yt-dlp live drain keeps its
+// attempt count across the restart.
+func TestTickReconnect(t *testing.T) {
+	now := time.Now()
+	station := playlist.Track{Title: "Station", Path: "https://example.com/one", Stream: true, Realtime: true}
+	tests := []struct {
+		name          string
+		at            time.Time
+		tracks        []playlist.Track
+		ytdlLiveDrain bool
+		wantRestarted bool
+		wantStopped   bool
+		wantAttempts  int
+	}{
+		{name: "nothing scheduled", tracks: []playlist.Track{station}},
+		{name: "scheduled later", at: now.Add(time.Second), tracks: []playlist.Track{station}},
+		{name: "due with a track", at: now.Add(-time.Millisecond), tracks: []playlist.Track{station}, wantRestarted: true, wantStopped: true},
+		{name: "due with a yt-dlp live drain", at: now.Add(-time.Millisecond), tracks: []playlist.Track{station}, ytdlLiveDrain: true, wantRestarted: true, wantStopped: true, wantAttempts: 2},
+		{name: "due with no track", at: now.Add(-time.Millisecond), wantStopped: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := &playbackFakeEngine{playing: true}
+			p := playlist.New()
+			p.Replace(tt.tracks)
+			m := Model{player: engine, playlist: p}
+			m.reconnect.at = tt.at
+			m.reconnect.attempts = 2
+			m.reconnect.ytdlLiveDrain = tt.ytdlLiveDrain
+
+			playCmd, restarted := m.tickReconnect(now)
+			if restarted != tt.wantRestarted || (playCmd != nil) != tt.wantRestarted {
+				t.Fatalf("tickReconnect = (cmd %t, %t), want restarted %t", playCmd != nil, restarted, tt.wantRestarted)
+			}
+			if stopped := engine.stopCalls > 0; stopped != tt.wantStopped {
+				t.Errorf("player stopped = %t, want %t", stopped, tt.wantStopped)
+			}
+			if tt.wantStopped && !m.reconnect.at.IsZero() {
+				t.Errorf("reconnect.at = %v after the due time, want cleared", m.reconnect.at)
+			}
+			if tt.wantRestarted && m.reconnect.attempts != tt.wantAttempts {
+				t.Errorf("reconnect.attempts = %d after the restart, want %d", m.reconnect.attempts, tt.wantAttempts)
+			}
+		})
+	}
+}
