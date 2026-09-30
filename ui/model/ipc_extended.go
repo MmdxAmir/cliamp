@@ -509,10 +509,9 @@ func ipcProviderPlaylistInfos(entry provider.Entry) ([]ipc.PlaylistInfo, error) 
 	}
 	items := make([]ipc.PlaylistInfo, len(lists))
 	for i, list := range lists {
-		items[i] = ipc.PlaylistInfo{ID: list.ID, Name: list.Name, Provider: entry.Key, Section: list.Section, TrackCount: list.TrackCount, DurationSecs: list.DurationSecs}
+		items[i] = ipc.PlaylistInfo{ID: list.ID, Name: list.Name, Provider: entry.Key, Section: list.Section, TrackCount: list.TrackCount, DurationSecs: list.DurationSecs, Favorite: list.Favorite}
 		if sectioned, ok := entry.Provider.(provider.SectionedList); ok {
 			items[i].Favoritable = sectioned.IsFavoritableID(list.ID)
-			items[i].Favorite = strings.HasPrefix(list.ID, "f:")
 		}
 	}
 	return items, nil

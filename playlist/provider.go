@@ -25,6 +25,10 @@ var ErrListChanged = errors.New("list changed while loading")
 // DirSourceCount is optional: providers that back playlists with [[dir]]
 // directory sources set it so the UI can flag them in the list. A zero value
 // means "none/unknown" and the UI hides the indicator.
+//
+// Favorite is optional: a provider sets it on a row that the user favorited,
+// such as a favorite radio station or a subscribed podcast show. The IPC
+// playlist list reports it.
 type PlaylistInfo struct {
 	ID             string
 	Name           string
@@ -32,6 +36,7 @@ type PlaylistInfo struct {
 	DurationSecs   int
 	Section        string
 	DirSourceCount int
+	Favorite       bool
 }
 
 // Provider is the interface for playlist sources (radio, Navidrome, Spotify, etc.).

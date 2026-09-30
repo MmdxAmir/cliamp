@@ -125,7 +125,7 @@ func TestProviderNewOffline(t *testing.T) {
 			p = New(tt.country)
 			p.Refresh()
 			checkProviderPlaylists(t, p, []playlist.PlaylistInfo{{
-				ID: "f:" + s.FeedURL, Name: "[subscribed] Offline Show", TrackCount: 4, Section: "Subscriptions",
+				ID: "f:" + s.FeedURL, Name: "[subscribed] Offline Show", TrackCount: 4, Section: "Subscriptions", Favorite: true,
 			}})
 			if added, _, err := p.ToggleFavorite("f:" + s.FeedURL); err != nil || added {
 				t.Fatalf("unsubscribe = %v, %v", added, err)
@@ -264,7 +264,7 @@ func TestProviderSearchCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := []playlist.PlaylistInfo{
-		{ID: "f:" + s.FeedURL, Name: "[subscribed] First Show", TrackCount: 12, Section: "Subscriptions"},
+		{ID: "f:" + s.FeedURL, Name: "[subscribed] First Show", TrackCount: 12, Section: "Subscriptions", Favorite: true},
 		{ID: "c:" + s.FeedURL, Name: "[subscribed] First Show", TrackCount: 12, Section: "Top Shows (US)"},
 	}
 	results := []playlist.PlaylistInfo{
@@ -739,7 +739,7 @@ func TestProviderSubscriptionPersistence(t *testing.T) {
 		p.Refresh()
 		var wantLists []playlist.PlaylistInfo
 		for _, s := range tt.want {
-			wantLists = append(wantLists, playlist.PlaylistInfo{ID: "f:" + s.FeedURL, Name: "[subscribed] " + s.Title, TrackCount: s.EpisodeCount, Section: "Subscriptions"})
+			wantLists = append(wantLists, playlist.PlaylistInfo{ID: "f:" + s.FeedURL, Name: "[subscribed] " + s.Title, TrackCount: s.EpisodeCount, Section: "Subscriptions", Favorite: true})
 			if restored.shows[s.FeedURL] != s {
 				t.Errorf("restored metadata = %+v, want %+v", restored.shows[s.FeedURL], s)
 			}
@@ -776,8 +776,8 @@ func TestProviderSubscriptionStoreValidation(t *testing.T) {
 					t.Errorf("loaded store = %+v, %v", restored.shows, restored.storeErr)
 				}
 				checkProviderPlaylists(t, restored, []playlist.PlaylistInfo{
-					{ID: "f:https://example.com/first", Name: "[subscribed] First", Section: "Subscriptions"},
-					{ID: "f:https://example.com/second", Name: "[subscribed] Second", Section: "Subscriptions"},
+					{ID: "f:https://example.com/first", Name: "[subscribed] First", Section: "Subscriptions", Favorite: true},
+					{ID: "f:https://example.com/second", Name: "[subscribed] Second", Section: "Subscriptions", Favorite: true},
 				})
 			} else {
 				checkProviderPlaylists(t, restored, nil)
@@ -820,7 +820,7 @@ func TestProviderSubscriptionWriteRollback(t *testing.T) {
 			if added, title, err := p.ToggleFavorite(target.FeedURL); added || title != target.Title || err == nil || !strings.Contains(err.Error(), "save podcast subscriptions:") {
 				t.Errorf("failed toggle = %v, %q, %v", added, title, err)
 			}
-			checkProviderPlaylists(t, p, []playlist.PlaylistInfo{{ID: "f:" + first.FeedURL, Name: "[subscribed] First", Section: "Subscriptions"}})
+			checkProviderPlaylists(t, p, []playlist.PlaylistInfo{{ID: "f:" + first.FeedURL, Name: "[subscribed] First", Section: "Subscriptions", Favorite: true}})
 			if after, err := os.ReadFile(path); err != nil || string(after) != string(before) {
 				t.Errorf("failed toggle changed persisted store: %s, %v", after, err)
 			}

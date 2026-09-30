@@ -105,7 +105,9 @@ func TestFavoritesToggleSharedWithProvider(t *testing.T) {
 	found := false
 	for _, list := range lists {
 		if list.ID == "f:"+station.URL {
-			found = strings.Contains(list.Name, station.Name)
+			found = strings.Contains(list.Name, station.Name) && list.Favorite
+		} else if list.Favorite {
+			t.Fatalf("row %q is marked favorite", list.ID)
 		}
 	}
 	if !found || !LoadFavorites().Contains(station.URL) {

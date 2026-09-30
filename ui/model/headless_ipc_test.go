@@ -379,6 +379,34 @@ func TestHeadlessProviderFavoriteAndCatalog(t *testing.T) {
 	}
 }
 
+// favoriteRowsProvider lists rows that the provider marks, as the radio and
+// podcast providers mark favorite stations and subscribed shows.
+type favoriteRowsProvider struct{ commandsTestProvider }
+
+func (favoriteRowsProvider) Playlists() ([]playlist.PlaylistInfo, error) {
+	return []playlist.PlaylistInfo{
+		{ID: "f:https://radio.example/a", Name: "Marked", Favorite: true},
+		{ID: "f:https://radio.example/b", Name: "Prefix only"},
+		{ID: "mix", Name: "Marked without a prefix", Favorite: true},
+	}, nil
+}
+
+// provider.playlists reports the favorite mark that the provider sets on the
+// row. It does not read the f: prefix of the ID.
+func TestIPCPlaylistsReportTheProviderFavoriteMark(t *testing.T) {
+	prov := favoriteRowsProvider{commandsTestProvider{name: "Rows"}}
+	m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "rows", Name: "Rows", Provider: prov}})
+	response := runV2(t, &m, "provider.playlists", ipc.Request{Provider: "rows"})
+	if !response.OK || len(response.Playlists) != 3 {
+		t.Fatalf("provider.playlists = %+v", response)
+	}
+	for i, want := range []bool{true, false, true} {
+		if got := response.Playlists[i].Favorite; got != want {
+			t.Errorf("row %q favorite = %v, want %v", response.Playlists[i].Name, got, want)
+		}
+	}
+}
+
 func TestHeadlessPlaylistMutations(t *testing.T) {
 	prov := &writableTestProvider{commandsTestProvider: commandsTestProvider{name: "Writable"}, removed: -1}
 	m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "local", Name: "Local", Provider: prov}})
