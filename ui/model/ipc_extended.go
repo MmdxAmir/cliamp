@@ -276,36 +276,16 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 		for i, info := range request.Tracks {
 			tracks[i] = ipcTrackFromInfo(info)
 		}
-		if writer, ok := entry.Provider.(provider.PlaylistBatchWriter); ok {
-			return func() tea.Msg {
-				if request.Context != nil && request.Context.Err() != nil {
-					return nil
-				}
-				added, skipped, err := writer.AddTracksToPlaylist(requestContext(request.Context), request.Playlist, tracks)
-				if err != nil {
-					request.Reply <- ipcResponseError(err)
-				} else {
-					request.Reply <- ipc.Response{OK: true, Total: added, Items: []string{fmt.Sprintf("skipped:%d", skipped)}}
-				}
-				return nil
-			}
-		}
-		writer, ok := entry.Provider.(provider.PlaylistWriter)
-		if !ok {
-			request.Reply <- ipc.Response{OK: false, Error: "provider does not support adding tracks"}
-			return nil
-		}
 		return func() tea.Msg {
 			if request.Context != nil && request.Context.Err() != nil {
 				return nil
 			}
-			for _, track := range tracks {
-				if err := writer.AddTrackToPlaylist(requestContext(request.Context), request.Playlist, track); err != nil {
-					request.Reply <- ipcResponseError(err)
-					return nil
-				}
+			added, skipped, err := provider.AddTracks(requestContext(request.Context), entry.Provider, request.Playlist, tracks)
+			if err != nil {
+				request.Reply <- ipcResponseError(err)
+			} else {
+				request.Reply <- ipc.Response{OK: true, Total: added, Items: []string{fmt.Sprintf("skipped:%d", skipped)}}
 			}
-			request.Reply <- ipc.Response{OK: true, Total: len(tracks)}
 			return nil
 		}
 	case "playlist.replace":

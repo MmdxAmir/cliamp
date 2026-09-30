@@ -300,20 +300,7 @@ func (m *Model) writeTracksToPlaylist(name string, tracks []playlist.Track) (add
 	if len(tracks) == 0 {
 		return 0, 0, nil
 	}
-	if bw, ok := m.localProvider.(provider.PlaylistBatchWriter); ok {
-		return bw.AddTracksToPlaylist(context.Background(), name, tracks)
-	}
-	w, ok := m.localProvider.(provider.PlaylistWriter)
-	if !ok {
-		return 0, 0, fmt.Errorf("playlist writes are not supported")
-	}
-	for _, track := range tracks {
-		if err := w.AddTrackToPlaylist(context.Background(), name, track); err != nil {
-			return added, skipped, err
-		}
-		added++
-	}
-	return added, skipped, nil
+	return provider.AddTracks(context.Background(), m.localProvider, name, tracks)
 }
 
 func (m *Model) refreshPlaylistManagerAfterWrite(name string) {
