@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -351,12 +352,20 @@ func (m *Model) undoPlaylistMutation() tea.Cmd {
 		return nil
 	}
 	if undo.persisted {
-		saver := m.localSaver()
-		if saver == nil {
+		// Put back only the removed track in one locked update, so a track
+		// that another writer added since the edit is kept.
+		updater, ok := m.localProvider.(playlistUpdater)
+		if !ok {
 			m.status.Warning("Undo unavailable", statusTTLDefault)
 			return nil
 		}
-		if err := saver.SavePlaylist(undo.loaded, cloneTracks(undo.saved)); err != nil {
+		err := updater.UpdatePlaylist(undo.loaded, func(tracks []playlist.Track) ([]playlist.Track, error) {
+			if slices.ContainsFunc(tracks, func(t playlist.Track) bool { return t.Path == undo.removed.Path }) {
+				return nil, playlist.ErrPlaylistUnchanged
+			}
+			return slices.Insert(tracks, min(undo.savedIdx, len(tracks)), undo.removed), nil
+		})
+		if err != nil {
 			m.status.Errorf(statusTTLDefault, "Undo failed: %s", err)
 			return nil
 		}

@@ -2,6 +2,8 @@ package model
 
 import (
 	"cmp"
+	"errors"
+	"io/fs"
 	"strings"
 	"testing"
 	"time"
@@ -237,8 +239,9 @@ func queueOpModel(t *testing.T, shuffle bool, loaded string, cursor int) (Model,
 
 func queueOpStateOf(t *testing.T, m Model, lp *local.Provider, engine *playbackFakeEngine) queueOpState {
 	t.Helper()
+	// A deleted Mix reads as no tracks.
 	saved, err := lp.Tracks("Mix")
-	if err != nil {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal(err)
 	}
 	state := queueOpState{
@@ -279,12 +282,40 @@ func TestPlaylistUndoRestoresOnlyTheLastEdit(t *testing.T) {
 		// between runs after the x on b and before Ctrl+Z.
 		between func(t *testing.T, m *Model, lp *local.Provider)
 		refused bool
-		want    func(s queueOpState) bool
+		// keepsUndo is true when a failed undo stays for a later Ctrl+Z.
+		keepsUndo bool
+		want      func(s queueOpState) bool
 	}{
 		{
 			name: "right after the edit",
 			want: func(s queueOpState) bool {
-				return s.queue == "a b c" && s.loaded == "Mix"
+				return s.queue == "a b c" && s.saved == "a b c" && s.loaded == "Mix"
+			},
+		},
+		{
+			// The undo puts back only the removed track, so a track that
+			// another writer added to the file is kept.
+			name: "after another writer added to the file",
+			between: func(t *testing.T, _ *Model, _ *local.Provider) {
+				if err := local.New(nil, nil).AddTrack("Mix", d); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: func(s queueOpState) bool {
+				return s.queue == "a b c" && s.saved == "a b c d" && s.loaded == "Mix"
+			},
+		},
+		{
+			name: "after the file was deleted",
+			between: func(t *testing.T, _ *Model, lp *local.Provider) {
+				if err := lp.DeletePlaylist("Mix"); err != nil {
+					t.Fatal(err)
+				}
+			},
+			refused:   true,
+			keepsUndo: true,
+			want: func(s queueOpState) bool {
+				return s.queue == "a c" && s.saved == "" && s.loaded == "Mix"
 			},
 		},
 		{
@@ -351,7 +382,7 @@ func TestPlaylistUndoRestoresOnlyTheLastEdit(t *testing.T) {
 			next, _ = m.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
 			m = next.(Model)
 			got := queueOpStateOf(t, m, lp, engine)
-			if got.undo || !tc.want(got) {
+			if got.undo != tc.keepsUndo || !tc.want(got) {
 				t.Fatalf("state after Ctrl+Z = %+v", got)
 			}
 			if restored := strings.HasPrefix(m.status.text, "Restored"); restored == tc.refused {

@@ -27,14 +27,16 @@ type searchState struct {
 // playlistUndo is the Ctrl+Z undo of the last queue edit. snapshot holds the
 // queue before the edit. revision and loaded hold the playlist revision and
 // the loaded playlist right after the edit. When either changes, the snapshot
-// is stale and the undo is refused.
+// is stale and the undo is refused. When persisted, the edit removed removed
+// from index savedIdx of the loaded playlist file.
 type playlistUndo struct {
 	active    bool
 	snapshot  playlist.Snapshot
 	revision  uint64
 	loaded    string
-	saved     []playlist.Track
 	persisted bool
+	removed   playlist.Track
+	savedIdx  int
 }
 
 // netSearchScreenType identifies which screen of the net search overlay is active.

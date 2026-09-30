@@ -77,7 +77,8 @@ func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 		return nil, errQueueDirTrack
 	}
 	snapshot := m.playlist.Snapshot()
-	var saved []playlist.Track
+	var removed playlist.Track
+	savedIdx := -1
 	persisted := false
 	if loaded != "" {
 		if updater, ok := m.localProvider.(playlistUpdater); ok {
@@ -86,13 +87,13 @@ func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 				// have shifted indexes since the queue was loaded. Match the
 				// persisted explicit track by path so the wrong track is
 				// never removed.
-				savedIdx := slices.IndexFunc(tracks, func(candidate playlist.Track) bool {
+				savedIdx = slices.IndexFunc(tracks, func(candidate playlist.Track) bool {
 					return !candidate.DirSourced && candidate.Path == track.Path
 				})
 				if savedIdx < 0 {
 					return nil, fmt.Errorf("selected track is no longer in %q", loaded)
 				}
-				saved = cloneTracks(tracks)
+				removed = cloneTracks(tracks[savedIdx : savedIdx+1])[0]
 				return slices.Delete(tracks, savedIdx, savedIdx+1), nil
 			})
 			if err != nil {
@@ -109,7 +110,7 @@ func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 	m.normalizeQueueOverlay()
 	undoHint := ""
 	if recordUndo {
-		m.recordPlaylistUndo(playlistUndo{snapshot: snapshot, saved: saved, persisted: persisted})
+		m.recordPlaylistUndo(playlistUndo{snapshot: snapshot, persisted: persisted, removed: removed, savedIdx: savedIdx})
 		undoHint = " (Ctrl+Z to undo)"
 	}
 	if wasActive {
