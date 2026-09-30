@@ -309,18 +309,19 @@ func (m *Model) fetchCatalogBatch(loader provider.CatalogLoader) tea.Cmd {
 
 // quickSwitchProvider closes any browser overlays and jumps to the provider
 // matched by key. It takes every key of providerKeyForShortcut, N included.
-// Returns nil when the key doesn't match a known provider.
-func (m *Model) quickSwitchProvider(key string) tea.Cmd {
+// ok is false when key is no shortcut. A shortcut of a provider that is not
+// configured still closes the overlays, and cmd is nil then.
+func (m *Model) quickSwitchProvider(key string) (cmd tea.Cmd, ok bool) {
 	provKey := providerKeyForShortcut(key)
 	if provKey == "" {
-		return nil
+		return nil, false
 	}
 	// Close any open overlays so the user lands on the provider pane.
 	m.cancelNavRequests()
 	m.navBrowser.visible = false
 	m.plManager.visible = false
 	m.fileBrowser.visible = false
-	return m.switchToProvider(provKey)
+	return m.switchToProvider(provKey), true
 }
 
 // providerShortcut switches to the provider that a Shift+letter shortcut

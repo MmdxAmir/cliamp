@@ -36,7 +36,7 @@ func (m *Model) handleNavBrowserKey(msg tea.KeyPressMsg) tea.Cmd {
 	// Shift+letter quick-switch to another provider — only when not typing
 	// into the filter, so users can still type capital letters in queries.
 	if !m.navBrowser.searching && (key != "R" || m.navBrowser.screen != navBrowseScreenTracks) {
-		if cmd := m.quickSwitchProvider(key); cmd != nil {
+		if cmd, ok := m.quickSwitchProvider(key); ok {
 			return cmd
 		}
 	}

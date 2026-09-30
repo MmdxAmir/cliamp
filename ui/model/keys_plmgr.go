@@ -22,7 +22,7 @@ func (m *Model) handlePlaylistManagerKey(msg tea.KeyPressMsg) tea.Cmd {
 	// the manager isn't currently capturing text input (filter, new-name) or
 	// waiting for a y/n answer, where Y confirms and other keys cancel.
 	if m.plManager.screen != plMgrScreenNewName && m.plManager.screen != plMgrScreenRename && !m.plManager.filtering && !m.plManager.confirmDel {
-		if cmd := m.quickSwitchProvider(msg.String()); cmd != nil {
+		if cmd, ok := m.quickSwitchProvider(msg.String()); ok {
 			return cmd
 		}
 	}
