@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -361,6 +362,52 @@ func TestHeadlessCatalogSearch(t *testing.T) {
 	response := runV2(t, &m, "provider.search", ipc.Request{Provider: "radio", Query: "station"})
 	if !response.OK || len(response.Tracks) != 1 || response.Tracks[0].Title != "Station" || prov.searching {
 		t.Fatalf("provider.search = %+v, searching %v", response, prov.searching)
+	}
+}
+
+// statelessStationProvider is a station catalog that can also search with no
+// pane state, as the radio provider does with SearchStations.
+type statelessStationProvider struct {
+	stationCatalogProvider
+	catalogSearches int
+	clears          int
+	searches        []string
+}
+
+func (p *statelessStationProvider) SearchCatalog(query string) (int, error) {
+	p.catalogSearches++
+	return p.stationCatalogProvider.SearchCatalog(query)
+}
+func (p *statelessStationProvider) ClearSearch() {
+	p.clears++
+	p.stationCatalogProvider.ClearSearch()
+}
+func (p *statelessStationProvider) SearchStations(_ context.Context, query string, limit int) ([]playlist.Track, error) {
+	p.searches = append(p.searches, fmt.Sprintf("%s/%d", query, limit))
+	return []playlist.Track{{Path: "https://radio.example/jazz", Title: "Jazz", Stream: true}}, nil
+}
+
+// An IPC search on a provider with SearchStations leaves the pane search as
+// it is: the provider keeps its search rows and the pane keeps its query.
+func TestIPCStationSearchKeepsThePaneSearch(t *testing.T) {
+	prov := &statelessStationProvider{stationCatalogProvider: stationCatalogProvider{commandsTestProvider: commandsTestProvider{name: "Radio"}}}
+	m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "radio", Name: "Radio", Provider: prov}})
+	prov.searching = true
+	m.provSearch.query = "rock"
+	m.providerLists = []playlist.PlaylistInfo{{ID: "s:0", Name: "Rock FM"}}
+
+	response := runV2(t, &m, "provider.search", ipc.Request{Provider: "radio", Query: "jazz", Limit: 5})
+	if !response.OK || len(response.Tracks) != 1 || response.Tracks[0].Title != "Jazz" {
+		t.Fatalf("provider.search = %+v", response)
+	}
+	if !slices.Equal(prov.searches, []string{"jazz/5"}) {
+		t.Fatalf("SearchStations calls = %v, want one for jazz", prov.searches)
+	}
+	if prov.catalogSearches != 0 || prov.clears != 0 || !prov.IsSearching() {
+		t.Fatalf("pane search changed: %d catalog searches, %d clears, searching %v", prov.catalogSearches, prov.clears, prov.IsSearching())
+	}
+	if m.provSearch.query != "rock" || len(m.providerLists) != 1 || m.providerLists[0].ID != "s:0" {
+		t.Fatalf("pane state = %q %+v, want the rock search rows", m.provSearch.query, m.providerLists)
 	}
 }
 

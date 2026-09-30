@@ -534,11 +534,25 @@ func ipcResponseError(err error) ipc.Response {
 	return ipc.Response{OK: true}
 }
 
+// stationSearcher is a station catalog that can search without the search
+// state of its pane, as the radio provider does with SearchStations.
+type stationSearcher interface {
+	SearchStations(ctx context.Context, query string, limit int) ([]playlist.Track, error)
+}
+
+// ipcSearchProvider runs an IPC search on source. A station catalog with
+// SearchStations keeps the search of its pane. Another catalog search replaces
+// the pane search and clears it at the end.
 func ipcSearchProvider(ctx context.Context, source playlist.Provider, query string, limit int) ([]playlist.Track, error) {
 	if searcher, ok := source.(provider.Searcher); ok {
 		ctx, cancel := context.WithTimeout(requestContext(ctx), 30*time.Second)
 		defer cancel()
 		return searcher.SearchTracks(ctx, query, limit)
+	}
+	if stations, ok := source.(stationSearcher); ok {
+		ctx, cancel := context.WithTimeout(requestContext(ctx), 30*time.Second)
+		defer cancel()
+		return stations.SearchStations(ctx, query, limit)
 	}
 	catalog, ok := source.(provider.CatalogSearcher)
 	if !ok {
