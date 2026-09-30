@@ -458,7 +458,11 @@ func TestMetadataKeyStaysLiteralInTextInputs(t *testing.T) {
 		open func(*Model) *string
 	}{
 		{"playlist search", func(m *Model) *string { m.search.active = true; return &m.search.query }},
-		{"provider filter", func(m *Model) *string { m.provSearch.active = true; return &m.provSearch.query }},
+		{"provider filter", func(m *Model) *string {
+			m.focus = focusProvider
+			m.provSearch.active = true
+			return &m.provSearch.query
+		}},
 		{"provider search", func(m *Model) *string { m.searchOverlay.visible = true; return &m.searchOverlay.query }},
 		{"URL", func(m *Model) *string { m.urlInput.active = true; return &m.urlInput.input }},
 	} {

@@ -183,7 +183,8 @@ func normalizeShiftedLetter(msg tea.KeyPressMsg) tea.KeyPressMsg {
 
 // handleKey processes a single key press and returns an optional command.
 // The global keys run first. Then the top overlay, the provider filter or
-// the focused area owns the key.
+// the focused area owns the key. The provider filter takes keys only while
+// the provider pane has the focus, where commandContext shows it.
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	msg = normalizeShiftedLetter(msg)
 
@@ -195,7 +196,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return spec.key(m, msg)
 	}
 
-	if m.provSearch.active {
+	if m.provSearch.active && m.focus == focusProvider {
 		return m.handleProvSearchKey(msg)
 	}
 	if m.focus != focusProvider {
@@ -923,7 +924,8 @@ func (m *Model) toggleExpandedView() {
 }
 
 // handlePaste sends pasted text to the text field of the top overlay, as
-// handleKey sends keys. With no overlay open, the provider filter takes it.
+// handleKey sends keys. With no overlay open, the provider filter takes it
+// while the provider pane has the focus.
 func (m *Model) handlePaste(content string) tea.Cmd {
 	if content == "" {
 		return nil
@@ -935,7 +937,7 @@ func (m *Model) handlePaste(content string) tea.Cmd {
 		return nil
 	}
 
-	if m.provSearch.active {
+	if m.provSearch.active && m.focus == focusProvider {
 		m.insertText("provider-search", &m.provSearch.query, content)
 		if _, ok := m.provider.(provider.CatalogSearcher); !ok {
 			m.updateProvSearch()

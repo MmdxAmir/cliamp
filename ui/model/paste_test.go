@@ -107,7 +107,7 @@ func TestHandlePasteRoutesToActiveInput(t *testing.T) {
 		},
 		{
 			name:    "provider search (non-catalog)",
-			model:   Model{provSearch: provSearchState{active: true, query: "rock"}},
+			model:   Model{focus: focusProvider, provSearch: provSearchState{active: true, query: "rock"}},
 			content: " ballads",
 			check: func(t *testing.T, m *Model) {
 				if m.provSearch.query != "rock ballads" {
@@ -282,5 +282,98 @@ func TestUpdateRoutesPasteMsg(t *testing.T) {
 	}
 	if got.netSearch.query != "pasted" {
 		t.Fatalf("netSearch.query = %q, want %q", got.netSearch.query, "pasted")
+	}
+}
+
+// A load that moves the focus to the playlist leaves the provider filter
+// open but hidden. Keys and pastes then go to the playlist, as the help line
+// says, and not into the hidden filter.
+func TestProviderFilterTakesInputOnlyWithFocus(t *testing.T) {
+	tracks := []playlist.Track{{Title: "A", Path: "a.mp3"}, {Title: "B", Path: "b.mp3"}}
+	tests := []struct {
+		name string
+		load func(m *Model)
+	}{
+		{name: "file browser result", load: func(m *Model) {
+			m.handleFBTracksResolved(fbTracksResolvedMsg{tracks: tracks})
+		}},
+		{name: "provider tracks", load: func(m *Model) {
+			m.handleTracksLoaded(tracksLoadedMsg{tracks: tracks, providerName: m.provider.Name(), gen: m.requests.tracks})
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := keybindingTestModel()
+			m.player = &playbackFakeEngine{playing: true}
+			m.focus = focusProvider
+			m.provSearch.active = true
+
+			tt.load(&m)
+			if m.focus != focusPlaylist {
+				t.Fatalf("focus = %v after the load, want the playlist", m.focus)
+			}
+			if _, screen := m.commandContext(); screen != "Playlist" {
+				t.Fatalf("help context = %q, want Playlist", screen)
+			}
+			m.plCursor = 0
+			m.handleKey(tea.KeyPressMsg{Code: 'j', Text: "j"})
+			m.handlePaste("abc")
+
+			if m.provSearch.query != "" {
+				t.Fatalf("hidden filter query = %q, want no input", m.provSearch.query)
+			}
+			if m.plCursor != 1 {
+				t.Fatalf("playlist cursor = %d, want j to move it to 1", m.plCursor)
+			}
+		})
+	}
+}
+
+// A resize fits the scroll of what shows, not of the provider filter that an
+// overlay or another focus hides.
+func TestResizeClampsTheVisibleListOverTheProviderFilter(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(m *Model)
+		check func(t *testing.T, m *Model)
+	}{
+		{
+			name: "keymap over the filter",
+			setup: func(m *Model) {
+				m.focus = focusProvider
+				m.openKeymap()
+				m.keymap.cursor, m.keymap.scroll = 1000, 1000
+			},
+			check: func(t *testing.T, m *Model) {
+				if n := m.keymapCount(); m.keymap.cursor >= n || m.keymap.scroll >= n {
+					t.Fatalf("keymap cursor %d scroll %d, want both inside %d entries", m.keymap.cursor, m.keymap.scroll, n)
+				}
+			},
+		},
+		{
+			name: "playlist after a load",
+			setup: func(m *Model) {
+				m.focus = focusPlaylist
+				m.plScroll = 50
+			},
+			check: func(t *testing.T, m *Model) {
+				if m.plScroll != 0 {
+					t.Fatalf("plScroll = %d, want 0 for a two-track playlist", m.plScroll)
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := keybindingTestModel()
+			m.playlist.Add(playlist.Track{Title: "A", Path: "a.mp3"}, playlist.Track{Title: "B", Path: "b.mp3"})
+			m.provSearch.active = true
+			tt.setup(&m)
+
+			updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+			m = updated.(Model)
+
+			tt.check(t, &m)
+		})
 	}
 }

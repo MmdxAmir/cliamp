@@ -154,10 +154,6 @@ func (m *Model) clampActiveScrollState() {
 	if m.layout.tooSmall() {
 		return
 	}
-	if m.provSearch.active {
-		m.provSearchMaybeAdjustScroll()
-		return
-	}
 	switch m.activeScreen() {
 	case screenKeymap:
 		m.keymapMaybeAdjustScroll(m.effectivePlaylistVisible())
@@ -200,9 +196,13 @@ func (m *Model) clampActiveScrollState() {
 	case screenLyrics:
 		m.lyrics.scroll = min(m.lyrics.scroll, max(0, len(m.lyrics.lines)-m.effectivePlaylistVisible()))
 	default:
-		if m.focus == focusProvider {
+		// The provider filter shows only in the provider pane.
+		switch {
+		case m.focus == focusProvider && m.provSearch.active:
+			m.provSearchMaybeAdjustScroll()
+		case m.focus == focusProvider:
 			m.providerMaybeAdjustScroll()
-		} else {
+		default:
 			m.adjustScroll()
 		}
 	}
