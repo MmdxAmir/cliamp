@@ -2525,13 +2525,16 @@ func (m *Model) plMgrToggleMarkAll() {
 	}
 }
 
-func (m *Model) plMgrSaveTracks(status string) bool {
-	saver := m.localSaver()
-	if saver == nil {
+// plMgrUpdateTracks writes an edit of the open playlist through fn in one
+// locked update, so a change that another writer made after the manager
+// loaded the playlist is kept.
+func (m *Model) plMgrUpdateTracks(status string, fn func([]playlist.Track) ([]playlist.Track, error)) bool {
+	updater, ok := m.localProvider.(provider.PlaylistUpdater)
+	if !ok {
 		m.status.Warning("Playlist saving is not supported", statusTTLDefault)
 		return false
 	}
-	if err := saver.SavePlaylist(m.plManager.selPlaylist, cloneTracks(m.plManager.tracks)); err != nil {
+	if err := updater.UpdatePlaylist(m.plManager.selPlaylist, fn); err != nil {
 		m.status.Errorf(statusTTLDefault, "Save failed: %s", err)
 		return false
 	}
@@ -2539,6 +2542,14 @@ func (m *Model) plMgrSaveTracks(status string) bool {
 		m.status.Show(status, statusTTLDefault)
 	}
 	return true
+}
+
+// plMgrSaveOrder writes the row order of the manager to the open playlist.
+func (m *Model) plMgrSaveOrder(status string) bool {
+	order := m.plManager.tracks
+	return m.plMgrUpdateTracks(status, func(tracks []playlist.Track) ([]playlist.Track, error) {
+		return orderByRows(tracks, order), nil
+	})
 }
 
 // plMgrRemoveSelectedTracks removes the selected tracks from the open playlist.
@@ -2562,13 +2573,27 @@ func (m *Model) plMgrRemoveSelectedTracks() {
 		}
 	}
 	m.plMgrSetTrackUndo()
+	rows := pathRowsOf(m.plManager.tracks)
+	drop := make(map[pathRow]bool, len(indices))
+	for _, idx := range indices {
+		drop[rows[idx]] = true
+	}
 	for i := len(indices) - 1; i >= 0; i-- {
 		idx := indices[i]
 		m.plManager.tracks = append(m.plManager.tracks[:idx], m.plManager.tracks[idx+1:]...)
 		m.plManager.missingLocal = append(m.plManager.missingLocal[:idx], m.plManager.missingLocal[idx+1:]...)
 	}
 	m.plManager.marked = make(map[int]bool)
-	if !m.plMgrSaveTracks(fmt.Sprintf("Removed %d track(s) from %q", len(indices), m.plManager.selPlaylist)) {
+	removed := m.plMgrUpdateTracks(fmt.Sprintf("Removed %d track(s) from %q", len(indices), m.plManager.selPlaylist), func(tracks []playlist.Track) ([]playlist.Track, error) {
+		kept := make([]playlist.Track, 0, len(tracks))
+		for i, row := range pathRowsOf(tracks) {
+			if !drop[row] {
+				kept = append(kept, tracks[i])
+			}
+		}
+		return kept, nil
+	})
+	if !removed {
 		m.plMgrRestoreTracks(m.plManager.undo.tracks, m.plManager.undo.missingLocal)
 		return
 	}
@@ -2600,7 +2625,7 @@ func (m *Model) plMgrMoveTrack(delta int) {
 	m.plManager.missingLocal[from], m.plManager.missingLocal[to] = m.plManager.missingLocal[to], m.plManager.missingLocal[from]
 	m.plManager.cursor = to
 	m.plManager.marked = make(map[int]bool)
-	if m.plMgrSaveTracks(fmt.Sprintf("Reordered %q", m.plManager.selPlaylist)) {
+	if m.plMgrSaveOrder(fmt.Sprintf("Reordered %q", m.plManager.selPlaylist)) {
 		m.plMgrTracksMaybeAdjustScroll(m.plMgrTracksVisible())
 	} else {
 		m.plMgrRestoreTracks(m.plManager.undo.tracks, m.plManager.undo.missingLocal)
@@ -2632,7 +2657,7 @@ func (m *Model) plMgrSortTracks() {
 	m.plManager.tracks = tracks
 	m.plManager.missingLocal = missingLocal
 	m.plManager.marked = make(map[int]bool)
-	if m.plMgrSaveTracks(fmt.Sprintf("Sorted %q by %s", m.plManager.selPlaylist, mode)) {
+	if m.plMgrSaveOrder(fmt.Sprintf("Sorted %q by %s", m.plManager.selPlaylist, mode)) {
 		m.plManager.cursor = 0
 		m.plManager.scroll = 0
 		m.plMgrRecomputeFilter()
@@ -2669,24 +2694,80 @@ func compareUITracks(a, b playlist.Track, mode string) int {
 	}
 }
 
+// pathRow names a row of a track list by its path and by the count of
+// earlier rows with that path, so two rows of one path stay apart.
+type pathRow struct {
+	path string
+	nth  int
+}
+
+// pathRowsOf returns the pathRow of each track, in order.
+func pathRowsOf(tracks []playlist.Track) []pathRow {
+	seen := make(map[string]int, len(tracks))
+	rows := make([]pathRow, len(tracks))
+	for i, t := range tracks {
+		rows[i] = pathRow{path: t.Path, nth: seen[t.Path]}
+		seen[t.Path]++
+	}
+	return rows
+}
+
+// orderByRows returns the saved tracks of a playlist file in the order of the
+// same rows in order. Saved tracks that order does not hold, such as a track
+// that another writer added, keep their order at the end. Rows of order that
+// the file does not hold are left out. Each track keeps its saved fields, and
+// a saved duration of 0 takes the duration of the row in order.
+func orderByRows(saved, order []playlist.Track) []playlist.Track {
+	at := make(map[pathRow]int, len(saved))
+	for i, row := range pathRowsOf(saved) {
+		at[row] = i
+	}
+	used := make([]bool, len(saved))
+	out := make([]playlist.Track, 0, len(saved))
+	for i, row := range pathRowsOf(order) {
+		j, ok := at[row]
+		if !ok {
+			continue
+		}
+		used[j] = true
+		t := saved[j]
+		if t.DurationSecs == 0 {
+			t.DurationSecs = order[i].DurationSecs
+		}
+		out = append(out, t)
+	}
+	for j, t := range saved {
+		if !used[j] {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// persistLoadedPlaylistOrder writes the queue order to the loaded playlist
+// file in one locked update, so a track or a tag that another writer added
+// after the load is kept.
 func (m *Model) persistLoadedPlaylistOrder() {
 	name := m.writableLoadedPlaylist()
 	if name == "" {
 		return
 	}
-	saver, ok := m.localProvider.(provider.PlaylistSaver)
+	updater, ok := m.localProvider.(provider.PlaylistUpdater)
 	if !ok {
 		return
 	}
-	tracks := m.playlist.Tracks()
+	queue := m.playlist.Tracks()
 	hasDirTracks := false
-	for _, t := range tracks {
+	for _, t := range queue {
 		if t.DirSourced {
 			hasDirTracks = true
 			break
 		}
 	}
-	if err := saver.SavePlaylist(name, tracks); err != nil {
+	err := updater.UpdatePlaylist(name, func(tracks []playlist.Track) ([]playlist.Track, error) {
+		return orderByRows(tracks, queue), nil
+	})
+	if err != nil {
 		m.status.Errorf(statusTTLDefault, "Save failed: %s", err)
 		return
 	}

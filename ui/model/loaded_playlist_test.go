@@ -196,6 +196,261 @@ func TestQueueRemoveUpdatesTheLoadedPlaylistFile(t *testing.T) {
 	}
 }
 
+// shift+down on a row of a loaded playlist writes the new order in one locked
+// update. A track or a tag that another writer added after the load
+// survives the move, and a duration that only the queue knows fills the file.
+func TestQueueMoveKeepsOtherWriters(t *testing.T) {
+	a := playlist.Track{Path: "/music/a.mp3", Title: "A"}
+	b := playlist.Track{Path: "/music/b.mp3", Title: "B"}
+	added := playlist.Track{Path: "/music/added.mp3", Title: "Added"}
+	for _, tc := range []struct {
+		name string
+		// other runs after the load as a second writer of the file.
+		other     func(t *testing.T, other *local.Provider)
+		queue     func(m *Model) // edits the queue after the load
+		wantMix   []string
+		wantAlbum string // the album of a in the file after the move
+		wantSecs  int    // the duration of a in the file after the move
+	}{
+		{name: "only this writer", wantMix: []string{b.Path, a.Path}},
+		{
+			name: "another writer added a track",
+			other: func(t *testing.T, other *local.Provider) {
+				if _, _, err := other.AddTracks("Mix", []playlist.Track{added}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantMix: []string{b.Path, a.Path, added.Path},
+		},
+		{
+			name: "another writer set an album",
+			other: func(t *testing.T, other *local.Provider) {
+				err := other.UpdatePlaylist("Mix", func(tracks []playlist.Track) ([]playlist.Track, error) {
+					tracks[0].Album = "Enriched"
+					return tracks, nil
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantMix:   []string{b.Path, a.Path},
+			wantAlbum: "Enriched",
+		},
+		{
+			name: "the queue knows a duration",
+			queue: func(m *Model) {
+				track, _ := m.playlist.Track(0)
+				track.DurationSecs = 200
+				m.playlist.SetTrack(0, track)
+			},
+			wantMix:  []string{b.Path, a.Path},
+			wantSecs: 200,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+			lp := local.New(nil, nil)
+			if err := lp.SavePlaylist("Mix", []playlist.Track{a, b}); err != nil {
+				t.Fatal(err)
+			}
+			m := Model{
+				player:        &playbackFakeEngine{},
+				playlist:      playlist.New(),
+				vis:           ui.NewVisualizer(44100),
+				provider:      lp,
+				localProvider: lp,
+				providers:     []provider.Entry{{Key: "local", Name: "Local", Provider: lp}},
+			}
+			if response := runV2(t, &m, "provider.load", ipc.Request{Provider: "local", Playlist: "Mix"}); !response.OK {
+				t.Fatalf("provider.load = %+v", response)
+			}
+			if tc.other != nil {
+				tc.other(t, local.New(nil, nil))
+			}
+			if tc.queue != nil {
+				tc.queue(&m)
+			}
+
+			m.focus = focusPlaylist
+			m.plCursor = 0
+			m.handleKey(tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift})
+			if m.status.kind == feedbackError {
+				t.Fatalf("unexpected error: %s", m.status.text)
+			}
+			mix, err := lp.Tracks("Mix")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := trackPaths(mix); !reflect.DeepEqual(got, tc.wantMix) {
+				t.Fatalf("Mix after the move = %v, want %v", got, tc.wantMix)
+			}
+			if got := mix[1]; got.Album != tc.wantAlbum || got.DurationSecs != tc.wantSecs {
+				t.Fatalf("a in the file = album %q, duration %d; want %q, %d", got.Album, got.DurationSecs, tc.wantAlbum, tc.wantSecs)
+			}
+		})
+	}
+}
+
+func TestOrderByRows(t *testing.T) {
+	track := func(path, title string, secs int) playlist.Track {
+		return playlist.Track{Path: path, Title: title, DurationSecs: secs}
+	}
+	for _, tc := range []struct {
+		name  string
+		saved []playlist.Track
+		order []playlist.Track
+		want  []playlist.Track
+	}{
+		{
+			name:  "order wins",
+			saved: []playlist.Track{track("/a", "A", 0), track("/b", "B", 0)},
+			order: []playlist.Track{track("/b", "B", 0), track("/a", "A", 0)},
+			want:  []playlist.Track{track("/b", "B", 0), track("/a", "A", 0)},
+		},
+		{
+			name:  "saved tracks without a row go last",
+			saved: []playlist.Track{track("/a", "A", 0), track("/new", "New", 0), track("/b", "B", 0)},
+			order: []playlist.Track{track("/b", "B", 0), track("/a", "A", 0)},
+			want:  []playlist.Track{track("/b", "B", 0), track("/a", "A", 0), track("/new", "New", 0)},
+		},
+		{
+			name:  "rows the file lacks are left out",
+			saved: []playlist.Track{track("/a", "A", 0)},
+			order: []playlist.Track{track("/gone", "Gone", 0), track("/a", "A", 0)},
+			want:  []playlist.Track{track("/a", "A", 0)},
+		},
+		{
+			name:  "saved fields win",
+			saved: []playlist.Track{track("/a", "Saved", 0), track("/b", "B", 90)},
+			order: []playlist.Track{track("/b", "Queue", 200), track("/a", "Queue", 200)},
+			want:  []playlist.Track{track("/b", "B", 90), track("/a", "Saved", 200)},
+		},
+		{
+			name:  "one path twice keeps its rows apart",
+			saved: []playlist.Track{track("/a", "A1", 0), track("/b", "B", 0), track("/a", "A2", 0)},
+			order: []playlist.Track{track("/b", "B", 0), track("/a", "A1", 0), track("/a", "A2", 0)},
+			want:  []playlist.Track{track("/b", "B", 0), track("/a", "A1", 0), track("/a", "A2", 0)},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := orderByRows(tc.saved, tc.order); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("orderByRows = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+// d, ] and s in the playlist manager write the playlist in one locked update.
+// A track or a tag that another writer added after the manager opened the
+// playlist survives the edit. d matches a row by its path and by the count
+// of earlier rows with that path.
+func TestPlaylistManagerEditsKeepOtherWriters(t *testing.T) {
+	a := playlist.Track{Path: "/music/a.mp3", Title: "A"}
+	b := playlist.Track{Path: "/music/b.mp3", Title: "B"}
+	added := playlist.Track{Path: "/music/added.mp3", Title: "Added"}
+	addTrack := func(t *testing.T, other *local.Provider) {
+		if _, _, err := other.AddTracks("Mix", []playlist.Track{added}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setAlbum := func(t *testing.T, other *local.Provider) {
+		err := other.UpdatePlaylist("Mix", func(tracks []playlist.Track) ([]playlist.Track, error) {
+			for i := range tracks {
+				if tracks[i].Path == a.Path {
+					tracks[i].Album = "Enriched"
+				}
+			}
+			return tracks, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	remove := func(m *Model) { m.plManager.cursor = 0; m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "d"}) }
+	move := func(m *Model) { m.plManager.cursor = 0; m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "]"}) }
+	sortTitle := func(m *Model) { m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "s"}) }
+	for _, tc := range []struct {
+		name      string
+		file      []playlist.Track
+		other     func(t *testing.T, other *local.Provider)
+		edit      func(m *Model)
+		wantMix   []string
+		wantTitle []string
+		wantAlbum string // the album of a in the file after the edit
+	}{
+		{name: "remove", file: []playlist.Track{b, a}, edit: remove, wantMix: []string{a.Path}},
+		{name: "remove after an add", file: []playlist.Track{b, a}, other: addTrack, edit: remove, wantMix: []string{a.Path, added.Path}},
+		{name: "remove after an album", file: []playlist.Track{b, a}, other: setAlbum, edit: remove, wantMix: []string{a.Path}, wantAlbum: "Enriched"},
+		{
+			name:      "remove the second row of one path",
+			file:      []playlist.Track{{Path: a.Path, Title: "A1"}, b, {Path: a.Path, Title: "A2"}},
+			edit:      func(m *Model) { m.plManager.cursor = 2; m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "d"}) },
+			wantMix:   []string{a.Path, b.Path},
+			wantTitle: []string{"A1", "B"},
+		},
+		{name: "move", file: []playlist.Track{b, a}, edit: move, wantMix: []string{a.Path, b.Path}},
+		{name: "move after an add", file: []playlist.Track{b, a}, other: addTrack, edit: move, wantMix: []string{a.Path, b.Path, added.Path}},
+		{name: "move after an album", file: []playlist.Track{b, a}, other: setAlbum, edit: move, wantMix: []string{a.Path, b.Path}, wantAlbum: "Enriched"},
+		{name: "sort", file: []playlist.Track{b, a}, edit: sortTitle, wantMix: []string{a.Path, b.Path}},
+		{name: "sort after an add", file: []playlist.Track{b, a}, other: addTrack, edit: sortTitle, wantMix: []string{a.Path, b.Path, added.Path}},
+		{name: "sort after an album", file: []playlist.Track{b, a}, other: setAlbum, edit: sortTitle, wantMix: []string{a.Path, b.Path}, wantAlbum: "Enriched"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+			lp := local.New(nil, nil)
+			if err := lp.SavePlaylist("Mix", tc.file); err != nil {
+				t.Fatal(err)
+			}
+			tracks, err := lp.Tracks("Mix")
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := Model{
+				player:        &playbackFakeEngine{},
+				playlist:      playlist.New(),
+				vis:           ui.NewVisualizer(44100),
+				provider:      lp,
+				localProvider: lp,
+				plManager: plManagerState{
+					visible:     true,
+					screen:      plMgrScreenTracks,
+					selPlaylist: "Mix",
+				},
+			}
+			m.plMgrLoadTracks(tracks)
+			if tc.other != nil {
+				tc.other(t, local.New(nil, nil))
+			}
+
+			tc.edit(&m)
+			if m.status.kind == feedbackError || m.status.kind == feedbackWarning {
+				t.Fatalf("unexpected status: %s", m.status.text)
+			}
+			mix, err := lp.Tracks("Mix")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := trackPaths(mix); !reflect.DeepEqual(got, tc.wantMix) {
+				t.Fatalf("Mix after the edit = %v, want %v", got, tc.wantMix)
+			}
+			if tc.wantTitle != nil {
+				var titles []string
+				for _, track := range mix {
+					titles = append(titles, track.Title)
+				}
+				if !reflect.DeepEqual(titles, tc.wantTitle) {
+					t.Fatalf("Mix titles = %v, want %v", titles, tc.wantTitle)
+				}
+			}
+			for _, track := range mix {
+				if track.Path == a.Path && track.Album != tc.wantAlbum {
+					t.Fatalf("album of a = %q, want %q", track.Album, tc.wantAlbum)
+				}
+			}
+		})
+	}
+}
+
 // Favorites can hold a radio station, because f on a station row in a saved
 // playlist adds it there. A key load of Favorites keeps the list as the saved
 // list of the ♥ rule, so f on that row removes it from Favorites and does not

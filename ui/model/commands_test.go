@@ -27,6 +27,7 @@ func (p commandsTestProvider) Playlists() ([]playlist.PlaylistInfo, error) {
 
 func (p commandsTestProvider) Tracks(string) ([]playlist.Track, error) { return nil, nil }
 
+// playlistManagerTestProvider keeps one saved playlist in saved.
 type playlistManagerTestProvider struct {
 	commandsTestProvider
 	saveName string
@@ -37,6 +38,17 @@ func (p *playlistManagerTestProvider) SavePlaylist(name string, tracks []playlis
 	p.saveName = name
 	p.saved = append([]playlist.Track(nil), tracks...)
 	return nil
+}
+
+func (p *playlistManagerTestProvider) UpdatePlaylist(name string, fn func([]playlist.Track) ([]playlist.Track, error)) error {
+	tracks, err := fn(append([]playlist.Track(nil), p.saved...))
+	if errors.Is(err, provider.ErrPlaylistUnchanged) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return p.SavePlaylist(name, tracks)
 }
 
 // Both add-to-playlist pickers offer only the lists that the provider accepts
@@ -124,7 +136,11 @@ func TestTracksLoadedMsgMarksOnlyExactLocalPlaylist(t *testing.T) {
 
 func TestPlaylistManagerTrackSortUsesLowercaseKey(t *testing.T) {
 	player := &playbackFakeEngine{}
-	local := &playlistManagerTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
+	tracks := []playlist.Track{
+		{Path: "/b.mp3", Title: "B"},
+		{Path: "/a.mp3", Title: "A"},
+	}
+	local := &playlistManagerTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}, saved: tracks}
 	m := Model{
 		player:        player,
 		playlist:      playlist.New(),
@@ -138,10 +154,7 @@ func TestPlaylistManagerTrackSortUsesLowercaseKey(t *testing.T) {
 			visible:     true,
 			screen:      plMgrScreenTracks,
 			selPlaylist: "mix",
-			tracks: []playlist.Track{
-				{Path: "/b.mp3", Title: "B"},
-				{Path: "/a.mp3", Title: "A"},
-			},
+			tracks:      slices.Clone(tracks),
 		},
 	}
 
