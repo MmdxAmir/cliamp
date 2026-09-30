@@ -28,7 +28,7 @@ Package `main` at the repo root:
 
 | File | Responsibility |
 |------|----------------|
-| `main.go` | `run(...)` for the TUI and headless mode: config, player, playlist, Model, Bubbletea program, IPC server and exit save. It also holds the V2 dispatcher `newTUIV2Dispatcher`, the operation set `v2Operations` and the plugin jobs |
+| `main.go` | `run(...)` for the TUI and headless mode: config, player, playlist, Model, Bubbletea program, IPC server and exit save. It also holds the V2 dispatcher `newV2Dispatcher`, the operation set `v2Operations` and the plugin jobs |
 | `providers.go` | `buildProviders` and the `providerKeys` table that `--provider` reads. The player hooks `registerPlayerHooks` and `isBufferedProviderURL`. The sign-in URL observers, the Jellyfin and Emby resume context and the yt-dlp install prompt |
 | `lua_wiring.go` | The Lua state, control and UI providers. `newLuaSender` queues the plugin messages for `prog.Send`, so a plugin never waits on the event loop |
 | `commands.go` | The root flags and every subcommand |
@@ -67,7 +67,7 @@ Other directories: `docs/` holds the user docs, one `.md` per feature. `site/` i
 ### Runtime flow (read this before touching `main.go`)
 
 1. `main()` sets the version and runs `buildApp()` from `commands.go`. Most subcommands are thin V2 clients in `ipc_client.go`. They talk to the running instance over the socket.
-2. `run(overrides, positional, daemon, visualizer60FPS)` is the path of the TUI and of headless mode:
+2. `run(overrides, positional, headless, visualizer60FPS)` is the path of the TUI and of headless mode:
    1. Load `config.toml`, apply the CLI overrides and open `cliamp.log`.
    2. Call `buildProviders` in `providers.go`. cliamp radio, Radio, Local and Podcasts always register. The other providers register when they are configured. YouTube also needs credentials and yt-dlp.
    3. Resolve the positional arguments with `resolve.Args`. Feeds, M3U, PLS and yt-dlp pages go to `Pending` and resolve after start.
@@ -100,7 +100,7 @@ The socket is `cliamp.sock` in the config directory. `ipc.DefaultSocketPath` ret
 | `ipc/v2.go`, `ipc/server.go` | The envelope, `capabilities`, `job.get`, `job.cancel`, `subscribe`, and the direct reads `state.get` and `spectrum.get` |
 | `ipc/operations.go` | `DefaultOperationRegistry`: the name, the parameters and the parameter checks of each operation |
 | `ipc/jobs.go`, `ipc/pubsub.go` | The job store and the event broker |
-| `main.go` | `newTUIV2Dispatcher` sends each job to the Model as `model.V2RequestMsg`, and runs `plugin.call` and `plugin.commands` against `luaplugin`. `v2Operations` picks the operations of the runtime |
+| `main.go` | `newV2Dispatcher` sends each job to the Model as `model.V2RequestMsg`, and runs `plugin.call` and `plugin.commands` against `luaplugin`. `v2Operations` picks the operations of the runtime |
 | `ui/model/ipc_runtime.go` | Playback, queue, play-next, settings, the runtime snapshot and the runtime events |
 | `ui/model/ipc_extended.go` | The provider, playlist, library, `url.load`, `save`, `lyrics` and `history` operations |
 | `ipc_client.go`, `commands.go`, `open.go` | The CLI side |

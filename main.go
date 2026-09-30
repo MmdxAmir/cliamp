@@ -41,7 +41,7 @@ const (
 	lowPowerUIFPS = 5
 )
 
-func run(overrides config.Overrides, positional []string, daemon, visualizer60FPS bool) error {
+func run(overrides config.Overrides, positional []string, headless, visualizer60FPS bool) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
@@ -57,7 +57,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		applog.Info("cliamp starting (version=%s level=%s)", appmeta.Version(), appliedLevel)
 	}
 
-	providers := buildProviders(cfg, !daemon && isCharDevice(os.Stdin))
+	providers := buildProviders(cfg, !headless && isCharDevice(os.Stdin))
 	defer providers.Close()
 
 	positional, err = searchArgs(positional)
@@ -77,11 +77,11 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		defaultProvider = "cliamp"
 	}
 	defaultRadio := len(positional) == 0 && defaultProvider == "radio"
-	// The cliamp radio view waits for the listener to pick a channel. The
-	// daemon has no view, and auto-play expects sound without a keypress, so
+	// The cliamp radio view waits for the listener to pick a channel. Headless
+	// mode has no view, and auto-play expects sound without a keypress, so
 	// both start with the live channel streams instead.
 	liveChannels := defaultRadio ||
-		(len(positional) == 0 && defaultProvider == "cliamp" && (daemon || cfg.AutoPlay))
+		(len(positional) == 0 && defaultProvider == "cliamp" && (headless || cfg.AutoPlay))
 	resumeState := resume.Load()
 
 	pl := playlist.New()
@@ -106,7 +106,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	restoredContext := false
 	restoredIndex := 0
 	restoredResumePath := ""
-	if !daemon && resumeServer != nil && cfg.Playlist == "" && len(positional) == 0 && len(resolved.Pending) == 0 && pl.Len() == 0 {
+	if !headless && resumeServer != nil && cfg.Playlist == "" && len(positional) == 0 && len(resolved.Pending) == 0 && pl.Len() == 0 {
 		if tracks, index, activePath, ok := restoreServerContext(resumeState, resumeServer); ok {
 			pl.Add(tracks...)
 			restoredContext = true
@@ -156,13 +156,13 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	if cfg.Playlist != "" && len(resolved.Tracks) == 0 && len(resolved.Pending) == 0 {
 		m.SetLoadedPlaylist(cfg.Playlist)
 	}
-	if !daemon && len(resolved.Tracks) == 0 && len(resolved.Pending) == 0 && pl.Len() == 0 {
+	if !headless && len(resolved.Tracks) == 0 && len(resolved.Pending) == 0 && pl.Len() == 0 {
 		m.StartInProvider()
 	}
 	if cfg.AutoPlay && !restoredContext {
 		m.SetAutoPlay(true)
 	}
-	configureModel(&m, cfg, daemon, visualizer60FPS)
+	configureModel(&m, cfg, headless, visualizer60FPS)
 
 	if resumeState.Path != "" && resumeState.PositionSec > 0 {
 		// Jellyfin and Emby resume the restored context above. Mixcloud is also commonly
@@ -176,8 +176,8 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		}
 	}
 
-	prog := tea.NewProgram(m, programOptions(daemon, cfg.LowPower)...)
-	if daemon {
+	prog := tea.NewProgram(m, programOptions(headless, cfg.LowPower)...)
+	if headless {
 		stopSignals := quitOnSignals(prog.Send)
 		defer stopSignals()
 	}
@@ -197,12 +197,12 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		luaMgr.SetUIProvider(luaUIProvider(luaSend))
 	}
 
-	stopIPC, err := startIPC(prog, pluginBroker, luaMgr, daemon)
+	stopIPC, err := startIPC(prog.Send, pluginBroker, luaMgr, headless)
 	if err != nil {
 		return err
 	}
 	defer stopIPC()
-	if daemon {
+	if headless {
 		fmt.Fprintf(os.Stderr, "cliamp: running headless (socket: %s)\n", ipc.DefaultSocketPath())
 		applog.Info("running headless")
 	}
@@ -211,7 +211,7 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 	if err != nil {
 		return err
 	}
-	saveOnExit(finalModel, daemon, resumeServer)
+	saveOnExit(finalModel, headless, resumeServer)
 	return nil
 }
 
@@ -310,10 +310,11 @@ func configureModel(m *model.Model, cfg config.Config, headless, visualizer60FPS
 	}
 }
 
-// startIPC serves the socket for prog. Headless mode is controlled only
-// through the socket, so there a failure is an error. The TUI reports the
-// failure and runs without the socket.
-func startIPC(prog *tea.Program, broker *ipc.Broker, plugins *luaplugin.Manager, headless bool) (stop func(), err error) {
+// startIPC serves the socket and sends its requests to the program through
+// send. Headless mode is controlled only through the socket, so there a
+// failure is an error. The TUI reports the failure and runs without the
+// socket.
+func startIPC(send func(tea.Msg), broker *ipc.Broker, plugins *luaplugin.Manager, headless bool) (stop func(), err error) {
 	srv, err := ipc.NewServerWithBroker(ipc.DefaultSocketPath(), broker)
 	if err != nil {
 		if headless {
@@ -322,7 +323,7 @@ func startIPC(prog *tea.Program, broker *ipc.Broker, plugins *luaplugin.Manager,
 		fmt.Fprintf(os.Stderr, "ipc: %v\n", err)
 		return func() {}, nil
 	}
-	srv.SetV2Dispatcher(newTUIV2Dispatcher(prog, srv.JobStore(), plugins))
+	srv.SetV2Dispatcher(newV2Dispatcher(send, srv.JobStore(), plugins))
 	srv.SetOperationRegistry(v2Operations(headless, plugins != nil))
 	go publishV2JobEvents(srv.Done(), srv.JobStore(), broker)
 	return func() { _ = srv.Close() }, nil
@@ -431,12 +432,15 @@ func v2Operations(headless, plugins bool) *ipc.OperationRegistry {
 	return operations
 }
 
-func newTUIV2Dispatcher(prog *tea.Program, jobs *ipc.JobStore, plugins *luaplugin.Manager) ipc.V2Dispatcher {
+// newV2Dispatcher answers the V2 requests of the TUI and of headless mode.
+// send delivers a request to the Model, as prog.Send does. The plugin jobs
+// run against plugins.
+func newV2Dispatcher(send func(tea.Msg), jobs *ipc.JobStore, plugins *luaplugin.Manager) ipc.V2Dispatcher {
 	return ipc.V2DispatcherFunc(func(ctx context.Context, request ipc.V2Request) (ipc.V2Result, *ipc.V2Error) {
 		switch request.Method {
 		case "state.get", "spectrum.get":
 			reply := make(chan model.V2RequestResult, 1)
-			go prog.Send(model.V2RequestMsg{Request: request, Reply: reply})
+			go send(model.V2RequestMsg{Request: request, Reply: reply})
 			select {
 			case result := <-reply:
 				return result.Result, result.Error
@@ -455,9 +459,9 @@ func newTUIV2Dispatcher(prog *tea.Program, jobs *ipc.JobStore, plugins *luaplugi
 			go runV2PluginJob(jobs, job.ID, request, plugins)
 			return ipc.V2Result{Job: &job}, nil
 		}
-		// Program.Send may wait for the TUI update loop. Job submission itself
+		// Program.Send may wait for the update loop. Job submission itself
 		// stays non-blocking so the IPC response can always acknowledge the job.
-		go prog.Send(model.V2RequestMsg{Request: request, Jobs: jobs, JobID: job.ID})
+		go send(model.V2RequestMsg{Request: request, Jobs: jobs, JobID: job.ID})
 		return ipc.V2Result{Job: &job}, nil
 	})
 }
