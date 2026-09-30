@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -10,7 +11,9 @@ import (
 	"github.com/gopxl/beep/v2"
 
 	"github.com/bjarneo/cliamp/config"
+	"github.com/bjarneo/cliamp/external/emby"
 	"github.com/bjarneo/cliamp/external/navidrome"
+	"github.com/bjarneo/cliamp/internal/resume"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -168,3 +171,37 @@ type fakeRadio struct{}
 func (fakeRadio) Name() string                                { return "Radio" }
 func (fakeRadio) Playlists() ([]playlist.PlaylistInfo, error) { return nil, nil }
 func (fakeRadio) Tracks(string) ([]playlist.Track, error)     { return nil, nil }
+
+// serverResumeSaver saves the play context only for a track that the server
+// owns. A track from another server or a local file leaves no resume state.
+func TestServerResumeSaver(t *testing.T) {
+	server := emby.NewFromConfig(config.EmbyConfig{
+		URL: "https://emby.example.com", Token: "token", UserID: "user-1",
+	})
+	owned := "https://emby.example.com/Items/two/Download?api_key=token"
+	context := []playlist.Track{
+		{Path: "https://emby.example.com/Items/one/Download?api_key=token", Title: "One"},
+		{Path: owned, Title: "Two"},
+	}
+	for _, tt := range []struct {
+		name string
+		path string
+		want resume.State
+	}{
+		{
+			name: "owned stream",
+			path: owned,
+			want: resume.State{Path: owned, PositionSec: 42, Context: context, ContextIndex: 1},
+		},
+		{name: "other server", path: "https://jf.example.com/Items/two/Download?api_key=token"},
+		{name: "local file", path: "/music/two.mp3"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+			serverResumeSaver(server.Provider)(playlist.Track{Path: tt.path, Title: "Two"}, 42, context, 1)
+			if got := resume.Load(); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("saved state = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
