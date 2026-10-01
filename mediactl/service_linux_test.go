@@ -317,3 +317,49 @@ func TestServiceRepublishesClampedVolume(t *testing.T) {
 		})
 	}
 }
+
+// TestServiceUpdateAfterConnectionLoss checks that Update does not panic
+// after the bus connection drops. godbus then fails each property emit, and
+// SetMust panics. The model calls Update on the event loop, so a panic there
+// ends cliamp in the middle of playback.
+func TestServiceUpdateAfterConnectionLoss(t *testing.T) {
+	base := playback.State{Status: playback.StatusPaused, VolumeDB: -12, VolumeMinDB: -50, Seekable: true}
+	tests := []struct {
+		name   string
+		change func(*playback.State)
+	}{
+		{name: "status", change: func(s *playback.State) { s.Status = playback.StatusPlaying }},
+		{name: "track", change: func(s *playback.State) { s.Track.Title = "Next" }},
+		{name: "volume", change: func(s *playback.State) { s.VolumeDB = -6 }},
+		{name: "can seek", change: func(s *playback.State) { s.Seekable = false }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newTestService(t, func(tea.Msg) {})
+			svc.Update(base)
+			svc.conn.Close()
+
+			state := base
+			tt.change(&state)
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("Update panicked after the connection dropped: %v", r)
+				}
+			}()
+			svc.Update(state)
+		})
+	}
+}
+
+// TestServicePublishAfterConnectionLoss checks the guard for a connection
+// that drops while Update or republishVolume publishes.
+func TestServicePublishAfterConnectionLoss(t *testing.T) {
+	svc := newTestService(t, func(tea.Msg) {})
+	svc.conn.Close()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("publish panicked after the connection dropped: %v", r)
+		}
+	}()
+	svc.publish("PlaybackStatus", string(playback.StatusPlaying))
+}

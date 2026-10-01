@@ -194,3 +194,7 @@ shuffle and repeat locally. External tools cannot view or control these states.
 
 On Linux, `HasTrackList` is false. cliamp does not implement the optional
 `org.mpris.MediaPlayer2.TrackList` interface.
+
+On Linux, cliamp does not reconnect to the session bus. If the bus connection
+drops while cliamp runs, playback continues without MPRIS. To register again,
+restart cliamp.

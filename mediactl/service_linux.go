@@ -322,15 +322,20 @@ func (s *Service) republishVolume(db float64) {
 	if dbToLinear(db, math.Float64frombits(s.volFloor.Load())) != s.lastVol || !s.volSet.Swap(false) {
 		return
 	}
-	// SetMust panics when the emit fails, for example after the bus
-	// connection drops. A panic on this goroutine ends the process and
-	// leaves the terminal in raw mode.
+	s.publish("Volume", s.lastVol)
+}
+
+// publish sets a Player property. SetMust panics when the emit fails, for
+// example after the bus connection drops. Update runs on the event loop and
+// republishVolume on the forward goroutine. A panic on either ends the
+// process and leaves the terminal in raw mode, so publish logs the failure.
+func (s *Service) publish(name string, v any) {
 	defer func() {
 		if r := recover(); r != nil {
-			applog.Warn("mpris: republish volume: %v", r)
+			applog.Warn("mpris: publish %s: %v", name, r)
 		}
 	}()
-	s.props.SetMust("org.mpris.MediaPlayer2.Player", "Volume", s.lastVol)
+	s.props.SetMust("org.mpris.MediaPlayer2.Player", name, v)
 }
 
 func (s *Service) Update(state playback.State) {
@@ -339,35 +344,34 @@ func (s *Service) Update(state playback.State) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.props == nil {
+	// A dropped bus connection does not come back, so every emit would fail.
+	if s.props == nil || !s.conn.Connected() {
 		return
 	}
 
-	iface := "org.mpris.MediaPlayer2.Player"
-
 	if state.Status != s.lastStatus {
-		s.props.SetMust(iface, "PlaybackStatus", string(state.Status))
+		s.publish("PlaybackStatus", string(state.Status))
 		s.lastStatus = state.Status
 	}
 
 	if state.Track != s.lastTrack {
 		s.trackSeq++
 		s.trackID = trackPath(s.trackSeq)
-		s.props.SetMust(iface, "Metadata", makeMetadata(state.Track, s.trackID))
+		s.publish("Metadata", makeMetadata(state.Track, s.trackID))
 		s.lastTrack = state.Track
 	}
 
 	s.volFloor.Store(math.Float64bits(state.VolumeMinDB))
 	vol := dbToLinear(state.VolumeDB, state.VolumeMinDB)
 	if s.volSet.Swap(false) || vol != s.lastVol {
-		s.props.SetMust(iface, "Volume", vol)
+		s.publish("Volume", vol)
 		s.lastVol = vol
 	}
 
-	s.props.SetMust(iface, "Position", state.Position.Microseconds())
+	s.publish("Position", state.Position.Microseconds())
 
 	if state.Seekable != s.lastCanSeek {
-		s.props.SetMust(iface, "CanSeek", state.Seekable)
+		s.publish("CanSeek", state.Seekable)
 		s.lastCanSeek = state.Seekable
 	}
 }
