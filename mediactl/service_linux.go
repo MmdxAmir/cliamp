@@ -355,8 +355,10 @@ func (s *Service) Update(state playback.State) {
 	}
 
 	if state.Track != s.lastTrack {
-		s.trackSeq++
-		s.trackID = trackPath(s.trackSeq)
+		if !sameTrack(state.Track, s.lastTrack) {
+			s.trackSeq++
+			s.trackID = trackPath(s.trackSeq)
+		}
 		s.publish("Metadata", makeMetadata(state.Track, s.trackID))
 		s.lastTrack = state.Track
 	}
@@ -374,6 +376,16 @@ func (s *Service) Update(state playback.State) {
 		s.publish("CanSeek", state.Seekable)
 		s.lastCanSeek = state.Seekable
 	}
+}
+
+// sameTrack reports whether a and b differ at most in Duration and ArtURL. A
+// buffered track gets its probed length while it plays, and its art can come
+// later. Neither starts a new track, so the track id stays the same, and a
+// client SetPosition with that id still applies.
+func sameTrack(a, b playback.Track) bool {
+	a.Duration, b.Duration = 0, 0
+	a.ArtURL, b.ArtURL = "", ""
+	return a == b
 }
 
 func (s *Service) Seeked(position time.Duration) {

@@ -363,3 +363,43 @@ func TestServicePublishAfterConnectionLoss(t *testing.T) {
 	}()
 	svc.publish("PlaybackStatus", string(playback.StatusPlaying))
 }
+
+// TestServiceTrackIDFollowsTrackIdentity checks that a change of only the
+// duration or the art URL keeps mpris:trackid. A buffered track gets its
+// probed length mid-track, and a client SetPosition with the id it read
+// earlier must still apply. Metadata still publishes the new values.
+func TestServiceTrackIDFollowsTrackIdentity(t *testing.T) {
+	const playerName = "org.mpris.MediaPlayer2.Player"
+	first := playback.Track{Title: "Song", Artist: "Artist", URL: "https://example.com/song", Duration: 3 * time.Minute}
+	tests := []struct {
+		name      string
+		change    func(*playback.Track)
+		wantNewID bool
+	}{
+		{name: "duration", change: func(tr *playback.Track) { tr.Duration = 3*time.Minute + 2*time.Second }},
+		{name: "art url", change: func(tr *playback.Track) { tr.ArtURL = "file:///tmp/cover.jpg" }},
+		{name: "title", change: func(tr *playback.Track) { tr.Title = "Other" }, wantNewID: true},
+		{name: "url", change: func(tr *playback.Track) { tr.URL = "https://example.com/other" }, wantNewID: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newTestService(t, func(tea.Msg) {})
+			svc.Update(playback.State{Track: first})
+			firstID := svc.props.GetMust(playerName, "Metadata").(map[string]dbus.Variant)["mpris:trackid"].Value()
+
+			next := first
+			tt.change(&next)
+			svc.Update(playback.State{Track: next})
+			metadata := svc.props.GetMust(playerName, "Metadata").(map[string]dbus.Variant)
+			if id := metadata["mpris:trackid"].Value(); (id != firstID) != tt.wantNewID {
+				t.Fatalf("mpris:trackid = %v after the %s change, first id %v, want new id %v", id, tt.name, firstID, tt.wantNewID)
+			}
+			if got, want := metadata["mpris:length"].Value(), next.Duration.Microseconds(); got != want {
+				t.Fatalf("mpris:length = %v, want %v", got, want)
+			}
+			if got := metadata["mpris:artUrl"]; next.ArtURL != "" && got.Value() != next.ArtURL {
+				t.Fatalf("mpris:artUrl = %v, want %v", got, next.ArtURL)
+			}
+		})
+	}
+}

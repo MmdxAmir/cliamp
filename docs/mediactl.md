@@ -84,7 +84,7 @@ cliamp publishes track metadata with standard MPRIS keys:
 
 | Key | Description |
 |---|---|
-| `mpris:trackid` | D-Bus object path for the current track |
+| `mpris:trackid` | D-Bus object path for the current track. It stays the same when only the length or the art URL of the track changes |
 | `xesam:title` | Track title |
 | `xesam:artist` | Artist name as a list with one entry |
 | `xesam:album` | Album name, when available |
