@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -459,6 +460,59 @@ func TestSetPadding(t *testing.T) {
 			}
 			if m.vis.Cols != tt.cols {
 				t.Fatalf("visualizer columns = %d, want %d", m.vis.Cols, tt.cols)
+			}
+		})
+	}
+}
+
+// lifecycleLuaHost records the init and render calls of the Lua visualizers.
+type lifecycleLuaHost struct{ calls []string }
+
+func (h *lifecycleLuaHost) RenderVis(name string, _ [ui.DefaultSpectrumBands]float64, rows, cols int, _ uint64) string {
+	h.calls = append(h.calls, fmt.Sprintf("render %s %dx%d", name, rows, cols))
+	return ""
+}
+
+func (h *lifecycleLuaHost) InitVis(name string, rows, cols int) {
+	h.calls = append(h.calls, fmt.Sprintf("init %s %dx%d", name, rows, cols))
+}
+
+func (h *lifecycleLuaHost) DestroyVis(name string) {
+	h.calls = append(h.calls, "destroy "+name)
+}
+
+// Bubbletea draws the first frame before the first WindowSizeMsg. A Lua
+// visualizer from the config must not get its init with the placeholder
+// size of that frame. It gets its init with the real size of the terminal.
+func TestLuaVisualizerInitWaitsForWindowSize(t *testing.T) {
+	tests := []struct {
+		width, height int
+		want          []string
+	}{
+		{200, 50, []string{"init myvis 7x194", "render myvis 7x194"}},
+		{100, 30, []string{"init myvis 7x94", "render myvis 7x94"}},
+		{60, 18, []string{"init myvis 5x54", "render myvis 5x54"}},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%dx%d", tt.width, tt.height), func(t *testing.T) {
+			host := &lifecycleLuaHost{}
+			m := New(&playbackFakeEngine{}, playlist.New(), nil, "", nil, nil, nil, nil, nil, nil)
+			m.RegisterLuaVisualizers([]string{"myvis"}, host)
+			m.SetVisRows(0)
+			if !m.SetVisualizer("myvis") {
+				t.Fatal("SetVisualizer(myvis) = false")
+			}
+
+			m.View()
+			if len(host.calls) != 0 {
+				t.Fatalf("calls before the window size = %q, want none", host.calls)
+			}
+
+			updated, _ := m.Update(tea.WindowSizeMsg{Width: tt.width, Height: tt.height})
+			m = updated.(Model)
+			m.View()
+			if !slices.Equal(host.calls, tt.want) {
+				t.Fatalf("calls = %q, want %q", host.calls, tt.want)
 			}
 		})
 	}
