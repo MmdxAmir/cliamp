@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -37,6 +36,14 @@ var downloadIdleTimeout = 30 * time.Second
 // errDownloadStalled ends a binary download that got no data within
 // downloadIdleTimeout.
 var errDownloadStalled = errors.New("download stalled")
+
+// releaseMaxBytes limits the releases/latest response. releaseListMaxBytes
+// limits the list of up to 100 releases. Each release lists its assets, so
+// the list is larger than 1 MiB.
+const (
+	releaseMaxBytes     = 1 << 20
+	releaseListMaxBytes = 16 << 20
+)
 
 type release struct {
 	TagName string `json:"tag_name"`
@@ -117,15 +124,14 @@ func latestVersion(prerelease bool) (string, error) {
 
 	if !prerelease {
 		var r release
-		// Limit response body to 1 MB to prevent unbounded memory usage.
-		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&r); err != nil {
+		if err := httpclient.ReadJSON(resp.Body, releaseMaxBytes, &r); err != nil {
 			return "", fmt.Errorf("parsing response: %w", err)
 		}
 		return validTag(r.TagName)
 	}
 
 	var releases []release
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&releases); err != nil {
+	if err := httpclient.ReadJSON(resp.Body, releaseListMaxBytes, &releases); err != nil {
 		return "", fmt.Errorf("parsing response: %w", err)
 	}
 	return newestRelease(releases)

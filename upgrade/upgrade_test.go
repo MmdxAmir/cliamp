@@ -183,6 +183,70 @@ func TestLatestPrereleaseVersion(t *testing.T) {
 	}
 }
 
+// TestLatestVersionBodySize verifies that a release response that fits the
+// read limit decodes, and that a larger one reports httpclient.ErrTooLarge.
+// The list of 100 releases with their assets is larger than 1 MiB.
+func TestLatestVersionBodySize(t *testing.T) {
+	// releases writes n releases with a padding field of pad bytes each.
+	releases := func(n, pad int) string {
+		var b strings.Builder
+		b.WriteString(`[{"tag_name":"v2.3.0"}`)
+		for i := range n {
+			b.WriteString(`,{"tag_name":"v1.0.` + strconv.Itoa(i) + `","body":"` + strings.Repeat("x", pad) + `"}`)
+		}
+		b.WriteString("]")
+		return b.String()
+	}
+	for _, tc := range []struct {
+		name       string
+		prerelease bool
+		body       string
+		want       string
+		wantErr    error
+	}{
+		{
+			name:       "release list larger than 1 MiB",
+			prerelease: true,
+			body:       releases(99, 20<<10),
+			want:       "v2.3.0",
+		},
+		{
+			name:       "release list over the limit",
+			prerelease: true,
+			body:       releases(1, releaseListMaxBytes),
+			wantErr:    httpclient.ErrTooLarge,
+		},
+		{
+			name:    "latest release over the limit",
+			body:    `{"tag_name":"v2.3.0","body":"` + strings.Repeat("x", releaseMaxBytes) + `"}`,
+			wantErr: httpclient.ErrTooLarge,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			defer srv.Close()
+			installTestClient(t, srv.URL)
+
+			tag, err := latestVersion(tc.prerelease)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("latestVersion error = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("latestVersion: %v", err)
+			}
+			if tag != tc.want {
+				t.Errorf("tag = %q, want %q", tag, tc.want)
+			}
+		})
+	}
+}
+
 // TestRunPrereleaseNeverDowngrades verifies that --prerelease does not move
 // the user to a release older than the one they run.
 func TestRunPrereleaseNeverDowngrades(t *testing.T) {
