@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,7 +22,9 @@ import (
 	"github.com/bjarneo/cliamp/external/ytmusic"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/player"
+	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/pluginmgr"
+	"github.com/bjarneo/cliamp/resolve"
 	"github.com/bjarneo/cliamp/theme"
 	"github.com/bjarneo/cliamp/ui"
 	"github.com/bjarneo/cliamp/upgrade"
@@ -866,10 +869,31 @@ func queueCommand() *cli.Command {
 			if c.Args().Len() == 0 {
 				return fmt.Errorf("usage: cliamp queue /path/to/file.mp3")
 			}
-			_, err := ipcSend("queue", ipc.Request{Path: c.Args().First()})
+			path, err := queuePath(c.Args().First())
+			if err != nil {
+				return err
+			}
+			_, err = ipcSend("queue", ipc.Request{Path: path})
 			return err
 		},
 	}
+}
+
+// queuePath returns the path that cliamp queue sends for arg. A local file
+// gets an absolute path, because the running cliamp has its own working
+// directory. A URL or another URI, such as spotify:track:..., goes as it is.
+// A missing file or a directory is an error.
+func queuePath(arg string) (string, error) {
+	info, err := os.Stat(arg)
+	switch {
+	case err == nil && info.IsDir():
+		return "", fmt.Errorf("queue: %s is a directory", arg)
+	case err == nil:
+		return filepath.Abs(arg)
+	case playlist.IsURL(arg) || resolve.URIScheme(arg) != "":
+		return arg, nil
+	}
+	return "", fmt.Errorf("queue: %w", err)
 }
 
 func themeCommand() *cli.Command {

@@ -351,3 +351,63 @@ func TestVersionFlag(t *testing.T) {
 		})
 	}
 }
+
+// cliamp queue sends a local file with an absolute path, because the
+// running cliamp has its own working directory. A URL or another URI goes
+// as it is. A missing file or a directory is an error and sends nothing.
+func TestQueueCommandPath(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "song.mp3"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "album"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	sent := make(chan string, 16)
+	startTestIPC(t, ipc.RuntimeSnapshot{}, func(jobs *ipc.JobStore, id string, request ipc.V2Request) {
+		var params ipc.Request
+		_ = json.Unmarshal(request.Params, &params)
+		sent <- params.Path
+		_, _ = jobs.Start(id)
+		_ = jobs.Succeed(id, json.RawMessage(`{"ok":true}`))
+	})
+
+	for _, tt := range []struct {
+		name    string
+		arg     string
+		want    string
+		wantErr string
+	}{
+		{name: "relative file", arg: "./song.mp3", want: filepath.Join(dir, "song.mp3")},
+		{name: "bare file name", arg: "song.mp3", want: filepath.Join(dir, "song.mp3")},
+		{name: "absolute file", arg: filepath.Join(dir, "song.mp3"), want: filepath.Join(dir, "song.mp3")},
+		{name: "URL", arg: "https://example.com/a.mp3", want: "https://example.com/a.mp3"},
+		{name: "search", arg: "ytsearch:aphex twin", want: "ytsearch:aphex twin"},
+		{name: "SSH", arg: "ssh://host/music/a.flac", want: "ssh://host/music/a.flac"},
+		{name: "provider URI", arg: "spotify:track:abc", want: "spotify:track:abc"},
+		{name: "missing file", arg: "nope.mp3", wantErr: "nope.mp3"},
+		{name: "directory", arg: "album", wantErr: "is a directory"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := buildApp().Run(t.Context(), []string{"cliamp", "queue", tt.arg})
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("cliamp queue %s error = %v, want %q", tt.arg, err, tt.wantErr)
+				}
+				select {
+				case got := <-sent:
+					t.Fatalf("cliamp queue %s sent %q, want nothing", tt.arg, got)
+				default:
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("cliamp queue %s: %v", tt.arg, err)
+			}
+			if got := <-sent; got != tt.want {
+				t.Fatalf("cliamp queue %s sent %q, want %q", tt.arg, got, tt.want)
+			}
+		})
+	}
+}
