@@ -145,6 +145,9 @@ func TestThemeValidate(t *testing.T) {
 	if err := (Theme{Name: "partial", Accent: "#112233"}).Validate(); err == nil {
 		t.Fatal("Validate() accepted incomplete custom theme")
 	}
+	if err := (Theme{Name: "empty", FG: "#334455", Yellow: "#556677", Red: "#667788"}).Validate(); err == nil {
+		t.Fatal("Validate() accepted a theme with no accent, bright_fg or green")
+	}
 	valid.Red = "red"
 	if err := valid.Validate(); err == nil {
 		t.Fatal("Validate() accepted invalid color")

@@ -325,6 +325,42 @@ red = "#dc322f"
 			},
 		},
 		{
+			name:  "empty theme",
+			files: fstest.MapFS{"themes/empty.toml": {Data: nil}},
+			want:  map[string]Theme{},
+			wantErr: []string{
+				`skip empty.toml in test dir: theme "empty": accent is required`,
+			},
+		},
+		{
+			name: "theme with only fg, yellow and red",
+			files: fstest.MapFS{"themes/partial.toml": {Data: []byte(
+				"fg = \"#839496\"\nyellow = \"#b58900\"\nred = \"#dc322f\"\n",
+			)}},
+			want: map[string]Theme{},
+			wantErr: []string{
+				`skip partial.toml in test dir: theme "partial": accent is required`,
+			},
+		},
+		{
+			name: "theme with misspelled keys",
+			files: fstest.MapFS{"themes/misspelled.toml": {Data: []byte(
+				"foreground = \"#839496\"\nbackground = \"#002b36\"\nprimary = \"#268bd2\"\n",
+			)}},
+			want: map[string]Theme{},
+			wantErr: []string{
+				`skip misspelled.toml in test dir: theme "misspelled": accent is required`,
+			},
+		},
+		{
+			name:  "theme with a malformed fg only",
+			files: fstest.MapFS{"themes/nope.toml": {Data: []byte(`fg = "nope"`)}},
+			want:  map[string]Theme{},
+			wantErr: []string{
+				`skip nope.toml in test dir: theme "nope": accent is required`,
+			},
+		},
+		{
 			name: "line too long",
 			files: fstest.MapFS{
 				"themes/long.toml":      {Data: []byte("# " + strings.Repeat("x", 70000))},

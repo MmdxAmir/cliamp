@@ -46,12 +46,10 @@ func (t Theme) IsDefault() bool {
 	return t.BG == "" && t.Accent == "" && t.Green == "" && t.BrightFG == ""
 }
 
-// Validate ensures a custom theme supplies the complete six-color foreground
-// palette in CSS hex notation. Background is optional for custom themes.
+// Validate ensures a theme file supplies the complete six-color foreground
+// palette in CSS hex notation. Background is optional. The Default sentinel
+// has no colors, so it does not pass.
 func (t Theme) Validate() error {
-	if t.IsDefault() {
-		return nil
-	}
 	for _, color := range []struct {
 		name  string
 		value string
