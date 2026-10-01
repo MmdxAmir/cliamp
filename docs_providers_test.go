@@ -40,6 +40,12 @@ func docList(s string) []string {
 	return strings.Split(s, ", ")
 }
 
+// isSearcher reports whether Ctrl+F opens the search overlay of p.
+func isSearcher(p playlist.Provider) bool {
+	_, ok := p.(provider.Searcher)
+	return ok
+}
+
 // TestDocsNameProviderCapabilities checks the provider lists of the docs
 // against the interfaces that each registered provider implements.
 func TestDocsNameProviderCapabilities(t *testing.T) {
@@ -62,7 +68,8 @@ func TestDocsNameProviderCapabilities(t *testing.T) {
 		file    string
 		list    *regexp.Regexp // captures the list of provider names
 		capable func(playlist.Provider) bool
-		skip    string // a provider key that the list leaves out on purpose
+		skip    string   // a provider key that the list leaves out on purpose
+		extra   []string // names that the list adds to the enabled providers
 	}{
 		{
 			name: "playback reports",
@@ -75,6 +82,22 @@ func TestDocsNameProviderCapabilities(t *testing.T) {
 			// Podcasts keep the listening position on this computer.
 			skip: "podcast",
 		},
+		{
+			name:    "Ctrl+F search",
+			file:    "keybindings.md",
+			list:    regexp.MustCompile(`Search with the active provider \(([^)]+)\)`),
+			capable: isSearcher,
+		},
+		{
+			name:    "Ctrl+F search API",
+			file:    "keybindings.md",
+			list:    regexp.MustCompile("Other `Ctrl\\+F` providers, including ([^.]+), send the"),
+			capable: isSearcher,
+			// The list above it names Local, which matches local.
+			skip: "local",
+			// YouTube needs yt-dlp, so everyProviderConfig leaves it off.
+			extra: []string{"YouTube"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -86,8 +109,8 @@ func TestDocsNameProviderCapabilities(t *testing.T) {
 			if m == nil {
 				t.Fatalf("docs/%s has no match for %q", tt.file, tt.list)
 			}
-			documented := docList(m[1])
-			var want []string
+			documented := docList(strings.Join(strings.Fields(m[1]), " "))
+			want := slices.Clone(tt.extra)
 			for _, e := range set.entries {
 				if e.Key != tt.skip && tt.capable(e.Provider) {
 					want = append(want, e.Name)
