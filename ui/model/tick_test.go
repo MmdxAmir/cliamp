@@ -192,25 +192,29 @@ func TestCadenceOwnerPlaybackHonorsDriverCadence(t *testing.T) {
 	}
 }
 
+// The raw-sample modes run at about 60 FPS during playback without the
+// 60 FPS setting. docs/cli.md names the same modes.
 func TestTickIntervalRawSampleVisualizerUsesWaveCadence(t *testing.T) {
-	p := &playbackFakeEngine{playing: true}
-	m := Model{
-		player:   p,
-		vis:      ui.NewVisualizer(float64(p.SampleRate())),
-		playlist: playlist.New(),
-		width:    80,
-		height:   24,
-	}
-	m.recomputeLayout()
-	m.SetVisualizer("Wave")
+	for _, mode := range []string{"Wave", "Scope", "Heartbeat", "Stereo"} {
+		t.Run(mode, func(t *testing.T) {
+			p := &playbackFakeEngine{playing: true}
+			m := Model{
+				player:   p,
+				vis:      ui.NewVisualizer(float64(p.SampleRate())),
+				playlist: playlist.New(),
+				width:    80,
+				height:   24,
+			}
+			m.recomputeLayout()
+			m.SetVisualizer(mode)
 
-	if got := m.tickInterval(); got != ui.TickWave {
-		t.Fatalf("Wave tickInterval() = %v, want %v", got, ui.TickWave)
-	}
-
-	m.SetVisualizer("Heartbeat")
-	if got := m.tickInterval(); got != ui.TickWave {
-		t.Fatalf("Heartbeat tickInterval() = %v, want %v", got, ui.TickWave)
+			if !m.vis.UsesRawSamples() {
+				t.Fatalf("%s UsesRawSamples() = false, want true", mode)
+			}
+			if got := m.tickInterval(); got != ui.TickWave {
+				t.Fatalf("%s tickInterval() = %v, want %v", mode, got, ui.TickWave)
+			}
+		})
 	}
 }
 
