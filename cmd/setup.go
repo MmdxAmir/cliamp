@@ -1011,15 +1011,22 @@ func (m *setupModel) submitForm() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Light URL sanity check before any network call.
+	// Light URL sanity check before any network call. A $NAME value stays
+	// as typed, and the check reads the variable.
 	if u, ok := m.values["url"]; ok && u != "" {
+		name, isRef := config.EnvRef(u)
+		if isRef {
+			u = os.Getenv(name)
+		}
 		clean := strings.TrimRight(u, "/")
 		if !looksLikeHTTPURL(clean) {
 			m.resultErr = fmt.Errorf("URL must start with http:// or https://")
 			m.stage = stageResult
 			return m, nil
 		}
-		m.values["url"] = clean
+		if !isRef {
+			m.values["url"] = clean
+		}
 	}
 
 	if spec.validate == nil {

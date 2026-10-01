@@ -186,24 +186,35 @@ func TestRequiredFieldBlocksSubmit(t *testing.T) {
 // TestSubmitFormEnvRef checks that setup rejects a $NAME value that names
 // an unset or empty variable, which config.Load reads as empty. It also
 // checks that the probe gets the value of a set variable and that the form
-// keeps the reference for the save.
+// keeps the reference for the save. The URL check reads a url variable.
 func TestSubmitFormEnvRef(t *testing.T) {
 	t.Setenv("CLIAMP_TEST_SETUP_PASS", "from-env")
 	t.Setenv("CLIAMP_TEST_SETUP_EMPTY", "")
+	t.Setenv("CLIAMP_TEST_SETUP_URL", "https://env.example.com/")
+	t.Setenv("CLIAMP_TEST_SETUP_BAD_URL", "env.example.com")
 	t.Setenv("Secret1", "")
 	os.Unsetenv("Secret1")
 
+	const typedURL = "https://music.example.com/"
 	tests := []struct {
-		name      string
-		password  string
-		wantErr   bool
-		wantProbe string
+		name         string
+		url          string // "" means typedURL
+		password     string
+		wantErr      string
+		wantProbe    string
+		wantProbeURL string
+		wantURL      string // url that the form keeps for the save
 	}{
-		{"unset variable", "$Secret1", true, ""},
-		{"unset variable in braces", "${CLIAMP_TEST_SETUP_UNSET}", true, ""},
-		{"empty variable", "$CLIAMP_TEST_SETUP_EMPTY", true, ""},
-		{"set variable", "${CLIAMP_TEST_SETUP_PASS}", false, "from-env"},
-		{"literal dollar", "p@$$w0rd", false, "p@$$w0rd"},
+		{name: "unset variable", password: "$Secret1", wantErr: "environment variable"},
+		{name: "unset variable in braces", password: "${CLIAMP_TEST_SETUP_UNSET}", wantErr: "environment variable"},
+		{name: "empty variable", password: "$CLIAMP_TEST_SETUP_EMPTY", wantErr: "environment variable"},
+		{name: "set variable", password: "${CLIAMP_TEST_SETUP_PASS}", wantProbe: "from-env",
+			wantProbeURL: "https://music.example.com", wantURL: "https://music.example.com"},
+		{name: "literal dollar", password: "p@$$w0rd", wantProbe: "p@$$w0rd",
+			wantProbeURL: "https://music.example.com", wantURL: "https://music.example.com"},
+		{name: "url from a variable", url: "${CLIAMP_TEST_SETUP_URL}", password: "pw", wantProbe: "pw",
+			wantProbeURL: "https://env.example.com/", wantURL: "${CLIAMP_TEST_SETUP_URL}"},
+		{name: "url variable without a scheme", url: "$CLIAMP_TEST_SETUP_BAD_URL", password: "pw", wantErr: "http://"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -215,22 +226,27 @@ func TestSubmitFormEnvRef(t *testing.T) {
 				}
 			}
 			m.handleKey(keyPress(tea.KeyEnter, "")) // open form (no picker)
-			probed := "not probed"
+			probed, probedURL := "not probed", ""
 			m.provs[m.pidx].validate = func(v map[string]string) error {
-				probed = v["password"]
+				probed, probedURL = v["password"], v["url"]
 				return nil
 			}
-			m.values["url"] = "https://music.example.com"
+			m.values["url"] = typedURL
+			if tt.url != "" {
+				m.values["url"] = tt.url
+			}
 			m.values["user"] = "alice"
 			m.values["password"] = tt.password
 
 			_, cmd := m.submitForm()
-			if tt.wantErr {
-				if m.stage != stageResult || m.resultErr == nil || !strings.Contains(m.resultErr.Error(), "environment variable") {
-					t.Fatalf("stage = %v, resultErr = %v, want an environment variable error", m.stage, m.resultErr)
+			if tt.wantErr != "" {
+				if m.stage != stageResult || m.resultErr == nil || !strings.Contains(m.resultErr.Error(), tt.wantErr) {
+					t.Fatalf("stage = %v, resultErr = %v, want an error with %q", m.stage, m.resultErr, tt.wantErr)
 				}
-				if key := m.provs[m.pidx].fields[m.visible[m.fcursor]].key; key != "password" {
-					t.Errorf("cursor on %q, want password", key)
+				if tt.wantErr == "environment variable" {
+					if key := m.provs[m.pidx].fields[m.visible[m.fcursor]].key; key != "password" {
+						t.Errorf("cursor on %q, want password", key)
+					}
 				}
 				if cmd != nil {
 					t.Error("submitForm started a probe")
@@ -248,8 +264,14 @@ func TestSubmitFormEnvRef(t *testing.T) {
 			if probed != tt.wantProbe {
 				t.Errorf("probe got password %q, want %q", probed, tt.wantProbe)
 			}
+			if probedURL != tt.wantProbeURL {
+				t.Errorf("probe got url %q, want %q", probedURL, tt.wantProbeURL)
+			}
 			if m.values["password"] != tt.password {
 				t.Errorf("form password = %q, want %q for the save", m.values["password"], tt.password)
+			}
+			if m.values["url"] != tt.wantURL {
+				t.Errorf("form url = %q, want %q for the save", m.values["url"], tt.wantURL)
 			}
 		})
 	}
