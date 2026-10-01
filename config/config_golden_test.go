@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -32,7 +33,8 @@ func readExampleConfig(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("read config.toml.example: %v", err)
 	}
-	return string(data)
+	// A Windows checkout can turn the line ends into CRLF.
+	return strings.ReplaceAll(string(data), "\r\n", "\n")
 }
 
 // exampleSetting matches a commented key or section header in the example.

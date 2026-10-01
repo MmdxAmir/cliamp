@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -264,7 +265,9 @@ func TestWritesDoNotReadDirsUnderLock(t *testing.T) {
 			}
 			var want []string
 			for _, path := range tt.wantPaths {
-				if !filepath.IsAbs(path) {
+				// The test tracks /a.mp3 and /new.mp3 are not absolute on
+				// Windows, but the playlist file keeps them as written.
+				if !strings.HasPrefix(path, "/") {
 					path = filepath.Join(music, path)
 				}
 				want = append(want, path)

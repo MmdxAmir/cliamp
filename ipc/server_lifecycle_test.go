@@ -18,10 +18,17 @@ import (
 
 func shortTempDir(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS != "darwin" {
+	// The temp dirs of the macOS and Windows runners make a socket path
+	// longer than the Unix socket limit.
+	base := ""
+	switch runtime.GOOS {
+	case "darwin":
+		base = "/tmp"
+	case "windows":
+	default:
 		return t.TempDir()
 	}
-	dir, err := os.MkdirTemp("/tmp", "c")
+	dir, err := os.MkdirTemp(base, "c")
 	if err != nil {
 		t.Fatal(err)
 	}

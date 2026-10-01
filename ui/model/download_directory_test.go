@@ -89,7 +89,10 @@ func TestSaveTrackKeyUsesTrackSaveRules(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("TMPDIR", filepath.Join(root, "tmp"))
+			// os.TempDir reads TMPDIR on Unix and TMP or TEMP on Windows.
+			for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+				t.Setenv(name, filepath.Join(root, "tmp"))
+			}
 			source := filepath.Join(root, tc.source)
 			if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
 				t.Fatal(err)

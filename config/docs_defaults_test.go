@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -18,7 +19,8 @@ func TestDocsNameAudioDefaults(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read docs/%s: %v", name, err)
 		}
-		return string(data)
+		// A Windows checkout can turn the line ends into CRLF.
+		return strings.ReplaceAll(string(data), "\r\n", "\n")
 	}
 	cli := read("cli.md")
 	quality := read("audio-quality.md")

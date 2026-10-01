@@ -26,7 +26,8 @@ func TestDocsVisualizerLists(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read %s: %v", tt.file, err)
 			}
-			m := tt.list.FindStringSubmatch(string(data))
+			// A Windows checkout can turn the line ends into CRLF.
+			m := tt.list.FindStringSubmatch(strings.ReplaceAll(string(data), "\r\n", "\n"))
 			if m == nil {
 				t.Fatalf("%s has no match for %q", tt.file, tt.list)
 			}

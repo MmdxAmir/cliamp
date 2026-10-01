@@ -4,6 +4,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -200,7 +201,10 @@ func TestLoadAllLogsSkippedTheme(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	for _, want := range []string{"level=WARN", "broken.toml in " + userDir, "accent must be #RRGGBB"} {
+	// The text handler quotes the message, so a Windows path shows doubled
+	// backslashes.
+	quotedDir := strings.Trim(strconv.Quote(userDir), `"`)
+	for _, want := range []string{"level=WARN", "broken.toml in " + quotedDir, "accent must be #RRGGBB"} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("log = %q, want it to contain %q", data, want)
 		}

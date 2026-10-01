@@ -133,7 +133,8 @@ func TestBuildProvidersSharesTheStores(t *testing.T) {
 // directory and no local provider. The Model then starts without one and
 // does not panic.
 func TestBuildProvidersWithoutConfigDir(t *testing.T) {
-	for _, name := range []string{"HOME", "CLIAMP_CONFIG_DIR", "XDG_CONFIG_HOME", "NAVIDROME_URL", "LYRION_URL"} {
+	// APPDATA and USERPROFILE are the config dir fallbacks on Windows.
+	for _, name := range []string{"HOME", "CLIAMP_CONFIG_DIR", "XDG_CONFIG_HOME", "APPDATA", "USERPROFILE", "NAVIDROME_URL", "LYRION_URL"} {
 		t.Setenv(name, "")
 	}
 	set := buildProviders(config.Config{}, false)
