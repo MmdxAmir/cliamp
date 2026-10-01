@@ -97,6 +97,13 @@ func (m *Model) SetVisRows(rows int) {
 	m.recomputeLayout()
 }
 
+// SetPadding sets the frame padding in columns left and right and in rows
+// above and below. The layout clamps it to the terminal size.
+func (m *Model) SetPadding(h, v int) {
+	m.paddingH, m.paddingV, m.paddingSet = h, v, true
+	m.recomputeLayout()
+}
+
 // findProviderWith returns the first registered provider that satisfies the
 // given capability check. This is used for cross-provider shortcuts like "N"
 // (browse) and "F" (search) which should work regardless of the active provider.

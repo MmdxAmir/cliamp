@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 func TestSettingsFocusCycle(t *testing.T) {
@@ -81,15 +80,12 @@ func TestSettingsFocusMatchesShedRows(t *testing.T) {
 }
 
 func TestSettingsFocusMatchesHeaderWithPadding(t *testing.T) {
-	previousH, previousV := ui.PaddingH, ui.VerticalPadding()
-	ui.SetPadding(8, 1)
-	t.Cleanup(func() { ui.SetPadding(previousH, previousV) })
-
 	// At 41 columns Repeat fits only while unfocused; at 42 it must remain
 	// reachable even from Shuffle, whose expanded badge temporarily hides it.
 	for _, width := range []int{56, 57, 58} {
 		t.Run(fmt.Sprintf("panel=%d", width-16), func(t *testing.T) {
 			m := newColumnTestModel(width, 16)
+			m.SetPadding(8, 1)
 			m.playlist.SetRepeat(playlist.RepeatAll)
 			wantRepeat := width == 58
 			want := []focusArea{focusPlaylist, focusProvPill, focusVolume, focusEQ, focusShuffle}

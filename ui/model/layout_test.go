@@ -432,13 +432,41 @@ func TestAsyncSearchResultLayoutUsesContentFirstRows(t *testing.T) {
 	}
 }
 
-func TestLayoutClampsConfiguredPadding(t *testing.T) {
-	previousPaddingH := ui.PaddingH
-	previousPaddingV := ui.VerticalPadding()
-	ui.SetPadding(10, 5)
-	t.Cleanup(func() { ui.SetPadding(previousPaddingH, previousPaddingV) })
+// The frame padding belongs to the Model. A Model that nobody configured
+// uses the config defaults. A headless Model keeps the padding for the
+// width of its visualizer.
+func TestSetPadding(t *testing.T) {
+	tests := []struct {
+		name               string
+		setup              func(*Model)
+		wantH, wantV, cols int
+	}{
+		{name: "unset", setup: func(*Model) {}, wantH: 3, wantV: 1, cols: 74},
+		{name: "zero", setup: func(m *Model) { m.SetPadding(0, 0) }, wantH: 0, wantV: 0, cols: 80},
+		{name: "configured", setup: func(m *Model) { m.SetPadding(5, 2) }, wantH: 5, wantV: 2, cols: 70},
+		{name: "headless", setup: func(m *Model) {
+			m.width, m.height = 0, 0
+			m.SetPadding(5, 2)
+			m.SetHeadless(true)
+		}, wantH: 5, wantV: 2, cols: 70},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newLayoutTestModel(80, 24)
+			tt.setup(&m)
+			if m.layout.paddingH != tt.wantH || m.layout.paddingV != tt.wantV {
+				t.Fatalf("padding = %d, %d; want %d, %d", m.layout.paddingH, m.layout.paddingV, tt.wantH, tt.wantV)
+			}
+			if m.vis.Cols != tt.cols {
+				t.Fatalf("visualizer columns = %d, want %d", m.vis.Cols, tt.cols)
+			}
+		})
+	}
+}
 
+func TestLayoutClampsConfiguredPadding(t *testing.T) {
 	m := newLayoutTestModel(40, 10)
+	m.SetPadding(10, 5)
 	if m.layout.panelWidth <= 0 {
 		t.Fatalf("panel width = %d, want positive", m.layout.panelWidth)
 	}
@@ -448,10 +476,6 @@ func TestLayoutClampsConfiguredPadding(t *testing.T) {
 }
 
 func TestViewsFitConfiguredPaddingExtremes(t *testing.T) {
-	previousPaddingH := ui.PaddingH
-	previousPaddingV := ui.VerticalPadding()
-	t.Cleanup(func() { ui.SetPadding(previousPaddingH, previousPaddingV) })
-
 	for _, tt := range []struct {
 		name     string
 		paddingH int
@@ -462,8 +486,8 @@ func TestViewsFitConfiguredPaddingExtremes(t *testing.T) {
 		{name: "maximum", paddingH: 10, paddingV: 5},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			ui.SetPadding(tt.paddingH, tt.paddingV)
 			m := newLayoutTestModel(80, 24)
+			m.SetPadding(tt.paddingH, tt.paddingV)
 			assertViewFits(t, m.View().Content, 80, 24)
 		})
 	}

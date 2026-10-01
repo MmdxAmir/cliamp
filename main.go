@@ -29,7 +29,6 @@ import (
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/resolve"
 	"github.com/bjarneo/cliamp/theme"
-	"github.com/bjarneo/cliamp/ui"
 	"github.com/bjarneo/cliamp/ui/model"
 )
 
@@ -128,7 +127,6 @@ func run(overrides config.Overrides, positional []string, headless, visualizer60
 	providers.registerPlayerHooks(p)
 	cfg.ApplyPlayer(p)
 	cfg.ApplyPlaylist(pl)
-	ui.SetPadding(cfg.PaddingH, cfg.PaddingV)
 
 	pluginBroker := ipc.NewBroker()
 	defer pluginBroker.Close()
@@ -295,6 +293,7 @@ func newPlayer(cfg config.Config) (p *player.Player, closePlayer func(), err err
 // screen, so the view settings do not apply there.
 func configureModel(m *model.Model, cfg config.Config, headless, visualizer60FPS bool) {
 	m.SetCustomEQBands(cfg.EQ)
+	m.SetPadding(cfg.PaddingH, cfg.PaddingV)
 	m.SetVisVolumeLinked(cfg.VisVolumeLinked)
 	m.SetSeekStepLarge(cfg.SeekStepLargeDuration())
 	m.SetLyricsOffset(cfg.LyricsOffsetMs)

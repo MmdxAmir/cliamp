@@ -91,6 +91,13 @@ const (
 	compactVisRows = 5
 )
 
+// The frame padding of a Model that SetPadding did not configure. These
+// match the defaults of padding_horizontal and padding_vertical in the config.
+const (
+	defaultPaddingH = 3
+	defaultPaddingV = 1
+)
+
 // fullChromeRows is the full tier's chrome height at the default visualizer
 // size, the baseline the configurable vis_rows is measured against.
 func fullChromeRows() int { return fullBaseRows + ui.DefaultVisRows }
@@ -116,8 +123,12 @@ func (m *Model) recomputeLayout() {
 		height = 24
 	}
 
-	paddingH := min(ui.PaddingH, max(0, (width-1)/2))
-	paddingV := min(ui.VerticalPadding(), max(0, (height-1)/2))
+	paddingH, paddingV := defaultPaddingH, defaultPaddingV
+	if m.paddingSet {
+		paddingH, paddingV = m.paddingH, m.paddingV
+	}
+	paddingH = min(paddingH, max(0, (width-1)/2))
+	paddingV = min(paddingV, max(0, (height-1)/2))
 
 	layout := frameLayout{
 		frameWidth: width,

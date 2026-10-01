@@ -395,6 +395,9 @@ type Model struct {
 
 	visVolumeLinked bool // when true, visualizer samples are scaled by volume gain
 	visRows         int  // configured visualizer height at the full tier; 0 uses ui.DefaultVisRows
+	paddingH        int  // configured frame padding left and right; used when paddingSet
+	paddingV        int  // configured frame padding above and below; used when paddingSet
+	paddingSet      bool // false uses defaultPaddingH and defaultPaddingV
 
 	// Async stream buffering (true while HTTP connect is in progress)
 	buffering   bool
