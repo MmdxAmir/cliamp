@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -165,10 +166,14 @@ func parseInt(val string) (int, bool) {
 	return v, err == nil
 }
 
-// parseFloat reads a number value. ok is false for any other value.
+// parseFloat reads a finite number value. ok is false for any other value,
+// also for NaN and an infinity, which clamp cannot constrain.
 func parseFloat(val string) (float64, bool) {
 	v, err := strconv.ParseFloat(scalar(val), 64)
-	return v, err == nil
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, false
+	}
+	return v, true
 }
 
 // scalar returns the number or bool token at the start of val without its
@@ -1517,9 +1522,9 @@ func parseEQ(val string) [10]float64 {
 		if i >= 10 {
 			break
 		}
-		// scalar drops a comment after the last band of a list without
-		// brackets.
-		if v, err := strconv.ParseFloat(scalar(strings.TrimSpace(p)), 64); err == nil {
+		// parseFloat drops a comment after the last band of a list without
+		// brackets, and it skips a NaN or infinite band.
+		if v, ok := parseFloat(strings.TrimSpace(p)); ok {
 			bands[i] = max(min(v, 12), -12)
 		}
 	}

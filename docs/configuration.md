@@ -285,6 +285,7 @@ cliamp reads a subset of TOML. These rules apply to every key:
 - Single quotes are literal. cliamp decodes no escapes inside them.
 - An unquoted string also works. cliamp keeps all of its text, including a `#`.
 - A bool is `true` or `false` in any letter case. `1` and `0` also work. cliamp ignores any other value and keeps the default.
+- A number such as `volume`, `speed` or an `eq` band must be finite. cliamp ignores `nan`, `inf` and any other text and keeps the default.
 - In a list, a comma inside a quoted item stays part of the item, as in `libraries = ["Rock, Pop", "Jazz"]`.
 - To add a comment at the end of a line, put whitespace and then `#`. This works after a quoted string, a number, a bool, a list in square brackets such as `eq` or `libraries`, or a section header such as `[navidrome]`. After a closing quote or a closing square bracket, the whitespace is optional. After an unquoted string, the `#` and the text after it stay part of the value. This rule also applies to an unquoted last string item of a list without square brackets, such as `libraries = Music, Jazz # x`.
 - A plugin gets each key of its `[plugins.<name>]` section as a string. cliamp reads `enabled`, and the `disabled` and `allowed_binaries` lists of `[plugins]`, with these rules.

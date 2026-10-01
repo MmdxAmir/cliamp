@@ -307,3 +307,54 @@ func TestQuotedItemsAndCommentsAfterClose(t *testing.T) {
 		})
 	}
 }
+
+func TestParseFloat(t *testing.T) {
+	tests := []struct {
+		in     string
+		want   float64
+		wantOK bool
+	}{
+		{"-5", -5, true},
+		{"1.25 # faster", 1.25, true},
+		{"", 0, false},
+		{"loud", 0, false},
+		{"nan", 0, false},
+		{"NaN", 0, false},
+		{"inf", 0, false},
+		{"-Inf", 0, false},
+		{"+infinity", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, ok := parseFloat(tt.in)
+			if got != tt.want || ok != tt.wantOK {
+				t.Fatalf("parseFloat(%q) = %v, %v, want %v, %v", tt.in, got, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
+}
+
+// TestLoadNonFiniteNumbers checks that NaN and an infinity keep the default.
+// clamp lets NaN through, and a saved EQ wrote NaN back to the file.
+func TestLoadNonFiniteNumbers(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		got  func(Config) any
+		want any
+	}{
+		{"volume nan", "volume = nan", func(c Config) any { return c.Volume }, 0.0},
+		{"volume inf", "volume = inf", func(c Config) any { return c.Volume }, 0.0},
+		{"volume_min nan", "volume_min = nan", func(c Config) any { return c.VolumeMin }, -50.0},
+		{"speed nan", "speed = NaN", func(c Config) any { return c.Speed }, 1.0},
+		{"eq nan band", "eq = [nan, 1]", func(c Config) any { return c.EQ }, [10]float64{0, 1}},
+		{"eq inf band", "eq = [1, -inf, 2]", func(c Config) any { return c.EQ }, [10]float64{1, 0, 2}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.got(loadConfigText(t, tt.data)); got != tt.want {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
