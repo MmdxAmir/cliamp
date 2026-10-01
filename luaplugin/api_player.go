@@ -72,13 +72,13 @@ func registerPlayerAPI(L *lua.LState, cliamp *lua.LTable, loadState func() *Stat
 		return 1
 	}))
 
-	// cliamp.player.repeat_mode() -> "off" | "all" | "one"
+	// cliamp.player.repeat_mode() -> "Off" | "All" | "One"
 	L.SetField(tbl, "repeat_mode", L.NewFunction(func(L *lua.LState) int {
 		state := loadState()
 		if state.RepeatMode != nil {
 			L.Push(lua.LString(state.RepeatMode()))
 		} else {
-			L.Push(lua.LString("off"))
+			L.Push(lua.LString("Off"))
 		}
 		return 1
 	}))

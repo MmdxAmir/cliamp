@@ -672,19 +672,24 @@ func TestStateProviderDefaultsWhenNil(t *testing.T) {
 		_G.speed = cliamp.player.speed()
 		_G.pos = cliamp.player.position()
 		_G.title = cliamp.track.title()
+		_G.repeat_mode = cliamp.player.repeat_mode()
 	`)
 
-	if p.L.GetGlobal("state").String() != "stopped" {
-		t.Fatalf("default state = %q, want 'stopped'", p.L.GetGlobal("state").String())
+	tests := []struct {
+		global string
+		want   lua.LValue
+	}{
+		{"state", lua.LString("stopped")},
+		{"vol", lua.LNumber(0)},
+		{"speed", lua.LNumber(1)},
+		{"title", lua.LString("")},
+		// The same case as playlist.RepeatMode.String, which the provider returns.
+		{"repeat_mode", lua.LString("Off")},
 	}
-	if float64(p.L.GetGlobal("vol").(lua.LNumber)) != 0 {
-		t.Fatalf("default vol = %v, want 0", p.L.GetGlobal("vol"))
-	}
-	if float64(p.L.GetGlobal("speed").(lua.LNumber)) != 1 {
-		t.Fatalf("default speed = %v, want 1", p.L.GetGlobal("speed"))
-	}
-	if p.L.GetGlobal("title").String() != "" {
-		t.Fatalf("default title = %q, want empty", p.L.GetGlobal("title").String())
+	for _, tt := range tests {
+		if got := p.L.GetGlobal(tt.global); got != tt.want {
+			t.Errorf("default %s = %v, want %v", tt.global, got, tt.want)
+		}
 	}
 }
 

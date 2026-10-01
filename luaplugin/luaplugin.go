@@ -60,14 +60,14 @@ type StateProvider struct {
 	Volume        func() float64 // dB
 	Speed         func() float64 // ratio (1.0 = normal)
 	Mono          func() bool
-	RepeatMode    func() string // "off", "all", "one"
+	RepeatMode    func() string // "Off", "All", "One"
 	Shuffle       func() bool
 	EQBands       func() [10]float64
 	CurrentTrack  func() Track // the track of cliamp.track.*; the zero Track when there is none
 	PlaylistCount func() int
 	CurrentIndex  func() int          // 0-based
 	HasNext       func() bool         // a track follows in play order (queue, repeat, shuffle)
-	QueueList     func() []QueueEntry // full playlist in play order
+	QueueList     func() []QueueEntry // full playlist in track order; Index is the track index
 }
 
 // Track is a track as plugins see it. cliamp.track.* reads every field.
