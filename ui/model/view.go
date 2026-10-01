@@ -170,6 +170,8 @@ func (m Model) View() tea.View {
 	}
 	if m.layout.tooSmall() {
 		content := fmt.Sprintf("Terminal too small. Resize to at least 40x10 (current: %dx%d).", m.width, m.height)
+		// Wrap the message, so a narrow terminal still shows both sizes.
+		content = ansi.Wrap(content, max(1, m.width), "")
 		view := tea.NewView(ui.FitRect(content, max(1, m.width), max(1, m.height)))
 		view.BackgroundColor = ui.ColorBackground
 		if ui.ColorBackground != nil {

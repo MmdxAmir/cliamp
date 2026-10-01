@@ -574,6 +574,30 @@ func TestTooSmallLayoutBlocksHiddenMutations(t *testing.T) {
 	}
 }
 
+// The too-small message wraps to the width, so the required and the current
+// size stay in view.
+func TestTooSmallMessageWraps(t *testing.T) {
+	for _, size := range []struct{ width, height int }{{39, 9}, {30, 8}, {20, 5}, {30, 3}} {
+		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
+			m := newLayoutTestModel(size.width, size.height)
+			out := m.View().Content
+			lines := strings.Split(out, "\n")
+			if len(lines) > size.height {
+				t.Fatalf("message has %d lines, want <= %d:\n%s", len(lines), size.height, out)
+			}
+			for _, line := range lines {
+				if got := lipgloss.Width(line); got > size.width {
+					t.Fatalf("line width = %d, want <= %d: %q", got, size.width, line)
+				}
+			}
+			want := fmt.Sprintf("Terminal too small. Resize to at least 40x10 (current: %dx%d).", size.width, size.height)
+			if got := strings.Join(strings.Fields(out), " "); got != want {
+				t.Fatalf("message = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestTrackInfoScrollsWithinBodyBudget(t *testing.T) {
 	m := newLayoutTestModel(40, 10)
 	track := m.playlist.Tracks()[0]
