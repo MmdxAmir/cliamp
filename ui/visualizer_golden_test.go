@@ -31,11 +31,16 @@ const (
 	visGoldenFrames = 48
 )
 
-// visGoldenSizes holds one roomy panel and one narrow panel. The narrow panel
-// has fewer columns than 10 bands need with a gap between each pair.
+// visGoldenSizes holds one roomy panel, one narrow panel, one 1-row panel
+// and one wide panel. The narrow panel has fewer columns than 10 bands need
+// with a gap between each pair. The layout gives the visualizer 1 row when
+// the metadata pane borrows its rows. The wide panel gives each band more
+// than 5 columns and makes ClassicPeak expand its 64 bands.
 var visGoldenSizes = []struct{ cols, rows int }{
 	{48, 9},
 	{13, 3},
+	{40, 1},
+	{140, 16},
 }
 
 // visGoldenStep is one frame of the fixed schedule that every mode runs.
