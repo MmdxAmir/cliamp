@@ -687,7 +687,16 @@ func (d *playbackTestDecoder) Close() error {
 	return nil
 }
 
-func TestPlayerBlockedNavStreamCanBeInterruptedBeforeSpeakerLock(t *testing.T) {
+// A pipe decoder can block in Stream while the audio goroutine holds the
+// speaker lock. Stop and a source replacement must interrupt it first.
+func TestPlayerBlockedPipeStreamCanBeInterruptedBeforeSpeakerLock(t *testing.T) {
+	sources := []struct {
+		name    string
+		blocked func(*testing.T) (*trackPipeline, <-chan struct{}, <-chan struct{}, func())
+	}{
+		{name: "nav", blocked: blockedNavPlayback},
+		{name: "yt-dlp", blocked: blockedYTDLPlayback},
+	}
 	tests := []struct {
 		name string
 		run  func(*Player) error
@@ -714,60 +723,96 @@ func TestPlayerBlockedNavStreamCanBeInterruptedBeforeSpeakerLock(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			old, audioStarted, audioDone, closeInput := blockedNavPlayback(t)
-			defer closeInput()
-			queuedDecoder := newPlaybackTestDecoder()
-			queued := &trackPipeline{decoder: queuedDecoder, stream: queuedDecoder}
-			p := &Player{
-				sr:           100,
-				gapless:      &gaplessStreamer{},
-				current:      old,
-				nextPipeline: queued,
-				started:      true,
-				ctrl:         &beep.Ctrl{},
-				suspended:    false,
-			}
-			p.gapless.Replace(old.stream)
-			p.gapless.SetNext(queued.stream)
-			<-audioStarted
-
-			done := make(chan error, 1)
-			go func() { done <- tt.run(p) }()
-			select {
-			case err := <-done:
-				if err != nil {
-					t.Fatalf("playback operation error = %v", err)
+	for _, src := range sources {
+		for _, tt := range tests {
+			t.Run(src.name+"/"+tt.name, func(t *testing.T) {
+				old, audioStarted, audioDone, release := src.blocked(t)
+				defer release()
+				queuedDecoder := newPlaybackTestDecoder()
+				queued := &trackPipeline{decoder: queuedDecoder, stream: queuedDecoder}
+				p := &Player{
+					sr:           100,
+					gapless:      &gaplessStreamer{},
+					current:      old,
+					nextPipeline: queued,
+					started:      true,
+					ctrl:         &beep.Ctrl{},
+					suspended:    false,
 				}
-			case <-time.After(2 * time.Second):
-				old.interrupt()
-				<-audioDone
-				t.Fatal("playback operation deadlocked behind blocked nav Stream")
-			}
-			select {
-			case <-audioDone:
-			case <-time.After(time.Second):
-				t.Fatal("blocked nav Stream was not released")
-			}
-			select {
-			case <-queuedDecoder.closed:
-			case <-time.After(time.Second):
-				t.Fatal("playback operation retained the queued preload")
-			}
+				p.gapless.Replace(old.stream)
+				p.gapless.SetNext(queued.stream)
+				<-audioStarted
 
-			if tt.name == "source replacement" {
-				p.mu.Lock()
-				current := p.current
-				p.mu.Unlock()
-				if current == nil || current == old {
-					t.Fatal("late gapless advance overwrote source replacement")
+				done := make(chan error, 1)
+				go func() { done <- tt.run(p) }()
+				select {
+				case err := <-done:
+					if err != nil {
+						t.Fatalf("playback operation error = %v", err)
+					}
+				case <-time.After(2 * time.Second):
+					release()
+					<-audioDone
+					t.Fatalf("playback operation deadlocked behind blocked %s Stream", src.name)
 				}
-				p.suspended = true
-				p.Stop()
-			}
-		})
+				select {
+				case <-audioDone:
+				case <-time.After(time.Second):
+					t.Fatalf("blocked %s Stream was not released", src.name)
+				}
+				select {
+				case <-queuedDecoder.closed:
+				case <-time.After(time.Second):
+					t.Fatal("playback operation retained the queued preload")
+				}
+
+				if tt.name == "source replacement" {
+					p.mu.Lock()
+					current := p.current
+					p.mu.Unlock()
+					if current == nil || current == old {
+						t.Fatal("late gapless advance overwrote source replacement")
+					}
+					p.suspended = true
+					p.Stop()
+				}
+			})
+		}
 	}
+}
+
+// blockedYTDLPlayback starts a yt-dlp | ffmpeg chain whose yt-dlp sends one
+// frame and then stalls, as on a network stall. The audio goroutine then
+// blocks in Stream while it holds the speaker lock.
+func blockedYTDLPlayback(t *testing.T) (*trackPipeline, <-chan struct{}, <-chan struct{}, func()) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX process fixtures")
+	}
+	dir := t.TempDir()
+	writeExecutable(t, filepath.Join(dir, "yt-dlp"), "#!/bin/sh\nprintf '\\000\\100\\000\\300'\nexec sleep 30\n")
+	writeExecutable(t, filepath.Join(dir, "ffmpeg"), "#!/bin/sh\nexec cat\n")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	decoder, format, err := decodeYTDLPipe("https://www.youtube.com/watch?v=stall", 100, 16, 0)
+	if err != nil {
+		t.Fatalf("decodeYTDLPipe() error = %v", err)
+	}
+	if err := prefillYTDLPipe(decoder); err != nil {
+		t.Fatalf("prefillYTDLPipe() error = %v", err)
+	}
+	tp := &trackPipeline{decoder: decoder, stream: decoder, format: format, ytdlSeek: true}
+	started := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		speaker.Lock()
+		close(started)
+		// One frame is in the pipe. The read waits for the second one.
+		decoder.Stream(make([][2]float64, 2))
+		speaker.Unlock()
+		close(done)
+	}()
+	return tp, started, done, func() { _ = decoder.Close() }
 }
 
 func blockedNavPlayback(t *testing.T) (*trackPipeline, <-chan struct{}, <-chan struct{}, func()) {

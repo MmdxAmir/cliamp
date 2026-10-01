@@ -188,6 +188,19 @@ func (y *ytdlPipeStreamer) waitCause(d time.Duration) error {
 
 func (y *ytdlPipeStreamer) Seek(int) error { return nil }
 
+// interrupt releases a blocked PCM read without waiting for yt-dlp or ffmpeg.
+// A stalled download otherwise holds Stream, and the speaker lock with it,
+// until yt-dlp gets data or gives up. Close reaps both processes later.
+func (y *ytdlPipeStreamer) interrupt() {
+	_ = y.pipe.Close()
+	if y.ytdlCmd.Process != nil {
+		_ = y.ytdlCmd.Process.Kill()
+	}
+	if y.ffmpegCmd.Process != nil {
+		_ = y.ffmpegCmd.Process.Kill()
+	}
+}
+
 func (y *ytdlPipeStreamer) Close() error {
 	y.closeOnce.Do(func() {
 		// Kill both processes to stop downloading/decoding.
