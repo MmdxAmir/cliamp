@@ -274,8 +274,7 @@ func TestNewAPIProxyAndUserAgent(t *testing.T) {
 }
 
 // TestAPIProxy verifies that NewAPI hands the proxy URL, credentials
-// included, to net/http, and that it keeps the ALL_PROXY and NO_PROXY rules
-// of Streaming.
+// included, to net/http, and that it keeps the ALL_PROXY and NO_PROXY rules.
 func TestAPIProxy(t *testing.T) {
 	tests := []struct {
 		name string

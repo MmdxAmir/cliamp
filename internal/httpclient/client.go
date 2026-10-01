@@ -1,6 +1,6 @@
 // Package httpclient provides a shared HTTP client configured for audio
-// streaming, a constructor for API clients with the same proxy rules, and
-// helpers that read API response bodies.
+// streaming, a constructor for API clients that read the same proxy
+// variables, and helpers that read API response bodies.
 package httpclient
 
 import (
@@ -29,7 +29,9 @@ const UserAgent = "cliamp/1.0 (https://github.com/bjarneo/cliamp)"
 //
 // Proxy is read from the environment (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY,
 // NO_PROXY) so users behind corporate or local proxies aren't bypassed.
-// NewAPI clients pick a proxy by the same rules. http.DefaultTransport
+// ALL_PROXY applies to streams only when it names a socks5 or socks5h
+// proxy. With an http proxy in ALL_PROXY, a stream dials its server
+// directly. NewAPI clients use that http proxy. http.DefaultTransport
 // ignores ALL_PROXY.
 var Streaming = &http.Client{Transport: &socks5RoundTripper{transport: newStreamingTransport()}}
 
