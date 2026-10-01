@@ -29,7 +29,10 @@ tools:
 	go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
 	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 
-GOFILES = $$(git ls-files '*.go')
+# GOFILES lists the Go files that git tracks or would track. git leaves
+# out nested checkouts such as .claude/worktrees. The test drops a tracked
+# file that the worktree deleted.
+GOFILES = $$(git ls-files --cached --others --exclude-standard '*.go' | while read -r f; do if [ -f "$$f" ]; then echo "$$f"; fi; done)
 
 fmt:
 	gofmt -l -w $(GOFILES)

@@ -158,8 +158,8 @@ Lua plugins run in isolated `gopher-lua` VMs. A crash stays in its plugin. Each 
 | `make lint` | `vet`, then `staticcheck` when it is installed |
 | `make staticcheck` | `staticcheck ./...`. It fails when staticcheck is missing |
 | `make tools` | Installs the pinned `staticcheck` and `govulncheck` |
-| `make fmt` | `gofmt -l -w` on the Go files that git tracks |
-| `make fmt-check` | Fails when a tracked Go file needs `gofmt` |
+| `make fmt` | `gofmt -l -w` on the Go files that git tracks or would track |
+| `make fmt-check` | Fails when a Go file that git tracks or would track needs `gofmt` |
 | `make tidy-check` | `go mod tidy -diff`. Fails when `go.mod` or `go.sum` is not tidy |
 | `make coverage` | Tests with a coverage profile and a summary for each function |
 | `make security` | `govulncheck ./...` |
