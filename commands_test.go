@@ -279,3 +279,42 @@ func TestSwitchCommands(t *testing.T) {
 		t.Fatalf("operations = %q, want %q", got, want)
 	}
 }
+
+// TestVersionFlag checks that --version works with and without the
+// version that -ldflags sets. go install and go build set none.
+func TestVersionFlag(t *testing.T) {
+	tests := []struct {
+		name    string
+		ldflags string
+		arg     string
+	}{
+		{"release long", "v1.2.3", "--version"},
+		{"release short", "v1.2.3", "-v"},
+		{"plain build long", "", "--version"},
+		{"plain build short", "", "-v"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orig := version
+			version = tt.ldflags
+			t.Cleanup(func() { version = orig })
+
+			want := buildVersion()
+			if want == "" {
+				t.Fatal("buildVersion() is empty")
+			}
+			if tt.ldflags != "" && want != tt.ldflags {
+				t.Fatalf("buildVersion() = %q, want %q", want, tt.ldflags)
+			}
+			var out strings.Builder
+			app := buildApp()
+			app.Writer = &out
+			if err := app.Run(t.Context(), []string{"cliamp", tt.arg}); err != nil {
+				t.Fatalf("Run(%s) error = %v", tt.arg, err)
+			}
+			if got := out.String(); got != "cliamp version "+want+"\n" {
+				t.Errorf("Run(%s) printed %q, want version %q", tt.arg, got, want)
+			}
+		})
+	}
+}

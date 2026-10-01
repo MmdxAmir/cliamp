@@ -57,7 +57,7 @@ func buildApp() *cli.Command {
 	return &cli.Command{
 		Name:                  "cliamp",
 		Usage:                 "retro terminal music player",
-		Version:               version,
+		Version:               buildVersion(),
 		EnableShellCompletion: true,
 		Flags:                 rootFlags,
 		Action: func(ctx context.Context, c *cli.Command) error {

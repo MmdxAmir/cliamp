@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -34,6 +35,19 @@ import (
 
 // version is set at build time via -ldflags "-X main.version=vX.Y.Z".
 var version string
+
+// buildVersion returns version when -ldflags set it. go install and go
+// build set none, so it falls back to the module version that go records,
+// and then to "dev". The result is never empty, so --version always works.
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
+}
 
 const (
 	defaultUIFPS  = 20
@@ -584,7 +598,7 @@ func wireMediaCtl(prog *tea.Program) (*mediactl.Service, error) {
 }
 
 func main() {
-	appmeta.SetVersion(version)
+	appmeta.SetVersion(buildVersion())
 	app := buildApp()
 	if err := app.Run(context.Background(), os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
