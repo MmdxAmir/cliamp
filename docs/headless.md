@@ -29,10 +29,12 @@ The daemon exposes the same runtime, library, job, and event IPC interface as th
 
 ## What doesn't
 
-UI-only commands return an error in headless mode:
+These UI-only commands return an error in headless mode:
 
-- `theme`: no UI is available for themes
-- `vis`: headless mode has no visualizer to select
+- `cliamp theme <name>`: no UI is available for themes
+- `cliamp vis <name|next>`: headless mode has no visualizer to select
+
+The `cliamp theme list` and `cliamp vis list` commands still work.
 
 The daemon enables MPRIS on Linux, NowPlaying on macOS, and hardware media key hotkeys on Windows when the platform service is available. You can also bind media keys directly to `cliamp` subcommands. See [Hyprland](#hyprland).
 

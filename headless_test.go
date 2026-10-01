@@ -21,6 +21,7 @@ import (
 	"github.com/bjarneo/cliamp/luaplugin"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/theme"
 	"github.com/bjarneo/cliamp/ui/model"
 )
 
@@ -458,6 +459,50 @@ func TestStartIPCServesTheModel(t *testing.T) {
 			stop()
 			if _, err := os.Stat(socket); !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("socket after stop: %v, want it removed", err)
+			}
+		})
+	}
+}
+
+// A headless cliamp fails cliamp theme <name> and cliamp vis <name|next>.
+// The list forms still work, as headless.md says.
+func TestHeadlessAppearanceCommands(t *testing.T) {
+	t.Setenv("CLIAMP_CONFIG_DIR", socketDir(t))
+	send := func(msg tea.Msg) {
+		if request, ok := msg.(model.V2RequestMsg); ok && request.Reply != nil {
+			request.Reply <- model.V2RequestResult{Result: ipc.V2Result{Snapshot: &ipc.RuntimeSnapshot{State: "paused", Visualizer: "Wave"}}}
+		}
+	}
+	stop, err := startIPC(send, ipc.NewBroker(), nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stop)
+
+	for _, tt := range []struct {
+		args    []string
+		wantErr bool
+		want    string // a line of the output
+	}{
+		{args: []string{"theme", "list"}, want: "  " + theme.DefaultName},
+		{args: []string{"theme", "Nord"}, wantErr: true},
+		{args: []string{"vis", "list"}, want: "* Wave"},
+		{args: []string{"vis", "Bars"}, wantErr: true},
+		{args: []string{"vis", "next"}, wantErr: true},
+	} {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			var runErr error
+			stdout, _ := captureOutput(t, func() {
+				runErr = buildApp().Run(t.Context(), append([]string{"cliamp"}, tt.args...))
+			})
+			switch {
+			case tt.wantErr && (runErr == nil || !strings.Contains(runErr.Error(), "unknown operation")):
+				t.Fatalf("error = %v, want unknown operation", runErr)
+			case !tt.wantErr && runErr != nil:
+				t.Fatal(runErr)
+			}
+			if tt.want != "" && !slices.Contains(strings.Split(stdout, "\n"), tt.want) {
+				t.Errorf("output = %q, want the line %q", stdout, tt.want)
 			}
 		})
 	}

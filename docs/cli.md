@@ -72,7 +72,7 @@ cliamp --daemon --auto-play --playlist Lofi  # start playing on launch
 cliamp -d ~/Music --auto-play                # short flag form
 ```
 
-Run cliamp without a UI. It runs the same player as the TUI and listens on the Unix socket that the TUI uses. All `cliamp <subcommand>` IPC clients work. Plugins, scrobbling, and Recently Played work as in the TUI. UI-only commands (`theme`, `vis`) return an error. See [Headless Daemon Mode](headless.md) for use cases and configuration examples for Waybar, Hyprland, systemd, and cron.
+Run cliamp without a UI. It runs the same player as the TUI and listens on the Unix socket that the TUI uses. All `cliamp <subcommand>` IPC clients work. Plugins, scrobbling, and Recently Played work as in the TUI. `cliamp theme <name>` and `cliamp vis <name|next>` return an error. The `list` forms still work. See [Headless Daemon Mode](headless.md) for use cases and configuration examples for Waybar, Hyprland, systemd, and cron.
 
 ## Search
 
