@@ -624,6 +624,11 @@ func PlaylistEnrich(name string, source string) error {
 	if err != nil {
 		return err
 	}
+	// The save fails for a virtual playlist such as Favorites. Stop before
+	// the probes.
+	if !prov.CanAddToPlaylist(playlist.PlaylistInfo{ID: name}) {
+		return fmt.Errorf("enriching playlist %q: a virtual playlist cannot be modified", name)
+	}
 
 	tracks, err := prov.Tracks(name)
 	if err != nil {

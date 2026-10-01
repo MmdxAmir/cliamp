@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bjarneo/cliamp/favorites"
+	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/playlist"
 )
 
@@ -149,6 +151,26 @@ func TestPlaylistEnrich(t *testing.T) {
 				if strings.Contains(string(doc), "b.mp3") {
 					t.Errorf("playlist file holds the directory-sourced track:\n%s", doc)
 				}
+			}
+		})
+	}
+}
+
+// TestPlaylistEnrichVirtualPlaylist checks that enrich of a virtual playlist
+// fails before it probes any track.
+func TestPlaylistEnrichVirtualPlaylist(t *testing.T) {
+	setupTestEnv(t)
+	if _, err := favorites.New().Favorite(playlist.Track{Path: "/music/Blue Album/a.mp3", Title: "A"}); err != nil {
+		t.Fatalf("Favorite: %v", err)
+	}
+	logFile := fakeFFprobe(t, "", "")
+	for _, name := range []string{favorites.PlaylistName, history.PlaylistName} {
+		t.Run(name, func(t *testing.T) {
+			if err := PlaylistEnrich(name, "path"); err == nil {
+				t.Fatal("PlaylistEnrich() error = nil, want an error")
+			}
+			if _, err := os.Stat(logFile); err == nil {
+				t.Error("PlaylistEnrich probed a track of a virtual playlist")
 			}
 		})
 	}
