@@ -102,9 +102,6 @@ func (v *Visualizer) ConsumeRefresh() bool {
 	return true
 }
 
-// SampleBuf returns the internal sample buffer (for slicing after SamplesInto).
-func (v *Visualizer) SampleBuf() []float64 { return v.sampleBuf }
-
 // SmoothedBands returns the eased per-frame band values used by spectrum
 // renderers. Falls back to the raw bands until smoothing has run at least
 // once.
