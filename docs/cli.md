@@ -214,7 +214,8 @@ See [playlists.md](playlists.md) for the TOML format. See [ssh-streaming.md](ssh
 
 ```sh
 cliamp history                                # show the 50 most recent plays
-cliamp history --limit 200                    # change the cap
+cliamp history --limit 200                    # show the 200 most recent
+cliamp history --limit 0                      # show all (capped at 200 entries on disk)
 cliamp history --json                         # machine-readable output
 cliamp history clear                          # wipe ~/.config/cliamp/history.toml
 ```
