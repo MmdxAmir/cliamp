@@ -457,6 +457,9 @@ cliamp.store.keys()            --> sorted array of keys
 cliamp.store.clear()
 ```
 
+`set` returns `nil` and an error for a value that JSON cannot hold, such as
+`0/0` or `1/0`, also inside a table. The store keeps the old value of the key.
+
 cliamp stores this data in `~/.local/share/cliamp/plugins/<name>/store.json`
 with owner-only mode (0600). Use it for play counts, offline scrobble queues,
 resume positions, and saved settings. Do not use it for large data.

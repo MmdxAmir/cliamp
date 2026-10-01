@@ -121,6 +121,11 @@ func registerStoreAPI(L *lua.LState, cliamp *lua.LTable, pluginName string) {
 	L.SetField(tbl, "set", L.NewFunction(func(L *lua.LState) int {
 		key := L.CheckString(1)
 		val := luaToGo(L.CheckAny(2))
+		// Reject a value that JSON cannot hold, such as NaN, before it goes
+		// into the map. Otherwise each later save fails on it.
+		if _, err := json.Marshal(val); err != nil {
+			return pushErr(L, err.Error())
+		}
 		store.mu.Lock()
 		store.load()
 		store.data[key] = val
