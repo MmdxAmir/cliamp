@@ -6,6 +6,10 @@ cliamp listens on `~/.config/cliamp/cliamp.sock` with `0600` permissions. It
 uses newline-delimited JSON over a local Unix socket. To use SSH, run the client
 command on the host that owns the socket.
 
+The socket path can have at most 107 bytes on Linux and Windows and 103 bytes
+on macOS. When the path is longer, cliamp and its client commands stop with
+`socket path is too long`. Set `CLIAMP_CONFIG_DIR` to a shorter directory.
+
 ## Quick Start
 
 ```sh
