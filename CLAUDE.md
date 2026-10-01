@@ -186,7 +186,7 @@ Config lives at `~/.config/cliamp/config.toml` (example at `config.toml.example`
 
 - **Package naming:** lowercase, single-word, matches directory. No internal suffix gymnastics — use `internal/` for genuinely private helpers.
 - **Error handling:** wrap with `fmt.Errorf("context: %w", err)`. Surface user-facing messages from `main.go` / `run(...)` only.
-- **Build tags:** platform-specific audio and media-control files use `*_linux.go` / `*_darwin.go` / `*_stub.go` suffixes — follow the existing pattern, don't invent new conditional-compile styles.
+- **Build tags:** a platform file uses the GOOS suffix `_linux.go`, `_darwin.go` or `_windows.go`. `player/audio_device_macos.go` is the one exception, with `//go:build darwin && !ios`. The file for the other platforms uses `_stub.go`, `_other.go` or `_unix.go`, with a `//go:build` line such as `!windows`. Follow these patterns. Do not invent new conditional-compile styles.
 - **Bubbletea messages:** put shared message types in `internal/playback/` so UI code and non-UI callers (Lua, IPC) can both send them via `prog.Send(...)`.
 - **Keep `docs/` and `site/index.html` in sync** on any user-visible change (keybindings, plugin APIs, providers, config keys). This is recorded as user feedback — the automation depends on it.
 - **Don't add emojis** to code or docs unless the user asks for them.
