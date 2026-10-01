@@ -239,7 +239,7 @@ func (m *Model) SetTheme(name string) bool {
 // Returns true if a valid mode name was recognized. Does not modify state
 // if the name is not found, matching the SetTheme guard pattern.
 func (m *Model) SetVisualizer(name string) bool {
-	mode, ok := ui.StringToVisModeExact(name)
+	mode, ok := m.vis.ModeByName(name)
 	if !ok {
 		return false
 	}

@@ -86,6 +86,8 @@ var visModes = [VisCount]visEntry{
 	VisNone:        {"None", newNoOpDriver},
 }
 
+// visNameMap maps the lowercase name of each built-in mode to the mode. The
+// init function builds it, and nothing changes it after that.
 var visNameMap map[string]VisMode
 
 func init() {
@@ -107,10 +109,27 @@ func (v *Visualizer) ModeName() string {
 	return "Unknown"
 }
 
-// StringToVisModeExact converts a name to VisMode, returning false if not found.
+// StringToVisModeExact converts a built-in mode name to VisMode, returning
+// false if not found.
 func StringToVisModeExact(name string) (VisMode, bool) {
 	mode, ok := visNameMap[strings.ToLower(name)]
 	return mode, ok
+}
+
+// ModeByName converts a name to VisMode, ignoring case. A built-in name wins
+// over a Lua name, and an earlier Lua name wins over a later one, so a
+// plugin named Bars cannot hide the built-in Bars. It returns false if no
+// mode of v has the name.
+func (v *Visualizer) ModeByName(name string) (VisMode, bool) {
+	if mode, ok := StringToVisModeExact(name); ok {
+		return mode, true
+	}
+	for i, luaName := range v.luaVisNames {
+		if strings.EqualFold(luaName, name) {
+			return VisCount + VisMode(i), true
+		}
+	}
+	return 0, false
 }
 
 // VisModeNames returns the display names of all built-in visualizer modes.

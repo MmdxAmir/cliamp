@@ -136,7 +136,6 @@ func TestVisualizerListIncludesLuaModes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := visTestModel(&recordingSaver{})
 			m.RegisterLuaVisualizers([]string{"Bars"}, nil)
-			t.Cleanup(func() { m.RegisterLuaVisualizers(nil, nil) })
 			m.vis.SetMode(tt.mode)
 			jobs, id := newVisJob(t)
 

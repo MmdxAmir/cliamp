@@ -32,10 +32,6 @@ func newLuaTestVisualizer(t *testing.T, host LuaVisHost) *Visualizer {
 	v := NewVisualizer(44100)
 	v.Rows, v.Cols = 8, 40
 	v.RegisterLuaVisualizers([]string{"a", "b"}, host)
-	t.Cleanup(func() {
-		delete(visNameMap, "a")
-		delete(visNameMap, "b")
-	})
 	return v
 }
 
@@ -95,6 +91,52 @@ func TestLuaModeInitAndDestroy(t *testing.T) {
 			},
 			want: []string{"init a 8x40", "destroy a", "init a 8x40"},
 		},
+		{
+			name: "register the same names again while a Lua mode is active",
+			steps: func(v *Visualizer) {
+				v.SetMode(modeA)
+				v.Render()
+				v.RegisterLuaVisualizers([]string{"a", "b"}, v.luaHost)
+				v.Render()
+				v.SetMode(VisBars)
+				v.Render()
+			},
+			want: []string{"init a 8x40", "destroy a", "init a 8x40", "destroy a"},
+		},
+		{
+			name: "register a new plugin at the index of the active mode",
+			steps: func(v *Visualizer) {
+				v.SetMode(modeA)
+				v.Render()
+				v.RegisterLuaVisualizers([]string{"z", "a"}, v.luaHost)
+				v.Render()
+				v.SetMode(VisBars)
+				v.Render()
+			},
+			want: []string{"init a 8x40", "destroy a", "init z 8x40", "destroy z"},
+		},
+		{
+			name: "register again before the first frame",
+			steps: func(v *Visualizer) {
+				v.SetMode(modeA)
+				v.TickInterval(VisTickContext{})
+				v.RegisterLuaVisualizers([]string{"a", "b"}, v.luaHost)
+				v.Render()
+			},
+			want: []string{"init a 8x40"},
+		},
+		{
+			name: "register again while a built-in mode is active",
+			steps: func(v *Visualizer) {
+				v.SetMode(modeA)
+				v.Render()
+				v.SetMode(VisBars)
+				v.Render()
+				v.RegisterLuaVisualizers([]string{"a", "b"}, v.luaHost)
+				v.Render()
+			},
+			want: []string{"init a 8x40", "destroy a"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -142,18 +184,14 @@ func TestLuaModeGetsSmoothedBands(t *testing.T) {
 
 // A Lua visualizer cannot take the name of a built-in mode or of an earlier
 // Lua mode, so a name always selects the same mode. It stays in the cycle
-// and in the picker.
+// and in the picker. Each Visualizer knows only its own Lua names, and the
+// built-in names never change.
 func TestRegisterLuaVisualizersKeepsNames(t *testing.T) {
 	v := NewVisualizer(44100)
 	v.RegisterLuaVisualizers([]string{"old"}, nil)
 	v.RegisterLuaVisualizers([]string{"Bars", "Custom", "custom"}, nil)
-	t.Cleanup(func() {
-		for name, mode := range visNameMap {
-			if mode >= VisCount {
-				delete(visNameMap, name)
-			}
-		}
-	})
+	other := NewVisualizer(44100)
+	other.RegisterLuaVisualizers([]string{"Other", "Custom"}, nil)
 	tests := []struct {
 		name   string
 		want   VisMode
@@ -161,13 +199,21 @@ func TestRegisterLuaVisualizersKeepsNames(t *testing.T) {
 	}{
 		{"bars", VisBars, true},
 		{"Custom", VisCount + 1, true},
+		{"CUSTOM", VisCount + 1, true},
 		{"old", 0, false},
+		{"other", 0, false},
 	}
 	for _, tt := range tests {
-		got, ok := StringToVisModeExact(tt.name)
+		got, ok := v.ModeByName(tt.name)
 		if got != tt.want || ok != tt.wantOK {
-			t.Errorf("StringToVisModeExact(%q) = %v, %v; want %v, %v", tt.name, got, ok, tt.want, tt.wantOK)
+			t.Errorf("ModeByName(%q) = %v, %v; want %v, %v", tt.name, got, ok, tt.want, tt.wantOK)
 		}
+	}
+	if got, ok := other.ModeByName("custom"); got != VisCount+1 || !ok {
+		t.Errorf("other ModeByName(custom) = %v, %v; want %v, true", got, ok, VisCount+1)
+	}
+	if _, ok := StringToVisModeExact("custom"); ok || len(visNameMap) != int(VisCount) {
+		t.Errorf("the built-in names changed: %d names, custom found = %v", len(visNameMap), ok)
 	}
 	if names := v.AllModeNames(); names[VisCount] != "Bars" {
 		t.Errorf("AllModeNames()[VisCount] = %q, want the Lua Bars in the cycle", names[VisCount])

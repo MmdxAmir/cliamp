@@ -1,7 +1,5 @@
 package ui
 
-import "strings"
-
 // LuaVisHost runs the Lua visualizers. *luaplugin.Manager implements it.
 // The Visualizer calls it on the UI goroutine, so no method may wait for a
 // plugin.
@@ -12,25 +10,24 @@ type LuaVisHost interface {
 }
 
 // RegisterLuaVisualizers adds Lua visualizer names so they can be cycled
-// through with the v key. host renders the active Lua visualizer, and it
-// runs init and destroy when a Lua mode is selected and deselected.
+// through with the v key and selected with ModeByName. host renders the
+// active Lua visualizer, and it runs init and destroy when a Lua mode is
+// selected and deselected. A second registration replaces the first.
 func (v *Visualizer) RegisterLuaVisualizers(names []string, host LuaVisHost) {
+	// The active Lua mode leaves the old plugin and enters the new one, so
+	// the old plugin gets its destroy and the new one its init.
+	activeLua := v.activeModeSet && v.activeMode >= VisCount
+	if activeLua {
+		if driver, ok := v.luaDriverCache[int(v.activeMode-VisCount)]; ok {
+			driver.OnLeave(v)
+		}
+	}
 	v.luaVisNames = names
 	v.luaHost = host
 	clear(v.luaDriverCache)
-	// Add to name map for StringToVisModeExact lookups. A name that a
-	// built-in mode or an earlier Lua mode has keeps its mode, so a plugin
-	// named Bars cannot hide the built-in Bars. The Lua mode stays in the
-	// cycle and in the picker.
-	for name, mode := range visNameMap {
-		if mode >= VisCount {
-			delete(visNameMap, name)
-		}
-	}
-	for i, name := range names {
-		key := strings.ToLower(name)
-		if _, taken := visNameMap[key]; !taken {
-			visNameMap[key] = VisCount + VisMode(i)
+	if activeLua {
+		if driver := v.driverFor(v.activeMode); driver != nil {
+			driver.OnEnter(v)
 		}
 	}
 }

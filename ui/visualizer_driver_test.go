@@ -589,7 +589,6 @@ func TestTerrainTickSkipsAnalyzeUnderOverlay(t *testing.T) {
 func TestSpectrumDriverBaseDefaults(t *testing.T) {
 	v := NewVisualizer(44100)
 	v.RegisterLuaVisualizers([]string{"plugin"}, nil)
-	t.Cleanup(func() { delete(visNameMap, "plugin") })
 	contexts := []VisTickContext{
 		{Playing: true},
 		{},
