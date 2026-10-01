@@ -268,9 +268,9 @@ p:bind("ctrl+t", function(key) ... end)
 
 Returns `true` on success. Returns `false, reason` when cliamp's core UI owns the key or the plugin lacks the `keymap` permission. Pass a description as the middle argument to show the binding in the `Ctrl+K` keymap overlay. Omit it for an internal-only binding.
 
-Use Bubbletea's `msg.String()` form for key strings: lowercase letters and the `ctrl+`, `shift+`, or `alt+` prefixes. For example: `"x"`, `"ctrl+e"`, and `"shift+f1"`. Key strings are case-insensitive.
+Use Bubbletea's `msg.String()` form for key strings: lowercase letters and the `ctrl+`, `shift+`, or `alt+` prefixes. For example: `"n"`, `"ctrl+y"`, and `"shift+f1"`. Key strings are case-insensitive.
 
-Plugin keys work only in the main view. Overlays such as the file browser, theme picker, and keymap capture their own input. The core reserves every key in `docs/keybindings.md`. Trying to bind one logs a warning and returns `false`.
+Plugin keys work only in the main view. Overlays such as the file browser, theme picker, and keymap capture their own input. The core reserves the keys of its own commands, in the main view and in each overlay. It also reserves the text-editor keys `Ctrl+A`, `Ctrl+E`, `Ctrl+W`, `Ctrl+U`, `Home`, `End`, `Delete`, and `Backspace`. The cursor aliases `Ctrl+N` and `Ctrl+P` stay free. A bind of a reserved key logs a warning to `plugins.log` and returns `false, reason`.
 
 Use `p:unbind(key)` to release a binding.
 
