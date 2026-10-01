@@ -41,9 +41,12 @@ func (m *Manager) registerVisPlugin(L *lua.LState, obj *lua.LTable, p *Plugin) {
 }
 
 // finalizeVisualizers is called after all plugins are loaded to resolve
-// render/init/destroy function references from the plugin objects.
+// render/init/destroy function references from the plugin objects. It reads
+// each object under the plugin lock, because a timer that the top-level chunk
+// started can write the object at the same time.
 func (m *Manager) finalizeVisualizers() {
 	for _, vis := range m.visPlugs {
+		vis.plugin.mu.Lock()
 		if fn, ok := vis.obj.RawGetString("render").(*lua.LFunction); ok {
 			vis.render = fn
 		}
@@ -53,6 +56,7 @@ func (m *Manager) finalizeVisualizers() {
 		if fn, ok := vis.obj.RawGetString("destroy").(*lua.LFunction); ok {
 			vis.destroy = fn
 		}
+		vis.plugin.mu.Unlock()
 	}
 }
 

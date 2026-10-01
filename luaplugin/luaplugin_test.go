@@ -834,6 +834,35 @@ func TestVisualizerPlugin(t *testing.T) {
 }
 
 // waitGlobal waits until the Lua global name of p is set.
+// A timer that the top-level chunk started can write the plugin object while
+// finalizeVisualizers reads it. Run with -race. Before finalizeVisualizers
+// took the plugin lock, the race could abort the process.
+func TestFinalizeVisualizersWhileTimerWrites(t *testing.T) {
+	m := newTestManager()
+	t.Cleanup(m.Close)
+	p := loadTestPlugin(t, m, "busy-vis", `
+		local p = plugin.register({name = "busy-vis", type = "visualizer"})
+		local n = 0
+		cliamp.timer.every(0.001, function()
+			n = n + 1
+			p["field" .. (n % 64)] = n
+			_G.ticks = n
+		end)
+		function p:render() return "frame" end
+	`)
+	waitGlobal(t, p, "ticks")
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		m.finalizeVisualizers()
+	}
+	m.mu.RLock()
+	vis := m.visMap["busy-vis"]
+	m.mu.RUnlock()
+	if vis.render == nil {
+		t.Fatal("finalizeVisualizers did not find render")
+	}
+}
+
 func waitGlobal(t *testing.T, p *Plugin, name string) {
 	t.Helper()
 	waitExec(t, p, p.L, name, time.Second)
