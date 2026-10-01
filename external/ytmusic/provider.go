@@ -97,16 +97,16 @@ func (b *baseProvider) initSession(interactive bool) error {
 		b.mu.Unlock()
 		return fmt.Errorf("ytmusic: no client ID available")
 	}
-	// Cancel any previous in-progress auth attempt so the old listener
-	// on CallbackPort is released before we try to bind again.
-	if b.authCancel != nil {
-		b.authCancel()
-		b.authCancel = nil
-	}
-	// Register an interactive flow in the same lock hold, so a newer call
-	// or close always finds the flow that runs.
+	// An interactive call cancels any previous in-progress auth attempt so
+	// the old listener on CallbackPort is released before it binds again.
+	// It registers its own flow in the same lock hold, so a newer call or
+	// close always finds the flow that runs. A silent call leaves a running
+	// browser flow alone.
 	var gen uint64
 	if interactive {
+		if b.authCancel != nil {
+			b.authCancel()
+		}
 		b.authGen++
 		gen = b.authGen
 		b.authCancel = cancel

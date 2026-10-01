@@ -149,3 +149,50 @@ func TestAuthenticateCancelsEarlierFlow(t *testing.T) {
 	}
 	finish(2)
 }
+
+// TestSilentSessionCheckKeepsSignIn starts a browser sign-in on YouTube
+// Music. A silent session check from any of the three providers must leave
+// that sign-in running and report that sign-in is required.
+func TestSilentSessionCheckKeepsSignIn(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		check func(Providers) error
+	}{
+		{name: "ensure session", check: func(p Providers) error { return p.Video.base.ensureSession() }},
+		{name: "video playlists", check: func(p Providers) error { _, err := p.Video.Playlists(); return err }},
+		{name: "all playlists", check: func(p Providers) error { _, err := p.All.Playlists(); return err }},
+		{name: "music tracks", check: func(p Providers) error { _, err := p.Music.Tracks("p1"); return err }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+
+			started := make(chan context.Context)
+			release := make(chan struct{})
+			orig := signIn
+			t.Cleanup(func() { signIn = orig })
+			signIn = func(ctx context.Context, _, _ string) (*Session, error) {
+				started <- ctx
+				<-release
+				return nil, ctx.Err()
+			}
+
+			provs := New(nil, "client-id", "client-secret", false)
+			done := make(chan error, 1)
+			go func() { done <- provs.Music.Authenticate() }()
+			flow := <-started
+
+			if err := tt.check(provs); !errors.Is(err, playlist.ErrNeedsAuth) {
+				t.Errorf("silent check error = %v, want ErrNeedsAuth", err)
+			}
+			if flow.Err() != nil {
+				t.Errorf("silent check cancelled the sign-in: %v", flow.Err())
+			}
+
+			provs.Music.Close()
+			close(release)
+			if err := <-done; !errors.Is(err, context.Canceled) {
+				t.Fatalf("sign-in error = %v, want context.Canceled", err)
+			}
+		})
+	}
+}
