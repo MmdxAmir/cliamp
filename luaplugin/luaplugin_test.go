@@ -1266,6 +1266,90 @@ func (r *recorder) wait(t *testing.T, n int) []string {
 	}
 }
 
+// A coroutine runs under the time limit of the call that resumes it. Before,
+// it kept the context of the call that created it. That context ended with
+// its call, so a later resume failed with "context canceled".
+func TestCoroutineResumedInLaterCall(t *testing.T) {
+	const counter = `function() local i = 0 while true do i = i + 1 coroutine.yield(i) end end`
+	tests := []struct {
+		name string
+		code string
+		want []string
+	}{
+		{"wrap made at load", `
+			local gen = coroutine.wrap(` + counter + `)
+			p:on("ev", function() record(tostring(gen())) end)
+		`, []string{"1", "2"}},
+		{"resume made at load", `
+			local co = coroutine.create(` + counter + `)
+			p:on("ev", function()
+				local ok, v = coroutine.resume(co)
+				record(tostring(ok) .. " " .. tostring(v))
+			end)
+		`, []string{"true 1", "true 2"}},
+		{"wrap made in a callback", `
+			local gen
+			p:on("ev", function()
+				gen = gen or coroutine.wrap(` + counter + `)
+				record(tostring(gen()))
+			end)
+		`, []string{"1", "2"}},
+		{"nested coroutines", `
+			local inner = coroutine.wrap(` + counter + `)
+			local outer = coroutine.wrap(function()
+				while true do coroutine.yield(inner() * 10) end
+			end)
+			p:on("ev", function() record(tostring(outer())) end)
+		`, []string{"10", "20"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			m.logger = newPluginLogger(filepath.Join(t.TempDir(), pluginLogName))
+			t.Cleanup(m.Close)
+			p := loadTestPlugin(t, m, "co", `
+				local p = plugin.register({name = "co", type = "hook"})
+				`+tt.code)
+			var rec recorder
+			rec.install(p)
+			m.Emit("ev", nil)
+			m.Emit("ev", nil)
+			if got := rec.wait(t, len(tt.want)); !slices.Equal(got, tt.want) {
+				log, _ := os.ReadFile(m.logger.path)
+				t.Fatalf("hooks recorded %v, want %v; plugins.log: %s", got, tt.want, log)
+			}
+		})
+	}
+}
+
+// A coroutine that never yields still stops at the time limit of the call
+// that resumes it.
+func TestCoroutineKeepsCallTimeLimit(t *testing.T) {
+	defer func(d time.Duration) { hookTimeout = d }(hookTimeout)
+	hookTimeout = 100 * time.Millisecond
+
+	m := newTestManager()
+	m.logger = newPluginLogger(filepath.Join(t.TempDir(), pluginLogName))
+	t.Cleanup(m.Close)
+	p := loadTestPlugin(t, m, "co-loop", `
+		local p = plugin.register({name = "co-loop", type = "hook"})
+		local spin = coroutine.wrap(function() while true do end end)
+		p:on("spin", function() spin() end)
+		p:on("after", function() record("after") end)
+	`)
+	var rec recorder
+	rec.install(p)
+	m.Emit("spin", nil)
+	m.Emit("after", nil)
+	if got := rec.wait(t, 1); !slices.Equal(got, []string{"after"}) {
+		t.Fatalf("hooks recorded %v, want the next event after the time limit", got)
+	}
+	log, _ := os.ReadFile(m.logger.path)
+	if !strings.Contains(string(log), "did not finish in "+hookTimeout.String()) {
+		t.Errorf("plugins.log = %q, want the time limit error", log)
+	}
+}
+
 // Each plugin gets its events and key presses in the order cliamp sent them.
 // Before the queue, each event ran in its own goroutine, and the plugin lock
 // does not wake goroutines in order.
