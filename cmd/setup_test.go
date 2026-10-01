@@ -334,7 +334,7 @@ func TestSaveAnywayClearsStaleValidationError(t *testing.T) {
 	}
 	m.values = map[string]string{"url": "http://example.com", "user": "alice", "password": "secret"}
 
-	m.onValidateDone(errors.New("dial tcp: connection refused"))
+	m.onValidateDone(errors.New("dial tcp: connection refused"), nil)
 	if !m.awaitingSave || m.resultErr == nil {
 		t.Fatalf("onValidateDone(err) should prompt to save anyway; awaitingSave=%v resultErr=%v", m.awaitingSave, m.resultErr)
 	}

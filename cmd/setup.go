@@ -13,6 +13,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"strconv"
@@ -736,7 +737,13 @@ func (m *setupModel) Init() tea.Cmd {
 
 // ----- Messages -----------------------------------------------------------
 
-type validateDoneMsg struct{ err error }
+// validateDoneMsg is the result of a probe. found holds each key that the
+// probe added or changed in its copy of the form values, such as the NetEase
+// user_id.
+type validateDoneMsg struct {
+	err   error
+	found map[string]string
+}
 
 type spinTickMsg struct{}
 
@@ -749,7 +756,15 @@ func runValidateCmd(spec providerSpec, values map[string]string) tea.Cmd {
 		if spec.validate == nil {
 			return validateDoneMsg{}
 		}
-		return validateDoneMsg{err: spec.validate(values)}
+		before := maps.Clone(values)
+		err := spec.validate(values)
+		found := make(map[string]string)
+		for k, v := range values {
+			if old, ok := before[k]; !ok || old != v {
+				found[k] = v
+			}
+		}
+		return validateDoneMsg{err: err, found: found}
 	}
 }
 
@@ -775,7 +790,7 @@ func (m *setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case validateDoneMsg:
-		return m.onValidateDone(msg.err)
+		return m.onValidateDone(msg.err, msg.found)
 	}
 	return m, nil
 }
@@ -1031,7 +1046,15 @@ func envResolved(values map[string]string) map[string]string {
 	return out
 }
 
-func (m *setupModel) onValidateDone(err error) (tea.Model, tea.Cmd) {
+// onValidateDone takes the keys that the probe found into the form values,
+// so the save writes them. A key that holds a $NAME or ${NAME} value keeps
+// that reference.
+func (m *setupModel) onValidateDone(err error, found map[string]string) (tea.Model, tea.Cmd) {
+	for k, v := range found {
+		if _, ok := config.EnvRef(m.values[k]); !ok {
+			m.values[k] = v
+		}
+	}
 	if err == nil {
 		return m, m.persistAndDone(false)
 	}
