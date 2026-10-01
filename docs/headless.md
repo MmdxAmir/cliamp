@@ -36,7 +36,7 @@ These UI-only commands return an error in headless mode:
 
 The `cliamp theme list` and `cliamp vis list` commands still work.
 
-The daemon enables MPRIS on Linux, NowPlaying on macOS, and hardware media key hotkeys on Windows when the platform service is available. You can also bind media keys directly to `cliamp` subcommands. See [Hyprland](#hyprland).
+The daemon enables MPRIS on Linux, NowPlaying on macOS, and hardware media key hotkeys on Windows when the platform service is available. You can also bind media keys directly to `cliamp` subcommands. See [Hotkeys](#hotkeys-window-manager--sxhkd--hyprland).
 
 ## Same behavior as the TUI
 
