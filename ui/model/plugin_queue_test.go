@@ -64,3 +64,33 @@ func TestPluginQueueAddRearmsGaplessPreload(t *testing.T) {
 		})
 	}
 }
+
+// A plugin add counts the new tracks for the album headers, as every other
+// append does. Three tracks of one album turn the headers on.
+func TestAppendsCountAlbumHeaders(t *testing.T) {
+	album := []playlist.Track{
+		{Path: "/1.mp3", Album: "X"},
+		{Path: "/2.mp3", Album: "X"},
+		{Path: "/3.mp3", Album: "X"},
+	}
+	for name, add := range map[string]func(m *Model){
+		"plugin add": func(m *Model) {
+			next, _ := m.Update(pluginQueueAddedMsg{tracks: album})
+			*m = next.(Model)
+		},
+		"playlist manager append": func(m *Model) { m.appendTracksToPlaylist(album, "Saved") },
+		"URL load": func(m *Model) {
+			next, _ := m.Update(feedsLoadedMsg{tracks: album})
+			*m = next.(Model)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := Model{player: &playbackFakeEngine{}, playlist: playlist.New(), loadedPlaylist: "Saved"}
+			add(&m)
+			if m.playlist.Len() != 3 || !m.showAlbumHeaders || m.headerTracks != 3 || m.loadedPlaylist != "" {
+				t.Fatalf("len %d, headers %v over %d tracks, loaded %q; want 3 tracks under album headers and no loaded list",
+					m.playlist.Len(), m.showAlbumHeaders, m.headerTracks, m.loadedPlaylist)
+			}
+		})
+	}
+}

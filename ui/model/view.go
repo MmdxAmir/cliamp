@@ -26,24 +26,6 @@ const (
 	titleScrollInterval = 200 * time.Millisecond
 )
 
-// Pre-built styles for elements created per-render to avoid repeated
-// allocation. Built by rebuildModelStyles (styles.go), never here.
-var (
-	seekFillStyle lipgloss.Style
-	seekDimStyle  lipgloss.Style
-	volBarStyle   lipgloss.Style
-	activeToggle  lipgloss.Style
-	// favMarkerStyle paints the favorite heart in the theme's red so it
-	// reads as a deliberate accent instead of inheriting the dim/unavailable
-	// look. The glyph carries U+FE0E (text presentation) so terminals render
-	// it as a compact font glyph rather than a large color emoji.
-	favMarkerStyle lipgloss.Style
-	// favRemovedStyle mutes the same filled heart for unfavorite feedback:
-	// identical attractive glyph, faded to signal the removed state instead
-	// of switching to a thin outline glyph.
-	favRemovedStyle lipgloss.Style
-)
-
 // favHeart is the small, text-presentation favorite heart used everywhere the
 // UI shows favorite state (track rows, header badge, status messages).
 const favHeart = "♥\uFE0E"
@@ -180,14 +162,16 @@ func playlistLabel(prefix string, p playlist.PlaylistInfo) string {
 	return out
 }
 
-// View renders the full TUI frame.
+// View renders the full TUI frame from the layout that Update keeps current.
+// A headless Model renders nothing.
 func (m Model) View() tea.View {
-	if m.quitting {
+	if m.quitting || m.headless {
 		return tea.NewView("")
 	}
-	m.recomputeLayout()
 	if m.layout.tooSmall() {
 		content := fmt.Sprintf("Terminal too small. Resize to at least 40x10 (current: %dx%d).", m.width, m.height)
+		// Wrap the message, so a narrow terminal still shows both sizes.
+		content = ansi.Wrap(content, max(1, m.width), "")
 		view := tea.NewView(ui.FitRect(content, max(1, m.width), max(1, m.height)))
 		view.BackgroundColor = ui.ColorBackground
 		if ui.ColorBackground != nil {
@@ -218,7 +202,7 @@ func (m Model) View() tea.View {
 
 	// Every screen now renders within the main frame, so frame and center
 	// uniformly.
-	rendered := m.centerFrame(ui.FrameStyle.Render(content))
+	rendered := m.centerFrame(m.layout.frameStyle().Render(content))
 	rendered = ui.FitRect(rendered, m.layout.frameWidth, max(1, m.height))
 
 	view := tea.NewView(rendered)
@@ -321,7 +305,7 @@ func (m Model) mainSections(playlist string, includeTransient, contentFirst bool
 				// playlist header rule runs the whole frame width.
 				sections = append(sections,
 					m.renderSourceVolume(),
-					fillSeparator(m.renderPlaylistHeader(), ui.PanelWidth))
+					fillSeparator(m.renderPlaylistHeader(), m.layout.panelWidth))
 			default:
 				sections = append(sections, m.renderControls())
 				if source := m.renderProviderPill(); source != "" {
@@ -341,7 +325,7 @@ func (m Model) mainSections(playlist string, includeTransient, contentFirst bool
 		sections = append(sections, "")
 	}
 	if !m.hideHelpBar {
-		sections = append(sections, m.renderTierHelp())
+		sections = append(sections, m.renderHelp())
 	}
 	// The two-column pane carries speed and the download counters, and the
 	// closed layout deliberately shows neither.
@@ -373,8 +357,8 @@ func (m Model) renderSimplifiedTrackInfo() string {
 		}
 	}
 
-	name = scrollTrackName(name, max(1, ui.PanelWidth-lipgloss.Width(duration)-1), m.titleOff)
-	gap := max(1, ui.PanelWidth-lipgloss.Width(name)-lipgloss.Width(duration))
+	name = scrollTrackName(name, max(1, m.layout.panelWidth-lipgloss.Width(duration)-1), m.titleOff)
+	gap := max(1, m.layout.panelWidth-lipgloss.Width(name)-lipgloss.Width(duration))
 	return trackStyle.Render(name) + strings.Repeat(" ", gap) + dimStyle.Render(duration)
 }
 
@@ -386,7 +370,7 @@ func trackInfoName(track playlist.Track, streamTitle string) string {
 	name := trackViewName(track)
 	if track.Meta(provider.MetaPodcastFeed) != "" {
 		name = track.DisplayName()
-		if track.Meta(provider.MetaMixcloudExclusive) == "true" {
+		if track.Restricted {
 			name = strings.TrimSpace(name) + restrictedViewSuffix
 		}
 	}
@@ -437,16 +421,6 @@ func (m *Model) advanceTitleScroll(now time.Time) {
 	m.titleOff++
 }
 
-func (m Model) renderTierHelp() string {
-	if m.layout.tier != layoutMinimal {
-		return m.renderHelp()
-	}
-	if ov, ok := m.activeOverlay(); ok {
-		return fitHelpLine(ov.help(&m))
-	}
-	return m.commandHelp(commandModeMain)
-}
-
 func (m Model) renderTransient() string {
 	if m.err != nil {
 		return ui.FitRect(errorStyle.Render(fmt.Sprintf("ERR: %s", m.err)), m.layout.panelWidth, 1)
@@ -495,7 +469,7 @@ func (m Model) renderCompactControls() string {
 }
 
 func (m Model) renderCompactSource() string {
-	return m.settingsSource(ui.PanelWidth)
+	return m.settingsSource(m.layout.panelWidth)
 }
 
 // centerFrame centers a pre-rendered frame in the terminal.
@@ -527,7 +501,7 @@ func (m Model) renderTitle() string {
 		return title
 	}
 	indicator := dimStyle.Render("[" + label + "]")
-	gap := max(ui.PanelWidth-lipgloss.Width(title)-lipgloss.Width(indicator), 1)
+	gap := max(m.layout.panelWidth-lipgloss.Width(title)-lipgloss.Width(indicator), 1)
 	return title + strings.Repeat(" ", gap) + indicator
 }
 
@@ -536,7 +510,7 @@ func (m Model) renderTrackInfo() string {
 	name := trackInfoName(track, m.streamTitle)
 	// The "♫ " prefix takes two cells; the rest of the row is the marquee's,
 	// so a name only scrolls once it genuinely cannot fit.
-	return trackStyle.Render("♫ " + scrollTrackName(name, ui.PanelWidth-2, m.titleOff))
+	return trackStyle.Render("♫ " + scrollTrackName(name, m.layout.panelWidth-2, m.titleOff))
 }
 
 func (m Model) renderTimeStatus() string {
@@ -577,7 +551,7 @@ func (m Model) renderTimeStatus() string {
 	}
 
 	left := timeStyle.Render(timeStr)
-	gap := max(ui.PanelWidth-lipgloss.Width(left)-lipgloss.Width(status), 1)
+	gap := max(m.layout.panelWidth-lipgloss.Width(left)-lipgloss.Width(status), 1)
 
 	return left + strings.Repeat(" ", gap) + status
 }
@@ -625,19 +599,19 @@ func (m Model) fullVisTopLine() string {
 }
 
 func (m Model) renderSeekBar() string {
-	if ui.PanelWidth <= 0 {
+	if m.layout.panelWidth <= 0 {
 		return ""
 	}
 	// During buffering, show a dim bar — avoids speaker.Lock() contention.
 	if m.buffering {
-		return seekDimStyle.Render(strings.Repeat(seekEmptyGlyph, ui.PanelWidth))
+		return seekDimStyle.Render(strings.Repeat(seekEmptyGlyph, m.layout.panelWidth))
 	}
 	// Show a static streaming bar for non-seekable streams with no known duration.
 	if !m.player.Seekable() && m.player.IsPlaying() && m.cachedDur == 0 {
 		label := " STREAMING "
-		pad := ui.PanelWidth - lipgloss.Width(label)
+		pad := m.layout.panelWidth - lipgloss.Width(label)
 		if pad < 0 {
-			return seekFillStyle.Render(label[:ui.PanelWidth])
+			return seekFillStyle.Render(label[:m.layout.panelWidth])
 		}
 		left := pad / 2
 		right := pad - left
@@ -653,7 +627,7 @@ func (m Model) renderSeekBar() string {
 	}
 	progress = max(0, min(1, progress))
 
-	w := ui.PanelWidth
+	w := m.layout.panelWidth
 	filled := min(int(progress*float64(w)), w)
 	if filled >= w {
 		// Finished: there is no cell left to put the head in.
@@ -708,7 +682,7 @@ func (m Model) renderControls() string {
 	volSuffix := dimStyle.Render(dbStr) + monoStr
 	volLabelW := lipgloss.Width(volLabel)
 	volSuffixW := lipgloss.Width(volSuffix)
-	barW := max(6, (ui.PanelWidth-leftW-2-volLabelW-volSuffixW)*3/4)
+	barW := max(6, (m.layout.panelWidth-leftW-2-volLabelW-volSuffixW)*3/4)
 	filled := int(frac * float64(barW))
 
 	bar := volBarStyle.Render(strings.Repeat("█", filled)) +
@@ -716,7 +690,7 @@ func (m Model) renderControls() string {
 
 	right := volLabel + bar + volSuffix
 	rightW := lipgloss.Width(right)
-	gap := max(1, ui.PanelWidth-leftW-rightW)
+	gap := max(1, m.layout.panelWidth-leftW-rightW)
 
 	return left + strings.Repeat(" ", gap) + right
 }
@@ -748,13 +722,13 @@ func (m Model) renderSourceVolume() string {
 
 	leftW := lipgloss.Width(left)
 	fixedW := lipgloss.Width(label) + lipgloss.Width(dbStr) + lipgloss.Width(mono)
-	barW := max(6, (ui.PanelWidth-leftW-2-fixedW)*3/4)
+	barW := max(6, (m.layout.panelWidth-leftW-2-fixedW)*3/4)
 	filled := int(frac * float64(barW))
 
 	right := label + volBarStyle.Render(strings.Repeat("█", filled)) +
 		dimStyle.Render(strings.Repeat("░", barW-filled)) + dimStyle.Render(dbStr) + mono
 
-	gap := max(1, ui.PanelWidth-leftW-lipgloss.Width(right))
+	gap := max(1, m.layout.panelWidth-leftW-lipgloss.Width(right))
 	return left + strings.Repeat(" ", gap) + right
 }
 
@@ -782,7 +756,7 @@ func (m Model) renderProviderPill() string {
 	if m.focus == focusProvPill {
 		indicator = activeToggle.Render("["+current+"]") + dimStyle.Render(fmt.Sprintf(" %d/%d", m.provPillIdx+1, len(m.providers)))
 	}
-	if ui.PanelWidth < 110 {
+	if m.layout.panelWidth < 110 {
 		return srcLabel + indicator
 	}
 
@@ -811,7 +785,7 @@ func (m Model) renderPlaylistHeader() string {
 		case m.providerCatalogSearching():
 			label += " / Search results"
 		}
-		return dimStyle.Render(labeledSeparator("", label))
+		return dimStyle.Render(labeledSeparator("", label, m.layout.panelWidth))
 	}
 	return m.renderPlaybackHeader()
 }
@@ -873,7 +847,7 @@ func (m Model) renderPlaybackHeader() string {
 		if i > 0 {
 			w++ // separating space
 		}
-		if width+w > ui.PanelWidth {
+		if width+w > m.layout.panelWidth {
 			break
 		}
 		if i > 0 {
@@ -890,20 +864,20 @@ func (m Model) renderProviderList() string {
 	if visibleBudget <= 0 {
 		return ""
 	}
-	if m.provSignIn {
+	if m.provPane.signIn {
 		return dimStyle.Render(fmt.Sprintf("  Sign in to %s. Press Enter to continue.", m.provider.Name()))
 	}
-	if m.provLoading && (len(m.providerLists) == 0 || m.provSearch.loading) && !m.provSearch.active {
+	if m.provPane.loading && (len(m.provPane.lists) == 0 || m.provSearch.loading) && !m.provSearch.active {
 		label := fmt.Sprintf("Loading %s…", m.provider.Name())
 		if m.provSearch.loading {
 			label = fmt.Sprintf("Searching %s…", m.provider.Name())
 		}
 		lines := []string{loadingLine(label)}
-		if m.provAuthURL != "" {
+		if m.provPane.authURL != "" {
 			lines = append(lines,
 				"",
 				dimStyle.Render("  If your browser didn't open, visit this URL to sign in:"),
-				"  "+m.provAuthURL,
+				"  "+m.provPane.authURL,
 			)
 		}
 		for len(lines) < visibleBudget {
@@ -911,10 +885,10 @@ func (m Model) renderProviderList() string {
 		}
 		return strings.Join(lines, "\n")
 	}
-	if m.provAskLoc {
+	if m.provPane.askLoc {
 		return m.renderLocationPrompt(visibleBudget)
 	}
-	if len(m.providerLists) == 0 && !m.provSearch.active && !m.catalogBatch.loading {
+	if len(m.provPane.lists) == 0 && !m.provSearch.active && !m.catalogBatch.loading {
 		return m.renderProviderEmptyState(visibleBudget)
 	}
 
@@ -945,32 +919,32 @@ func (m Model) renderProviderList() string {
 				scroll := m.provSearch.scroll
 				for j := scroll; j < scroll+visible && j < len(m.provSearch.results); j++ {
 					idx := m.provSearch.results[j]
-					p := m.providerLists[idx]
+					p := m.provPane.lists[idx]
 					prefix, style := m.providerRowStyle(p, j == m.provSearch.cursor)
 					lines = append(lines, style.Render(playlistLabel(prefix, p)))
 				}
-				lines = append(lines, dimStyle.Render(fmt.Sprintf("  %d/%d playlists", len(m.provSearch.results), len(m.providerLists))))
+				lines = append(lines, dimStyle.Render(fmt.Sprintf("  %d/%d playlists", len(m.provSearch.results), len(m.provPane.lists))))
 			}
 		}
 	} else {
-		scroll := max(0, m.provScroll)
-		if scroll >= len(m.providerLists) {
-			scroll = max(0, len(m.providerLists)-1)
+		scroll := max(0, m.provPane.scroll)
+		if scroll >= len(m.provPane.lists) {
+			scroll = max(0, len(m.provPane.lists)-1)
 		}
-		if m.provCursor < scroll {
-			scroll = m.provCursor
+		if m.provPane.cursor < scroll {
+			scroll = m.provPane.cursor
 		}
 
-		hasSections := !sectioned && slices.ContainsFunc(m.providerLists, func(p playlist.PlaylistInfo) bool {
+		hasSections := !sectioned && slices.ContainsFunc(m.provPane.lists, func(p playlist.PlaylistInfo) bool {
 			return p.Section != ""
 		})
 
 		if sectioned {
-			for scroll < len(m.providerLists)-1 && m.providerRowsFromScroll(scroll, m.provCursor) > visibleBudget {
+			for scroll < len(m.provPane.lists)-1 && m.providerRowsFromScroll(scroll, m.provPane.cursor) > visibleBudget {
 				scroll++
 			}
-		} else if m.provCursor >= scroll+visibleBudget {
-			scroll = m.provCursor - visibleBudget + 1
+		} else if m.provPane.cursor >= scroll+visibleBudget {
+			scroll = m.provPane.cursor - visibleBudget + 1
 		}
 
 		// Headers are deduplicated on the resolved title, not the ID prefix:
@@ -978,26 +952,26 @@ func (m Model) renderProviderList() string {
 		// sits under the same "Countries" heading as the pinned places).
 		prevTitle := ""
 		if sectioned && scroll > 0 {
-			prevTitle = m.providerSectionTitle(sl.IDPrefix(m.providerLists[scroll-1].ID))
+			prevTitle = m.providerSectionTitle(sl.IDPrefix(m.provPane.lists[scroll-1].ID))
 		}
 		prevSection := ""
 		if hasSections && scroll > 0 {
-			prevSection = m.providerLists[scroll-1].Section
+			prevSection = m.provPane.lists[scroll-1].Section
 		}
 
-		for j := scroll; j < len(m.providerLists) && len(lines) < visibleBudget; j++ {
-			p := m.providerLists[j]
+		for j := scroll; j < len(m.provPane.lists) && len(lines) < visibleBudget; j++ {
+			p := m.provPane.lists[j]
 
 			if sectioned {
 				title := m.providerSectionTitle(sl.IDPrefix(p.ID))
 				if title != prevTitle {
 					if title != "" && len(lines) < visibleBudget {
-						lines = append(lines, dimStyle.Render(labeledSeparator("  ", title)))
+						lines = append(lines, dimStyle.Render(labeledSeparator("  ", title, m.layout.panelWidth)))
 					}
 					prevTitle = title
 				}
 			} else if hasSections && p.Section != prevSection {
-				header := labeledSeparator("  ", p.Section)
+				header := labeledSeparator("  ", p.Section, m.layout.panelWidth)
 				if len(lines) < visibleBudget {
 					lines = append(lines, dimStyle.Render(header))
 				}
@@ -1008,7 +982,7 @@ func (m Model) renderProviderList() string {
 				break
 			}
 
-			prefix, style := m.providerRowStyle(p, j == m.provCursor)
+			prefix, style := m.providerRowStyle(p, j == m.provPane.cursor)
 			lines = append(lines, style.Render(playlistLabel(prefix, p)))
 		}
 	}
@@ -1033,7 +1007,7 @@ func (m Model) renderLocationPrompt(budget int) string {
 	}
 
 	lines := []string{""}
-	for _, line := range wrapText(question, ui.PanelWidth-6) {
+	for _, line := range wrapText(question, m.layout.panelWidth-6) {
 		lines = append(lines, "  "+line)
 	}
 	lines = append(lines, "", playlistSelectedStyle.Render("  y  Yes"), dimStyle.Render("  n  No, don't"))
@@ -1173,7 +1147,7 @@ func (m Model) renderPlaylist() string {
 
 		name := trackViewName(t)
 		queueSuffix := ""
-		if queuePosition > 0 && ui.PanelWidth >= 64 {
+		if queuePosition > 0 && m.layout.panelWidth >= 64 {
 			queueSuffix = fmt.Sprintf(" [Q%d]", queuePosition)
 		}
 		queueLen := lipgloss.Width(queueSuffix)
@@ -1188,17 +1162,17 @@ func (m Model) renderPlaylist() string {
 
 		// State markers always occupy the same cells; low-priority queue position,
 		// album, and unavailable labels appear only when the terminal has room.
-		name = truncate(name, ui.PanelWidth-linePrefixWidth-queueLen-durationGap)
+		name = truncate(name, m.layout.panelWidth-linePrefixWidth-queueLen-durationGap)
 		// Truncate the album to fit whatever space remains after the track name.
 		albumSuffix := ""
 		nameLen := lipgloss.Width(name)
-		if t.Unplayable && ui.PanelWidth >= 68 {
-			remaining := ui.PanelWidth - linePrefixWidth - nameLen - queueLen - durationGap
+		if t.Unplayable && m.layout.panelWidth >= 68 {
+			remaining := m.layout.panelWidth - linePrefixWidth - nameLen - queueLen - durationGap
 			if remaining >= len(" (unavailable)") {
 				albumSuffix = truncate(" (unavailable)", remaining)
 			}
-		} else if album := t.Album; album != "" && !m.showAlbumHeaders && ui.PanelWidth >= 56 {
-			remaining := ui.PanelWidth - linePrefixWidth - nameLen - queueLen - durationGap - 3 // 3 = " · "
+		} else if album := t.Album; album != "" && !m.showAlbumHeaders && m.layout.panelWidth >= 56 {
+			remaining := m.layout.panelWidth - linePrefixWidth - nameLen - queueLen - durationGap - 3 // 3 = " · "
 			if remaining >= 4 {
 				albumSuffix = " · " + truncate(album, remaining)
 			}
@@ -1214,7 +1188,7 @@ func (m Model) renderPlaylist() string {
 			line += activeToggle.Render(queueSuffix)
 		}
 		if duration != "" {
-			padding := max(1, ui.PanelWidth-lipgloss.Width(line)-durationLen)
+			padding := max(1, m.layout.panelWidth-lipgloss.Width(line)-durationLen)
 			line += strings.Repeat(" ", padding) + dimStyle.Render(duration)
 		}
 		lines = append(lines, line)
@@ -1223,31 +1197,10 @@ func (m Model) renderPlaylist() string {
 	return strings.Join(padLines(lines, budget, len(lines)), "\n")
 }
 
+// renderHelp renders the key hints of what owns the keys.
 func (m Model) renderHelp() string {
-	if ov, ok := m.activeOverlay(); ok {
-		return fitHelpLine(ov.help(&m))
-	}
-	switch m.focus {
-	case focusProvider:
-		if m.provSearch.active {
-			return m.commandHelp(commandModeProviderSearch)
-		}
-		return m.commandHelp(commandModeProvider)
-	case focusProvPill:
-		return m.commandHelp(commandModeProviderPill)
-	case focusSpeed:
-		return m.commandHelp(commandModeSpeed)
-	case focusEQ:
-		return m.commandHelp(commandModeEQ)
-	case focusVolume:
-		return m.commandHelp(commandModeVolume)
-	case focusShuffle:
-		return m.commandHelp(commandModeShuffle)
-	case focusRepeat:
-		return m.commandHelp(commandModeRepeat)
-	default:
-		return m.commandHelp(commandModeMain)
-	}
+	mode, _ := m.commandContext()
+	return m.commandHelp(mode)
 }
 
 // renderBottomStatus renders the bottom status line: speed (left) and
@@ -1279,7 +1232,7 @@ func (m Model) renderBottomStatus() string {
 
 	leftW := lipgloss.Width(left)
 	rightW := lipgloss.Width(right)
-	gap := max(1, ui.PanelWidth-leftW-rightW)
+	gap := max(1, m.layout.panelWidth-leftW-rightW)
 
 	if right == "" {
 		return left

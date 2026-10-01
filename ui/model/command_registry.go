@@ -7,7 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 // commandMode identifies the UI contexts in which a command is available.
@@ -37,7 +36,7 @@ const (
 	commandModeQueue
 	commandModeSearch
 	commandModeNetSearch
-	commandModeSpotSearch
+	commandModeSearchOverlay
 	commandModeJump
 	commandModeURL
 	commandModeLyrics
@@ -173,7 +172,7 @@ var commandRegistry = []commandSpec{
 	{Mode: commandModeMain, Keys: []string{"ctrl+j"}, KeyLabel: "Ctrl+J", Label: "Jump to time", Keymap: true},
 	{Mode: commandModeMain, Keys: []string{"p"}, KeyLabel: "p", Label: "Playlist manager", Keymap: true},
 	{Mode: commandModeProvider, Keys: []string{"p"}, KeyLabel: "p", Label: "Playlist manager", Keymap: true, ContextHelp: true, Enabled: func(m Model) bool {
-		return m.isActiveProvider("Local") && m.localProvider != nil
+		return m.activeProviderKey() == providerKeyLocal && m.localProvider != nil
 	}},
 	{Mode: commandModeMain, Keys: []string{"ctrl+h"}, KeyLabel: "Ctrl+H", Label: "Toggle album headers", Keymap: true},
 	{Mode: commandModeMain, Keys: []string{"ctrl+g"}, KeyLabel: "Ctrl+G", Label: "Toggle key-binding hint bar", Keymap: true},
@@ -205,7 +204,7 @@ var commandRegistry = []commandSpec{
 
 	// Shared text editing is reserved even though these are intentionally absent
 	// from the global keymap, where they would be misleading outside a field.
-	{Mode: commandModeKeymapSearch | commandModeFileBrowserSearch | commandModeNavSearch | commandModePlaylistManagerInput | commandModePlaylistPickerInput | commandModeSearch | commandModeNetSearch | commandModeSpotSearch | commandModeJump | commandModeURL | commandModeThemePickerFilter | commandModeVisPickerFilter | commandModeProviderSearch, Keys: []string{"left", "right", "home", "end", "ctrl+a", "ctrl+e", "backspace", "delete", "ctrl+w", "ctrl+u"}, KeyLabel: "Text editor", Label: "Move cursor and delete text"},
+	{Mode: commandModeKeymapSearch | commandModeFileBrowserSearch | commandModeNavSearch | commandModePlaylistManagerInput | commandModePlaylistPickerInput | commandModeSearch | commandModeNetSearch | commandModeSearchOverlay | commandModeJump | commandModeURL | commandModeThemePickerFilter | commandModeVisPickerFilter | commandModeProviderSearch, Keys: []string{"left", "right", "home", "end", "ctrl+a", "ctrl+e", "backspace", "delete", "ctrl+w", "ctrl+u"}, KeyLabel: "Text editor", Label: "Move cursor and delete text"},
 
 	{Mode: commandModeProvider, Keys: []string{"enter"}, KeyLabel: "Enter", Label: "Load", LabelFor: func(m Model) string {
 		if m.selectedProviderListIsBrowseEntry() {
@@ -229,27 +228,27 @@ var commandRegistry = []commandSpec{
 	}},
 	{Mode: commandModeProvider, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite", ContextHelp: true, Prominent: true, Enabled: func(m Model) bool {
 		_, ok := m.provider.(provider.FavoriteToggler)
-		if !ok || m.provLoading || m.provCursor < 0 || m.provCursor >= len(m.providerLists) || m.selectedProviderListIsBrowseEntry() {
+		if !ok || m.provPane.loading || m.provPane.cursor < 0 || m.provPane.cursor >= len(m.provPane.lists) || m.selectedProviderListIsBrowseEntry() {
 			return false
 		}
 		if sl, ok := m.provider.(provider.SectionedList); ok {
-			return sl.IsFavoritableID(m.providerLists[m.provCursor].ID)
+			return sl.IsFavoritableID(m.provPane.lists[m.provPane.cursor].ID)
 		}
 		return true
 	}},
-	{Mode: commandModeSpotSearch, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite", ContextHelp: true, Prominent: true, Enabled: func(m Model) bool {
-		_, ok := m.spotSearch.prov.(provider.FavoriteToggler)
-		return ok && m.spotSearch.screen == spotSearchResults && !m.spotSearchBusy() &&
-			m.spotSearch.cursor >= 0 && m.spotSearch.cursor < len(m.spotSearch.results) &&
-			m.spotSearch.results[m.spotSearch.cursor].IsAlbum() && m.spotSearch.results[m.spotSearch.cursor].AlbumID() != ""
+	{Mode: commandModeSearchOverlay, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite", ContextHelp: true, Prominent: true, Enabled: func(m Model) bool {
+		_, ok := m.searchOverlay.prov.(provider.FavoriteToggler)
+		return ok && m.searchOverlay.screen == searchOverlayResults && !m.searchOverlayBusy() &&
+			m.searchOverlay.cursor >= 0 && m.searchOverlay.cursor < len(m.searchOverlay.results) &&
+			m.searchOverlay.results[m.searchOverlay.cursor].IsAlbum() && m.searchOverlay.results[m.searchOverlay.cursor].AlbumID() != ""
 	}},
-	{Mode: commandModeSpotSearch, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite track", ContextHelp: true, Prominent: true, Enabled: func(m Model) bool {
-		return m.favMgr != nil && m.spotSearch.screen == spotSearchResults && !m.spotSearchBusy() &&
-			m.spotSearch.cursor >= 0 && m.spotSearch.cursor < len(m.spotSearch.results) &&
-			!m.spotSearch.results[m.spotSearch.cursor].IsAlbum()
+	{Mode: commandModeSearchOverlay, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite track", ContextHelp: true, Prominent: true, Enabled: func(m Model) bool {
+		return m.favStore != nil && m.searchOverlay.screen == searchOverlayResults && !m.searchOverlayBusy() &&
+			m.searchOverlay.cursor >= 0 && m.searchOverlay.cursor < len(m.searchOverlay.results) &&
+			!m.searchOverlay.results[m.searchOverlay.cursor].IsAlbum()
 	}},
 	{Mode: commandModeNetSearch, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite track", ContextHelp: true, Enabled: func(m Model) bool {
-		return m.favMgr != nil && m.netSearch.screen == netSearchResults && !m.netSearch.loading && len(m.netSearch.results) > 0
+		return m.favStore != nil && m.netSearch.screen == netSearchResults && !m.netSearch.loading && len(m.netSearch.results) > 0
 	}},
 	{Mode: commandModeEQ, Keys: []string{"up", "down"}, KeyLabel: "Up Down", Label: "Gain", ContextHelp: true},
 	{Mode: commandModeSpeed, Keys: []string{"left", "right"}, KeyLabel: "Left Right", Label: "Speed", ContextHelp: true},
@@ -260,9 +259,11 @@ var commandRegistry = []commandSpec{
 	{Mode: commandModeProviderPill, Keys: []string{"enter"}, KeyLabel: "Enter", Label: "Open", ContextHelp: true, Primary: true},
 	{Mode: commandModeProviderPill, Keys: []string{"esc", "backspace"}, KeyLabel: "Esc", RunKey: "esc", Label: "Back", ContextHelp: true, Cancel: true},
 	{Mode: commandModeKeymap | commandModeFileBrowser | commandModeNavBrowser | commandModePlaylistManager | commandModePlaylistPicker | commandModeQueue | commandModeDevicePicker, Keys: []string{"esc"}, KeyLabel: "Esc", Label: "Back", ContextHelp: true, Cancel: true},
-	{Mode: commandModeKeymapSearch | commandModeFileBrowserSearch | commandModeNavSearch | commandModePlaylistManagerInput | commandModePlaylistPickerInput | commandModeSearch | commandModeNetSearch | commandModeSpotSearch | commandModeJump | commandModeURL | commandModeProviderSearch, Keys: []string{"esc"}, KeyLabel: "Esc", Label: "Cancel", ContextHelp: true, Cancel: true},
-	{Mode: commandModeKeymapSearch | commandModeFileBrowserSearch | commandModeNavSearch | commandModePlaylistManagerInput | commandModePlaylistPickerInput | commandModeSearch | commandModeNetSearch | commandModeSpotSearch | commandModeJump | commandModeURL | commandModeProviderSearch, Keys: []string{"enter"}, KeyLabel: "Enter", Label: "Confirm", ContextHelp: true, Primary: true},
-	{Mode: commandModeNavBrowser | commandModePlaylistManager | commandModePlaylistPicker | commandModeQueue | commandModeDevicePicker | commandModeProviderSearch, Keys: []string{"up", "down", "k", "j"}, KeyLabel: "Up Down", Label: "Navigate", ContextHelp: true},
+	{Mode: commandModeKeymapSearch | commandModeFileBrowserSearch | commandModeNavSearch | commandModePlaylistManagerInput | commandModePlaylistPickerInput | commandModeSearch | commandModeNetSearch | commandModeSearchOverlay | commandModeJump | commandModeURL | commandModeProviderSearch, Keys: []string{"esc"}, KeyLabel: "Esc", Label: "Cancel", ContextHelp: true, Cancel: true},
+	{Mode: commandModeKeymapSearch | commandModeFileBrowserSearch | commandModeNavSearch | commandModePlaylistManagerInput | commandModePlaylistPickerInput | commandModeSearch | commandModeNetSearch | commandModeSearchOverlay | commandModeJump | commandModeURL | commandModeProviderSearch, Keys: []string{"enter"}, KeyLabel: "Enter", Label: "Confirm", ContextHelp: true, Primary: true},
+	{Mode: commandModeNavBrowser | commandModePlaylistManager | commandModePlaylistPicker | commandModeQueue | commandModeDevicePicker, Keys: []string{"up", "down", "k", "j"}, KeyLabel: "Up Down", Label: "Navigate", ContextHelp: true},
+	// k and j type into the provider filter.
+	{Mode: commandModeProviderSearch, Keys: []string{"up", "down"}, KeyLabel: "Up Down", Label: "Navigate", ContextHelp: true},
 	{Mode: commandModeFileBrowser | commandModeNavBrowser | commandModePlaylistManager | commandModePlaylistPicker | commandModeDevicePicker, Keys: []string{"enter"}, KeyLabel: "Enter", Label: "Select", ContextHelp: true, Primary: true},
 	{Mode: commandModePlaylistPicker, Keys: []string{"p"}, KeyLabel: "p", Label: "Add to the start instead", Keymap: true, ContextHelp: true},
 	{Mode: commandModePlaylistManager, Keys: []string{"A"}, KeyLabel: "A", Label: "Add to the current playlist", Keymap: true, ContextHelp: true},
@@ -274,7 +275,7 @@ var commandRegistry = []commandSpec{
 			idx >= 0 && m.navBrowser.albums[idx].ID != ""
 	}},
 	{Mode: commandModeNavBrowser, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite track", ContextHelp: true, Prominent: true, Enabled: func(m Model) bool {
-		return m.favMgr != nil && m.navView() == navViewTracks && !m.navBrowser.confirmReplace &&
+		return m.favStore != nil && m.navView() == navViewTracks && !m.navBrowser.confirmReplace &&
 			m.selectedNavRawIndex(len(m.navBrowser.tracks)) >= 0
 	}},
 	{Mode: commandModeNavBrowser, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite genre", LabelFor: func(m Model) string {
@@ -324,7 +325,7 @@ var commandRegistry = []commandSpec{
 		}
 	}},
 	{Mode: commandModePlaylistManager, Keys: []string{"f"}, KeyLabel: "f", Label: "Favorite", ContextHelp: true, Enabled: func(m Model) bool {
-		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks && m.favMgr != nil
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks && m.favStore != nil
 	}},
 	{Mode: commandModePlaylistManager, Keys: []string{"[", "]"}, KeyLabel: "[ ]", Label: "Reorder", ContextHelp: true, Enabled: func(m Model) bool {
 		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
@@ -394,7 +395,7 @@ func (m Model) commandHint(mode commandMode, key string) string {
 	if !ok {
 		return ""
 	}
-	return fitHelpLine("  " + helpKey(command.KeyLabel, command.label(m)))
+	return fitHelpLine("  "+helpKey(command.KeyLabel, command.label(m)), m.layout.panelWidth)
 }
 
 // pressKeyHint renders "Press <key> <text>" for the command that key runs in
@@ -404,12 +405,12 @@ func (m Model) pressKeyHint(mode commandMode, key, text string) string {
 	if !ok {
 		return ""
 	}
-	return fitHelpLine(dimStyle.Render("  Press ") + helpKeyStyle.Render(" "+command.KeyLabel+" ") + dimStyle.Render(" "+text))
+	return fitHelpLine(dimStyle.Render("  Press ")+helpKeyStyle.Render(" "+command.KeyLabel+" ")+dimStyle.Render(" "+text), m.layout.panelWidth)
 }
 
 func (m Model) helpWidth() int {
-	if ui.PanelWidth > 0 {
-		return ui.PanelWidth
+	if m.layout.panelWidth > 0 {
+		return m.layout.panelWidth
 	}
 	if m.width > 0 {
 		return m.width

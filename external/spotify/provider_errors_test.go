@@ -10,16 +10,17 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/oauth2"
-
 	"github.com/bjarneo/cliamp/playlist"
 )
 
 // stubSpotifyAPI serves each request path from routes and fails on others.
-func stubSpotifyAPI(t *testing.T, clientID string, routes map[string]func(*http.Request) *http.Response) *SpotifyProvider {
-	t.Helper()
-	originalTransport := http.DefaultTransport
-	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+func stubSpotifyAPI(clientID string, routes map[string]func(*http.Request) *http.Response) *SpotifyProvider {
+	return New(stubSession(routeTransport(routes)), clientID, 320)
+}
+
+// routeTransport serves each request path from routes and fails on others.
+func routeTransport(routes map[string]func(*http.Request) *http.Response) roundTripFunc {
+	return roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		route, ok := routes[req.URL.Path]
 		if !ok {
 			return nil, fmt.Errorf("unexpected Spotify API path %q", req.URL.Path)
@@ -31,9 +32,6 @@ func stubSpotifyAPI(t *testing.T, clientID string, routes map[string]func(*http.
 		}
 		return resp, nil
 	})
-	t.Cleanup(func() { http.DefaultTransport = originalTransport })
-	sess := &Session{tokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "token"})}
-	return New(sess, clientID, 320)
 }
 
 func apiResponse(status int, body string) func(*http.Request) *http.Response {
@@ -68,6 +66,7 @@ func TestNewAPIErrorReadsSpotifyMessage(t *testing.T) {
 }
 
 func TestWebAPIReportsLongRetryAfterWithoutWaiting(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		clientID string
@@ -78,7 +77,7 @@ func TestWebAPIReportsLongRetryAfterWithoutWaiting(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := stubSpotifyAPI(t, tt.clientID, map[string]func(*http.Request) *http.Response{
+			p := stubSpotifyAPI(tt.clientID, map[string]func(*http.Request) *http.Response{
 				"/v1/me": func(*http.Request) *http.Response {
 					resp := apiResponse(http.StatusTooManyRequests, "")(nil)
 					resp.Header = http.Header{"Retry-After": {"86400"}}
@@ -106,8 +105,42 @@ func TestWebAPIReportsLongRetryAfterWithoutWaiting(t *testing.T) {
 	}
 }
 
+// TestWebAPIUnauthorizedAsksForSignIn checks that a rejected access token
+// asks for sign-in, and that the error still carries the API status.
+func TestWebAPIUnauthorizedAsksForSignIn(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		status   int
+		wantAuth bool
+	}{
+		{name: "401 asks for sign-in", status: http.StatusUnauthorized, wantAuth: true},
+		{name: "403 does not", status: http.StatusForbidden},
+		{name: "500 does not", status: http.StatusInternalServerError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := stubSpotifyAPI("own", map[string]func(*http.Request) *http.Response{
+				"/v1/me/tracks": apiResponse(tt.status, `{"error":{"status":0,"message":"rejected"}}`),
+			})
+
+			_, err := p.Playlists()
+			if err == nil {
+				t.Fatal("Playlists() error = nil, want an error")
+			}
+			if got := errors.Is(err, playlist.ErrNeedsAuth); got != tt.wantAuth {
+				t.Errorf("errors.Is(%v, ErrNeedsAuth) = %v, want %v", err, got, tt.wantAuth)
+			}
+			if !hasStatus(err, tt.status) {
+				t.Errorf("error = %v, want it to wrap status %d", err, tt.status)
+			}
+		})
+	}
+}
+
 func TestTracksExplainsForbiddenPlaylist(t *testing.T) {
-	p := stubSpotifyAPI(t, "own", map[string]func(*http.Request) *http.Response{
+	t.Parallel()
+	p := stubSpotifyAPI("own", map[string]func(*http.Request) *http.Response{
 		"/v1/playlists/other/items": apiResponse(http.StatusForbidden, `{"error":{"status":403,"message":"Forbidden"}}`),
 	})
 
@@ -134,8 +167,9 @@ func playlistRoutes(albums func(*http.Request) *http.Response) map[string]func(*
 }
 
 func TestPlaylistsKeepsPlaylistsWhenSavedAlbumsFail(t *testing.T) {
+	t.Parallel()
 	calls := 0
-	p := stubSpotifyAPI(t, "own", playlistRoutes(func(req *http.Request) *http.Response {
+	p := stubSpotifyAPI("own", playlistRoutes(func(req *http.Request) *http.Response {
 		calls++
 		return apiResponse(http.StatusInternalServerError, `{"error":{"status":500,"message":"Server error"}}`)(req)
 	}))
@@ -153,7 +187,8 @@ func TestPlaylistsKeepsPlaylistsWhenSavedAlbumsFail(t *testing.T) {
 }
 
 func TestCanAddToPlaylistAcceptsOwnedAndCollaborative(t *testing.T) {
-	p := stubSpotifyAPI(t, "own", playlistRoutes(apiResponse(http.StatusOK, `{"total":1,"items":[
+	t.Parallel()
+	p := stubSpotifyAPI("own", playlistRoutes(apiResponse(http.StatusOK, `{"total":1,"items":[
 		{"album":{"id":"a1","name":"Album","total_tracks":3}}
 	]}`)))
 

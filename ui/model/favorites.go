@@ -28,7 +28,7 @@ type trackFavoriteSyncedMsg struct {
 // It does nothing without a favorites store, and shows an error in the status
 // bar when the store fails.
 func (m *Model) favoriteTrackKey(track playlist.Track) tea.Cmd {
-	if m.favMgr == nil {
+	if m.favStore == nil {
 		return nil
 	}
 	cmd, err := m.toggleTrackFavorite(track)
@@ -43,42 +43,23 @@ func (m *Model) favoriteTrackKey(track playlist.Track) tea.Cmd {
 // which stays the source of truth. The returned command copies the change to
 // the provider that owns the track and refreshes the provider pane counts.
 func (m *Model) toggleTrackFavorite(track playlist.Track) (tea.Cmd, error) {
-	if m.favMgr == nil {
+	if m.favStore == nil {
 		return nil, errFavoritesUnavailable
 	}
-	favorite, err := m.favMgr.ToggleFavorite(track)
+	favorite, err := m.favStore.Toggle(track)
 	if err != nil {
 		return nil, err
 	}
 	m.refreshFavSet()
-	// The provider pane renders Favorites counts from Playlists(). The
+	// The Local pane renders Favorites counts from Playlists(). The
 	// manager list refreshes itself on open.
-	return tea.Batch(m.syncTrackFavoriteCmd(track, favorite), m.fetchProviderPlaylists()), nil
+	return tea.Batch(m.syncTrackFavoriteCmd(track, favorite), m.refreshPaneAfterLocalWrite()), nil
 }
 
 // findTrackFavoriter returns the first registered provider that owns track
 // and keeps its own favorite state, and the name to show for it.
 func (m *Model) findTrackFavoriter(track playlist.Track) (provider.TrackFavoriter, string) {
-	match := func(p playlist.Provider) provider.TrackFavoriter {
-		fav, ok := p.(provider.TrackFavoriter)
-		if !ok || !fav.CanFavoriteTrack(track) {
-			return nil
-		}
-		return fav
-	}
-
-	if fav := match(m.provider); fav != nil {
-		return fav, m.provider.Name()
-	}
-	for _, pe := range m.providers {
-		if pe.Provider == nil {
-			continue
-		}
-		if fav := match(pe.Provider); fav != nil {
-			return fav, pe.Name
-		}
-	}
-	return nil, ""
+	return findCapable(m, func(f provider.TrackFavoriter) bool { return f.CanFavoriteTrack(track) })
 }
 
 // syncTrackFavoriteCmd copies a favorite change to the provider that owns

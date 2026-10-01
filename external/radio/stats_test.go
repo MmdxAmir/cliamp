@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 const statsFixture = `{
@@ -53,8 +55,8 @@ const statsFixture = `{
 
 func TestFetchStatistics(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ua := r.Header.Get("User-Agent"); !strings.HasPrefix(ua, "cliamp/") {
-			t.Errorf("User-Agent = %q", ua)
+		if ua := r.Header.Get("User-Agent"); ua != httpclient.UserAgent {
+			t.Errorf("User-Agent = %q, want %q", ua, httpclient.UserAgent)
 		}
 		w.Write([]byte(statsFixture))
 	}))

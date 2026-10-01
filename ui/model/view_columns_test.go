@@ -9,14 +9,14 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/bjarneo/cliamp/ui"
+	"github.com/bjarneo/cliamp/provider"
 )
 
 // newColumnTestModel builds a full-tier model with several providers so the
 // settings pane renders every row it can.
 func newColumnTestModel(width, height int) Model {
 	m := newLayoutTestModel(width, height)
-	m.providers = []ProviderEntry{{Name: "Local"}, {Name: "Navidrome"}, {Name: "Radio"}}
+	m.providers = []provider.Entry{{Name: "Local"}, {Name: "Navidrome"}, {Name: "Radio"}}
 	m.eqPresetIdx = 1
 	m.applyEQPreset()
 	m.recomputeLayout()
@@ -123,18 +123,18 @@ func TestTwoColumnBodyRowsMatch(t *testing.T) {
 func TestSettingsPaneRows(t *testing.T) {
 	tests := []struct {
 		name      string
-		providers []ProviderEntry
+		providers []provider.Entry
 		want      []string
 		absent    []string
 	}{
 		{
 			name:      "multiple providers",
-			providers: []ProviderEntry{{Name: "Local"}, {Name: "Navidrome"}},
+			providers: []provider.Entry{{Name: "Local"}, {Name: "Navidrome"}},
 			want:      []string{"EQ", "[Rock]", "VOL", "+0dB", "SRC", "[Local] 1/2", "SPD", "[1x]", "SHF", "RPT"},
 		},
 		{
 			name:      "single provider",
-			providers: []ProviderEntry{{Name: "Local"}},
+			providers: []provider.Entry{{Name: "Local"}},
 			want:      []string{"EQ", "VOL", "SPD", "SHF", "RPT"},
 			absent:    []string{"SRC"},
 		},
@@ -219,19 +219,19 @@ func TestTwoColumnPlaylistUsesReclaimedRows(t *testing.T) {
 }
 
 // TestTwoColumnPlaylistRendersAtColumnWidth checks that the playlist lays out
-// inside its column rather than at the full panel width, and that the global
-// panel width is restored afterwards for the full-width chrome.
+// inside its column rather than at the full panel width, and that the panel
+// width stays whole for the full-width chrome.
 func TestTwoColumnPlaylistRendersAtColumnWidth(t *testing.T) {
 	m := newColumnTestModel(100, 30)
-	before := ui.PanelWidth
+	before := m.layout.panelWidth
 
 	for _, line := range strings.Split(m.renderBodyRegion(), "\n") {
 		if got, want := lipgloss.Width(line), m.layout.panelWidth; got != want {
 			t.Fatalf("body row width = %d, want %d: %q", got, want, ansi.Strip(line))
 		}
 	}
-	if ui.PanelWidth != before {
-		t.Fatalf("panel width left at %d, want %d restored", ui.PanelWidth, before)
+	if m.layout.panelWidth != before {
+		t.Fatalf("panel width left at %d, want %d", m.layout.panelWidth, before)
 	}
 }
 
@@ -253,9 +253,13 @@ func TestMarkerColumnsReserveOnlyWhatIsUsed(t *testing.T) {
 			want:  markerColumns{queue: true, favorite: true},
 		},
 		{
-			name:  "legacy bookmark reserves nothing",
-			setup: func(m *Model) { m.playlist.ToggleBookmark(1) },
-			want:  markerColumns{favorite: true},
+			name: "legacy bookmark reserves nothing",
+			setup: func(m *Model) {
+				track, _ := m.playlist.Track(1)
+				track.Bookmark = true
+				m.playlist.SetTrack(1, track)
+			},
+			want: markerColumns{favorite: true},
 		},
 		{
 			name:  "favorite track",
@@ -372,7 +376,7 @@ func TestPlaylistHeaderDropsBadgesThatDoNotFit(t *testing.T) {
 		return m
 	}
 	headerAt := func(m Model, width int) string {
-		defer ui.WithPanelWidth(width)()
+		m.layout.panelWidth = width
 		return ansi.Strip(m.renderPlaylistHeader())
 	}
 
@@ -482,7 +486,7 @@ func TestSettingsPaneShedsRankGroupsWhole(t *testing.T) {
 // through the main key path and that it round-trips the layout.
 func TestSettingsPaneToggleClosesAndReopens(t *testing.T) {
 	m := newColumnTestModel(80, 24)
-	m.configSaver = &recordingConfigSaver{}
+	m.configSaver = &recordingSaver{}
 	if !m.layout.twoColumn {
 		t.Fatal("expected the pane open at 80x24")
 	}
@@ -500,16 +504,16 @@ func TestSettingsPaneToggleClosesAndReopens(t *testing.T) {
 // TestSettingsPaneTogglePersists checks that the choice is written to config so
 // the pane comes back the way it was left.
 func TestSettingsPaneTogglePersists(t *testing.T) {
-	saver := &recordingConfigSaver{}
+	saver := &recordingSaver{}
 	m := newColumnTestModel(80, 24)
 	m.configSaver = saver
 
 	m.toggleSettingsPane()
-	if got := saver.values["hide_settings_pane"]; got != "true" {
+	if got := saver.saved["hide_settings_pane"]; got != "true" {
 		t.Fatalf("saved hide_settings_pane = %q, want %q", got, "true")
 	}
 	m.toggleSettingsPane()
-	if got := saver.values["hide_settings_pane"]; got != "false" {
+	if got := saver.saved["hide_settings_pane"]; got != "false" {
 		t.Fatalf("saved hide_settings_pane = %q, want %q", got, "false")
 	}
 }

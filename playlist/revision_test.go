@@ -121,13 +121,6 @@ func TestRevisionIncrementsForStateChanges(t *testing.T) {
 			},
 		},
 		{
-			name: "toggle bookmark",
-			setup: func(p *Playlist) func() {
-				p.Add(Track{Title: "A"})
-				return func() { p.ToggleBookmark(0) }
-			},
-		},
-		{
 			name: "toggle shuffle",
 			setup: func(p *Playlist) func() {
 				p.Add(Track{Title: "A"})
@@ -304,12 +297,6 @@ func TestRevisionUnchangedByNoopMutations(t *testing.T) {
 			},
 		},
 		{
-			name: "toggle invalid bookmark",
-			setup: func(p *Playlist) func() {
-				return func() { p.ToggleBookmark(0) }
-			},
-		},
-		{
 			name: "set same repeat mode",
 			setup: func(p *Playlist) func() {
 				return func() { p.SetRepeat(RepeatOff) }
@@ -359,7 +346,6 @@ func TestRevisionUnchangedByReadOnlyCalls(t *testing.T) {
 		func() { p.Track(0) },
 		func() { p.OrderWindow(0, 1) },
 		func() { p.OrderPosition(1) },
-		func() { p.BookmarkCount() },
 		func() { p.Shuffled() },
 		func() { p.Repeat() },
 	}

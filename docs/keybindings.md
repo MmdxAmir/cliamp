@@ -52,8 +52,9 @@ Metadata is read-only and never a separate Tab stop.
 
 In the minimal (`40x10`) and simplified layouts, `Tab` and `Shift+Tab` keep
 playback focus on the playlist, even though simplified mode hides the list.
-`Esc` still opens the separate provider-list view. Below `40x10`, only a resize
-message is shown.
+`Esc` still opens the separate provider-list view. In the minimal layout, the
+hint bar then shows the provider keys. Below `40x10`, only a resize message is
+shown.
 
 ### Focused Settings
 
@@ -104,9 +105,9 @@ list.
 |---|---|
 | `e` | Cycle EQ preset, including the saved Custom curve |
 | `t` | Choose theme |
-| `v` | Cycle visualizer |
+| `v` | Cycle visualizer and save the choice in `config.toml` |
 | `Ctrl+V` | Pick visualizer from a list (live preview) |
-| `V` | Full screen visualizer. Inside it, `v` cycles modes, `<`/`>` change track, `+`/`-` change volume, and `t` hides the episode name, leaving only the bracketed source. |
+| `V` | Full screen visualizer. Inside it, `v` cycles modes and saves the choice, `<`/`>` change track, `+`/`-` change volume, and `t` hides the episode name, leaving only the bracketed source. |
 | `Ctrl+H` | Toggle album headers |
 | `Ctrl+G` | Toggle the key-binding hint bar (remembered in `hide_help_bar`) |
 | `Ctrl+B` | Open/close the settings pane (remembered in `hide_settings_pane`) |
@@ -121,7 +122,7 @@ and `Esc` clears it.
 | Key | Action |
 |---|---|
 | `f` | Toggle the favorite ♥ on the selected track. Favorites appear in the "Favorites" virtual playlist, and cliamp also saves them on Spotify and Navidrome. For directory radio stations outside saved local playlists, toggle Radio Favorites from the browser or playback playlist, including country and genre results. In the country browser, pin the selected country or region. On a podcast show, subscribe or unsubscribe. |
-| `Ctrl+F` | Search with the active provider (Podcasts, Spotify, Qobuz, Tidal, Navidrome, Lyrion, Jellyfin, Emby, Plex, Audiobookshelf, Mixcloud, NetEase, Local), or search YouTube. Available in playlist and provider-browser views. The search line names the source. See [Search and filter modes](#search-and-filter-modes). |
+| `Ctrl+F` | Search with the active provider (Podcasts, Spotify, Qobuz, Tidal, Navidrome, Lyrion, Jellyfin, Emby, Plex, Audiobookshelf, Mixcloud, NetEase, SoundCloud, Yandex Music, Local), or search YouTube. Available in playlist and provider-browser views. The search line names the source. See [Search and filter modes](#search-and-filter-modes). |
 | `u` | Load URL (stream/playlist) |
 | `d` | Open the audio device picker |
 | `y` | Show or close lyrics |
@@ -231,7 +232,8 @@ reordered, so `p` leaves them alone and reports them as skipped.
 
 Shift-letter keys switch providers. Playlist-manager track actions use lowercase
 or punctuation keys. `D` is the exception. It opens the directory-sources
-screen.
+screen. While a delete prompt waits for an answer, `y` or `Y` confirms and any
+other key cancels. The Shift-letter keys do not switch providers then.
 
 #### Directory sources screen (`D` from the tracks screen)
 
@@ -287,8 +289,12 @@ the provider pane.
 | `R` | Replace the queue with all visible tracks (start from the top, confirm when non-empty) |
 | `q` | Queue the highlighted track to play next |
 | `s` | Cycle album sort (album list only) |
-| `S` `N` `P` `J` `E` `Y` `C` `X` `M` `Q` `T` `L` `O` | Switch to that provider without opening the main pane. `R` replaces the queue on the track screen. |
+| `S` `P` `J` `E` `B` `Y` `C` `X` `M` `Q` `T` `L` `R` `O` | Switch to that provider without opening the main pane. On the track screen, `R` replaces the queue instead. |
+| `N` | In Jellyfin, reopen the browse-mode chooser. Elsewhere, switch to Navidrome. |
 | `Esc` `b` | Go back one level; close the browser |
+
+While you type in the `/` filter, the Shift+letter switches and `N` do not
+work. These keys add their letter to the filter.
 
 The Mixcloud browser menu has **By Show**, **By Creator**, **By Creator / Show**,
 and **Genres**. Genre favorites add Latest/Popular rows to the provider pane and
@@ -320,7 +326,8 @@ Navidrome, Podcasts, or Local Playlists:
 | `Ctrl+F` | Run the provider online or server search (Spotify, Navidrome, NetEase, and others). |
 | `Ctrl+R` | Refresh the provider: reload the currently open playlist or starting wave in place (e.g. a fresh Yandex "Моя волна" batch), or return to the playlist list. For Mixcloud, also clear the cached `/me/` identity. |
 | `p` | Open the playlist manager (Local pane only; create, rename, delete, add dirs/tracks) |
-| `S` `N` `P` `J` `E` `Y` `C` `X` `M` `Q` `L` `R` `O` | Switch to that provider |
+| `S` `P` `J` `E` `B` `Y` `C` `X` `M` `Q` `T` `L` `R` `O` | Switch to that provider |
+| `N` | Open the browser of the provider on screen |
 | `Tab` | Leave the provider pane and focus Source, or the first visible playback control |
 | `Shift+Tab` | Leave the provider pane and focus the last visible playback control (Speed, or Repeat with Settings closed) |
 | `Esc` `b` | Back to the playlist pane; in Podcasts, clear show search first |
@@ -372,8 +379,9 @@ This applies to:
 - `Ctrl+F` when the active provider is Local (your saved playlists)
 
 Other `Ctrl+F` providers, including Spotify, Qobuz, Tidal, Navidrome, Lyrion,
-Jellyfin, Emby, Plex, Audiobookshelf, Mixcloud, NetEase, Podcasts, and YouTube, send the
-query to their search API. Their services control matching rules.
+Jellyfin, Emby, Plex, Audiobookshelf, Mixcloud, NetEase, SoundCloud, Yandex
+Music, Podcasts, and YouTube, send the query to their search API. Their
+services control matching rules.
 
 ## General
 
@@ -381,3 +389,5 @@ query to their search API. Their services control matching rules.
 |---|---|
 | `?` / `Ctrl+K` | Show keymap. `Enter` runs the selected command. |
 | `q` / `Ctrl+C` | Quit |
+
+cliamp also quits as the `q` key does when it gets `SIGINT`, `SIGTERM` or `SIGHUP`. It then saves the resume position. The terminal sends `SIGHUP` when you close its window.

@@ -288,14 +288,6 @@ type PlaylistDocumenter interface {
 	RestorePlaylistDocument(name string, data []byte) error
 }
 
-// BookmarkSetter is implemented by providers that can toggle the legacy
-// per-playlist bookmark flag. Favorites replace bookmarks, so the UI, the CLI,
-// and IPC do not call it.
-type BookmarkSetter interface {
-	SetBookmark(playlistName string, idx int) error
-	SetBookmarkByPath(playlistName string, path string) error
-}
-
 // PlaylistDirSourceManager is implemented by providers whose playlists can
 // reference directory sources that are re-scanned on each load. The local
 // TOML provider implements this for its [[dir]] sections; other providers
@@ -405,19 +397,6 @@ type GenreLabeler interface {
 // connections) that should be released on shutdown.
 type Closer interface {
 	Close()
-}
-
-// FavoritesManager is implemented by providers that support a cross-playlist
-// favorites virtual playlist. The UI uses this to toggle favorites from the
-// track list without going through the per-playlist write path.
-type FavoritesManager interface {
-	// ToggleFavorite toggles the given track in the favorites store.
-	// Returns true when the track is now favorited after the call.
-	ToggleFavorite(track playlist.Track) (bool, error)
-	// IsFavorited reports whether the given path is in the favorites store.
-	IsFavorited(path string) bool
-	// FavoritesCount returns the number of favorited tracks.
-	FavoritesCount() int
 }
 
 // TrackPager is implemented by providers that can return a playlist's tracks

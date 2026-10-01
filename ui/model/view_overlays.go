@@ -6,7 +6,6 @@ import (
 
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 // renderVisPickerList renders the visualizer mode list for the playlist region
@@ -14,36 +13,18 @@ import (
 // layout (renderPlaylistHeader / renderHelp).
 func (m Model) renderVisPickerList() string {
 	budget := m.effectivePlaylistVisible()
-	if budget <= 0 {
-		return ""
-	}
-	items := m.visPicker.modes
-	if m.visPicker.filter != "" {
-		filtered := make([]string, 0, len(m.visPicker.filtered))
-		for _, rawIdx := range m.visPicker.filtered {
-			if rawIdx >= 0 && rawIdx < len(m.visPicker.modes) {
-				filtered = append(filtered, m.visPicker.modes[rawIdx])
-			}
-		}
-		items = filtered
-	}
+	items := shownRows(&m.visPicker.filterList, m.visPicker.modes)
 	if len(items) == 0 {
 		return bodyMessage("No matches.", budget)
 	}
-	scroll := m.visPicker.scroll
-
-	lines := make([]string, 0, budget)
-	for i := scroll; i < len(items) && len(lines) < budget; i++ {
-		lines = append(lines, cursorLine(items[i], i == m.visPicker.cursor))
-	}
-	return strings.Join(padLines(lines, budget, len(lines)), "\n")
+	return windowList(items, m.visPicker.cursor, m.visPicker.scroll, budget)
 }
 
 func (m Model) visPickerHeaderLine() string {
-	if m.visPicker.filtering || m.visPicker.filter != "" {
+	if m.visPicker.isFiltered() {
 		return m.filterHeader("Filter: Visualizers", "visualizer-picker-filter", m.visPicker.filter, fmt.Sprintf("%d/%d", m.visPickerViewCount(), len(m.visPicker.modes)))
 	}
-	return sepHeaderN("Visualizers", m.visPicker.cursor+1, m.visPickerViewCount())
+	return sepHeaderN("Visualizers", m.visPicker.cursor+1, m.visPickerViewCount(), m.layout.panelWidth)
 }
 
 // — playlist manager (inline) —
@@ -63,10 +44,10 @@ func (m Model) plMgrHeaderLine() string {
 			mode := plMgrSortModes[(m.plManager.sortMode-1)%len(plMgrSortModes)]
 			label += " · sort: " + mode
 		}
-		return sepHeaderN(label, m.plManager.cursor+1, len(m.plManager.tracks))
+		return sepHeaderN(label, m.plManager.cursor+1, len(m.plManager.tracks), m.layout.panelWidth)
 	case plMgrScreenDirs:
 		label := "Directory sources: " + m.plManager.selPlaylist
-		return sepHeaderN(label, m.plManager.cursor+1, len(m.plManager.dirs))
+		return sepHeaderN(label, m.plManager.cursor+1, len(m.plManager.dirs), m.layout.panelWidth)
 	case plMgrScreenNewName:
 		return m.promptHeader("playlist-manager-new-name", "New Playlist", m.plManager.newName)
 	case plMgrScreenRename:
@@ -76,22 +57,7 @@ func (m Model) plMgrHeaderLine() string {
 		if m.plManager.filter != "" {
 			total = len(m.plManager.filtered)
 		}
-		return sepHeaderN("Playlists", m.plManager.cursor+1, total)
-	}
-}
-
-func (m Model) plMgrHelpLine() string {
-	switch m.plManager.screen {
-	case plMgrScreenTracks:
-		return m.plMgrTracksHelpLine()
-	case plMgrScreenDirs:
-		return m.plMgrDirsHelpLine()
-	case plMgrScreenNewName:
-		return m.commandHelp(commandModePlaylistManagerInput)
-	case plMgrScreenRename:
-		return m.commandHelp(commandModePlaylistManagerInput)
-	default:
-		return m.plMgrListHelpLine()
+		return sepHeaderN("Playlists", m.plManager.cursor+1, total, m.layout.panelWidth)
 	}
 }
 
@@ -305,7 +271,7 @@ func (m Model) plMgrTrackLabel(realIdx int) string {
 	if realIdx < len(m.plManager.missingLocal) && m.plManager.missingLocal[realIdx] {
 		missing = "! "
 	}
-	return mark + missing + formatTrackRow(realIdx+1, trackViewName(t)+trackAlbumSuffix(t, m.showAlbumHeaders), t.DurationSecs)
+	return mark + missing + formatTrackRow(realIdx+1, trackViewName(t)+trackAlbumSuffix(t, m.showAlbumHeaders), t.DurationSecs, m.layout.panelWidth)
 }
 
 // renderSearchList renders the playlist-search results for the playlist region
@@ -348,7 +314,7 @@ func (m Model) renderSearchList() string {
 		if qp := m.playlist.QueuePosition(i); qp > 0 {
 			queueSuffix = fmt.Sprintf(" [Q%d]", qp)
 		}
-		name = truncate(name, ui.PanelWidth-8-len([]rune(queueSuffix)))
+		name = truncate(name, m.layout.panelWidth-8-len([]rune(queueSuffix)))
 
 		line := fmt.Sprintf("%s%d. %s", prefix, i+1, name)
 		item := style.Render(line)

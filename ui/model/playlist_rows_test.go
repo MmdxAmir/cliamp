@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 const shuffleRowsTrackCount = 8
@@ -20,10 +19,6 @@ const shuffleRowsTrackCount = 8
 // index, so a test fails if an action reads a view row as a track index.
 func shuffleRowsTestModel(t *testing.T, shuffle bool) Model {
 	t.Helper()
-	old := ui.PanelWidth
-	ui.PanelWidth = 80
-	t.Cleanup(func() { ui.PanelWidth = old })
-
 	tracks := make([]playlist.Track, shuffleRowsTrackCount)
 	for i := range tracks {
 		tracks[i] = playlist.Track{
@@ -40,6 +35,7 @@ func shuffleRowsTestModel(t *testing.T, shuffle bool) Model {
 		}
 	}
 	m.player = &playbackFakeEngine{}
+	m.layout.panelWidth = 80
 	m.focus = focusPlaylist
 	m.plVisible = shuffleRowsTrackCount
 	m.plCursor = m.playlist.Index()

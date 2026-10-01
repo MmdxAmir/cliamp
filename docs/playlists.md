@@ -125,13 +125,25 @@ Each `[[track]]` section supports these keys:
 | `year` | No | Release year |
 | `track_number` | No | Track number |
 | `duration_secs` | No | Duration in seconds |
+| `stream` | No | Treat a provider URI, such as `qobuz://track/42`, as a network stream. cliamp writes it for provider tracks. HTTP and HTTPS paths are always streams. |
 | `realtime` | No | Treat an HTTP URL as live radio. Reconnect after pause or disconnect. |
+| `restricted` | No | Mark a track that its provider may refuse to play, such as an exclusive Mixcloud show. cliamp shows an `[E]` suffix and still tries to play it. |
+| `feed` | No | Treat the URL as an RSS or podcast feed. cliamp resolves it before playback. |
+| `provider_meta.<key>` | No | Provider data, such as `provider_meta.navidrome.id` or `provider_meta.podcast.guid`. cliamp uses it to scrobble, to sync favorites, and to recognize stations and podcast episodes. The `<key>` holds only letters, digits, `.`, `_` and `-`. cliamp does not save a key with other characters. |
 | `embedded_lyrics` | No | Lyrics from local file tags |
-| `album_art_url` | No | Cached file URL for embedded album art |
+| `album_art_url` | No | Album art URL: a cached file URL for embedded art, or the cover URL of a provider track. The media controls show it. |
 | `bookmark` | No | Legacy bookmark flag. cliamp reads it one time and copies the track into favorites. See [Favorites](#favorites). |
 
 cliamp treats HTTP/HTTPS paths as streams. Set `realtime = true` for live radio.
 cliamp keeps this flag when it saves the playlist.
+
+`favorites.toml` and `history.toml` use the same track keys, except
+`embedded_lyrics` and `bookmark`. Older versions saved a
+podcast episode with `podcast_feed` and `podcast_guid`. cliamp still reads
+these keys and writes `provider_meta` keys on the next save. Older versions
+also marked an exclusive Mixcloud show with
+`provider_meta.mixcloud.exclusive = "true"`. cliamp reads it as
+`restricted = true` and writes `restricted` on the next save.
 
 ### Directory Sources (`[[dir]]`)
 
@@ -360,6 +372,8 @@ cliamp playlist delete "Name"
 ```
 
 Use `track`, `title`, `artist`, `album`, `artist+album`, or `path` as sort keys.
+
+`playlist doctor --fix` prunes only playlist files. It reports a missing favorite and keeps it. To remove a favorite, run `cliamp playlist favorite Favorites --index N`.
 
 New playlist names reject path separators and non-portable file name characters.
 cliamp can still read and write existing playlist files with older Unix-only

@@ -22,13 +22,16 @@ const streamPreloadLeadTime = 3 * time.Second
 // takes 3-10 seconds, so we start preloading much earlier.
 const ytdlPreloadLeadTime = 15 * time.Second
 
-// rearmPreload discards any armed gapless pipeline and re-arms from the
-// current playlist state. Call after any change that alters which track
-// plays next.
-func (m *Model) rearmPreload() tea.Cmd {
-	nextRequest(&m.requests.preload)
-	m.preloading = false
-	m.player.ClearPreload()
+// rearmStalePreload drops a preload that no longer holds the next track and
+// arms the next track at once. A preload that still holds it stays, so an
+// edit below the next track opens no new stream. Nothing is armed while
+// playback is stopped, a track still buffers or a paged load runs. Call it
+// after any change that can alter which track plays next.
+func (m *Model) rearmStalePreload() tea.Cmd {
+	m.dropStalePreload()
+	if !m.player.IsPlaying() || m.buffering || m.tracksPaging || m.preloading || m.player.HasPreload() {
+		return nil
+	}
 	return m.preloadNext()
 }
 
@@ -45,7 +48,7 @@ func (m *Model) rearmPreload() tea.Cmd {
 // and the tick loop will retry on the next pass.
 func (m *Model) preloadNext() tea.Cmd {
 	next, ok := m.preloadTarget()
-	if !ok || next.Path == m.preloadFailed {
+	if !ok || next.Path == m.preloadFailed || (m.preloading && m.preloadFor == next.Path) {
 		return nil
 	}
 	isYTDL := playlist.IsYTDL(next.Path)
@@ -60,9 +63,9 @@ func (m *Model) preloadNext() tea.Cmd {
 		}
 		nextDur := time.Duration(next.DurationSecs) * time.Second
 		m.preloading, m.preloadFor = true, next.Path
-		return preloadYTDLStreamCmd(m.player, next.Path, nextDur, nextRequest(&m.requests.preload), m.player.BeginPreload())
+		return preloadStreamCmd(m.player, next.Path, nextDur, nextRequest(&m.requests.preload), m.player.BeginPreload())
 	}
-	if next.Stream {
+	if next.Stream || m.hasSourceResolver(next.Path) {
 		// For streams, only arm gapless if we're within the lead-time window.
 		// Without a known boundary, opening the next connection now can leave it
 		// stale for the entire track or pause and turn one EOF into several skips.
@@ -84,7 +87,7 @@ func (m *Model) preloadNext() tea.Cmd {
 	}
 	nextDur := time.Duration(next.DurationSecs) * time.Second
 	m.preloading, m.preloadFor = true, next.Path
-	return preloadLocalCmd(m.player, next.Path, nextDur, nextRequest(&m.requests.preload), m.player.BeginPreload())
+	return preloadStreamCmd(m.player, next.Path, nextDur, nextRequest(&m.requests.preload), m.player.BeginPreload())
 }
 
 // preloadTarget returns the track the gapless pipeline should hold next. It is
@@ -98,12 +101,11 @@ func (m *Model) preloadTarget() (playlist.Track, bool) {
 	if currentIdx >= 0 && m.currentPlaybackIsLive(current) {
 		return playlist.Track{}, false
 	}
+	// Arm the track that advanceToNext picks.
 	var next playlist.Track
 	var ok bool
 	if m.playbackDetached {
-		var idx int
-		next, idx = m.playlist.Current()
-		ok = idx >= 0
+		next, ok = m.playlist.PeekSelected()
 	} else {
 		next, ok = m.playlist.PeekNext()
 	}

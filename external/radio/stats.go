@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"maps"
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/bjarneo/cliamp/internal/httpclient"
 )
 
 // StatsURL serves live and all-time listener statistics for the cliamp radio
@@ -96,7 +97,7 @@ type TrackListenerCountry struct {
 // FetchTrackStatistics downloads the playlist statistics document.
 func FetchTrackStatistics(ctx context.Context) (TrackStatistics, error) {
 	var stats TrackStatistics
-	if err := getLimitedJSON(ctx, catalogClient, TrackStatsURL, maxStatsBody, &stats); err != nil {
+	if err := getJSON(ctx, catalogClient, TrackStatsURL, maxStatsBody, &stats); err != nil {
 		return TrackStatistics{}, fmt.Errorf("playlist statistics: %w", err)
 	}
 	return stats, nil
@@ -118,7 +119,7 @@ func fetchStatistics(ctx context.Context, client *http.Client, u string) (Statis
 		return Statistics{}, nil, err
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxStatsBody))
+	raw, err := httpclient.ReadBody(resp.Body, maxStatsBody)
 	if err != nil {
 		return Statistics{}, nil, err
 	}

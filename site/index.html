@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>cliamp — terminal music player</title>
-<meta name="description" content="A full music player that lives in your terminal. Play local files, podcasts, Spotify, Qobuz, Tidal, YouTube Music, Plex, Jellyfin, Emby, Navidrome, Lyrion, SoundCloud, Mixcloud, NetEase, Yandex Music, and about 58,000 radio stations, with a 10-band equalizer, visualizers, synced lyrics, and Lua plugins.">
+<meta name="description" content="A full music player that lives in your terminal. Play local files, podcasts, Spotify, Qobuz, Tidal, YouTube Music, Plex, Jellyfin, Emby, Navidrome, Lyrion, Audiobookshelf, SoundCloud, Mixcloud, NetEase, Yandex Music, and about 58,000 radio stations, with a 10-band equalizer, visualizers, synced lyrics, and Lua plugins.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg" id="favicon">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0b0c0d">
@@ -331,7 +331,7 @@ footer a{color:var(--fg-2)}
       <div class="eyebrow">~/audio/cliamp</div>
       <h1>cliamp</h1>
       <p class="tagline">A full <em>music player</em> that lives in your terminal. No browser tab required.</p>
-      <p class="lede">Playlists, a 10-band equalizer, 31 visualizers, synced lyrics, podcasts, remote control, and Lua plugins. Stream from <b>Spotify, Qobuz, Tidal, YouTube Music, Plex, Jellyfin, Emby, Navidrome, Lyrion, Yandex Music</b> — plus podcast feeds and about 58,000 internet radio stations.</p>
+      <p class="lede">Playlists, a 10-band equalizer, 32 visualizers, synced lyrics, podcasts, remote control, and Lua plugins. Stream from <b>Spotify, Qobuz, Tidal, YouTube Music, SoundCloud, Mixcloud, NetEase Cloud Music, Yandex Music, Plex, Jellyfin, Emby, Navidrome, Lyrion, Audiobookshelf</b> — plus podcast feeds and about 58,000 internet radio stations.</p>
       <div class="btns">
         <a href="#install" class="btn go">$ install</a>
         <a href="https://github.com/bjarneo/cliamp" class="btn">view source</a>
@@ -409,7 +409,7 @@ footer a{color:var(--fg-2)}
         <span class="cc-cmd">go install github.com/bjarneo/cliamp@latest</span>
       </button>
     </div>
-    <p class="note">then just run <b>cliamp</b> — <b>cliamp setup</b> walks you through streaming services and media servers. Optional: <i>ffmpeg</i> for AAC, ALAC, Opus and WMA, <i>yt-dlp</i> for YouTube, SoundCloud, Mixcloud, Bandcamp, Bilibili and NetEase. Windows builds are in <a href="https://github.com/bjarneo/cliamp/releases/latest">Releases</a>.</p>
+    <p class="note">then just run <b>cliamp</b> — <b>cliamp setup</b> walks you through streaming services and media servers. Optional: <i>ffmpeg</i> for AAC, ALAC, Opus and WMA, <i>yt-dlp</i> for YouTube, YouTube Music, SoundCloud, Mixcloud, Bandcamp, Bilibili and NetEase. Behind a proxy? cliamp reads <i>HTTP_PROXY</i>, <i>HTTPS_PROXY</i>, <i>ALL_PROXY</i> and <i>NO_PROXY</i>, and SOCKS5 proxies work (<a href="https://github.com/bjarneo/cliamp/blob/main/docs/configuration.md#proxy">proxy docs</a>). Windows builds are in <a href="https://github.com/bjarneo/cliamp/releases/latest">Releases</a>.</p>
   </section>
 
   <!-- ═══ SOURCES ═══ -->
@@ -422,12 +422,7 @@ footer a{color:var(--fg-2)}
       <div class="filters" id="filters" role="group" aria-label="Filter sources"></div>
     </div>
     <div class="grid g-sources" id="sources-grid"></div>
-    <p class="sub">Radio favorites follow the station: press <kbd>f</kbd> in Catalog, search results, or the playback playlist after browsing countries or genres. Stations are saved locally under Radio → Favorites by URL, using the station name rather than the current song and retaining station details, including the region, after restart. A favorite station shows the same ♥ marker as a favorite track, in the same pinned column, so a toggle does not move the titles. M3U/PLS wrappers keep their original station URL after playback resolution. Toggling a favorite preserves the selected station and completed catalog pages, including during loading. Favoriting does not fetch more catalog stations or interrupt an in-progress station load. IPC clients use the stable URL-based favorite IDs returned by provider.playlists; positional favorite IDs are not supported. On Linux and macOS, favorite mutations preserve other cliamp instances’ changes through a shared file lock. The action follows the displayed marker: it favorites an unmarked station or unfavorites a marked station, without reversing the same change already made by another instance. Other instances’ changes become visible in another open player on its next favorite mutation or restart, not through live refresh. Windows assumes one writer per config directory. Press <kbd>f</kbd> again to remove one. In saved local playlists, <kbd>f</kbd> toggles the track favorite instead. Station favorites do not change a remote account. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/radio.md#station-favorites">Radio favorites guide</a>.</p>
-    <p class="sub">Choose where TUI <kbd>Ctrl+S</kbd> saves yt-dlp downloads and temporary audio files: set <code>directory = "/media/usb/CLAPt/Music"</code> under <code>[downloads]</code> in config.toml and restart cliamp. Empty uses <code>~/Music/cliamp</code>. Relative paths are rejected (literal ~ is not expanded). Mount external drives first; missing directories are created without checking mount status. The setting also applies to IPC Save in the TUI; headless daemon saving is unchanged. Saved files can be opened locally and are not automatically substituted into online playlists.</p>
-    <p class="sub">Navidrome uses the player's transcoding settings, or streams the original file if none are configured. Set <code>format = "raw"</code> under <code>[navidrome]</code> to always request the original. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/navidrome.md#transcoding">Navidrome guide</a>.</p>
-    <p class="sub">With Jellyfin as the default provider, reopen cliamp without files, URLs, or a playlist to restore the last track, position, and complete source list. Queued tracks keep their own album context. Press <kbd>Enter</kbd> to resume; restored sessions stay silent even with <code>auto_play</code>. Playback is checkpointed every two seconds and on normal exit, without saving unfinished seeks. Stream URLs use current API-key or password authentication when playback starts. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/jellyfin.md">Jellyfin guide</a>.</p>
-    <p class="sub">One favorite key: <kbd>f</kbd> toggles the ♥ favorite on a track in the playlist, the playlist manager, a browser track list, or search results. On a Spotify track, it also saves the track to Liked Songs. On a Navidrome song, it also stars the song. If the service call fails, the local favorite stays and a warning names the provider. Old ★ bookmarks move into favorites one time. Your playlist files do not change. <code>cliamp playlist bookmark</code> still works as an alias. <kbd>n</kbd> has no action now. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/playlists.md#favorites">Favorites guide</a>.</p>
-    <p class="sub">Large Spotify playlists fill in as they load: the first tracks appear right away, later pages append in the background, and playback works while the list is still arriving. If the connection drops mid-track, playback reconnects and resumes where it stopped. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/spotify.md">Spotify guide</a>.</p>
+    <p class="sub">Setup steps and limits for each source are in the <a href="https://docs.cliamp.stream">docs ↗</a>. Guides: <a href="https://github.com/bjarneo/cliamp/blob/main/docs/radio.md#station-favorites">radio favorites</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/playlists.md#favorites">track favorites</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/configuration.md#download-directory">download directory</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/navidrome.md#transcoding">Navidrome transcoding</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/jellyfin.md">Jellyfin</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/spotify.md">Spotify</a>.</p>
   </section>
 
   <!-- ═══ FEATURES ═══ -->
@@ -436,11 +431,11 @@ footer a{color:var(--fg-2)}
     <div class="grid g-feat">
       <div class="feat">
         <div class="feat-k">10-BAND EQ</div>
-        <p>Parametric equalizer with 14 presets — Rock, Jazz, Classical, Bass Boost, Vocal, Podcast and more — or dial in your own curve. The Custom preset survives restarts.</p>
+        <p>Parametric equalizer with 16 presets — Rock, Jazz, Classical, Bass Boost, Vocal, Podcast and more — or dial in your own curve. The Custom preset survives restarts.</p>
       </div>
       <div class="feat">
         <div class="feat-k">VISUALIZERS</div>
-        <p>31 built-in modes rendered in the terminal from live FFT data: spectrum bars, scope, wave, matrix, flame, and a true-stereo LED peak meter. ClassicPeak uses smooth bars and floating peak caps, with sampling aligned to audible playback and adaptive redraws for smooth motion. Neighboring bands are averaged into each bar. <kbd>v</kbd> cycles, <kbd>V</kbd> goes full screen.</p>
+        <p>32 built-in modes rendered in the terminal from live FFT data: spectrum bars, scope, wave, matrix, flame, and a true-stereo LED peak meter. ClassicPeak uses smooth bars and floating peak caps, with sampling aligned to audible playback and adaptive redraws for smooth motion. ClassicLED redraws at 30 FPS during playback. Neighboring bands are averaged into each bar. <kbd>v</kbd> cycles, <kbd>V</kbd> goes full screen.</p>
       </div>
       <div class="feat">
         <div class="feat-k">SYNCED LYRICS</div>
@@ -452,7 +447,7 @@ footer a{color:var(--fg-2)}
       </div>
       <div class="feat">
         <div class="feat-k">REMOTE CONTROL</div>
-        <p>Newline-delimited JSON over a local Unix socket, with full state snapshots and push events for scripts, status bars, and GUIs. Media keys via MPRIS on Linux and Now Playing on macOS. Run <b>--daemon</b> for headless playback.</p>
+        <p>Newline-delimited JSON over a local Unix socket, with full state snapshots and push events for scripts, status bars, and GUIs. Media keys via MPRIS on Linux, Now Playing on macOS, and global hotkeys on Windows. Run <b>--daemon</b> for headless playback with the same plugins, scrobbling, and history as the TUI.</p>
       </div>
       <div class="feat">
         <div class="feat-k">THEMES</div>
@@ -553,7 +548,7 @@ p:<span class="k">on</span>(<span class="s">"track.change"</span>, <span class="
       <div class="api">
         <div class="api-i">
           <div class="sig">track.change · playback.state · queue.end</div>
-          <div class="d">Twelve events to subscribe to: track changes, scrobbles, seeks, volume, EQ, shuffle and repeat, queue edits, end of queue, explicit stops, start and quit. Track-change events fire after playback starts successfully, including YouTube, SoundCloud, and gapless transitions. Buffering, failed, or superseded starts do not emit a track change. End-of-queue events report the last track that started playing; a manual stop, a stream still buffering, or a failed start does not emit one. Ask <code>cliamp.track.is_live()</code> before treating a track as one that ends.</div>
+          <div class="d">12 events to subscribe to: track changes, scrobbles, seeks, volume, EQ, shuffle and repeat, queue edits, end of queue, explicit stops, start and quit. Each plugin gets its events in the order they happen. Track-change events fire after playback starts successfully, including YouTube, SoundCloud, and gapless transitions. Buffering, failed, or superseded starts do not emit a track change. End-of-queue events report the last track that started playing; a manual stop, a stream still buffering, or a failed start does not emit one. Playback-state events fire once for each change, and once per second while a track plays. A hook reads the state that includes the change its event reports. Ask <code>cliamp.track.is_live()</code> before treating a track as one that ends.</div>
         </div>
         <div class="api-i">
           <div class="sig">cliamp.queue.has_next()</div>
@@ -562,6 +557,10 @@ p:<span class="k">on</span>(<span class="s">"track.change"</span>, <span class="
         <div class="api-i">
           <div class="sig">cliamp.queue.add({ path, title, artist, … })</div>
           <div class="d">Queue a track exactly as described, such as a Spotify track with its title and artist, without resolving its path.</div>
+        </div>
+        <div class="api-i">
+          <div class="sig">cliamp.queue.move(from, to) · cliamp.queue.remove(i)</div>
+          <div class="d">Edit the queue by the rules of the keys and IPC. While shuffle is on, a move changes nothing. A loaded saved playlist gets the same edit.</div>
         </div>
         <div class="api-i">
           <div class="sig">p:bind("ctrl+n", fn) · p:command("name", fn)</div>
@@ -573,7 +572,7 @@ p:<span class="k">on</span>(<span class="s">"track.change"</span>, <span class="
         </div>
         <div class="api-i">
           <div class="sig">type = "visualizer" → p:render(bands, frame, rows, cols)</div>
-          <div class="d">Draw your own visualizer from the live spectrum bands. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/plugins.md">Plugin API reference ↗</a></div>
+          <div class="d">Draw your own visualizer from the smoothed spectrum bands. Optional <code>p:init</code> and <code>p:destroy</code> run when the mode is selected and left. <a href="https://github.com/bjarneo/cliamp/blob/main/docs/plugins.md">Plugin API reference ↗</a></div>
         </div>
       </div>
     </div>
@@ -643,7 +642,7 @@ var SOURCES=[
   {name:"Qobuz",kind:"streaming",note:"lossless FLAC · OAuth"},
   {name:"Tidal",kind:"streaming",note:"lossless FLAC · device code"},
   {name:"YouTube",kind:"streaming",note:"search & play · yt-dlp"},
-  {name:"YouTube Music",kind:"streaming",note:"playlists & likes · cookies"},
+  {name:"YouTube Music",kind:"streaming",note:"playlists & likes · cookies or OAuth"},
   {name:"SoundCloud",kind:"streaming",note:"search & genres · yt-dlp"},
   {name:"Mixcloud",kind:"streaming",note:"shows & creators · yt-dlp"},
   {name:"NetEase Cloud Music",kind:"streaming",note:"browser session · yt-dlp"},
@@ -652,7 +651,7 @@ var SOURCES=[
   {name:"Bilibili",kind:"streaming",note:"video audio · yt-dlp"},
   {name:"Plex",kind:"self-hosted",note:"server token"},
   {name:"Jellyfin",kind:"self-hosted",note:"API key / password, gapless, resume"},
-  {name:"Emby",kind:"self-hosted",note:"API key"},
+  {name:"Emby",kind:"self-hosted",note:"API key / password, resume"},
   {name:"Navidrome",kind:"self-hosted",note:"Subsonic API · lyrics"},
   {name:"Lyrion",kind:"self-hosted",note:"LMS"},
   {name:"Audiobookshelf",kind:"self-hosted",note:"audiobooks & podcasts"},
@@ -661,7 +660,8 @@ var SOURCES=[
   {name:"SSH",kind:"local",note:"ssh:// paths, no mount needed"},
   {name:"Internet radio",kind:"radio",note:"~58,000 stations · Radio Browser"},
   {name:"cliamp radio",kind:"radio",note:"14 channels we run ourselves"},
-  {name:"Podcasts",kind:"podcast",note:"Apple charts + RSS · shorter episode titles · no account"}
+  {name:"Podcasts",kind:"podcast",note:"Apple charts + RSS · shorter episode titles · no account"},
+  {name:"Xiaoyuzhou",kind:"podcast",note:"paste an episode URL"}
 ];
 var KIND={streaming:"var(--accent)","self-hosted":"var(--warm)",local:"var(--blue)",radio:"var(--rose)",podcast:"var(--purple)"};
 

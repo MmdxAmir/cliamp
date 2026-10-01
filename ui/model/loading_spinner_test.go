@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bjarneo/cliamp/playlist"
-	"github.com/bjarneo/cliamp/ui"
 )
 
 // loadingSpinnerCases puts the model into each load that shows a spinner.
@@ -38,9 +37,9 @@ var loadingSpinnerCases = []struct {
 		name: "provider search",
 		setup: func(m *Model) {
 			m.openProviderSearchWith(&catalogTestProvider{commandsTestProvider: commandsTestProvider{name: "Spotify"}})
-			m.spotSearch.loading = true
+			m.searchOverlay.loading = true
 		},
-		body: (*Model).renderSpotSearchBody,
+		body: (*Model).renderSearchOverlayBody,
 		want: "Searching Spotify...",
 	},
 	{
@@ -48,8 +47,8 @@ var loadingSpinnerCases = []struct {
 		setup: func(m *Model) {
 			m.provider = &catalogTestProvider{commandsTestProvider: commandsTestProvider{name: "Radio"}}
 			m.focus = focusProvider
-			m.providerLists = []playlist.PlaylistInfo{{ID: "c:1", Name: "Old station"}}
-			m.provLoading, m.provSearch.loading = true, true
+			m.provPane.lists = []playlist.PlaylistInfo{{ID: "c:1", Name: "Old station"}}
+			m.provPane.loading, m.provSearch.loading = true, true
 		},
 		body: (*Model).renderProviderList,
 		want: "Searching Radio…",
@@ -57,13 +56,10 @@ var loadingSpinnerCases = []struct {
 }
 
 func TestLoadingTextsShowTheSpinner(t *testing.T) {
-	old := ui.PanelWidth
-	ui.PanelWidth = 80
-	t.Cleanup(func() { ui.PanelWidth = old })
-
 	for _, tt := range loadingSpinnerCases {
 		t.Run(tt.name, func(t *testing.T) {
 			m := keybindingTestModel()
+			m.layout.panelWidth = 80
 			m.plVisible = 6
 			tt.setup(&m)
 			body := ansi.Strip(tt.body(&m))

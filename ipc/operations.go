@@ -15,7 +15,7 @@ const (
 )
 
 // Operation describes a runtime capability exposed through V2. Validation is
-// deliberately protocol-only; the model or daemon supplies the behavior.
+// deliberately protocol-only. The runtime owner supplies the behavior.
 type Operation struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
@@ -53,7 +53,7 @@ func (r *OperationRegistry) Register(operation Operation) {
 }
 
 // Unregister removes local capabilities that are unavailable in a particular
-// runtime, such as TUI-only appearance controls in daemon mode.
+// runtime, such as the appearance controls in headless mode.
 func (r *OperationRegistry) Unregister(names ...string) {
 	r.mu.Lock()
 	for _, name := range names {

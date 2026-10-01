@@ -40,21 +40,15 @@ func (m *Model) handlePluginQueue(msg PluginQueueMsg) tea.Cmd {
 		if msg.Index < 0 || msg.Index >= m.playlist.Len() {
 			return nil
 		}
-		refresh := m.scrobbleCurrent()
-		m.playlist.SetIndex(msg.Index)
-		cmd := m.playCurrentTrack()
-		m.notifyPlayback()
-		return tea.Batch(refresh, cmd)
+		return m.playIndex(msg.Index)
 
 	case "remove":
-		m.removeIndex(msg.Index)
-		return nil
+		cmd, _ := m.removeTrack(msg.Index, false)
+		return cmd
 
 	case "move":
-		if m.playlist.Move(msg.Index, msg.To) {
-			m.adjustScroll()
-		}
-		return nil
+		cmd, _ := m.moveTrack(msg.Index, msg.To)
+		return cmd
 	}
 	return nil
 }
@@ -66,35 +60,8 @@ func (m *Model) appendPluginTracks(tracks ...playlist.Track) tea.Cmd {
 	if len(tracks) == 0 {
 		return nil
 	}
-	m.playlist.Add(tracks...)
-	m.loadedPlaylist = ""
-	m.notifyPlayback()
-	return m.rearmPreload()
-}
-
-// removeIndex removes the track at idx, mirroring the side effects of the
-// interactive delete: stop playback if the active track was removed and clamp
-// the playlist cursor.
-func (m *Model) removeIndex(idx int) {
-	if idx < 0 || idx >= m.playlist.Len() {
-		return
-	}
-	wasActive := idx == m.playlist.Index()
-	if !m.playlist.Remove(idx) {
-		return
-	}
-	m.normalizeQueueOverlay()
-	if wasActive {
-		m.stopPlayback()
-		m.player.ClearPreload()
-	}
-	if newLen := m.playlist.Len(); newLen == 0 {
-		m.plCursor = 0
-	} else if m.plCursor >= newLen {
-		m.plCursor = newLen - 1
-	}
-	m.adjustScroll()
-	m.notifyPlayback()
+	m.appendTracks(tracks...)
+	return m.rearmStalePreload()
 }
 
 // resolvePluginAddCmd resolves a plugin-supplied path/URL off the UI thread,

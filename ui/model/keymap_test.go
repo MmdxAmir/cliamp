@@ -1,9 +1,7 @@
 package model
 
 import (
-	"os"
-	"path/filepath"
-	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,48 +10,52 @@ import (
 	"github.com/bjarneo/cliamp/playlist"
 )
 
-// TestReservedKeysCoversHandleKey is a drift guard: every `case "..."` clause in
-// the main handleKey switch (keys.go) must be represented in commandRegistry.
+// mainKeyPath lists the functions of the main key path: handleKey without
+// the overlays and the focused areas that own a command mode. The path ends
+// in the plugin forward of handleMainKey. The test adds the keys of the
+// provider shortcut helpers through shortcutKeys.
+var mainKeyPath = []string{"handleKey", "handleGlobalKey", "handleMainKey"}
+
+// focusKeyHandlers maps the handlers that handleKey calls for a focused area
+// to the command mode of that area.
+var focusKeyHandlers = map[string]commandMode{
+	"handleProvSearchKey":   commandModeProviderSearch,
+	"handleProviderPaneKey": commandModeProvider,
+	"handleSpeedKey":        commandModeSpeed,
+	"handleProvPillKey":     commandModeProviderPill,
+}
+
+// TestReservedKeysCoversHandleKey is a drift guard. Every key that the main
+// key path handles must be in commandRegistry, so a plugin cannot bind a key
+// that cliamp takes before the plugin forward. The keys of shortcutKeys
+// count as keys of the function that calls the shortcut helper.
 func TestReservedKeysCoversHandleKey(t *testing.T) {
-	path := filepath.Join("keys.go")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Find every `case "X", "Y", ...:` clause in keys.go. We intentionally
-	// over-collect (subhandler switches too) and then filter to the main
-	// handler's section between "func (m *Model) handleKey" and its close.
-	src := string(data)
-	// The main dispatch switch is anchored by its comment header; overlays
-	// and subhandlers have their own switches with different anchors.
-	start := strings.Index(src, "// Vim-style count prefix")
-	if start < 0 {
-		t.Fatal("could not locate main dispatch anchor in keys.go")
-	}
-	// Bound at the next top-level function declaration to avoid scanning
-	// into helper functions below handleKey.
-	body := src[start:]
-	if end := strings.Index(body, "\nfunc "); end > 0 {
-		body = body[:end]
-	}
-
-	caseRe := regexp.MustCompile(`case ("[^"]+"(?:, "[^"]+")*):`)
-	tokenRe := regexp.MustCompile(`"([^"]+)"`)
+	funcs := modelFuncs(t)
 	reserved := ReservedKeys()
-
-	var missing []string
-	for _, m := range caseRe.FindAllStringSubmatch(body, -1) {
-		for _, tok := range tokenRe.FindAllStringSubmatch(m[1], -1) {
-			key := tok[1]
+	for _, name := range mainKeyPath {
+		fd := lookupFunc(t, funcs, name)
+		keys := handlerKeys(t, fd)
+		if len(keys) == 0 {
+			t.Errorf("%s handles no keys. The walker cannot read it.", name)
+		}
+		keys = append(keys, shortcutKeys(t, funcs, methodCalls(fd))...)
+		var missing []string
+		for _, key := range keys {
 			if !reserved[key] {
 				missing = append(missing, key)
 			}
 		}
-	}
+		if len(missing) > 0 {
+			t.Errorf("%s handles keys that commandRegistry does not list: %q\nAdd them to command_registry.go so plugin binds cannot shadow them.", name, missing)
+		}
 
-	if len(missing) > 0 {
-		t.Fatalf("handleKey has case clauses not covered by coreReservedKeys: %v\nAdd these to keymap.go so plugin binds can't shadow them.", missing)
+		// Each handler that the function calls is on the main key path or
+		// owns the command mode of a focused area.
+		for _, callee := range handlerCalls(fd) {
+			if !slices.Contains(mainKeyPath, callee) && focusKeyHandlers[callee] == 0 {
+				t.Errorf("%s calls %s. Add it to mainKeyPath or focusKeyHandlers.", name, callee)
+			}
+		}
 	}
 }
 
@@ -108,7 +110,7 @@ func TestKeymapEnterRunsSelectedCommand(t *testing.T) {
 		{
 			name: "load URL from the playlist",
 			key:  "u", action: "Load URL (stream/playlist)",
-			check: func(m *Model) bool { return m.urlInputting },
+			check: func(m *Model) bool { return m.urlInput.active },
 		},
 		{
 			name: "playlist search from the playlist",
@@ -118,7 +120,7 @@ func TestKeymapEnterRunsSelectedCommand(t *testing.T) {
 		{
 			name: "jump to time from the playlist",
 			key:  "Ctrl+J", action: "Jump to time",
-			check: func(m *Model) bool { return m.jumping },
+			check: func(m *Model) bool { return m.jump.active },
 		},
 		{
 			name: "queue manager from the playlist",
@@ -199,6 +201,56 @@ func TestKeymapEnterExplainsCommandsItCannotRun(t *testing.T) {
 			}
 			if !strings.Contains(m.status.text, tt.want) {
 				t.Fatalf("status = %q, want %q", m.status.text, tt.want)
+			}
+		})
+	}
+}
+
+// The keymap lists the commands of the playlist manager screen that is open,
+// the same commands as that screen's help line.
+func TestKeymapContextFollowsPlaylistManagerScreen(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		screen      plMgrScreenType
+		wantMode    commandMode
+		wantLabel   string
+		wantRuns    []string
+		wantMissing []string
+	}{
+		{name: "list", screen: plMgrScreenList, wantMode: commandModePlaylistManager, wantLabel: "Playlists", wantRuns: []string{"Select"}},
+		{name: "tracks", screen: plMgrScreenTracks, wantMode: commandModePlaylistManager, wantLabel: "Playlists", wantRuns: []string{"Select"}},
+		{
+			name: "dirs", screen: plMgrScreenDirs,
+			wantMode: commandModePlaylistManagerDirs, wantLabel: "Directory Sources",
+			wantRuns:    []string{"Add dir", "Remove", "Toggle recursive"},
+			wantMissing: []string{"Select", "Add to the current playlist"},
+		},
+		{name: "new name", screen: plMgrScreenNewName, wantMode: commandModePlaylistManagerInput, wantLabel: "Playlist Name"},
+		{name: "rename", screen: plMgrScreenRename, wantMode: commandModePlaylistManagerInput, wantLabel: "Playlist Name"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := keybindingTestModel()
+			m.plManager = plManagerState{visible: true, screen: tc.screen}
+
+			mode, label := m.keymapContext()
+			if mode != tc.wantMode || label != tc.wantLabel {
+				t.Fatalf("keymapContext() = %v %q, want %v %q", mode, label, tc.wantMode, tc.wantLabel)
+			}
+			runs := map[string]bool{}
+			for _, entry := range m.buildKeymapEntries() {
+				if entry.run != "" {
+					runs[entry.action] = true
+				}
+			}
+			for _, action := range tc.wantRuns {
+				if !runs[action] {
+					t.Errorf("keymap cannot run %q on this screen", action)
+				}
+			}
+			for _, action := range tc.wantMissing {
+				if runs[action] {
+					t.Errorf("keymap runs %q, which this screen does not handle", action)
+				}
 			}
 		})
 	}

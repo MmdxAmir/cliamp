@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/playlist"
 )
 
@@ -337,30 +338,118 @@ func TestPlaylistDedupeAndSort(t *testing.T) {
 	}
 }
 
+// The write commands change a playlist in one locked update. A command
+// that finds nothing to change, or that fails, leaves the file as it is.
+func TestPlaylistWriteCommandsLeaveTheFileAlone(t *testing.T) {
+	tests := []struct {
+		name    string
+		run     func() error
+		wantErr bool
+	}{
+		{name: "dedupe without duplicates", run: func() error { return PlaylistDedupe("mix") }},
+		{name: "sort by an unknown key", run: func() error { return PlaylistSort("mix", "color") }, wantErr: true},
+		{name: "dedupe of Recently Played", run: func() error { return PlaylistDedupe("Recently Played") }, wantErr: true},
+		{name: "sort of Favorites", run: func() error { return PlaylistSort("Favorites", "title") }, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := setupTestEnv(t)
+			p, err := newProvider()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := p.SavePlaylist("mix", []playlist.Track{{Path: filepath.Join(home, "b.mp3"), Title: "B"}, {Path: filepath.Join(home, "a.mp3"), Title: "A"}}); err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(home, ".config", "cliamp", "playlists")
+			before, err := os.ReadFile(filepath.Join(dir, "mix.toml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := tt.run(); (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, want an error %v", err, tt.wantErr)
+			}
+			after, err := os.ReadFile(filepath.Join(dir, "mix.toml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(after) != string(before) {
+				t.Fatalf("mix.toml changed:\n%s", after)
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("playlist files = %v, want only mix.toml", entries)
+			}
+		})
+	}
+}
+
+// TestPlaylistDoctorFixPrunesMissing checks that --fix prunes missing files
+// from playlist files. It reports a missing favorite, but the virtual
+// Favorites playlist does not stop the prune of the other playlists.
 func TestPlaylistDoctorFixPrunesMissing(t *testing.T) {
-	home := setupTestEnv(t)
-	a := filepath.Join(home, "a.mp3")
-	missing := filepath.Join(home, "missing.mp3")
-	writeAudioFile(t, a)
-	if err := PlaylistCreate("mix", nil, "", nil); err != nil {
-		t.Fatalf("PlaylistCreate empty: %v", err)
+	tests := []struct {
+		name            string
+		doctor          string // playlist name for doctor; "" checks all
+		missingFavorite bool
+		wantErr         bool
+	}{
+		{name: "one playlist", doctor: "mix"},
+		{name: "all playlists", doctor: ""},
+		{name: "all playlists with a missing favorite", doctor: "", missingFavorite: true},
+		{name: "favorites by name", doctor: favorites.PlaylistName, missingFavorite: true},
 	}
-	p, err := newProvider()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := p.SavePlaylist("mix", []playlist.Track{{Path: a, Title: "A"}, {Path: missing, Title: "Missing"}}); err != nil {
-		t.Fatalf("SavePlaylist: %v", err)
-	}
-	if err := PlaylistDoctor("mix", true); err != nil {
-		t.Fatalf("PlaylistDoctor: %v", err)
-	}
-	tracks, err := p.Tracks("mix")
-	if err != nil {
-		t.Fatalf("Tracks: %v", err)
-	}
-	if len(tracks) != 1 || tracks[0].Path != a {
-		t.Fatalf("tracks after doctor = %+v", tracks)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := setupTestEnv(t)
+			a := filepath.Join(home, "a.mp3")
+			missing := filepath.Join(home, "missing.mp3")
+			writeAudioFile(t, a)
+			p, err := newProvider()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := p.SavePlaylist("mix", []playlist.Track{{Path: a, Title: "A"}, {Path: missing, Title: "Missing"}}); err != nil {
+				t.Fatalf("SavePlaylist: %v", err)
+			}
+			if tt.missingFavorite {
+				if _, err := favorites.New().Toggle(playlist.Track{Path: missing, Title: "Missing"}); err != nil {
+					t.Fatalf("Toggle: %v", err)
+				}
+			}
+			out, err := captureStdout(t, func() error { return PlaylistDoctor(tt.doctor, true) })
+			if err != nil {
+				t.Fatalf("PlaylistDoctor: %v", err)
+			}
+			wantMix := 1
+			if tt.doctor == favorites.PlaylistName {
+				wantMix = 2
+			}
+			tracks, err := p.Tracks("mix")
+			if err != nil {
+				t.Fatalf("Tracks: %v", err)
+			}
+			if len(tracks) != wantMix || tracks[0].Path != a {
+				t.Fatalf("mix after doctor = %+v, want %d tracks", tracks, wantMix)
+			}
+			if !tt.missingFavorite {
+				return
+			}
+			if !strings.Contains(out, "[Favorites] missing: "+missing) {
+				t.Errorf("output = %q, want the missing favorite", out)
+			}
+			favs, err := p.Tracks(favorites.PlaylistName)
+			if err != nil {
+				t.Fatalf("Tracks(Favorites): %v", err)
+			}
+			if len(favs) != 1 {
+				t.Errorf("favorites after doctor = %+v, want the missing favorite kept", favs)
+			}
+		})
 	}
 }
 

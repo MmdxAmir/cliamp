@@ -163,6 +163,11 @@ name = "Oslo, Norway"
 state = "Oslo"
 ```
 
+On Linux and macOS, a pin or unpin uses the latest file contents under a shared
+file lock, so it keeps the pins of other cliamp instances. As with favorites,
+the action follows the marker in this instance. If cliamp cannot read the file,
+`f` shows an error and does not change the file.
+
 ## Using your location
 
 Until you ask for it, cliamp does not work out where you are. A fresh install

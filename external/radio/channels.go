@@ -2,10 +2,8 @@ package radio
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -152,7 +150,7 @@ func fetchChannels(ctx context.Context, client *http.Client, u string) ([]Channe
 	var doc struct {
 		Stations []Channel `json:"stations"`
 	}
-	if err := getLimitedJSON(ctx, client, u, maxChannelsBody, &doc); err != nil {
+	if err := getJSON(ctx, client, u, maxChannelsBody, &doc); err != nil {
 		return nil, err
 	}
 	// Channels with songs come first: they are the playlists cliamp opens on.
@@ -197,7 +195,7 @@ func fetchChannelTracks(ctx context.Context, client *http.Client, u string) ([]p
 	var doc struct {
 		Tracks []channelSong `json:"tracks"`
 	}
-	if err := getLimitedJSON(ctx, client, u, maxChannelTracksBody, &doc); err != nil {
+	if err := getJSON(ctx, client, u, maxChannelTracksBody, &doc); err != nil {
 		return nil, err
 	}
 	tracks := make([]playlist.Track, 0, len(doc.Tracks))
@@ -215,24 +213,6 @@ func fetchChannelTracks(ctx context.Context, client *http.Client, u string) ([]p
 		})
 	}
 	return tracks, nil
-}
-
-// getLimitedJSON decodes the JSON document at u into v, reading at most limit
-// bytes.
-func getLimitedJSON(ctx context.Context, client *http.Client, u string, limit int64, v any) error {
-	resp, err := get(ctx, client, u)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, limit))
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(body, v); err != nil {
-		return fmt.Errorf("decode: %w", err)
-	}
-	return nil
 }
 
 func isHTTPURL(raw string) bool {
