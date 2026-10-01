@@ -220,6 +220,8 @@ func downloadAndReplace(url, destPath, expectedHash string) error {
 		return fmt.Errorf("downloading: %w", err)
 	}
 	defer resp.Body.Close()
+	// The headers arrived, so the first body bytes get a full idle window.
+	idle.Reset(downloadIdleTimeout)
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed: %s", resp.Status)

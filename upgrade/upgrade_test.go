@@ -470,6 +470,19 @@ func TestDownloadIdleTimeout(t *testing.T) {
 			},
 		},
 		{
+			name: "slow headers then a short pause before the body",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				// Each wait is shorter than the idle timeout, but the
+				// two waits together are longer.
+				time.Sleep(200 * time.Millisecond)
+				w.Header().Set("Content-Length", strconv.Itoa(len(newContent)))
+				w.WriteHeader(http.StatusOK)
+				w.(http.Flusher).Flush()
+				time.Sleep(200 * time.Millisecond)
+				_, _ = w.Write(newContent)
+			},
+		},
+		{
 			name: "body stops sending",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Length", strconv.Itoa(len(newContent)))
