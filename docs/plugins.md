@@ -414,7 +414,7 @@ local body, status = cliamp.http.post(url, {
 })
 ```
 
-The timeout is 5 seconds. The response body limit is 1 MB.
+The timeout is 5 seconds. A request also ends when the time limit of the running callback ends, such as the 50 ms limit of a visualizer `render`. The response body limit is 1 MB.
 
 ### cliamp.fs
 
@@ -428,7 +428,7 @@ cliamp.fs.mkdir(path)             -- create directory (recursive)
 cliamp.fs.listdir(path)           --> {names}, err
 ```
 
-You can write only to the system temp directory (`/tmp/` on Unix), `~/.config/cliamp/`, `~/.local/share/cliamp/`, and `~/Music/cliamp/`. In `~/.config/cliamp/`, you cannot write to the `plugins/` directory, `config.toml`, `radios.toml`, `cliamp.sock`, `cliamp.sock.pid`, or `plugins.log`. You can read from any path. On Windows, when `HOME` is unset, the config directory resolves to `%APPDATA%\cliamp`.
+You can write only to the system temp directory (`/tmp/` on Unix), `~/.config/cliamp/`, `~/.local/share/cliamp/`, and `~/Music/cliamp/`. In `~/.config/cliamp/`, you cannot write to the `plugins/` directory, `config.toml`, `radios.toml`, `cliamp.sock`, `cliamp.sock.pid`, or `plugins.log`. You can read from any path. `cliamp.fs.read` reads only regular files. For a FIFO, a device, or a directory, it returns `nil` and an error, because a read of such a file can block without a limit. On Windows, when `HOME` is unset, the config directory resolves to `%APPDATA%\cliamp`.
 
 ### cliamp.json
 
@@ -526,7 +526,7 @@ cliamp.notify("Song Title")                -- notification with title only
 cliamp.notify("Song Title", "Artist Name") -- notification with title and body
 ```
 
-This sends a desktop notification through `notify-send`. It works with mako, dunst, and other notification daemons.
+This sends a desktop notification through `notify-send`. It works with mako, dunst, and other notification daemons. cliamp stops `notify-send` after 2 seconds, or earlier when the time limit of the running callback ends.
 
 ### cliamp.exec (requires permissions)
 
@@ -716,7 +716,7 @@ You can use `os.time()`, `os.date()`, `os.clock()`, and `os.getenv()`. `os.geten
 
 ### File system restrictions
 
-**Reads:** You can read from any path, up to 1 MB for each read.
+**Reads:** You can read any regular file, up to 1 MB for each read.
 
 **Writes/removes/mkdir** work only in these directories:
 

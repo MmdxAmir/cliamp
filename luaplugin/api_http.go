@@ -87,7 +87,7 @@ func doHTTP(L *lua.LState, method string) int {
 		}
 	}
 
-	req, err := http.NewRequest(method, rawURL, bodyReader)
+	req, err := http.NewRequestWithContext(callContext(L), method, rawURL, bodyReader)
 	if err != nil {
 		return pushErr(L, err.Error())
 	}

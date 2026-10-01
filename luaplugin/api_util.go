@@ -1,6 +1,21 @@
 package luaplugin
 
-import lua "github.com/yuin/gopher-lua"
+import (
+	"context"
+
+	lua "github.com/yuin/gopher-lua"
+)
+
+// callContext returns the context of the Lua call that runs on L, or
+// context.Background when L runs outside a call. A Go API that can block
+// passes it on, so the time limit of the call and the stop at Close also end
+// the wait. callLocked stops only the Lua instructions.
+func callContext(L *lua.LState) context.Context {
+	if ctx := L.Context(); ctx != nil {
+		return ctx
+	}
+	return context.Background()
+}
 
 // permitted reports whether p declared perm. The first denial of each
 // permission logs one warning that names api. It runs from Lua, under p.mu.

@@ -5,9 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -1048,21 +1052,67 @@ func TestVisualizerHookControlDuringRender(t *testing.T) {
 
 // A render that runs past renderTimeout stops, and RenderVis returns the last
 // frame.
+// A render that waits in a Go API also ends at renderTimeout, because each
+// API that can block uses the call context. Before, an HTTP request, a
+// notify-send run or the read of a FIFO held the UI goroutine.
 func TestRenderVisTimeout(t *testing.T) {
 	tests := []struct {
-		name string
-		body string
+		name  string
+		body  func(t *testing.T) string
+		frame string // the frame that RenderVis returns
 	}{
-		{"busy loop", "while true do end"},
-		{"sleep", "cliamp.sleep(10)"},
+		{"busy loop", func(*testing.T) string { return "while true do end" }, "frame-1"},
+		{"sleep", func(*testing.T) string { return "cliamp.sleep(10)" }, "frame-1"},
+		{"http request", func(t *testing.T) string {
+			release := make(chan struct{})
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				select {
+				case <-r.Context().Done():
+				case <-release:
+				}
+			}))
+			t.Cleanup(srv.Close)
+			t.Cleanup(func() { close(release) })
+			// The test server is on loopback, which the real client blocks.
+			old := httpClient
+			httpClient = srv.Client()
+			httpClient.Timeout = 2 * time.Second
+			t.Cleanup(func() { httpClient = old })
+			return fmt.Sprintf("cliamp.http.get(%q)", srv.URL)
+		}, "frame-1"},
+		{"notify", func(t *testing.T) string {
+			if runtime.GOOS == "windows" {
+				t.Skip("needs a shell script as notify-send")
+			}
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "notify-send"), []byte("#!/bin/sh\nexec sleep 3\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			return `cliamp.notify("title")`
+		}, "frame-1"},
+		{"read of a FIFO", func(t *testing.T) string {
+			mkfifo, err := exec.LookPath("mkfifo")
+			if err != nil {
+				t.Skip("mkfifo is not available")
+			}
+			path := filepath.Join(t.TempDir(), "fifo")
+			if out, err := exec.Command(mkfifo, path).CombinedOutput(); err != nil {
+				t.Skipf("mkfifo: %v: %s", err, out)
+			}
+			// fs.read refuses the FIFO at once, so render finishes.
+			return fmt.Sprintf("assert(not cliamp.fs.read(%q))", path)
+		}, "frame-2"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			body := tt.body(t)
 			m := newTestManager()
+			m.logger = newPluginLogger(filepath.Join(t.TempDir(), pluginLogName))
 			loadTestPlugin(t, m, "slow-vis", `
 				local v = plugin.register({name = "slow-vis", type = "visualizer"})
 				function v:render(bands, frame)
-					if frame > 1 then `+tt.body+` end
+					if frame > 1 then `+body+` end
 					return "frame-" .. frame
 				end
 			`)
@@ -1077,8 +1127,8 @@ func TestRenderVisTimeout(t *testing.T) {
 			if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 				t.Errorf("RenderVis() took %v, want about %v", elapsed, renderTimeout)
 			}
-			if got != "frame-1" {
-				t.Errorf("RenderVis() = %q, want the last frame frame-1", got)
+			if got != tt.frame {
+				t.Errorf("RenderVis() = %q, want %q", got, tt.frame)
 			}
 		})
 	}

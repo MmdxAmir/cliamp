@@ -1,12 +1,14 @@
 package luaplugin
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 
 	lua "github.com/yuin/gopher-lua"
 
@@ -182,6 +184,27 @@ func isWithin(path, dir string) bool {
 	return true
 }
 
+// openRegular opens path for reading and fails when it is not a regular
+// file. A read of a FIFO or a device can block without limit, and the read
+// runs under the plugin lock, maybe in a render on the UI goroutine.
+// O_NONBLOCK keeps the open of a FIFO without a writer from blocking.
+func openRegular(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		f.Close()
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	return f, nil
+}
+
 // registerFSAPI adds cliamp.fs.{write,append,read,remove,exists} to the cliamp table.
 func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 	tbl := L.NewTable()
@@ -231,7 +254,7 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 	// cliamp.fs.read(path) -> string (max 1MB)
 	L.SetField(tbl, "read", L.NewFunction(func(L *lua.LState) int {
 		path := L.CheckString(1)
-		f, err := os.Open(path)
+		f, err := openRegular(path)
 		if err != nil {
 			return pushErr(L, err.Error())
 		}
