@@ -117,9 +117,13 @@ func argsContext(ctx context.Context, args []string) (Result, error) {
 			}
 			continue
 		}
-		matches, err := filepath.Glob(arg)
-		if err != nil || len(matches) == 0 {
-			matches = []string{arg}
+		// A path that exists is taken as is. Its brackets or other glob
+		// metacharacters could otherwise match a sibling instead of itself.
+		matches := []string{arg}
+		if _, err := os.Lstat(arg); err != nil {
+			if m, _ := filepath.Glob(arg); len(m) > 0 {
+				matches = m
+			}
 		}
 		for _, path := range matches {
 			if playlist.IsLocalM3U(path) {
