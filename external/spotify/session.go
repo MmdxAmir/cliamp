@@ -611,11 +611,12 @@ func (s *Session) initPlayer() error {
 // independently of that lifetime.
 //
 // Holds s.mu.RLock() across the librespot network call. Multiple concurrent
-// NewStream / webAPIOnce callers can run in parallel (RLock is shared), so rapid
-// track skipping does not serialize. reconnect() and Close() take the full
-// Lock and will wait for in-flight callers to finish before tearing down the
-// player — without this, the swap could call oldPlayer.Close() while we are
-// still reading from it.
+// NewStream callers can run in parallel (RLock is shared), so rapid track
+// skipping does not serialize. reconnect() and Close() take the full Lock and
+// will wait for in-flight callers to finish before tearing down the player —
+// without this, the swap could call oldPlayer.Close() while we are still
+// reading from it. webAPIOnce holds the RLock only to read the token source,
+// not during its HTTP call.
 func (s *Session) NewStream(ctx context.Context, spotID librespot.SpotifyId, bitrate int, positionMs int64) (*librespotPlayer.Stream, context.CancelFunc, error) {
 	streamCtx, cancel := context.WithCancel(context.Background())
 	client := newSpotifyStreamHTTPClient(streamCtx, http.DefaultTransport)
@@ -663,7 +664,7 @@ func (s *Session) ReconnectInteractive(ctx context.Context) error {
 // window where s.sess/s.player are nil (which would crash concurrent callers).
 //
 // The swap-and-teardown phase is done under s.mu (full Lock), which waits for
-// any in-flight NewStream / webAPIOnce RLockers to drain. This guarantees that
+// any in-flight NewStream RLockers to drain. This guarantees that
 // oldPlayer.Close() is never called while a NewStream is still using the
 // old player pointer.
 func (s *Session) reconnect(ctx context.Context, build func(context.Context, string) (*Session, error)) error {
@@ -677,8 +678,8 @@ func (s *Session) reconnect(ctx context.Context, build func(context.Context, str
 	}
 
 	// Swap and tear down the old session under a single write lock so
-	// in-flight NewStream / webAPIOnce calls finish before oldPlayer.Close()
-	// runs. The expensive build() above happened lock-free.
+	// in-flight NewStream calls finish before oldPlayer.Close() runs. The
+	// expensive build() above happened lock-free.
 	s.mu.Lock()
 	oldPlayer := s.player
 	oldSess := s.sess

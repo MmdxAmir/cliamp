@@ -60,7 +60,7 @@ var albumSortTypes = []provider.SortType{
 
 // QobuzProvider implements playlist.Provider backed by the Qobuz API. Tracks
 // carry qobuz:// URIs. ResolveSource turns them into signed stream URLs when
-// playback starts. stream.go holds the URL registry.
+// playback starts. providers.go marks the resolved URL as Buffered.
 type QobuzProvider struct {
 	quality int
 

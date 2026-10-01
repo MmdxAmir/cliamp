@@ -55,7 +55,8 @@ var albumSortTypes = []provider.SortType{
 
 // TidalProvider implements playlist.Provider backed by Tidal's private client
 // API. Tracks carry tidal:// URIs; ResolveSource turns them into playable
-// sources when playback starts (see stream.go for the URL registry).
+// sources when playback starts. providers.go marks the resolved URL as
+// Buffered.
 type TidalProvider struct {
 	quality      string // normalized Tidal audioquality value
 	clientID     string
