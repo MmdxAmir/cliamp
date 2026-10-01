@@ -59,7 +59,9 @@ initial_directory = "~/Music"
 seek_large_step_sec = 30
 
 # EQ preset: "Flat", "Rock", "Pop", "Jazz", "Classical",
-#             "Bass Boost", "Treble Boost", "Vocal", "Electronic", "Acoustic"
+#             "Bass Boost", "Treble Boost", "Vocal", "Electronic", "Acoustic",
+#             "Hip-Hop", "R&B", "Loudness", "Late Night", "Podcast",
+#             "Small Speakers"
 # Leave empty or "Custom" to use manual eq values below
 eq_preset = "Flat"
 

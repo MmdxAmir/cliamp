@@ -101,3 +101,48 @@ func TestDocsNameProviderCapabilities(t *testing.T) {
 		})
 	}
 }
+
+// TestDocsProviderKeys checks the provider values that the example config
+// and configuration.md list against providerKeys. The example names the
+// YouTube providers as one group.
+func TestDocsProviderKeys(t *testing.T) {
+	youtube := []string{"yt", "youtube", "ytmusic"}
+	var all, other []string
+	for _, pk := range providerKeys {
+		all = append(all, pk.key)
+		if !slices.Contains(youtube, pk.key) {
+			other = append(other, pk.key)
+		}
+	}
+	tests := []struct {
+		file string
+		list *regexp.Regexp // captures the list of provider values
+		name *regexp.Regexp // captures one value of the list
+		want []string
+	}{
+		{"config.toml.example", regexp.MustCompile(`(?m)^# Default provider on startup: (.+)$`), regexp.MustCompile(`"([a-z]+)"`), other},
+		{filepath.Join("docs", "configuration.md"), regexp.MustCompile(`(?m)^Valid values: (.+?)\. `), regexp.MustCompile("`([a-z]+)`"), all},
+	}
+	for _, tt := range tests {
+		t.Run(tt.file, func(t *testing.T) {
+			data, err := os.ReadFile(tt.file)
+			if err != nil {
+				t.Fatalf("read %s: %v", tt.file, err)
+			}
+			m := tt.list.FindStringSubmatch(string(data))
+			if m == nil {
+				t.Fatalf("%s has no match for %q", tt.file, tt.list)
+			}
+			var got []string
+			for _, v := range tt.name.FindAllStringSubmatch(m[1], -1) {
+				got = append(got, v[1])
+			}
+			want := slices.Clone(tt.want)
+			slices.Sort(got)
+			slices.Sort(want)
+			if !slices.Equal(got, want) {
+				t.Errorf("%s lists %v, want %v", tt.file, got, want)
+			}
+		})
+	}
+}

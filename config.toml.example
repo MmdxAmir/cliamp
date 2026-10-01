@@ -49,7 +49,9 @@ seek_large_step_sec = 30
 # audio_device = "alsa_output.usb-FiiO_K5_Pro-00.analog-stereo"
 
 # EQ preset: "Flat", "Rock", "Pop", "Jazz", "Classical",
-#             "Bass Boost", "Treble Boost", "Vocal", "Electronic", "Acoustic"
+#             "Bass Boost", "Treble Boost", "Vocal", "Electronic", "Acoustic",
+#             "Hip-Hop", "R&B", "Loudness", "Late Night", "Podcast",
+#             "Small Speakers"
 # Leave empty or "Custom" to use manual eq values below
 eq_preset = "Flat"
 
@@ -58,7 +60,7 @@ eq_preset = "Flat"
 # Saved Custom curve; applied when eq_preset is "Custom" or empty
 eq = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-# Default provider on startup: "cliamp" (the cliamp radio channels), "radio", "podcast", "navidrome", "lyrion", "spotify", "qobuz", "tidal", "plex", "jellyfin", "emby", "soundcloud", "mixcloud", "netease", "audiobookshelf", or a YouTube provider
+# Default provider on startup: "cliamp" (the cliamp radio channels), "radio", "podcast", "navidrome", "lyrion", "spotify", "qobuz", "tidal", "plex", "jellyfin", "emby", "soundcloud", "mixcloud", "netease", "yandex", "audiobookshelf", or a YouTube provider
 # provider = "cliamp"
 
 # Simplified mode: artist/title and time strip without a visualizer or playlist.
@@ -94,7 +96,7 @@ eq = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 # UI theme name (check ~/.config/cliamp/themes/ for available themes)
 # theme = "Tokyo Night"
 
-# Visualizer mode: Bars, BarsDot, Rain, BarsOutline, Bricks, Columns, ClassicPeak, Wave, Scatter, Flame, Retro, Pulse, Matrix, Binary, Sakura, Firework, Bubbles, Logo, Terrain, Scope, Heartbeat, Butterfly, Ascii, Firefly, Mosaic, Sand, Geyser, ClassicLED, Stereo, Mirror, or None
+# Visualizer mode: Bars, BarsDot, Rain, BarsOutline, Bricks, Columns, ClassicPeak, Wave, Scatter, Flame, Retro, Pulse, Matrix, Binary, Sakura, Firework, Bubbles, Logo, Terrain, Scope, Heartbeat, Butterfly, Ascii, Firefly, Mosaic, Sand, Geyser, ClassicLED, Stereo, Mirror, Omarchy, RedSector, or None
 # Mirror draws tapered Braille bars around a persistent horizontal center axis.
 # visualizer = "Bars"
 
