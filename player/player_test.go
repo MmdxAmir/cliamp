@@ -94,6 +94,61 @@ func TestCommitYTDLSeekDoesNotReplaceNewTrack(t *testing.T) {
 	}
 }
 
+// SeekYTDL snapshots the current pipeline and mutes it later. A skip or a
+// newer seek can land between the two, and the mute must then leave the new
+// source alone.
+func TestMuteYTDLSeekSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		change   func(p *Player, newer *trackPipeline)
+		wantMute bool
+	}{
+		{name: "snapshot still current", wantMute: true},
+		{name: "another track started", change: func(p *Player, newer *trackPipeline) {
+			p.current = newer
+			p.gapless.Replace(newer.stream)
+		}},
+		{name: "newer seek started", change: func(p *Player, newer *trackPipeline) {
+			p.CancelSeekYTDL()
+			p.gapless.Replace(newer.stream)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snapshot := newPlaybackTestDecoder()
+			newerDecoder := newPlaybackTestDecoder()
+			cur := &trackPipeline{
+				decoder:  snapshot,
+				stream:   snapshot,
+				format:   beep.Format{SampleRate: 100, NumChannels: 2, Precision: 2},
+				ytdlSeek: true,
+			}
+			newer := &trackPipeline{decoder: newerDecoder, stream: newerDecoder}
+			p := &Player{gapless: &gaplessStreamer{}, current: cur}
+			p.gapless.Replace(cur.stream)
+			gen := p.seekGen.Load()
+			want := beep.Streamer(cur.stream)
+			if tt.change != nil {
+				tt.change(p, newer)
+				want = newer.stream
+			}
+			if tt.wantMute {
+				want = nil
+			}
+
+			if _, muted := p.muteYTDLSeekSource(cur, gen); muted != tt.wantMute {
+				t.Fatalf("muteYTDLSeekSource() = %v, want %v", muted, tt.wantMute)
+			}
+			p.gapless.mu.Lock()
+			got := p.gapless.current
+			p.gapless.mu.Unlock()
+			if got != want {
+				t.Fatalf("gapless source = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
 func TestPlayPipelineForGenerationDiscardsStaleStart(t *testing.T) {
 	p := newTestPlayer()
 	p.SetPlaybackGeneration(2)

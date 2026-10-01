@@ -598,11 +598,11 @@ func (p *Player) SeekYTDL(d time.Duration) error {
 	// silence while the new pipeline is being built (which blocks on Peek
 	// waiting for yt-dlp data). Without this, the old audio keeps playing
 	// at the pre-seek position during the rebuild.
-	speaker.Lock()
-	curPos := cur.format.SampleRate.D(cur.decoder.Position()) + cur.streamOffset
-	p.gapless.Replace(nil)
-	p.gaplessAdvance.Store(false)
-	speaker.Unlock()
+	curPos, ok := p.muteYTDLSeekSource(cur, gen)
+	if !ok {
+		// Another track or a newer seek replaced cur after the snapshot.
+		return nil
+	}
 
 	newPos := max(curPos+d, 0)
 	if cur.knownDuration > 0 && newPos >= cur.knownDuration {
@@ -625,6 +625,23 @@ func (p *Player) SeekYTDL(d time.Duration) error {
 		go closePipelines(tp)
 	}
 	return nil
+}
+
+// muteYTDLSeekSource reads the position of cur and silences it while SeekYTDL
+// builds the replacement. It returns false and leaves the source alone when
+// another track or a newer seek replaced cur after the snapshot. It checks
+// under the same locks that commitYTDLSeek uses.
+func (p *Player) muteYTDLSeekSource(cur *trackPipeline, gen int64) (time.Duration, bool) {
+	speaker.Lock()
+	defer speaker.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.current != cur || p.seekGen.Load() != gen {
+		return 0, false
+	}
+	p.gapless.Replace(nil)
+	p.gaplessAdvance.Store(false)
+	return cur.format.SampleRate.D(cur.decoder.Position()) + cur.streamOffset, true
 }
 
 // commitYTDLSeek swaps in a rebuilt seek pipeline only when it still belongs
