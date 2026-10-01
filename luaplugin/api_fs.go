@@ -52,6 +52,8 @@ func loadWriteRules() writeRules {
 	// A plugin that writes these could approve its own code in
 	// plugins/.trust.json, add a binary to the exec allowlist in config.toml,
 	// change the stations in radios.toml, break IPC, or erase what it logged.
+	// The IPC server reads the PID file at start. A live PID in it makes the
+	// next start fail with "cliamp is already running".
 	if pluginDir, err := appdir.PluginDir(); err == nil {
 		add(&r.deny, pluginDir)
 	}
@@ -61,6 +63,7 @@ func loadWriteRules() writeRules {
 		add(&r.deny, filepath.Join(configDir, pluginLogName))
 	}
 	add(&r.deny, ipc.DefaultSocketPath())
+	add(&r.deny, ipc.DefaultSocketPath()+".pid")
 	return r
 }
 

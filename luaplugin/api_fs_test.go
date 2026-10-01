@@ -230,6 +230,7 @@ func TestIsWriteAllowed(t *testing.T) {
 				{name: "config.toml through traversal", path: filepath.Join(cfg, "themes", "..", "config.toml")},
 				{name: "radios.toml", path: filepath.Join(cfg, "radios.toml")},
 				{name: "IPC socket", path: filepath.Join(cfg, "cliamp.sock")},
+				{name: "IPC PID file", path: filepath.Join(cfg, "cliamp.sock.pid")},
 				{name: "plugin log", path: filepath.Join(cfg, "plugins.log")},
 				{name: "plugins dir with other case", path: filepath.Join(cfg, "PLUGINS", "evil.lua"), want: !caseFolded},
 				{name: "config.toml with other case", path: filepath.Join(cfg, "Config.toml"), want: !caseFolded},
