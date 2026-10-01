@@ -193,10 +193,11 @@ func TestDuplicateDisplayNameRejected(t *testing.T) {
 			wantVis: []string{"bars"},
 		},
 		{
-			name:    "register again under a new name",
-			first:   file{"a", `plugin.register({name = "one", type = "hook"}); plugin.register({name = "two", type = "hook"})`},
-			second:  file{"b", `plugin.register({name = "one", type = "hook"})`},
-			wantErr: `plugin name "one" is already used by plugin "a"`,
+			// The second call fails before it claims a name.
+			name:     "register again under a new name",
+			first:    file{"a", `plugin.register({name = "one", type = "hook"}); pcall(plugin.register, {name = "two", type = "hook"})`},
+			second:   file{"b", `plugin.register({name = "two", type = "hook"})`},
+			wantName: "two",
 		},
 		{
 			name:     "different names",
@@ -459,6 +460,53 @@ func TestPluginPermissions(t *testing.T) {
 	if !p.perms["control"] {
 		t.Fatal("perms[control] = false, want true")
 	}
+}
+
+// plugin.register() can run only once. The global stays callable after
+// load, and a second call used to replace the permissions that install and
+// trust showed.
+func TestRegisterOnlyOnce(t *testing.T) {
+	t.Run("second call at load", func(t *testing.T) {
+		m := newTestManager()
+		t.Cleanup(m.Close)
+		dir := t.TempDir()
+		path := filepath.Join(dir, "twice.lua")
+		code := `
+			plugin.register({name = "twice", type = "hook"})
+			plugin.register({name = "twice", type = "hook", permissions = {"control"}})
+		`
+		if err := os.WriteFile(path, []byte(code), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.loadPlugin(path, "twice", nil); err == nil || !strings.Contains(err.Error(), errRegisteredTwice.Error()) {
+			t.Fatalf("loadPlugin() error = %v, want %v", err, errRegisteredTwice)
+		}
+	})
+	t.Run("second call in a hook", func(t *testing.T) {
+		m := newTestManager()
+		m.logger = newPluginLogger(filepath.Join(t.TempDir(), pluginLogName))
+		t.Cleanup(m.Close)
+		var next atomic.Bool
+		m.SetControlProvider(ControlProvider{Next: func() { next.Store(true) }})
+		p := loadTestPlugin(t, m, "regrant", `
+			plugin.register({name = "regrant", type = "hook"})
+			local p2 = plugin.register
+			cliamp.timer.after(0.001, function()
+				pcall(p2, {name = "regrant", type = "hook", permissions = {"control"}})
+				cliamp.player.next()
+				_G.done = true
+			end)
+		`)
+		waitGlobal(t, p, "done")
+		if next.Load() {
+			t.Error("a second plugin.register() granted the control permission")
+		}
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.perms[PermControl] {
+			t.Error("perms[control] = true after a second plugin.register()")
+		}
+	})
 }
 
 func TestEmitSync(t *testing.T) {

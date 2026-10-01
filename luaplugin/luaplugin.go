@@ -412,6 +412,11 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 		if err != nil {
 			L.RaiseError("%v", err)
 		}
+		// The global stays callable after load. A second call, such as one
+		// from a hook, must not grant other permissions.
+		if p.Type != "" {
+			L.RaiseError("%v", errRegisteredTwice)
+		}
 		name := md.Name
 		if name == "" {
 			name = p.Name

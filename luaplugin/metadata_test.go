@@ -79,6 +79,12 @@ func TestReadMetadata(t *testing.T) {
 			source:  `plugin.register({name = "x", type = "hook"}); plugin.register({name = "x"})`,
 			wantErr: `needs type = "hook" or "visualizer"`,
 		},
+		{
+			name: "second register call",
+			source: `plugin.register({name = "x", type = "hook"})
+				plugin.register({name = "x", type = "hook", permissions = {"exec"}})`,
+			wantErr: "can be called only once",
+		},
 		{name: "syntax error", source: `plugin.register({`, wantErr: "syntax error"},
 		{name: "endless loop before register", source: `while true do end`, wantErr: "context deadline exceeded"},
 		{name: "sandbox", source: `os.execute("true")`, wantErr: "non-function"},

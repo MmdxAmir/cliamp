@@ -458,6 +458,9 @@ func TestTrustMatchesRuntime(t *testing.T) {
 		{"missing type", `plugin.register({name = "p"})`, false},
 		{"unknown type", `plugin.register({name = "p", type = "visualiser"})`, false},
 		{"syntax error", `plugin.register({`, false},
+		{"second register call", `
+			plugin.register({name = "p", type = "hook"})
+			plugin.register({name = "p", type = "hook"})`, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

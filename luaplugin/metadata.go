@@ -26,6 +26,11 @@ type Metadata struct {
 // permissions.
 var knownPermissions = map[string]bool{PermControl: true, PermExec: true, PermKeymap: true}
 
+// errRegisteredTwice is the error of a second plugin.register() call. A
+// later call could otherwise replace the permissions that install and trust
+// showed.
+var errRegisteredTwice = errors.New("plugin.register() can be called only once")
+
 // parseRegisterOpts reads and checks the table passed to plugin.register().
 // The runtime and ReadMetadata both use it, so `cliamp plugins` accepts and
 // rejects the same plugins as the player.
@@ -86,6 +91,9 @@ func ReadMetadata(source string) (Metadata, error) {
 	pluginTbl := L.NewTable()
 	L.SetField(pluginTbl, "register", L.NewFunction(func(L *lua.LState) int {
 		got, err := parseRegisterOpts(L.CheckTable(1))
+		if err == nil && registered {
+			err = errRegisteredTwice
+		}
 		if err != nil {
 			regErr = err
 			L.RaiseError("%v", err)
