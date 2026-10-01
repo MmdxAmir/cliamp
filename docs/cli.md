@@ -204,6 +204,8 @@ cliamp playlist delete "Name"                   # delete entire playlist
 
 Sort keys: `track`, `title`, `artist`, `album`, `artist+album`, `path`.
 
+`playlist doctor --fix` prunes only playlist files. It reports a missing favorite and keeps it. To remove a favorite, run `cliamp playlist favorite Favorites --index N`.
+
 `--ssh` takes `host`, `user@host`, or `host:port`. `playlist enrich` connects to the port in each `ssh://` track path.
 
 See [playlists.md](playlists.md) for the TOML format. See [ssh-streaming.md](ssh-streaming.md) for remote playback.

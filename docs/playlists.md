@@ -373,6 +373,8 @@ cliamp playlist delete "Name"
 
 Use `track`, `title`, `artist`, `album`, `artist+album`, or `path` as sort keys.
 
+`playlist doctor --fix` prunes only playlist files. It reports a missing favorite and keeps it. To remove a favorite, run `cliamp playlist favorite Favorites --index N`.
+
 New playlist names reject path separators and non-portable file name characters.
 cliamp can still read and write existing playlist files with older Unix-only
 names.

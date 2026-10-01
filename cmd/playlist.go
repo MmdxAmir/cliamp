@@ -421,6 +421,8 @@ func PlaylistSort(name, by string) error {
 }
 
 // PlaylistDoctor reports missing local files and optionally prunes them.
+// fix prunes only playlist files. It reports a missing favorite and keeps
+// it, because Favorites is a virtual playlist.
 func PlaylistDoctor(name string, fix bool) error {
 	prov, err := newProvider()
 	if err != nil {
@@ -434,7 +436,7 @@ func PlaylistDoctor(name string, fix bool) error {
 		}
 		names = names[:0]
 		for _, pl := range lists {
-			if pl.Name != "Recently Played" {
+			if pl.Name != history.PlaylistName {
 				names = append(names, pl.Name)
 			}
 		}
@@ -453,6 +455,10 @@ func PlaylistDoctor(name string, fix bool) error {
 				totalMissing++
 				fmt.Printf("  [%s] missing: %s\n", plName, t.Path)
 			}
+		}
+		if fix && missing > 0 && plName == favorites.PlaylistName {
+			fmt.Println("Kept the missing favorites. To remove one, press f on it in the player or run cliamp playlist favorite Favorites --index N.")
+			continue
 		}
 		if fix && missing > 0 {
 			// Prune the tracks that are missing now, so a track that another
