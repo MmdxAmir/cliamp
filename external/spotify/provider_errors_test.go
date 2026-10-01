@@ -105,6 +105,39 @@ func TestWebAPIReportsLongRetryAfterWithoutWaiting(t *testing.T) {
 	}
 }
 
+// TestWebAPIUnauthorizedAsksForSignIn checks that a rejected access token
+// asks for sign-in, and that the error still carries the API status.
+func TestWebAPIUnauthorizedAsksForSignIn(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		status   int
+		wantAuth bool
+	}{
+		{name: "401 asks for sign-in", status: http.StatusUnauthorized, wantAuth: true},
+		{name: "403 does not", status: http.StatusForbidden},
+		{name: "500 does not", status: http.StatusInternalServerError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := stubSpotifyAPI("own", map[string]func(*http.Request) *http.Response{
+				"/v1/me/tracks": apiResponse(tt.status, `{"error":{"status":0,"message":"rejected"}}`),
+			})
+
+			_, err := p.Playlists()
+			if err == nil {
+				t.Fatal("Playlists() error = nil, want an error")
+			}
+			if got := errors.Is(err, playlist.ErrNeedsAuth); got != tt.wantAuth {
+				t.Errorf("errors.Is(%v, ErrNeedsAuth) = %v, want %v", err, got, tt.wantAuth)
+			}
+			if !hasStatus(err, tt.status) {
+				t.Errorf("error = %v, want it to wrap status %d", err, tt.status)
+			}
+		})
+	}
+}
+
 func TestTracksExplainsForbiddenPlaylist(t *testing.T) {
 	t.Parallel()
 	p := stubSpotifyAPI("own", map[string]func(*http.Request) *http.Response{

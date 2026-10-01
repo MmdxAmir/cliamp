@@ -93,7 +93,12 @@ func (p *SpotifyProvider) webAPIWithRetry(ctx context.Context, method, path stri
 			if readErr != nil {
 				return nil, fmt.Errorf("http status %s (failed to read body: %v)", resp.Status, readErr)
 			}
-			return nil, newAPIError(resp.StatusCode, respBody)
+			apiErr := newAPIError(resp.StatusCode, respBody)
+			// Spotify rejected the access token, so ask for sign-in.
+			if apiErr.status == http.StatusUnauthorized {
+				return nil, fmt.Errorf("%w: %w", playlist.ErrNeedsAuth, apiErr)
+			}
+			return nil, apiErr
 		}
 		return resp, nil
 	}
@@ -136,8 +141,8 @@ func (s *Session) webAPIOnce(ctx context.Context, method, path string, query url
 
 // bearer returns the OAuth2 access token for Web API and lyrics requests. The
 // token source refreshes an expired token. When ctx has ended, bearer returns
-// ctx.Err() and sends no refresh request. A session without a token source
-// returns playlist.ErrNeedsAuth.
+// ctx.Err() and sends no refresh request. A session without a token source,
+// or with a revoked refresh token, returns playlist.ErrNeedsAuth.
 func (s *Session) bearer(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -149,6 +154,9 @@ func (s *Session) bearer(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("spotify: web api token unavailable, sign in again: %w", playlist.ErrNeedsAuth)
 	}
 	tok, err := ts.Token()
+	if isInvalidGrant(err) {
+		return "", fmt.Errorf("spotify: web api token revoked, sign in again: %w", playlist.ErrNeedsAuth)
+	}
 	if err != nil {
 		return "", fmt.Errorf("refresh access token: %w", err)
 	}

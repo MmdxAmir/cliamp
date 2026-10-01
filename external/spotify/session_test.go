@@ -436,6 +436,13 @@ func TestSessionBearer(t *testing.T) {
 			wantCalls: 1,
 		},
 		{
+			name:      "refresh token revoked",
+			ctx:       context.Background(),
+			source:    func() (*oauth2.Token, error) { return nil, &oauth2.RetrieveError{ErrorCode: "invalid_grant"} },
+			wantErr:   playlist.ErrNeedsAuth,
+			wantCalls: 1,
+		},
+		{
 			name:    "ended context sends no refresh",
 			ctx:     cancelled,
 			source:  func() (*oauth2.Token, error) { return &oauth2.Token{AccessToken: "token"}, nil },
