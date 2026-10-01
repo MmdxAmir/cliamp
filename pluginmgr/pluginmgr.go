@@ -4,8 +4,6 @@ package pluginmgr
 
 import (
 	"bufio"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -173,8 +171,7 @@ func Install(source string, assumeYes ...bool) error {
 	if err != nil {
 		return fmt.Errorf("inspect plugin metadata: %w", err)
 	}
-	h := sha256.Sum256(body)
-	hash := hex.EncodeToString(h[:])
+	hash := plugintrust.Hash(body)
 	fmt.Fprintf(output, "Source: %s\nSHA-256: %s\nDeclared permissions: %s\nImplicit access: unrestricted reads; allowlisted writes; public HTTP\n",
 		source, hash, displayPermissions(md.Permissions))
 	yes := len(assumeYes) > 0 && assumeYes[0]
@@ -193,7 +190,7 @@ func Install(source string, assumeYes ...bool) error {
 	if err := fileutil.WriteFileAtomic(dest, body, 0o600); err != nil {
 		return fmt.Errorf("writing plugin: %w", err)
 	}
-	if _, err := plugintrust.Approve(dir, name, dest); err != nil {
+	if err := plugintrust.ApproveHash(dir, name, dest, hash); err != nil {
 		_ = os.Remove(dest)
 		return fmt.Errorf("recording plugin trust: %w", err)
 	}
@@ -223,16 +220,19 @@ func Trust(name string, assumeYes bool) error {
 	if _, err := plugintrust.Load(dir); err != nil {
 		return manifestError(dir, err)
 	}
-	info := extractMetadata(path)
-	if info.err != nil {
-		return fmt.Errorf("inspect plugin metadata: %w", info.err)
-	}
-	hash, err := plugintrust.HashFile(path)
+	// Read the file once, so the permissions and the hash that the prompt
+	// shows come from the same content.
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
+	md, err := luaplugin.ReadMetadata(string(data))
+	if err != nil {
+		return fmt.Errorf("inspect plugin metadata: %w", err)
+	}
+	hash := plugintrust.Hash(data)
 	fmt.Fprintf(output, "Plugin: %s\nSHA-256: %s\nDeclared permissions: %s\nImplicit access: unrestricted reads; allowlisted writes; public HTTP\n",
-		name, hash, displayPermissions(info.Permissions))
+		name, hash, displayPermissions(md.Permissions))
 	if !assumeYes {
 		fmt.Fprint(output, "Trust this plugin content? [y/N] ")
 		answer, readErr := bufio.NewReader(input).ReadString('\n')
@@ -244,8 +244,13 @@ func Trust(name string, assumeYes bool) error {
 			return errors.New("plugin trust not approved")
 		}
 	}
-	_, err = plugintrust.Approve(dir, name, path)
-	return err
+	if err := plugintrust.ApproveHash(dir, name, path, hash); err != nil {
+		if errors.Is(err, plugintrust.ErrHashMismatch) {
+			return fmt.Errorf("plugin %q changed after cliamp showed it; run `cliamp plugins trust %s` again", name, name)
+		}
+		return err
+	}
+	return nil
 }
 
 func validateName(name string) error {

@@ -105,3 +105,37 @@ func TestRevoke(t *testing.T) {
 		})
 	}
 }
+
+// ApproveHash approves only the content that the user saw. A change to the
+// file after the hash was shown leaves the manifest as it was.
+func TestApproveHash(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string // the file content when ApproveHash runs
+		wantErr error
+	}{
+		{"unchanged", "shown", nil},
+		{"changed after the prompt", "changed", ErrHashMismatch},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "example.lua")
+			if err := os.WriteFile(path, []byte(tt.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			shown := Hash([]byte("shown"))
+			if err := ApproveHash(dir, "example", path, shown); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ApproveHash() = %v, want %v", err, tt.wantErr)
+			}
+			m, err := Load(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, approved := m.Plugins["example"]
+			if approved != (tt.wantErr == nil) || (approved && got != shown) {
+				t.Errorf("manifest approval = %q, %v, want the shown hash only without an error", got, approved)
+			}
+		})
+	}
+}

@@ -2,6 +2,7 @@ package pluginmgr
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -619,6 +620,65 @@ func TestListDropsControlCharacters(t *testing.T) {
 			}
 			if lines := strings.Count(out.String(), "\n"); lines != 2 {
 				t.Errorf("List output = %q, want 2 lines", out.String())
+			}
+		})
+	}
+}
+
+// editOnRead stands for an edit of the plugin file while the trust prompt
+// waits. At the first read, it writes content to path. Then it answers y.
+type editOnRead struct {
+	path, content string
+	answer        io.Reader
+}
+
+func (r *editOnRead) Read(p []byte) (int, error) {
+	if r.answer == nil {
+		if r.content != "" {
+			if err := os.WriteFile(r.path, []byte(r.content), 0o644); err != nil {
+				return 0, err
+			}
+		}
+		r.answer = strings.NewReader("y\n")
+	}
+	return r.answer.Read(p)
+}
+
+// cliamp plugins trust approves only the content that it showed. Before, it
+// hashed the file again after the prompt, so an edit while the prompt waited
+// was approved.
+func TestTrustApprovesShownContent(t *testing.T) {
+	const shown = `plugin.register({ name = "p", type = "hook" })`
+	tests := []struct {
+		name  string
+		edit  string // the content that the file gets while the prompt waits
+		trust bool
+	}{
+		{"unchanged", "", true},
+		{"edited while the prompt waits", `plugin.register({ name = "p", type = "hook", permissions = {"exec"} })`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pluginDir, path := installForTest(t, "p", shown)
+			out := silenceOutput(t)
+			oldInput := input
+			input = &editOnRead{path: path, content: tt.edit}
+			t.Cleanup(func() { input = oldInput })
+
+			err := Trust("p", false)
+			if (err == nil) != tt.trust {
+				t.Fatalf("Trust() error = %v, want an error: %v", err, !tt.trust)
+			}
+			if !strings.Contains(out.String(), plugintrust.Hash([]byte(shown))) {
+				t.Errorf("Trust output = %q, want the hash of the shown content", out.String())
+			}
+			m, err := plugintrust.Load(pluginDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, approved := m.Plugins["p"]
+			if approved != tt.trust {
+				t.Errorf("manifest approves p: %v, want %v", approved, tt.trust)
 			}
 		})
 	}

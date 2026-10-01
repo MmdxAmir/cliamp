@@ -44,6 +44,12 @@ func HashFile(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// Hash returns the hash of plugin content, in the form that HashFile returns.
+func Hash(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
 func Load(dir string) (Manifest, error) {
 	m := Manifest{Version: 1, Plugins: make(map[string]string)}
 	data, err := os.ReadFile(ManifestPath(dir))
@@ -72,20 +78,35 @@ func Save(dir string, m Manifest) error {
 	return fileutil.WriteFileAtomic(ManifestPath(dir), data, 0o600)
 }
 
+// Approve approves the current content of the plugin file at path.
 func Approve(dir, name, path string) (string, error) {
 	hash, err := HashFile(path)
 	if err != nil {
 		return "", err
 	}
-	m, err := Load(dir)
-	if err != nil {
-		return "", err
-	}
-	m.Plugins[name] = hash
-	if err := Save(dir, m); err != nil {
+	if err := ApproveHash(dir, name, path, hash); err != nil {
 		return "", err
 	}
 	return hash, nil
+}
+
+// ApproveHash approves the content with hash, the hash that the user saw. It
+// fails with ErrHashMismatch when the file at path no longer has that hash.
+// Thus a change to the file while the prompt waits is not approved.
+func ApproveHash(dir, name, path, hash string) error {
+	got, err := HashFile(path)
+	if err != nil {
+		return err
+	}
+	if got != hash {
+		return ErrHashMismatch
+	}
+	m, err := Load(dir)
+	if err != nil {
+		return err
+	}
+	m.Plugins[name] = hash
+	return Save(dir, m)
 }
 
 // Revoke removes the approval of name. It leaves the manifest as it is when
