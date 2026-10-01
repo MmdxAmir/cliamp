@@ -20,7 +20,7 @@ cliamp --provider podcast             # open on one provider for this session
 ## Audio engine
 
 ```sh
-cliamp --sample-rate 48000 track.mp3      # output sample rate (22050, 44100, 48000, 96000, 192000)
+cliamp --sample-rate 48000 track.mp3      # output sample rate (0=auto, 22050, 44100, 48000, 96000, 192000)
 cliamp --buffer-ms 2000 track.mp3         # speaker buffer in ms (50-5000; useful for unstable radio)
 cliamp --resample-quality 1 track.mp3     # resample quality factor (1–4)
 cliamp --bit-depth 32 track.m4a           # PCM bit depth: 16 (default) or 32 (lossless)
@@ -148,7 +148,7 @@ cliamp track.mp3 --repeat all --mono ~/Music
 | `--visualizer-60fps` | bool | false | render a visible visualizer at about 60 FPS |
 | `--start-theme` | string | | theme name |
 | `--eq-preset` | string | | preset name |
-| `--sample-rate` | int | 44100 | 22050, 44100, 48000, 96000, 192000 |
+| `--sample-rate` | int | 0 | 0, 22050, 44100, 48000, 96000, 192000. 0 reads the rate of the default output device on macOS and uses 44100 on other platforms. |
 | `--buffer-ms` | int | 250 | 50-5000 |
 | `--resample-quality` | int | 4 | 1-4 |
 | `--bit-depth` | int | 16 | 16, 32 |
