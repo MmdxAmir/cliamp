@@ -76,5 +76,7 @@ Fix: Open **System Settings > Privacy & Security > Local Network**. Enable acces
 
 ## Known limitations
 
+- **Playback reporting**: cliamp reports now-playing status, progress, and stop
+  events to Emby, so the server can track play activity and history.
 - **Token-based access**: Store the API key safely.
 - **API key user selection**: Emby API keys apply to the server and have no "current user". Without `user`, cliamp selects the first user returned by `/Users`. This is correct for a single-user server. On a multi-user server, set `user_id` in `[emby]` to select an account.
