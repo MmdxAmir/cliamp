@@ -195,8 +195,9 @@ func (p *Player) LastPlayedDuration() time.Duration {
 // speaker. Subsequent calls swap only the track source via the gapless
 // streamer. knownDuration is the metadata duration (use 0 if unknown); it is
 // used as a fallback when the decoder cannot determine the length (e.g. HTTP
-// streams). The decoder is positioned before the pipeline reaches the
-// speaker, so no audio plays from 0:00. buildSource picks the pipeline.
+// streams). A seekable decoder is positioned before the pipeline reaches the
+// speaker, so no audio plays from 0:00. A yt-dlp page starts at 0, and the
+// caller seeks it by restart. buildSource picks the pipeline.
 func (p *Player) PlayAt(path string, knownDuration, offset time.Duration) error {
 	return p.playAt(path, knownDuration, offset, 0)
 }
@@ -359,8 +360,8 @@ func (p *Player) preloadPipelineForGeneration(tp *trackPipeline, generation uint
 // ClearPreload discards the preloaded next track (e.g., when shuffle/repeat changes).
 // Speaker is locked to ensure no in-flight gapless transition can reference the
 // pipeline we're about to close. The old pipeline closes asynchronously, as in
-// playPipeline, because ClearPreload runs on the UI goroutine and a close can
-// wait for an ffmpeg or yt-dlp process to exit.
+// playPipelineForGeneration, because ClearPreload runs on the UI goroutine and
+// a close can wait for an ffmpeg or yt-dlp process to exit.
 func (p *Player) ClearPreload() {
 	p.preloadGen.Add(1)
 	speaker.Lock()
