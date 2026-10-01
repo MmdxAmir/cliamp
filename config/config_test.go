@@ -999,3 +999,35 @@ func TestLoadNavidromeFormat(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadPluginKeysThatCliampReads checks that the plugin keys cliamp reads
+// itself follow the value rules: a bool in any letter case with a comment,
+// and a list in square brackets. Other plugin keys stay strings.
+func TestLoadPluginKeysThatCliampReads(t *testing.T) {
+	tests := []struct {
+		name   string
+		body   string
+		plugin string
+		key    string
+		want   string
+	}{
+		{"enabled with a comment", "[plugins.webhook]\nenabled = false   # too noisy\n", "webhook", "enabled", "false"},
+		{"enabled in capitals", "[plugins.lastfm]\nenabled = False\n", "lastfm", "enabled", "false"},
+		{"enabled as a quoted string", "[plugins.lastfm]\nenabled = \"false\"\n", "lastfm", "enabled", "false"},
+		{"enabled with another value", "[plugins.lastfm]\nenabled = no\n", "lastfm", "enabled", "no"},
+		{"disabled in square brackets", "[plugins]\ndisabled = [\"webhook\", 'x'] # two\n", "", "disabled", "webhook,x"},
+		{"disabled without brackets", "[plugins]\ndisabled = webhook, discord-rpc\n", "", "disabled", "webhook, discord-rpc"},
+		{"disabled as a quoted string", "[plugins]\ndisabled = \"webhook, x\" # two\n", "", "disabled", "webhook, x"},
+		{"allowed_binaries in square brackets", "[plugins]\nallowed_binaries = [\"ffprobe\", \"curl\"]\n", "", "allowed_binaries", "ffprobe,curl"},
+		{"other plugin key keeps the brackets", "[plugins.lastfm]\ntags = [\"a\", \"b\"]\n", "lastfm", "tags", `["a", "b"]`},
+		{"disabled in a plugin section stays a string", "[plugins.lastfm]\ndisabled = [\"a\"]\n", "lastfm", "disabled", `["a"]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := loadConfigText(t, tt.body)
+			if got := cfg.Plugins[tt.plugin][tt.key]; got != tt.want {
+				t.Errorf("Plugins[%q][%q] = %q, want %q", tt.plugin, tt.key, got, tt.want)
+			}
+		})
+	}
+}

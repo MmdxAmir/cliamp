@@ -875,7 +875,7 @@ func Load() (Config, error) {
 		default:
 			if name, ok := pluginSection(section); ok {
 				if m, ok := cfg.Plugins[name]; ok {
-					m[key] = parseString(val)
+					m[key] = pluginValue(name, key, val)
 				}
 			} else {
 				cfg.setTopLevel(key, val)
@@ -921,6 +921,26 @@ func pluginSection(section string) (string, bool) {
 		return "", true
 	}
 	return strings.CutPrefix(section, "plugins.")
+}
+
+// pluginValue reads a value of the [plugins] section, or of the
+// [plugins.<name>] section when plugin is not empty. Plugins get each value
+// as a string. cliamp reads three keys itself, so these follow the value
+// rules: enabled of a plugin is a bool, and disabled and allowed_binaries of
+// [plugins] are lists. Load stores the bool as true or false, and a list in
+// square brackets as names that commas separate.
+func pluginValue(plugin, key, val string) string {
+	switch {
+	case plugin != "" && key == "enabled":
+		if v, ok := parseBool(val); ok {
+			return strconv.FormatBool(v)
+		}
+	case plugin == "" && (key == "disabled" || key == "allowed_binaries"):
+		if strings.HasPrefix(val, "[") {
+			return strings.Join(parseStringSlice(val), ",")
+		}
+	}
+	return parseString(val)
 }
 
 // setTopLevel applies one top-level key. Keys under an unknown section also
