@@ -758,7 +758,7 @@ func statusCommand() *cli.Command {
 			if c.Bool("json") {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
-				return enc.Encode(resp)
+				return enc.Encode(newStatusJSON(resp))
 			}
 			state := resp.State
 			if state == "" {

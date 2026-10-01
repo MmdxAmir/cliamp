@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -407,6 +408,50 @@ func TestQueueCommandPath(t *testing.T) {
 			}
 			if got := <-sent; got != tt.want {
 				t.Fatalf("cliamp queue %s sent %q, want %q", tt.arg, got, tt.want)
+			}
+		})
+	}
+}
+
+// cliamp status --json always prints position, volume and index, because
+// 0 is a real value of each. Other fields with no value stay out.
+func TestStatusJSONKeepsZeroValues(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		snapshot ipc.RuntimeSnapshot
+		want     map[string]any
+	}{
+		{
+			name:     "zero values",
+			snapshot: ipc.RuntimeSnapshot{State: "playing", Total: 3},
+			want:     map[string]any{"ok": true, "state": "playing", "total": 3.0, "position": 0.0, "volume": 0.0, "index": 0.0},
+		},
+		{
+			name:     "set values",
+			snapshot: ipc.RuntimeSnapshot{State: "paused", Position: 12.5, Volume: -6, Index: 2, Total: 3},
+			want:     map[string]any{"ok": true, "state": "paused", "total": 3.0, "position": 12.5, "volume": -6.0, "index": 2.0},
+		},
+		{
+			name:     "empty playlist",
+			snapshot: ipc.RuntimeSnapshot{State: "stopped", Index: -1},
+			want:     map[string]any{"ok": true, "state": "stopped", "position": 0.0, "volume": 0.0, "index": -1.0},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			startTestIPC(t, tt.snapshot, func(*ipc.JobStore, string, ipc.V2Request) {})
+			var runErr error
+			stdout, _ := captureOutput(t, func() {
+				runErr = buildApp().Run(t.Context(), []string{"cliamp", "status", "--json"})
+			})
+			if runErr != nil {
+				t.Fatal(runErr)
+			}
+			var got map[string]any
+			if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+				t.Fatalf("status --json printed %q: %v", stdout, err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("status --json = %v, want %v", got, tt.want)
 			}
 		})
 	}

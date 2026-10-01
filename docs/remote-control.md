@@ -19,6 +19,10 @@ cliamp remote state
 cliamp remote events runtime.state runtime.job
 ```
 
+`cliamp status --json` always includes `position`, `volume` and `index`,
+because 0 is a valid value of each. It leaves out other fields that have no
+value. `index` is `-1` when the playlist is empty.
+
 IPC supports version 2 only. Clients must send a V2 envelope with each request.
 See [Upgrading IPC Clients To V2](upgrading-ipc-v2.md) when you migrate a raw
 socket integration.

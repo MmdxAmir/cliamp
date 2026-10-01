@@ -172,6 +172,20 @@ func stateResult(snapshot ipc.RuntimeSnapshot) ipc.Response {
 	}
 }
 
+// statusJSON is what cliamp status --json prints. It always holds the
+// position, the volume and the index, because 0 is a real value of each.
+// Its fields hide the omitempty fields of the same names in Response.
+type statusJSON struct {
+	ipc.Response
+	Position float64 `json:"position"`
+	Volume   float64 `json:"volume"`
+	Index    int     `json:"index"`
+}
+
+func newStatusJSON(resp ipc.Response) statusJSON {
+	return statusJSON{Response: resp, Position: resp.Position, Volume: resp.Volume, Index: resp.Index}
+}
+
 func printV2Response(response ipc.V2Response) error {
 	if err := v2ResponseError(response); err != nil {
 		return err
