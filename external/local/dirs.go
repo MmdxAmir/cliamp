@@ -27,6 +27,14 @@ func ExpandPath(p string) string {
 	return expanded
 }
 
+// scanDir lists the audio files of a [[dir]] source and readTags reads their
+// tags. Tests replace them to check that a write does not do this work while
+// it holds the playlist lock.
+var (
+	scanDir  = resolve.AudioFiles
+	readTags = resolve.TracksFromPaths
+)
+
 // Section kinds tracked in playlistDoc.order.
 const (
 	itemTrack uint8 = iota
@@ -89,13 +97,13 @@ func (d *playlistDoc) expand(withTags bool) []playlist.Track {
 		}
 		src := d.dirs[di]
 		di++
-		files, err := resolve.AudioFiles(ExpandPath(src.Path), src.Recursive)
+		files, err := scanDir(ExpandPath(src.Path), src.Recursive)
 		if err != nil {
 			continue
 		}
 		var dirTracks []playlist.Track
 		if withTags {
-			dirTracks = resolve.TracksFromPaths(files)
+			dirTracks = readTags(files)
 		} else {
 			dirTracks = make([]playlist.Track, len(files))
 			for i, f := range files {
@@ -296,6 +304,17 @@ func validateDirSource(dir string) error {
 		return fmt.Errorf("%q is not a directory", dir)
 	}
 	return nil
+}
+
+// suppliesFile reports whether a [[dir]] source of d supplies file. It checks
+// the path against each source and stats the file, so a write that holds the
+// playlist lock does not walk the directories.
+func (d *playlistDoc) suppliesFile(file string) bool {
+	if !slices.ContainsFunc(d.dirs, func(src playlist.DirSource) bool { return dirSuppliesFile(src, file) }) {
+		return false
+	}
+	info, err := os.Stat(file)
+	return err == nil && !info.IsDir()
 }
 
 // dirSuppliesFile reports whether a scan of dir would include file: the path

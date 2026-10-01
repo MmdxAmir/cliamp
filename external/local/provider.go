@@ -21,7 +21,6 @@ import (
 	"github.com/bjarneo/cliamp/internal/fuzzy"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
-	"github.com/bjarneo/cliamp/resolve"
 )
 
 // Compile-time interface checks.
@@ -270,15 +269,6 @@ func (p *Provider) Tracks(playlistID string) ([]playlist.Track, error) {
 	return doc.expand(true), nil
 }
 
-// expandedTracks loads a named playlist and expands its directory sources.
-func (p *Provider) expandedTracks(name string) ([]playlist.Track, error) {
-	doc, err := p.loadDocByName(name)
-	if err != nil {
-		return nil, err
-	}
-	return doc.expand(true), nil
-}
-
 // AddTrack appends a track to the named playlist, creating the directory and
 // file if needed.
 func (p *Provider) AddTrack(playlistName string, track playlist.Track) error {
@@ -321,19 +311,10 @@ func (p *Provider) AddTracks(playlistName string, tracks []playlist.Track) (adde
 	for _, t := range doc.tracks {
 		seen[t.Path] = struct{}{}
 	}
-	for _, src := range doc.dirs {
-		files, err := resolve.AudioFiles(ExpandPath(src.Path), src.Recursive)
-		if err != nil {
-			continue
-		}
-		for _, f := range files {
-			seen[f] = struct{}{}
-		}
-	}
 
 	existing := doc.tracks
 	for _, t := range tracks {
-		if _, ok := seen[t.Path]; ok {
+		if _, ok := seen[t.Path]; ok || doc.suppliesFile(t.Path) {
 			skipped++
 			continue
 		}
@@ -403,16 +384,6 @@ func (p *Provider) PrependTracks(playlistName string, tracks []playlist.Track) (
 	for _, t := range doc.tracks {
 		explicit[t.Path] = t
 	}
-	dirSourced := make(map[string]struct{})
-	for _, src := range doc.dirs {
-		files, err := resolve.AudioFiles(ExpandPath(src.Path), src.Recursive)
-		if err != nil {
-			continue
-		}
-		for _, f := range files {
-			dirSourced[f] = struct{}{}
-		}
-	}
 
 	front := make([]playlist.Track, 0, len(tracks))
 	relocated := make(map[string]struct{}, len(tracks))
@@ -425,7 +396,7 @@ func (p *Provider) PrependTracks(playlistName string, tracks []playlist.Track) (
 		if stored, ok := explicit[t.Path]; ok {
 			moved++
 			t = stored
-		} else if _, ok := dirSourced[t.Path]; ok {
+		} else if doc.suppliesFile(t.Path) {
 			skipped++
 			continue
 		} else {
@@ -1128,10 +1099,13 @@ func (p *Provider) RemoveTrack(name string, index int) error {
 		return err
 	}
 	defer unlock()
-	tracks, err := p.expandedTracks(name)
+	doc, err := p.loadDocByName(name)
 	if err != nil {
 		return err
 	}
+	// The index needs only the paths and the DirSourced flags. A tag read
+	// of every directory file must not hold the lock.
+	tracks := doc.expand(false)
 	if index < 0 || index >= len(tracks) {
 		return fmt.Errorf("track index %d out of range", index)
 	}

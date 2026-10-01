@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"testing"
 
@@ -163,6 +164,113 @@ func TestSeparateProvidersKeepConcurrentChanges(t *testing.T) {
 				if src.Recursive != tt.wantRecurs {
 					t.Errorf("dir source %s recursive = %v, want %v", src.Path, src.Recursive, tt.wantRecurs)
 				}
+			}
+		})
+	}
+}
+
+// TestWritesDoNotReadDirsUnderLock verifies which directory work a playlist
+// write does while it holds the playlist lock. The TUI takes the lock from
+// its update loop, so a long scan there freezes the UI. AddTracks and
+// PrependTracks check a path against each [[dir]] source without a walk.
+// RemoveTrack walks the directories to map the index but reads no tags.
+func TestWritesDoNotReadDirsUnderLock(t *testing.T) {
+	tests := []struct {
+		name            string
+		write           func(p *Provider, music string) error
+		wantLockedScans int
+		wantPaths       []string // explicit tracks after the write, relative to the music dir or absolute
+	}{
+		{
+			name: "AddTracks",
+			write: func(p *Provider, music string) error {
+				_, _, err := p.AddTracks("Mix", []playlist.Track{
+					{Path: filepath.Join(music, "dir.mp3")},
+					{Path: filepath.Join(music, "missing.mp3")},
+					{Path: "/new.mp3"},
+				})
+				return err
+			},
+			wantPaths: []string{"/a.mp3", "missing.mp3", "/new.mp3"},
+		},
+		{
+			name: "PrependTracks",
+			write: func(p *Provider, music string) error {
+				_, _, _, err := p.PrependTracks("Mix", []playlist.Track{
+					{Path: filepath.Join(music, "dir.mp3")},
+					{Path: filepath.Join(music, "missing.mp3")},
+					{Path: "/new.mp3"},
+				})
+				return err
+			},
+			wantPaths: []string{"missing.mp3", "/new.mp3", "/a.mp3"},
+		},
+		{
+			name:            "RemoveTrack",
+			write:           func(p *Provider, _ string) error { return p.RemoveTrack("Mix", 0) },
+			wantLockedScans: 1,
+			wantPaths:       nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestProvider(t)
+			music := t.TempDir()
+			writeAudioFile(t, filepath.Join(music, "dir.mp3"))
+			if err := p.SavePlaylist("Mix", []playlist.Track{{Path: "/a.mp3"}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := p.AddDirSources("Mix", []string{music}); err != nil {
+				t.Fatal(err)
+			}
+
+			// held reports whether the caller holds the playlist lock.
+			held := func() bool {
+				if p.mu.TryLock() {
+					p.mu.Unlock()
+					return false
+				}
+				return true
+			}
+			lockedScans, lockedTagReads := 0, 0
+			origScan, origTags := scanDir, readTags
+			t.Cleanup(func() { scanDir, readTags = origScan, origTags })
+			scanDir = func(dir string, recursive bool) ([]string, error) {
+				if held() {
+					lockedScans++
+				}
+				return origScan(dir, recursive)
+			}
+			readTags = func(files []string) []playlist.Track {
+				if held() {
+					lockedTagReads++
+				}
+				return origTags(files)
+			}
+
+			if err := tt.write(p, music); err != nil {
+				t.Fatal(err)
+			}
+			if lockedScans != tt.wantLockedScans {
+				t.Errorf("directory scans under the lock = %d, want %d", lockedScans, tt.wantLockedScans)
+			}
+			if lockedTagReads != 0 {
+				t.Errorf("tag reads under the lock = %d, want 0", lockedTagReads)
+			}
+
+			doc, err := p.loadDocByName("Mix")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var want []string
+			for _, path := range tt.wantPaths {
+				if !filepath.IsAbs(path) {
+					path = filepath.Join(music, path)
+				}
+				want = append(want, path)
+			}
+			if got := paths(doc.tracks); !slices.Equal(got, want) {
+				t.Errorf("explicit tracks = %v, want %v", got, want)
 			}
 		})
 	}
