@@ -947,6 +947,10 @@ func (p *Provider) SearchTracks(_ context.Context, query string, limit int) ([]p
 		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".toml") {
 			continue
 		}
+		// Playlists hides this file, so a search must not show its tracks.
+		if e.Name() == favoritesFileName {
+			continue
+		}
 		doc, err := p.loadDoc(filepath.Join(p.dir, e.Name()))
 		if err != nil {
 			continue

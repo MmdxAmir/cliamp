@@ -1012,10 +1012,11 @@ func TestRestorePlaylistDocumentRejectsHistory(t *testing.T) {
 // MigrateFavoritesFile moves a playlist file named Favorites.toml to the
 // legacy name, because the virtual Favorites playlist reserves the name. It
 // keeps a legacy file that exists. Playlists never renames a file. It lists
-// the legacy file once, from its own entry, and hides Favorites.toml.
+// the legacy file once, from its own entry, and hides Favorites.toml. A search
+// finds only the tracks of listed playlists.
 func TestMigrateFavoritesFile(t *testing.T) {
-	const two = "[[track]]\npath = \"/a.mp3\"\n\n[[track]]\npath = \"/b.mp3\"\n"
-	const one = "[[track]]\npath = \"/c.mp3\"\n"
+	const two = "[[track]]\npath = \"/a.mp3\"\ntitle = \"Song A\"\n\n[[track]]\npath = \"/b.mp3\"\ntitle = \"Song B\"\n"
+	const one = "[[track]]\npath = \"/c.mp3\"\ntitle = \"Song C\"\n"
 	tests := []struct {
 		name       string
 		source     bool   // Favorites.toml exists before the migration
@@ -1023,9 +1024,10 @@ func TestMigrateFavoritesFile(t *testing.T) {
 		migrate    bool   // MigrateFavoritesFile runs before the listing
 		wantTracks int    // track count of the listed legacy playlist, -1 when not listed
 		wantSource bool   // Favorites.toml is still on disk after the listing
+		wantSearch []string
 	}{
-		{name: "only Favorites.toml", source: true, migrate: true, wantTracks: 2},
-		{name: "both files", source: true, legacy: one, migrate: true, wantTracks: 1, wantSource: true},
+		{name: "only Favorites.toml", source: true, migrate: true, wantTracks: 2, wantSearch: []string{"/a.mp3", "/b.mp3"}},
+		{name: "both files", source: true, legacy: one, migrate: true, wantTracks: 1, wantSource: true, wantSearch: []string{"/c.mp3"}},
 		{name: "no Favorites.toml", migrate: true, wantTracks: -1},
 		{name: "listing without the migration", source: true, wantTracks: -1, wantSource: true},
 	}
@@ -1073,6 +1075,13 @@ func TestMigrateFavoritesFile(t *testing.T) {
 			}
 			if _, err := os.Stat(src); (err == nil) != tt.wantSource {
 				t.Errorf("Favorites.toml on disk = %v, want %v", err == nil, tt.wantSource)
+			}
+			found, err := p.SearchTracks(context.Background(), "song", 0)
+			if err != nil {
+				t.Fatalf("SearchTracks: %v", err)
+			}
+			if got := slices.Sorted(slices.Values(paths(found))); !slices.Equal(got, tt.wantSearch) {
+				t.Errorf("search found %v, want %v", got, tt.wantSearch)
 			}
 			if !tt.source {
 				if _, err := os.Stat(p.dir + ".lock"); !errors.Is(err, fs.ErrNotExist) {
