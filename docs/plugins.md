@@ -238,6 +238,8 @@ Up to 256 events and key presses can wait for one plugin. If a plugin falls furt
 
 In `playback.state`, `status` is `"playing"`, `"paused"`, or `"stopped"`. In `player.mode`, `repeat` is `"Off"`, `"All"`, or `"One"`, matching `cliamp.player.repeat_mode()`. In `player.eq`, `bands` is an array of 10 dB values.
 
+In `track.change`, `track.scrobble`, `playback.state` and `queue.end`, `duration` is the length in whole seconds. A track with no length in its metadata, such as a local file, gets the decoded length. `duration` is 0 when the length is unknown, as for a live stream.
+
 `track.change` fires after playback starts successfully for all sources, including YouTube and SoundCloud. A stream that is still buffering, fails to start, or is superseded before it starts does not emit this event. Gapless transitions also emit `track.change`.
 
 `queue.end` reports the last track that emitted `track.change`. It fires when the track drains, at a gapless boundary with nothing queued, on next from the last track, and on next after the playlist was emptied while the track played, or replaced by a list with no playable track. A stream still buffering when the queue runs out is not reported, and a failed start emits nothing. After a failed start, `queue.end` does not fire until another track starts, even if the previous track is still playing.

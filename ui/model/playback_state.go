@@ -91,7 +91,9 @@ func (m *Model) stopPlayback() (playlist.Track, bool) {
 // from a manual stop. Only a track the engine started is reported: a stream
 // still buffering, a failed start, or an empty player only stops.
 func (m *Model) endQueue() {
+	// The engine forgets the duration when it stops.
+	dur := m.player.Duration()
 	if finished, started := m.stopPlayback(); started {
-		m.emitPlugin(luaplugin.EventQueueEnd, trackToMap(finished))
+		m.emitPlugin(luaplugin.EventQueueEnd, trackEventData(finished, dur))
 	}
 }

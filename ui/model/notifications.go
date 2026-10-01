@@ -50,7 +50,7 @@ func (m *Model) notifyPlaybackChange() {
 		m.notifier.Update(state)
 	}
 	if hook {
-		data := trackToMap(track)
+		data := trackEventData(track, state.Track.Duration)
 		data["status"] = m.playerStatus()
 		data["title"] = state.Track.Title
 		data["artist"] = state.Track.Artist
@@ -146,6 +146,17 @@ func trackToMap(track playlist.Track) map[string]any {
 	return luaplugin.TrackData(pluginTrack(track))
 }
 
+// trackEventData returns the track table of a plugin event. A track with no
+// duration of its own, such as a scanned local file, gets dur in whole
+// seconds when dur is known.
+func trackEventData(track playlist.Track, dur time.Duration) map[string]any {
+	data := trackToMap(track)
+	if track.DurationSecs <= 0 && dur > 0 {
+		data["duration"] = int(dur.Seconds())
+	}
+	return data
+}
+
 // pluginTrack returns track as Lua plugins see it. It leaves Live unset,
 // because that depends on the engine.
 func pluginTrack(track playlist.Track) luaplugin.Track {
@@ -174,7 +185,7 @@ func (m *Model) stopByUser() {
 func (m *Model) nowPlaying(track playlist.Track) {
 	m.playingTrackStarted = true
 	if m.luaMgr != nil && m.luaMgr.HasHook(luaplugin.EventTrackChange) {
-		m.emitPlugin(luaplugin.EventTrackChange, trackToMap(track))
+		m.emitPlugin(luaplugin.EventTrackChange, trackEventData(track, m.player.Duration()))
 	}
 
 	reporter := m.findPlaybackReporter(track)
@@ -257,7 +268,7 @@ func (m *Model) maybeScrobble(track playlist.Track, elapsed, duration time.Durat
 
 	// Emit scrobble event to Lua plugins for all tracks (not just Navidrome).
 	if m.luaMgr != nil && m.luaMgr.HasHook(luaplugin.EventTrackScrobble) {
-		data := trackToMap(track)
+		data := trackEventData(track, duration)
 		data["played_secs"] = elapsed.Seconds()
 		m.emitPlugin(luaplugin.EventTrackScrobble, data)
 	}
