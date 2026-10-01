@@ -22,7 +22,7 @@ cliamp plugins remove <name>            # remove a plugin and its approval
 
 The install and trust commands show the source, SHA-256, declared permissions, and implicit file-system and network access before the prompt. In a non-interactive environment, use `--yes` only after you review the same content independently. cliamp stores approvals in `plugins/.trust.json`. Editing a plugin changes its hash and disables it until you approve it again. Removing a plugin also removes its approval. If `plugins/.trust.json` does not parse, cliamp treats every plugin as untrusted and logs the error to `plugins.log`. `cliamp plugins list` then shows each plugin as untrusted and prints the error. `cliamp plugins install` stops before it downloads the plugin, `cliamp plugins trust` stops before it asks, and `cliamp plugins remove` stops before it deletes the plugin. To recover, delete the file and approve each plugin again. Then run the `install` or `remove` command again.
 
-The install and trust commands check the `plugin.register()` call the same way the player does. They reject a plugin whose `plugin.register()` call the player rejects, such as a call with an unknown permission name, or without `type = "hook"` or `type = "visualizer"`. The check runs the plugin file with a stand-in `cliamp` table that does nothing, so the plugin cannot do any work before you approve it.
+The install and trust commands check the `plugin.register()` call the same way the player does. They reject a plugin whose `plugin.register()` call the player rejects, such as a call with an unknown permission name, or without `type = "hook"` or `type = "visualizer"`. The check runs the plugin file with a stand-in `cliamp` table that does nothing, and `print` does nothing too. Thus the plugin cannot do any work or write to the terminal before you approve it.
 
 ### Install sources
 
@@ -487,7 +487,7 @@ cliamp.log.error("request failed: " .. err)
 cliamp.log.debug("response: " .. body)
 ```
 
-cliamp writes logs to `~/.config/cliamp/plugins.log`. Each line has a timestamp and the installed name of the plugin as the prefix, for example `[now-playing]`.
+cliamp writes logs to `~/.config/cliamp/plugins.log`. Each line has a timestamp and the installed name of the plugin as the prefix, for example `[now-playing]`. `print(...)` also writes to this file, at the `info` level, with its arguments joined by tabs. It never writes to the terminal.
 
 cliamp also logs the Lua errors of event hooks, key bindings, commands, timers, exec callbacks, and visualizer callbacks to this file. A callback that fails again with the same error logs it once. cliamp logs it again after the callback succeeds or fails with a different error. A visualizer `render` runs on each frame, so cliamp logs only its first error and its first timeout until cliamp restarts. The log entry for a timeout names the time limit. cliamp does not write plugin errors to the terminal.
 

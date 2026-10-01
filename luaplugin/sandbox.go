@@ -17,6 +17,11 @@ func sandbox(L *lua.LState) {
 	// Remove the io module entirely (replaced by cliamp.fs).
 	L.SetGlobal("io", lua.LNil)
 
+	// The base print writes to stdout. That corrupts the TUI, and before
+	// approval it lets a plugin write into the trust prompt. print does
+	// nothing here, and registerLogAPI sends it to plugins.log at runtime.
+	L.SetGlobal("print", L.NewFunction(func(*lua.LState) int { return 0 }))
+
 	// Keep time, date, clock and getenv from the os module. getenv reads
 	// every variable of the cliamp environment, so it hides no secret.
 	if os := L.GetGlobal("os"); os != lua.LNil {

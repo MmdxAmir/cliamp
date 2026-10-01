@@ -3,6 +3,7 @@ package luaplugin
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +55,8 @@ func (l *pluginLogger) close() {
 }
 
 // registerLogAPI adds cliamp.log.{info,warn,error,debug} to the cliamp table.
+// It also makes print write its arguments to plugins.log at the info level,
+// joined by tabs as the base print joins them.
 func registerLogAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) {
 	tbl := L.NewTable()
 	for _, level := range []string{"info", "warn", "error", "debug"} {
@@ -64,4 +67,13 @@ func registerLogAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) {
 		}))
 	}
 	L.SetField(cliamp, "log", tbl)
+
+	L.SetGlobal("print", L.NewFunction(func(L *lua.LState) int {
+		parts := make([]string, L.GetTop())
+		for i := range parts {
+			parts[i] = L.ToStringMeta(L.Get(i + 1)).String()
+		}
+		p.logger.log(p.installName, "info", "%s", strings.Join(parts, "\t"))
+		return 0
+	}))
 }
