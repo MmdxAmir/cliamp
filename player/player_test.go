@@ -212,22 +212,44 @@ func TestClearPreloadDoesNotWaitForClose(t *testing.T) {
 	}
 }
 
-// A native decoder seek runs on the UI goroutine and drops the preload,
+// preparedSeekTestDecoder seeks through the prepared ffmpeg path, as a
+// local ffmpeg decoder does, without a process.
+type preparedSeekTestDecoder struct {
+	*playbackTestDecoder
+}
+
+func (preparedSeekTestDecoder) prepareSeek(int) (*preparedFFmpegSeek, error) {
+	return &preparedFFmpegSeek{}, nil
+}
+func (preparedSeekTestDecoder) seekMatches(*preparedFFmpegSeek) bool { return true }
+func (preparedSeekTestDecoder) commitPreparedSeek(*preparedFFmpegSeek) (ffmpegPipe, bool) {
+	return ffmpegPipe{}, true
+}
+func (preparedSeekTestDecoder) interrupt() {}
+
+// A seek of a local track runs on the UI goroutine and drops the preload,
 // because the gapless boundary moved. It must not wait while that preload
 // closes.
-func TestNativeSeekDoesNotWaitForPreloadClose(t *testing.T) {
+func TestSeekDoesNotWaitForPreloadClose(t *testing.T) {
+	native := func() beep.StreamSeekCloser { return newPlaybackTestDecoder() }
+	prepared := func() beep.StreamSeekCloser {
+		return preparedSeekTestDecoder{playbackTestDecoder: newPlaybackTestDecoder()}
+	}
 	tests := []struct {
 		name    string
+		current func() beep.StreamSeekCloser
 		preload bool
 	}{
-		{name: "no preload"},
-		{name: "preload with a slow close", preload: true},
+		{name: "native seek without a preload", current: native},
+		{name: "native seek with a slow preload close", current: native, preload: true},
+		{name: "prepared ffmpeg seek without a preload", current: prepared},
+		{name: "prepared ffmpeg seek with a slow preload close", current: prepared, preload: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := newTestPlayer()
 			p.gapless = &gaplessStreamer{}
-			current := newPlaybackTestDecoder()
+			current := tt.current()
 			p.current = &trackPipeline{
 				decoder:  current,
 				stream:   current,
@@ -809,7 +831,7 @@ printf '10\n'
 			}
 			select {
 			case <-preloadedDecoder.closed:
-			default:
+			case <-time.After(2 * time.Second):
 				t.Fatal("successful Seek did not close stale preload")
 			}
 		})

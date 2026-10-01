@@ -567,7 +567,9 @@ func (p *Player) commitPreparedSeek(cur *trackPipeline, seeker preparedFFmpegSee
 	p.lifecycleMu.Unlock()
 
 	_ = oldPipe.stop()
-	closePipelines(oldNext)
+	// A local track seeks on the UI goroutine, and the preload close can wait
+	// for an ffmpeg or yt-dlp process to exit, as in ClearPreload.
+	go closePipelines(oldNext)
 	return nil
 }
 
