@@ -30,6 +30,7 @@ func TestLuaControlProviderSendsMessages(t *testing.T) {
 		{"play_pause", func(c luaplugin.ControlProvider) { c.TogglePause() }, playback.PlayPauseMsg{}},
 		{"stop", func(c luaplugin.ControlProvider) { c.Stop() }, playback.StopMsg{}},
 		{"seek", func(c luaplugin.ControlProvider) { c.Seek(1.5) }, playback.SeekMsg{Offset: 1500 * time.Millisecond}},
+		{"seek back", func(c luaplugin.ControlProvider) { c.Seek(-10) }, playback.SeekMsg{Offset: -10 * time.Second}},
 		{"next", func(c luaplugin.ControlProvider) { c.Next() }, playback.NextMsg{}},
 		{"prev", func(c luaplugin.ControlProvider) { c.Prev() }, playback.PrevMsg{}},
 		{"queue.add path", func(c luaplugin.ControlProvider) { c.QueueAdd("/a.mp3") }, model.PluginQueueMsg{Op: "add", Path: "/a.mp3"}},

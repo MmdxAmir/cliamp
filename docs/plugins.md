@@ -512,7 +512,7 @@ cliamp.player.play_pause()        -- toggle play/pause
 cliamp.player.stop()              -- stop playback
 cliamp.player.set_volume(-5)      -- set volume in dB (volume_min to +6)
 cliamp.player.set_speed(1.25)     -- set playback speed (0.25 to 2.0)
-cliamp.player.seek(30)            -- seek to 30 seconds
+cliamp.player.seek(30)            -- seek forward 30 seconds (a negative value seeks back)
 cliamp.player.toggle_mono()       -- toggle mono output
 cliamp.player.set_eq_preset("Rock") -- switch to built-in preset (sets bands + UI label)
 cliamp.player.set_eq_preset("Metal", {6,4,1,-1,-2,2,4,6,6,5}) -- custom preset with bands
