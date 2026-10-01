@@ -138,7 +138,7 @@ The directory name is the plugin name. cliamp loads only `init.lua` automaticall
 
 ## Registration
 
-Each plugin must call `plugin.register()`. cliamp skips files that do not call it. The `type` field is required. A `plugin.register()` call without `type = "hook"` or `type = "visualizer"` is a load error. cliamp shows the error at startup and does not load the plugin. The top-level code of the plugin file must finish in 5 seconds. A plugin that runs longer at load is a load error.
+Each plugin must call `plugin.register()`. cliamp skips files that do not call it. The `type` field is required. A `plugin.register()` call without `type = "hook"` or `type = "visualizer"` is a load error. cliamp shows the error at startup and does not load the plugin. The top-level code of the plugin file must finish in 5 seconds. A plugin that runs longer at load is a load error. The `cliamp.player` controls and the `cliamp.queue` edits do nothing in the top-level code, because the player is not ready yet. Call them from an event handler, such as `app.start`.
 
 ```lua
 local p = plugin.register({

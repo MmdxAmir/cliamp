@@ -642,6 +642,34 @@ func TestControlClampsBounds(t *testing.T) {
 	}
 }
 
+// main.go sets the ControlProvider after the top-level chunks ran. Until
+// then, each control does nothing. Before, it called a nil func, and the
+// plugin failed to load.
+func TestControlBeforeProviderIsNoop(t *testing.T) {
+	tests := []string{
+		"cliamp.player.next()",
+		"cliamp.player.prev()",
+		"cliamp.player.play_pause()",
+		"cliamp.player.stop()",
+		"cliamp.player.set_volume(-10)",
+		"cliamp.player.set_speed(1.5)",
+		"cliamp.player.seek(30)",
+		"cliamp.player.toggle_mono()",
+		`cliamp.player.set_eq_preset("Rock")`,
+		"cliamp.player.set_eq_band(1, 3)",
+	}
+	for _, call := range tests {
+		t.Run(call, func(t *testing.T) {
+			m := newTestManager()
+			t.Cleanup(m.Close)
+			loadTestPlugin(t, m, "early-control", `
+				plugin.register({name = "early-control", type = "hook", permissions = {"control"}})
+				`+call+`
+			`)
+		})
+	}
+}
+
 func TestControlWithoutPermissionIsNoop(t *testing.T) {
 	m := newTestManager()
 	m.logger = newPluginLogger(filepath.Join(t.TempDir(), "test.log"))
