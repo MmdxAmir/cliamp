@@ -2,6 +2,7 @@ package lyrics
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -236,6 +237,12 @@ func fetchNetEase(ctx context.Context, query string) ([]Line, error) {
 
 	var searchRes ncmSearchResponse
 	if err := httpclient.ReadJSON(resp.Body, maxResponseBody, &searchRes); err != nil {
+		// NetEase answers some searches with a result that is not a song
+		// list, such as a string. That reply has no song for the query.
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 

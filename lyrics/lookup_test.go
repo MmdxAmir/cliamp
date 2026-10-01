@@ -175,6 +175,26 @@ func TestLookup(t *testing.T) {
 			wantNotFound: true,
 		},
 		{
+			name:   "a NetEase search result that is not an object has no songs",
+			artist: "Artist", title: "Song",
+			api:          lyricsAPI{lrclib: reply(`[]`), search: reply(`{"result":"35b1748964af"}`)},
+			wantNotFound: true,
+			wantPaths:    []string{"/api/search", "/api/search/get/web"},
+		},
+		{
+			name:   "a NetEase song id that is not a number has no songs",
+			artist: "Artist", title: "Song",
+			api:          lyricsAPI{lrclib: reply(`[]`), search: reply(`{"result":{"songs":[{"id":"42"}]}}`)},
+			wantNotFound: true,
+			wantPaths:    []string{"/api/search", "/api/search/get/web"},
+		},
+		{
+			name:   "a NetEase search reply that is not JSON is an error",
+			artist: "Artist", title: "Song",
+			api:     lyricsAPI{lrclib: reply(`[]`), search: reply(`<html>`)},
+			wantErr: true,
+		},
+		{
 			name:   "an LRCLIB error is not a missing lyric",
 			artist: "Artist", title: "Song",
 			api:     lyricsAPI{lrclib: status(http.StatusInternalServerError), search: reply(`{"result":{"songs":[]}}`)},
