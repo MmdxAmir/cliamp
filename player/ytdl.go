@@ -16,6 +16,7 @@ import (
 	"github.com/gopxl/beep/v2"
 
 	"github.com/bjarneo/cliamp/internal/ytdlcookies"
+	"github.com/bjarneo/cliamp/internal/ytdlp"
 )
 
 // pipeBufSize is the buffer size for audio pipe readers (yt-dlp, ffmpeg).
@@ -72,26 +73,6 @@ func probeYTDLDuration(pageURL string) time.Duration {
 		return 0
 	}
 	return time.Duration(secs * float64(time.Second))
-}
-
-// YtdlpInstallHint returns a platform-specific install command suggestion.
-func YtdlpInstallHint() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return "brew install yt-dlp"
-	case "linux":
-		if _, err := exec.LookPath("apt-get"); err == nil {
-			return "sudo apt install yt-dlp"
-		}
-		if _, err := exec.LookPath("pacman"); err == nil {
-			return "sudo pacman -S yt-dlp"
-		}
-		return "pip install yt-dlp"
-	case "windows":
-		return "winget install yt-dlp"
-	default:
-		return "pip install yt-dlp"
-	}
 }
 
 // ffmpegInstallHint returns a platform-specific install command suggestion.
@@ -250,7 +231,7 @@ func monitorExit(cmd *exec.Cmd, stderr *limitedBuffer, name string) (<-chan erro
 // to skip to the desired position in the input stream.
 func decodeYTDLPipe(pageURL string, sr beep.SampleRate, bitDepth, startSec int) (*ytdlPipeStreamer, beep.Format, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
-		return nil, beep.Format{}, fmt.Errorf("yt-dlp is required — install: %s", YtdlpInstallHint())
+		return nil, beep.Format{}, fmt.Errorf("yt-dlp is required — install: %s", ytdlp.InstallHint())
 	}
 	if err := requireFFmpeg(); err != nil {
 		return nil, beep.Format{}, err

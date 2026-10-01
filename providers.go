@@ -35,6 +35,7 @@ import (
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/internal/embyapi"
 	"github.com/bjarneo/cliamp/internal/resume"
+	"github.com/bjarneo/cliamp/internal/ytdlp"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -275,7 +276,7 @@ func youTubeEntries(cfg config.Config, interactive bool) []provider.Entry {
 
 	if !player.YTDLPAvailable() {
 		fmt.Fprintf(os.Stderr, "\nYouTube requires yt-dlp for audio playback.\n")
-		fmt.Fprintf(os.Stderr, "Install command: %s\n\n", player.YtdlpInstallHint())
+		fmt.Fprintf(os.Stderr, "Install command: %s\n\n", ytdlp.InstallHint())
 		if offerYTDLPInstall(interactive, os.Stdin, os.Stderr) {
 			fmt.Fprintf(os.Stderr, "Installing yt-dlp...\n")
 			if err := installYTDLP(); err != nil {

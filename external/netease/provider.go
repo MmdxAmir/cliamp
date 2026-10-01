@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/bjarneo/cliamp/internal/httpclient"
-	"github.com/bjarneo/cliamp/player"
+	"github.com/bjarneo/cliamp/internal/ytdlp"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/resolve"
@@ -436,7 +436,7 @@ func (p *Provider) ensureCookieHeader(ctx context.Context) (string, error) {
 
 func extractBrowserCookieHeader(ctx context.Context, browser string) (string, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
-		return "", fmt.Errorf("yt-dlp not found. Install with: %s", player.YtdlpInstallHint())
+		return "", fmt.Errorf("yt-dlp not found. Install with: %s", ytdlp.InstallHint())
 	}
 	tmp, err := os.CreateTemp("", "cliamp-netease-cookies-*.txt")
 	if err != nil {
