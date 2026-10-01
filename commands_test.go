@@ -8,7 +8,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/ipc"
+	"github.com/bjarneo/cliamp/resolve"
 	"github.com/bjarneo/cliamp/theme"
 )
 
@@ -60,6 +63,36 @@ func TestInverseBoolFlags(t *testing.T) {
 			value := tt.get(got)
 			if value == nil || *value != tt.want {
 				t.Errorf("value = %v, want %t", value, tt.want)
+			}
+		})
+	}
+}
+
+// The help of each --[no-] flag shows the default that docs/cli.md names.
+// --expand-playlist shows the default of the resolve package.
+func TestInverseBoolFlagDefaults(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("docs", "cli.md"))
+	if err != nil {
+		t.Fatalf("read docs/cli.md: %v", err)
+	}
+	code := map[string]bool{"expand-playlist": resolve.ExpandYTPlaylist}
+	for _, f := range buildApp().Flags {
+		bf, ok := f.(*cli.BoolWithInverseFlag)
+		if !ok {
+			continue
+		}
+		t.Run(bf.Name, func(t *testing.T) {
+			name := regexp.QuoteMeta(bf.Name)
+			row := regexp.MustCompile("(?m)^\\| `--" + name + "` / `--no-" + name + "` \\| bool \\| (true|false) \\|")
+			m := row.FindStringSubmatch(string(data))
+			if m == nil {
+				t.Fatalf("docs/cli.md has no row for --%s", bf.Name)
+			}
+			if got := strconv.FormatBool(bf.Value); got != m[1] {
+				t.Errorf("--%s help shows default %s, docs/cli.md says %s", bf.Name, got, m[1])
+			}
+			if want, ok := code[bf.Name]; ok && bf.Value != want {
+				t.Errorf("--%s help shows default %t, the code uses %t", bf.Name, bf.Value, want)
 			}
 		})
 	}

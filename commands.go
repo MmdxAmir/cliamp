@@ -49,7 +49,7 @@ func buildApp() *cli.Command {
 		&cli.StringFlag{Name: "audio-device", Usage: "audio output device (use 'list' to show)"},
 		&cli.StringFlag{Name: "playlist", Usage: "load a local TOML playlist by name and start playing"},
 		&cli.StringFlag{Name: "log-level", Usage: "log level: debug, info, warn, error"},
-		&cli.BoolWithInverseFlag{Name: "expand-playlist", Usage: "expand YouTube Music playlists from list= URLs"},
+		&cli.BoolWithInverseFlag{Name: "expand-playlist", Usage: "expand YouTube and YouTube Music list= URLs to the full playlist", Value: true},
 		&cli.BoolWithInverseFlag{Name: "low-power", Usage: "low-power mode: reduce CPU by lowering UI cadence and disabling visualization"},
 		&cli.BoolFlag{Name: "daemon", Aliases: []string{"d"}, Usage: "run headless (no TUI), serving IPC for scripts/Waybar"},
 	}
