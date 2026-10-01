@@ -1,7 +1,9 @@
 package radio
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 )
@@ -150,7 +152,8 @@ func TestPinsToggleFailedSaveKeepsMemory(t *testing.T) {
 			}
 			before := pins.Places()
 
-			// A directory cannot be replaced by the pins file, even as root.
+			// A directory cannot be read or replaced as the pins file, even
+			// as root.
 			pins.path = t.TempDir()
 			pinned, err := pins.Toggle(tc.toggle)
 			if err == nil {
@@ -161,6 +164,144 @@ func TestPinsToggleFailedSaveKeepsMemory(t *testing.T) {
 			}
 			if got := pins.Places(); !slices.Equal(got, before) {
 				t.Errorf("pins after a failed save = %+v, want %+v", got, before)
+			}
+		})
+	}
+}
+
+// placeIDs returns the IDs of places in order.
+func placeIDs(places []Place) []string {
+	var ids []string
+	for _, place := range places {
+		ids = append(ids, place.ID())
+	}
+	return ids
+}
+
+// Two instances share one pins file. A toggle applies the intent of its own
+// instance to the latest file contents, so it keeps the pins of the other.
+func TestPinsToggleUsesLatestFile(t *testing.T) {
+	norway := Place{Code: "NO", Name: "Norway"}
+	germany := Place{Code: "DE", Name: "Germany"}
+	tests := []struct {
+		name       string
+		initial    []Place // pinned before both instances load
+		other      []Place // toggled by the other instance after the load
+		toggle     Place
+		wantPinned bool
+		wantIDs    []string
+	}{
+		{
+			name:       "pin keeps a pin of the other instance",
+			other:      []Place{germany},
+			toggle:     norway,
+			wantPinned: true,
+			wantIDs:    []string{"DE", "NO"},
+		},
+		{
+			name:       "unpin keeps a pin of the other instance",
+			initial:    []Place{norway},
+			other:      []Place{germany},
+			toggle:     norway,
+			wantPinned: false,
+			wantIDs:    []string{"DE"},
+		},
+		{
+			name:       "pin that the other instance made",
+			other:      []Place{norway},
+			toggle:     norway,
+			wantPinned: true,
+			wantIDs:    []string{"NO"},
+		},
+		{
+			name:       "unpin that the other instance made",
+			initial:    []Place{norway, germany},
+			other:      []Place{norway},
+			toggle:     norway,
+			wantPinned: false,
+			wantIDs:    []string{"DE"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+			seed := LoadPins()
+			for _, place := range tt.initial {
+				if _, err := seed.Toggle(place); err != nil {
+					t.Fatal(err)
+				}
+			}
+			local, other := LoadPins(), LoadPins()
+			for _, place := range tt.other {
+				if _, err := other.Toggle(place); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			pinned, err := local.Toggle(tt.toggle)
+			if err != nil || pinned != tt.wantPinned {
+				t.Fatalf("Toggle = (%v, %v), want (%v, nil)", pinned, err, tt.wantPinned)
+			}
+			if got := placeIDs(local.Places()); !slices.Equal(got, tt.wantIDs) {
+				t.Errorf("pins in memory = %v, want %v", got, tt.wantIDs)
+			}
+			if got := placeIDs(LoadPins().Places()); !slices.Equal(got, tt.wantIDs) {
+				t.Errorf("pins on disk = %v, want %v", got, tt.wantIDs)
+			}
+		})
+	}
+}
+
+// A toggle that cannot read the pins file or take its lock must leave the
+// file and the pins in memory as they were. A replaced file loses its pins.
+func TestPinsToggleFailureKeepsFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes and file locks differ on Windows")
+	}
+	const content = "[[country]]\ncode = \"DE\"\nname = \"Germany\"\n"
+	tests := []struct {
+		name      string
+		breakFile func(t *testing.T, path string)
+	}{
+		{
+			name: "unreadable file",
+			breakFile: func(t *testing.T, path string) {
+				if os.Geteuid() == 0 {
+					t.Skip("root reads a file without read permission")
+				}
+				if err := os.Chmod(path, 0); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
+			},
+		},
+		{
+			name: "lock file is a directory",
+			breakFile: func(t *testing.T, path string) {
+				if err := os.Mkdir(path+".lock", 0o700); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), pinsFile)
+			writeFile(t, path, content)
+			pins := &Pins{path: path}
+			tt.breakFile(t, path)
+
+			pinned, err := pins.Toggle(Place{Code: "NO", Name: "Norway"})
+			if err == nil || pinned {
+				t.Fatalf("Toggle = (%v, %v), want (false, an error)", pinned, err)
+			}
+			if got := pins.Places(); len(got) != 0 {
+				t.Errorf("pins in memory = %+v, want none", got)
+			}
+			_ = os.Chmod(path, 0o644)
+			data, err := os.ReadFile(path)
+			if err != nil || string(data) != content {
+				t.Errorf("pins file = %q, %v, want %q", data, err, content)
 			}
 		})
 	}
