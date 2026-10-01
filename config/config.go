@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bjarneo/cliamp/internal/appdir"
@@ -1073,29 +1074,51 @@ func save(key, value string) error {
 	if strings.ContainsAny(key+value, "\r\n") {
 		return fmt.Errorf("save %s: a key or value holds a line break", key)
 	}
+	line := fmt.Sprintf("%s = %s", key, value)
+	return update(func(data string) string { return editTopLevel(data, key, line) })
+}
+
+// saveMu serializes the config saves of this process. The lock file in
+// update serializes them across cliamp processes.
+var saveMu sync.Mutex
+
+// update reads config.toml, passes its text to edit and writes the result.
+// A missing file reads as empty text. A lock file next to config.toml covers
+// the read, the edit and the write, so a save from another cliamp process,
+// such as cliamp setup next to the TUI, cannot get lost in between.
+func update(edit func(data string) string) error {
 	path, err := Path()
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve config path: %w", err)
 	}
-
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+	saveMu.Lock()
+	defer saveMu.Unlock()
+	unlock, err := fileutil.LockFile(path + ".lock")
+	if err != nil {
 		return err
 	}
-
-	line := fmt.Sprintf("%s = %s", key, value)
+	defer func() { _ = unlock() }()
 
 	data, err := os.ReadFile(path)
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		return fileutil.WriteFileAtomic(path, []byte(line+"\n"), 0o600)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("read config: %w", err)
 	}
+	if err := fileutil.WriteFileAtomic(path, []byte(edit(string(data))), 0o600); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	return nil
+}
 
+// editTopLevel returns data with line written as the top-level key. save
+// describes the rules.
+func editTopLevel(data, key, line string) string {
 	// Scan existing lines and replace the matching key in-place,
 	// but only in the top-level scope (before any [section] header).
 	// Load uses the last line of a duplicate key, so replace every line.
-	lines := strings.Split(string(data), "\n")
+	lines := strings.Split(data, "\n")
 	found := false
 	lastKey, header := -1, -1 // indexes of the last top-level key and the first header
 	for i, l := range lines {
@@ -1147,8 +1170,7 @@ func save(key, value string) error {
 	if lines[len(lines)-1] != "" {
 		lines = append(lines, "") // end the file with one newline
 	}
-
-	return fileutil.WriteFileAtomic(path, []byte(strings.Join(lines, "\n")), 0o600)
+	return strings.Join(lines, "\n")
 }
 
 // SaveNavidromeSort persists the given album browse sort type to the
@@ -1197,19 +1219,7 @@ func SaveSection(section string, kv []KeyValue, owned []string) error {
 			return fmt.Errorf("save [%s] %s: a key or value holds a line break", section, e.Key)
 		}
 	}
-	path, err := Path()
-	if err != nil {
-		return fmt.Errorf("resolve config path: %w", err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("read config: %w", err)
-	}
-	out := editSection(string(data), section, kv, owned)
-	if err := fileutil.WriteFileAtomic(path, []byte(out), 0o600); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
-	return nil
+	return update(func(data string) string { return editSection(data, section, kv, owned) })
 }
 
 // editSection returns data with kv written into [section]. SaveSection

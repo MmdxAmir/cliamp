@@ -1,9 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -532,5 +534,44 @@ func TestSaveKeepsCommentAboveFirstSection(t *testing.T) {
 				t.Errorf("config = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestSaveConcurrentWritersKeepEveryKey runs top-level saves and section
+// saves at the same time. Each save reads, edits and writes the whole file,
+// so a save that another save overlaps must not lose its key.
+func TestSaveConcurrentWritersKeepEveryKey(t *testing.T) {
+	home := withHome(t)
+	const writers = 8
+	for round := range 20 {
+		writeConfig(t, home, "volume = 0\n")
+		var wg sync.WaitGroup
+		errs := make(chan error, 2*writers)
+		for i := range writers {
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				errs <- SaveBool(fmt.Sprintf("k%d", i), true)
+			}()
+			go func() {
+				defer wg.Done()
+				errs <- SaveSection("radio", []KeyValue{{fmt.Sprintf("s%d", i), "true"}}, nil)
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			if err != nil {
+				t.Fatalf("round %d: save: %v", round, err)
+			}
+		}
+		got := readConfig(t, home)
+		for i := range writers {
+			for _, line := range []string{fmt.Sprintf("k%d = true\n", i), fmt.Sprintf("s%d = true\n", i)} {
+				if !strings.Contains(got, line) {
+					t.Fatalf("round %d: config lost %q:\n%s", round, line, got)
+				}
+			}
+		}
 	}
 }
