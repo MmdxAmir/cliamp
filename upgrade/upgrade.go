@@ -39,9 +39,8 @@ var downloadIdleTimeout = 30 * time.Second
 var errDownloadStalled = errors.New("download stalled")
 
 type release struct {
-	TagName    string `json:"tag_name"`
-	Prerelease bool   `json:"prerelease"`
-	Draft      bool   `json:"draft"`
+	TagName string `json:"tag_name"`
+	Draft   bool   `json:"draft"`
 }
 
 // Run checks for a newer release and replaces the current binary if one is found.
@@ -51,7 +50,9 @@ func Run(currentVersion string, prerelease bool) error {
 		return fmt.Errorf("checking latest version: %w", err)
 	}
 
-	if currentVersion != "" && currentVersion == latest {
+	// With prerelease, the user can run a build newer than every listed
+	// release. An older release must not replace it.
+	if currentVersion != "" && (currentVersion == latest || prerelease && notNewer(latest, currentVersion)) {
 		fmt.Printf("Already up to date (%s)\n", currentVersion)
 		return nil
 	}
@@ -127,12 +128,29 @@ func latestVersion(prerelease bool) (string, error) {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&releases); err != nil {
 		return "", fmt.Errorf("parsing response: %w", err)
 	}
+	return newestRelease(releases)
+}
+
+// newestRelease returns the tag of the release with the highest SemVer
+// version that is not a draft. Stable releases count too, so a stable release
+// that follows a prerelease wins over it. Tags that are not SemVer versions
+// are skipped.
+func newestRelease(releases []release) (string, error) {
+	var best string
+	var bestVersion version
 	for _, r := range releases {
-		if r.Prerelease && !r.Draft {
-			return validTag(r.TagName)
+		v, ok := parseVersion(r.TagName)
+		if r.Draft || !ok {
+			continue
+		}
+		if best == "" || v.compare(bestVersion) > 0 {
+			best, bestVersion = r.TagName, v
 		}
 	}
-	return "", errors.New("no prerelease releases found")
+	if best == "" {
+		return "", errors.New("no releases found")
+	}
+	return validTag(best)
 }
 
 func validTag(tag string) (string, error) {

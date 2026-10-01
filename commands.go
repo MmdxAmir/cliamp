@@ -232,7 +232,7 @@ func upgradeCommand() *cli.Command {
 		Name:  "upgrade",
 		Usage: "upgrade cliamp to the latest stable release",
 		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: "prerelease", Usage: "upgrade to the latest prerelease"},
+			&cli.BoolFlag{Name: "prerelease", Usage: "upgrade to the newest release, prereleases included"},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			return upgrade.Run(version, c.Bool("prerelease"))

@@ -81,44 +81,149 @@ func TestLatestVersionSuccess(t *testing.T) {
 	}
 }
 
-func TestLatestPrereleaseVersionSuccess(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.Path, "/repos/") || !strings.HasSuffix(r.URL.Path, "/releases") {
-			t.Errorf("unexpected path %q", r.URL.Path)
-		}
-		if got := r.URL.Query().Get("per_page"); got != "100" {
-			t.Errorf("per_page = %q, want 100", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[
-			{"tag_name":"v1.3.0-beta.2","prerelease":true,"draft":true},
-			{"tag_name":"v1.2.3","prerelease":false},
-			{"tag_name":"v1.3.0-beta.1","prerelease":true}
-		]`))
-	}))
-	defer srv.Close()
-	installTestClient(t, srv.URL)
+func TestLatestPrereleaseVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		list    string
+		want    string
+		wantErr string
+	}{
+		{
+			name: "prerelease newer than stable",
+			list: `[
+				{"tag_name":"v1.3.0-beta.2","prerelease":true,"draft":true},
+				{"tag_name":"v1.2.3","prerelease":false},
+				{"tag_name":"v1.3.0-beta.1","prerelease":true}
+			]`,
+			want: "v1.3.0-beta.1",
+		},
+		{
+			name: "stable newer than prerelease",
+			list: `[
+				{"tag_name":"v2.3.0"},
+				{"tag_name":"v2.2.0"},
+				{"tag_name":"v2.0.0-rc.2","prerelease":true},
+				{"tag_name":"v2.0.0-rc.1","prerelease":true}
+			]`,
+			want: "v2.3.0",
+		},
+		{
+			name: "stable release beats its own release candidates",
+			list: `[
+				{"tag_name":"v2.4.0-rc.2","prerelease":true},
+				{"tag_name":"v2.4.0"},
+				{"tag_name":"v2.4.0-rc.1","prerelease":true}
+			]`,
+			want: "v2.4.0",
+		},
+		{
+			name: "backported patch listed first",
+			list: `[
+				{"tag_name":"v1.9.1"},
+				{"tag_name":"v2.0.0-rc.1","prerelease":true},
+				{"tag_name":"v1.9.0"}
+			]`,
+			want: "v2.0.0-rc.1",
+		},
+		{
+			name: "numeric prerelease parts compare by value",
+			list: `[
+				{"tag_name":"v2.0.0-rc.2","prerelease":true},
+				{"tag_name":"v2.0.0-rc.10","prerelease":true}
+			]`,
+			want: "v2.0.0-rc.10",
+		},
+		{
+			name: "tags that are not versions are skipped",
+			list: `[
+				{"tag_name":"nightly","prerelease":true},
+				{"tag_name":"v1.2.3"}
+			]`,
+			want: "v1.2.3",
+		},
+		{
+			name:    "only drafts",
+			list:    `[{"tag_name":"v1.3.0-beta.1","prerelease":true,"draft":true}]`,
+			wantErr: "no releases",
+		},
+		{
+			name:    "empty list",
+			list:    `[]`,
+			wantErr: "no releases",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !strings.Contains(r.URL.Path, "/repos/") || !strings.HasSuffix(r.URL.Path, "/releases") {
+					t.Errorf("unexpected path %q", r.URL.Path)
+				}
+				if got := r.URL.Query().Get("per_page"); got != "100" {
+					t.Errorf("per_page = %q, want 100", got)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, tc.list)
+			}))
+			defer srv.Close()
+			installTestClient(t, srv.URL)
 
-	tag, err := latestVersion(true)
-	if err != nil {
-		t.Fatalf("latestVersion: %v", err)
-	}
-	if tag != "v1.3.0-beta.1" {
-		t.Errorf("tag = %q, want v1.3.0-beta.1", tag)
+			tag, err := latestVersion(true)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("latestVersion error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("latestVersion: %v", err)
+			}
+			if tag != tc.want {
+				t.Errorf("tag = %q, want %q", tag, tc.want)
+			}
+		})
 	}
 }
 
-func TestLatestPrereleaseVersionMissing(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"tag_name":"v1.2.3","prerelease":false}]`))
-	}))
-	defer srv.Close()
-	installTestClient(t, srv.URL)
+// TestRunPrereleaseNeverDowngrades verifies that --prerelease does not move
+// the user to a release older than the one they run.
+func TestRunPrereleaseNeverDowngrades(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		current string
+		list    string
+	}{
+		{
+			name:    "newest stable is current, older prerelease listed",
+			current: "v2.3.0",
+			list:    `[{"tag_name":"v2.3.0"},{"tag_name":"v2.0.0-rc.2","prerelease":true}]`,
+		},
+		{
+			name:    "current prerelease is newer than every listed release",
+			current: "v2.4.0-beta.1",
+			list:    `[{"tag_name":"v2.3.0"},{"tag_name":"v2.0.0-rc.2","prerelease":true}]`,
+		},
+		{
+			name:    "current is the newest prerelease",
+			current: "v2.4.0-rc.2",
+			list:    `[{"tag_name":"v2.4.0-rc.2","prerelease":true},{"tag_name":"v2.3.0"}]`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !strings.HasSuffix(r.URL.Path, "/releases") {
+					t.Errorf("Run requested %q, want no download", r.URL.Path)
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, tc.list)
+			}))
+			defer srv.Close()
+			installTestClient(t, srv.URL)
 
-	_, err := latestVersion(true)
-	if err == nil || !strings.Contains(err.Error(), "no prerelease") {
-		t.Errorf("latestVersion error = %v, want missing prerelease error", err)
+			if err := Run(tc.current, true); err != nil {
+				t.Errorf("Run(%q, prerelease) = %v, want nil", tc.current, err)
+			}
+		})
 	}
 }
 
