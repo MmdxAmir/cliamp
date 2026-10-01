@@ -58,6 +58,10 @@ The list holds each path one time only. When a track that is already in the
 list plays again, cliamp moves its entry to the top and sets the new time. The
 time since the last play has no effect. The entry keeps its stored tags,
 cover URL and `provider_meta` keys when the new play does not have them.
+It also keeps a stored `realtime` or `restricted` flag when the new play has
+no `provider_meta` keys. Otherwise, the provider of the new play sets these
+flags. For example, a Mixcloud show loses its `[E]` suffix when Mixcloud no
+longer marks it as exclusive.
 
 ## What is recorded
 

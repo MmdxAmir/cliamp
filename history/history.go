@@ -211,7 +211,9 @@ func (s *Store) saveLocked(entries []Entry) error {
 
 // mergeTrackMeta keeps any non-empty metadata from the previous entry when a
 // replay supplies a sparser track (e.g. an ICY title-only update arriving
-// after the original tags were captured).
+// after the original tags were captured). A replay with provider meta comes
+// from its provider, so its Realtime and Restricted flags replace the stored
+// ones. Stream and Feed follow from the path and are always kept.
 func mergeTrackMeta(prev, cur playlist.Track) playlist.Track {
 	if cur.Title == "" {
 		cur.Title = prev.Title
@@ -239,9 +241,9 @@ func mergeTrackMeta(prev, cur playlist.Track) playlist.Track {
 	}
 	cur.Stream = cur.Stream || prev.Stream
 	cur.Feed = cur.Feed || prev.Feed
-	cur.Realtime = cur.Realtime || prev.Realtime
-	cur.Restricted = cur.Restricted || prev.Restricted
 	if len(cur.ProviderMeta) == 0 {
+		cur.Realtime = cur.Realtime || prev.Realtime
+		cur.Restricted = cur.Restricted || prev.Restricted
 		cur.ProviderMeta = prev.ProviderMeta
 	}
 	return cur

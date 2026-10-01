@@ -410,6 +410,18 @@ func TestMergeTrackMeta(t *testing.T) {
 			cur:  playlist.Track{Path: "/a", ProviderMeta: map[string]string{"jellyfin.id": "7"}},
 			want: playlist.Track{Path: "/a", ProviderMeta: map[string]string{"jellyfin.id": "7"}},
 		},
+		{
+			name: "provider replay clears the stored realtime and restricted flags",
+			prev: playlist.Track{Path: "/a", Stream: true, Realtime: true, Restricted: true, ProviderMeta: meta},
+			cur:  playlist.Track{Path: "/a", Stream: true, ProviderMeta: meta},
+			want: playlist.Track{Path: "/a", Stream: true, ProviderMeta: meta},
+		},
+		{
+			name: "provider replay keeps the stored stream and feed flags",
+			prev: playlist.Track{Path: "/a", Stream: true, Feed: true, ProviderMeta: meta},
+			cur:  playlist.Track{Path: "/a", ProviderMeta: meta},
+			want: playlist.Track{Path: "/a", Stream: true, Feed: true, ProviderMeta: meta},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
