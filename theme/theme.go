@@ -228,14 +228,19 @@ func loadFS(fsys fs.FS, dir, where string, themes map[string]Theme) []error {
 	return errs
 }
 
-// loadFile parses and validates one theme file and stores it in themes.
+// loadFile parses and validates one theme file and stores it in themes. It
+// skips a file whose name selects the terminal colors, because no lookup or
+// saved config could select that theme.
 func loadFile(fsys fs.FS, file string, themes map[string]Theme) error {
+	name := strings.TrimSuffix(path.Base(file), ".toml")
+	if IsDefaultName(name) {
+		return fmt.Errorf("theme %q: name is reserved for the terminal colors", name)
+	}
 	f, err := fsys.Open(file)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	name := strings.TrimSuffix(path.Base(file), ".toml")
 	t, err := Parse(name, f)
 	if err != nil {
 		return err

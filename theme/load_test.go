@@ -361,6 +361,20 @@ red = "#dc322f"
 			},
 		},
 		{
+			name: "theme names that select the terminal colors",
+			files: fstest.MapFS{
+				"themes/DEFAULT.toml":                   {Data: []byte(good)},
+				"themes/Default - Terminal colors.toml": {Data: []byte(good)},
+				"themes/default.toml":                   {Data: []byte(good)},
+			},
+			want: map[string]Theme{},
+			wantErr: []string{
+				`skip DEFAULT.toml in test dir: theme "DEFAULT": name is reserved for the terminal colors`,
+				`skip Default - Terminal colors.toml in test dir: theme "Default - Terminal colors": name is reserved for the terminal colors`,
+				`skip default.toml in test dir: theme "default": name is reserved for the terminal colors`,
+			},
+		},
+		{
 			name: "line too long",
 			files: fstest.MapFS{
 				"themes/long.toml":      {Data: []byte("# " + strings.Repeat("x", 70000))},

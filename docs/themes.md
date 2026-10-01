@@ -20,10 +20,12 @@ mkdir -p ~/.config/cliamp/themes
 
 Each file needs all six foreground colors as `#RRGGBB` hex values. Add `bg` to
 set a background. Omit it to keep the terminal background. The file name
-without `.toml` is the theme name.
+without `.toml` is the theme name. The name `default` selects the terminal
+colors, so you cannot use it for a custom theme.
 
-cliamp skips an incomplete or malformed custom theme. It writes the file name
-and the reason to `~/.config/cliamp/cliamp.log` once per run, for example:
+cliamp skips an incomplete or malformed custom theme, and a theme named
+`default`. It writes the file name and the reason to
+`~/.config/cliamp/cliamp.log` once per run, for example:
 
 ```
 time=2026-09-29T21:00:00.000+02:00 level=WARN msg="theme: skip mytheme.toml in /home/you/.config/cliamp/themes: theme \"mytheme\": accent must be #RRGGBB"
