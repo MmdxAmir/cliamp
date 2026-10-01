@@ -66,41 +66,46 @@ func fixedArgs(fn *lua.LFunction, args ...lua.LValue) callBuilder {
 
 // call is the one way Go calls into a plugin's Lua VM. It holds p.mu for the
 // whole call because an LState is not safe for concurrent use. It returns
-// errClosed after the VM is closed. See callLocked for the rest.
+// errClosed after the VM is closed. The call runs under m.ctx. See callLocked
+// for the rest.
 func (m *Manager) call(p *Plugin, label string, timeout time.Duration, nret int, build callBuilder) (lua.LValue, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return m.callLocked(p, label, timeout, nret, build)
+	return m.callLocked(m.ctx, p, label, timeout, nret, build)
 }
 
 // renderLabel is the call label of a visualizer render. See callLocked.
 const renderLabel = "render"
 
 // callLocked is call for a caller that already holds p.mu. The call stops
-// after timeout, or when Close cancels m.ctx. When nret > 0, it returns the
-// first result. After Close cancels m.ctx, it returns errClosed and logs
-// nothing, because the stop is not an error of the plugin. It logs a Lua
-// error under label, but only when the error differs from the last one logged
-// for label. Thus a timer that fails each time logs once. A render runs on
+// after timeout, or when parent ends. parent is m.ctx, or for a command a
+// child of m.cmdCtx. Close cancels both with the cause errClosed. When nret >
+// 0, it returns the first result. After parent ends, it returns the cause of
+// parent and logs nothing, because the stop is not an error of the plugin. It
+// logs a Lua error under label, but only when the error differs from the last
+// one logged for label. Thus a timer that fails each time logs once. A render runs on
 // each frame, so it logs only its first error and its first timeout while the
 // plugin is loaded. Otherwise a render that fails on some frames fills
 // plugins.log. A timeout error names the limit.
-func (m *Manager) callLocked(p *Plugin, label string, timeout time.Duration, nret int, build callBuilder) (lua.LValue, error) {
-	if p.closed || m.ctx.Err() != nil {
+func (m *Manager) callLocked(parent context.Context, p *Plugin, label string, timeout time.Duration, nret int, build callBuilder) (lua.LValue, error) {
+	if p.closed {
 		return lua.LNil, errClosed
+	}
+	if parent.Err() != nil {
+		return lua.LNil, context.Cause(parent)
 	}
 	fn, args := build(p.L)
 	if fn == nil {
 		return lua.LNil, nil
 	}
-	ctx, cancel := context.WithTimeout(m.ctx, timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	p.L.SetContext(ctx)
 	defer p.L.RemoveContext()
 
 	if err := p.L.CallByParam(lua.P{Fn: fn, NRet: nret, Protect: true}, args...); err != nil {
-		if m.ctx.Err() != nil {
-			return lua.LNil, errClosed
+		if parent.Err() != nil {
+			return lua.LNil, context.Cause(parent)
 		}
 		// A timeout stops the VM at a different line each time, so key it by
 		// the context error and not by the Lua message. A render timeout has

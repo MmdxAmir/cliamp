@@ -213,7 +213,7 @@ and the `status` command already exposes playback metadata.
 
 Use `p:on(event, callback)` to subscribe to events. Each plugin gets its events and key presses one at a time, in the order cliamp sent them. Different plugins run in parallel. Each callback times out after 5 seconds.
 
-Up to 256 events and key presses can wait for one plugin. If a plugin falls further behind, cliamp drops its new events and key presses until it catches up, and logs one warning to `plugins.log`. At shutdown, cliamp runs the events that wait for up to 2 seconds and drops the rest. Then it runs the `app.quit` handlers one at a time, with the same 5 second limit. After that, cliamp stops each command, timer callback, and exec callback that still runs.
+Up to 256 events and key presses can wait for one plugin. If a plugin falls further behind, cliamp drops its new events and key presses until it catches up, and logs one warning to `plugins.log`. At shutdown, cliamp first stops each command that still runs. Then it runs the events that wait for up to 2 seconds and drops the rest. Then it runs the `app.quit` handlers one at a time, with the same 5 second limit. After that, cliamp stops each timer callback and exec callback that still runs.
 
 ### Available events
 
@@ -281,7 +281,7 @@ end)
 
 The callback can return a string. The CLI client prints it. Invoke commands from the shell with `cliamp plugins call <plugin-name> <command> [args...]`. cliamp sends the command to the running player over IPC. Commands need no separate permission because the user starts them.
 
-List registered commands with `cliamp plugins commands`. A command can run for up to 5 minutes before it times out.
+List registered commands with `cliamp plugins commands`. A command can run for up to 5 minutes before it times out. cliamp also stops a command when its IPC job is canceled and when cliamp quits.
 
 ## Lua API
 

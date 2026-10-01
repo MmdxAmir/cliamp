@@ -1,6 +1,8 @@
 package luaplugin
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -169,7 +171,7 @@ func TestCommandRegisterAndEmit(t *testing.T) {
 		t.Fatal("plugin failed to load")
 	}
 
-	out, err := m.EmitCommand("cmd", "hello", []string{"friend"})
+	out, err := m.EmitCommand(context.Background(), "cmd", "hello", []string{"friend"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,12 +182,70 @@ func TestCommandRegisterAndEmit(t *testing.T) {
 
 func TestCommandNotFound(t *testing.T) {
 	m := newTestManager()
-	_, err := m.EmitCommand("nope", "nope", nil)
+	_, err := m.EmitCommand(context.Background(), "nope", "nope", nil)
 	if err == nil {
 		t.Fatal("expected error for unknown command")
 	}
 	if !strings.Contains(err.Error(), "no such") {
 		t.Fatalf("err = %q", err)
+	}
+}
+
+// A caller that ends ctx stops the command. runV2PluginJob passes the job
+// context, so a canceled IPC job stops its Lua. Before, the Lua ran on for
+// up to commandTimeout and held the plugin lock.
+func TestEmitCommandStopsWhenContextEnds(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"loop", "while true do end"},
+		{"sleep", "while true do cliamp.sleep(10) end"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestManager()
+			t.Cleanup(m.Close)
+			p := loadTestPlugin(t, m, "spin", `
+				local p = plugin.register({name = "spin", type = "hook"})
+				p:command("run", function() `+tt.body+` end)
+			`)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cmdErr := make(chan error, 1)
+			go func() {
+				_, err := m.EmitCommand(ctx, "spin", "run", nil)
+				cmdErr <- err
+			}()
+			// Wait until the command holds the plugin lock.
+			deadline := time.Now().Add(time.Second)
+			for p.mu.TryLock() {
+				p.mu.Unlock()
+				if time.Now().After(deadline) {
+					t.Fatal("the command did not start")
+				}
+				time.Sleep(time.Millisecond)
+			}
+
+			cancel()
+			select {
+			case err := <-cmdErr:
+				if !errors.Is(err, context.Canceled) {
+					t.Errorf("EmitCommand() error = %v, want %v", err, context.Canceled)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("EmitCommand did not return after the context ended")
+			}
+			// The Lua stopped, so the plugin lock is free again.
+			deadline = time.Now().Add(time.Second)
+			for !p.mu.TryLock() {
+				if time.Now().After(deadline) {
+					t.Fatal("the command still holds the plugin lock")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			p.mu.Unlock()
+		})
 	}
 }
 
@@ -238,7 +298,7 @@ func TestFailedPluginKeepsOtherPluginsCommands(t *testing.T) {
 		`)
 	}
 
-	out, err := m.EmitCommand("dup", "hi", nil)
+	out, err := m.EmitCommand(context.Background(), "dup", "hi", nil)
 	if err != nil || out != "from a" {
 		t.Errorf("EmitCommand() = %q, %v, want %q", out, err, "from a")
 	}

@@ -141,6 +141,49 @@ p:command("say", function(args) return "said " .. args[1] end)`})
 	}
 }
 
+// A job that is canceled while its plugin command runs stops the command.
+// Before, the command kept the plugin lock for up to 5 minutes.
+func TestRunV2PluginJobCancelStopsCommand(t *testing.T) {
+	plugins := newTestPlugins(t, map[string]string{"spin": `local p = plugin.register({name = "spin", type = "hook"})
+p:command("run", function() while true do cliamp.sleep(10) end end)
+p:command("ping", function() return "pong" end)`})
+	jobs := ipc.NewJobStore()
+	job, err := jobs.Create("plugin.call")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		runV2PluginJob(jobs, job.ID, ipc.V2Request{Operation: "plugin.call", Params: json.RawMessage(`{"name":"spin","sub":"run"}`)}, plugins)
+		close(done)
+	}()
+	for deadline := time.Now().Add(time.Second); ; time.Sleep(time.Millisecond) {
+		if got, _ := jobs.Get(job.ID); got.State == ipc.JobRunning {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the job did not start")
+		}
+	}
+	if err := jobs.Cancel(job.ID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runV2PluginJob did not return after the cancel")
+	}
+	if got, _ := jobs.Get(job.ID); got.State != ipc.JobCanceled {
+		t.Fatalf("state = %s, want %s", got.State, ipc.JobCanceled)
+	}
+	// The command stopped, so the next command of the plugin runs at once.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if out, err := plugins.EmitCommand(ctx, "spin", "ping", nil); err != nil || out != "pong" {
+		t.Fatalf("EmitCommand(ping) = %q, %v, want pong", out, err)
+	}
+}
+
 // The dispatcher sends state.get and spectrum.get to the Model and returns
 // its reply. It stops the wait when the request ends or the Model does not
 // answer in time.

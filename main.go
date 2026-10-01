@@ -526,7 +526,7 @@ func runV2PluginJob(jobs *ipc.JobStore, jobID string, request ipc.V2Request, plu
 		_ = jobs.Fail(jobID, ipc.V2Error{Code: ipc.V2ErrorCodeInvalidParams, Message: ipc.V2MessageInvalidParams})
 		return
 	}
-	output, err := plugins.EmitCommand(params.Name, params.Sub, params.Args)
+	output, err := plugins.EmitCommand(ctx, params.Name, params.Sub, params.Args)
 	if err != nil {
 		_ = jobs.Fail(jobID, ipc.V2Error{Code: ipc.V2ErrorCodeInternal, Message: ipc.V2MessageInternal, Detail: err.Error()})
 		return

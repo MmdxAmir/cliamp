@@ -1,6 +1,7 @@
 package luaplugin
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"time"
@@ -132,8 +133,10 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 // commandTimeout for the handler to return a result. A missing plugin/command
 // returns ("", err); a handler error returns ("", err); success returns
 // (result, nil). The result is whatever the handler returned as a string
-// (nil or false stringifies to ""). After Close starts it returns errClosed.
-func (m *Manager) EmitCommand(pluginName, cmdName string, args []string) (string, error) {
+// (nil or false stringifies to ""). When ctx ends, the handler stops and
+// EmitCommand returns the cause of ctx. When Close starts, the handler stops
+// and EmitCommand returns errClosed.
+func (m *Manager) EmitCommand(ctx context.Context, pluginName, cmdName string, args []string) (string, error) {
 	m.mu.RLock()
 	if m.closing {
 		m.mu.RUnlock()
@@ -160,7 +163,15 @@ func (m *Manager) EmitCommand(pluginName, cmdName string, args []string) (string
 
 	go func() {
 		defer m.wg.Done()
-		ret, err := m.call(hook.plugin, "command "+cmdName, commandTimeout, 1, func(L *lua.LState) (*lua.LFunction, []lua.LValue) {
+		// The call stops when Close cancels m.cmdCtx or when ctx ends.
+		callCtx, cancel := context.WithCancelCause(m.cmdCtx)
+		defer cancel(nil)
+		stop := context.AfterFunc(ctx, func() { cancel(context.Cause(ctx)) })
+		defer stop()
+		p := hook.plugin
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		ret, err := m.callLocked(callCtx, p, "command "+cmdName, commandTimeout, 1, func(L *lua.LState) (*lua.LFunction, []lua.LValue) {
 			argsTbl := L.NewTable()
 			for i, a := range args {
 				argsTbl.RawSetInt(i+1, lua.LString(a))
@@ -173,6 +184,10 @@ func (m *Manager) EmitCommand(pluginName, cmdName string, args []string) (string
 	select {
 	case r := <-done:
 		return r.out, r.err
+	case <-ctx.Done():
+		// The handler may still wait for the plugin lock. It sees the end
+		// of ctx when it gets the lock and returns without a call.
+		return "", context.Cause(ctx)
 	case <-time.After(commandTimeout + time.Second):
 		return "", errCommandTimeout(pluginName, cmdName)
 	}

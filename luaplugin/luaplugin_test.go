@@ -2,6 +2,7 @@ package luaplugin
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -1693,18 +1694,30 @@ func TestCloseBoundsQuitHook(t *testing.T) {
 	}
 }
 
-// Close stops Lua that still runs after app.quit: an IPC command, or a timer
-// callback. Before, Close waited up to 5 minutes for a command and 5 seconds
-// for a timer callback.
+// Close stops Lua that still runs: an IPC command, or a timer callback.
+// Before, Close waited up to 5 minutes for a command and 5 seconds for a
+// timer callback. Close stops a command before it runs the queued events and
+// app.quit, because they wait for the plugin lock that the command holds.
+// Before, a plugin with an app.quit hook or a queued event made Close wait
+// for the command.
 func TestCloseStopsRunningLua(t *testing.T) {
+	const (
+		cmdLoop  = `p:command("run", function() while true do end end)`
+		cmdSleep = `p:command("run", function() while true do cliamp.sleep(10) end end)`
+	)
 	tests := []struct {
 		name    string
 		code    string
 		command bool
+		event   bool // queue an event while the Lua call runs
 	}{
-		{"command loop", `p:command("run", function() while true do end end)`, true},
-		{"command sleep", `p:command("run", function() while true do cliamp.sleep(10) end end)`, true},
-		{"timer loop", `cliamp.timer.after(0.001, function() while true do end end)`, false},
+		{"command loop", cmdLoop, true, false},
+		{"command sleep", cmdSleep, true, false},
+		{"command loop with a quit hook", cmdLoop + ` p:on("app.quit", function() record("quit") end)`, true, false},
+		{"command sleep with a quit hook", cmdSleep + ` p:on("app.quit", function() record("quit") end)`, true, false},
+		{"command loop with a queued event", cmdLoop + ` p:on("ev", function() record("ev") end)`, true, true},
+		{"command sleep with a queued event", cmdSleep + ` p:on("ev", function() record("ev") end)`, true, true},
+		{"timer loop", `cliamp.timer.after(0.001, function() while true do end end)`, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1712,10 +1725,12 @@ func TestCloseStopsRunningLua(t *testing.T) {
 			p := loadTestPlugin(t, m, "spin", `
 				local p = plugin.register({name = "spin", type = "hook"})
 				`+tt.code)
+			var rec recorder
+			rec.install(p)
 			cmdErr := make(chan error, 1)
 			if tt.command {
 				go func() {
-					_, err := m.EmitCommand("spin", "run", nil)
+					_, err := m.EmitCommand(context.Background(), "spin", "run", nil)
 					cmdErr <- err
 				}()
 			}
@@ -1727,6 +1742,9 @@ func TestCloseStopsRunningLua(t *testing.T) {
 					t.Fatal("the Lua call did not start")
 				}
 				time.Sleep(time.Millisecond)
+			}
+			if tt.event {
+				m.Emit("ev", nil)
 			}
 
 			done := make(chan struct{})
@@ -1742,6 +1760,17 @@ func TestCloseStopsRunningLua(t *testing.T) {
 			if tt.command {
 				if err := <-cmdErr; !errors.Is(err, errClosed) {
 					t.Errorf("EmitCommand() error = %v, want %v", err, errClosed)
+				}
+			}
+			// The queued event and app.quit still run after the stop.
+			if tt.event {
+				if got := rec.values(); !slices.Equal(got, []string{"ev"}) {
+					t.Errorf("plugin saw %v, want the queued event", got)
+				}
+			}
+			if strings.Contains(tt.code, "app.quit") {
+				if got := rec.values(); !slices.Equal(got, []string{"quit"}) {
+					t.Errorf("plugin saw %v, want app.quit", got)
 				}
 			}
 		})
@@ -1776,7 +1805,7 @@ func TestCallsAfterClose(t *testing.T) {
 			return nil
 		}},
 		{"EmitCommand", func() error {
-			if out, err := m.EmitCommand("closed", "ping", nil); err == nil {
+			if out, err := m.EmitCommand(context.Background(), "closed", "ping", nil); err == nil {
 				return fmt.Errorf("EmitCommand() = %q, nil, want an error", out)
 			}
 			return nil
