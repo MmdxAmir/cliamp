@@ -100,17 +100,13 @@ func (tp *trackPipeline) interrupt() {
 }
 
 // setKnownDuration stores the metadata duration hint and fills missing frame
-// counts on streaming ffmpeg decoders so Len() and seeking keep working.
+// counts on seekable ffmpeg decoders so Len() and seeking keep working.
 func (tp *trackPipeline) setKnownDuration(d time.Duration) {
 	tp.knownDuration = d
 	if d <= 0 {
 		return
 	}
 	switch s := tp.decoder.(type) {
-	case *ffmpegPipeStreamer:
-		// A duration identifies a finite HTTP source even when the server also
-		// sends ICY headers. Its clean EOF must remain an ordinary track end.
-		s.live = false
 	case *navFFmpegStreamer:
 		if s.total == 0 {
 			s.total = int(s.sr.N(d))
@@ -213,7 +209,7 @@ func (p *Player) buildSource(path string, knownDuration, offset time.Duration, p
 	if p.isYTDLURL(path) {
 		return p.buildYTDLSource(path, knownDuration, probeDuration)
 	}
-	tp, err := p.buildPipeline(path)
+	tp, err := p.buildPipeline(path, knownDuration)
 	if err != nil {
 		return nil, fmt.Errorf("play at %v: %w", offset, err)
 	}
@@ -230,8 +226,9 @@ func (p *Player) buildSource(path string, knownDuration, offset time.Duration, p
 
 // buildPipeline opens and decodes a track, returning a ready-to-play pipeline.
 // bufferedPipeline, ffmpegURLPipeline and localFFmpegPipeline build the
-// routes that more than one source type shares.
-func (p *Player) buildPipeline(path string) (*trackPipeline, error) {
+// routes that more than one source type shares. knownDuration is the metadata
+// duration (use 0 if unknown).
+func (p *Player) buildPipeline(path string, knownDuration time.Duration) (*trackPipeline, error) {
 	// Clear stream title on each new pipeline build.
 	p.streamTitle.Store("")
 
@@ -373,7 +370,10 @@ func (p *Player) buildPipeline(path string) (*trackPipeline, error) {
 	// ICY metadata reader attached so live radio StreamTitle parsing works for
 	// ffmpeg-only codecs (AAC, AAC+, Opus, ...).
 	if remote && needsFFmpeg(ext) {
-		decoder, format, err := decodeFFmpegPipeStream(rc, p.sr, p.bitDepth, src.live)
+		// A duration identifies a finite HTTP source even when the server also
+		// sends ICY headers. Its clean EOF must remain an ordinary track end.
+		// The decoder gets this before the prefetch starts to read it.
+		decoder, format, err := decodeFFmpegPipeStream(rc, p.sr, p.bitDepth, src.live && knownDuration <= 0)
 		if err != nil {
 			rc.Close()
 			return nil, fmt.Errorf("decode: %w", err)

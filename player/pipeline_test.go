@@ -2,7 +2,9 @@ package player
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -324,7 +326,7 @@ func TestBuildPipelineRoutes(t *testing.T) {
 				tt.register(p)
 			}
 
-			tp, err := p.buildPipeline(tt.path)
+			tp, err := p.buildPipeline(tt.path, 0)
 			if tt.wantErr != "" {
 				if tp != nil {
 					tp.close()
@@ -511,6 +513,63 @@ printf 'page bytes'
 	}
 }
 
+// A metadata duration marks an ICY response with a length as a finite file,
+// so its clean EOF ends the track and does not read as a dropped connection.
+// The prefetch reads the decoder at once, so run this with -race: the decoder
+// must get the flag before that read.
+func TestBuildSourceKnownDurationEndsICYFileCleanly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell fixtures")
+	}
+	dir := t.TempDir()
+	// ffmpeg writes one PCM frame and exits, so the decoder reaches EOF.
+	writeExecutable(t, filepath.Join(dir, "ffmpeg"), "#!/bin/sh\nprintf '\\000\\100\\000\\300'\n")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	srv := routeServer(t, nil)
+
+	tests := []struct {
+		name    string
+		known   time.Duration
+		wantErr error
+	}{
+		{name: "no duration is live radio", wantErr: io.ErrUnexpectedEOF},
+		{name: "known duration is a file", known: time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Player{sr: beep.SampleRate(44100), bitDepth: 16, resampleQuality: 1}
+			tp, err := p.buildSource(srv.URL+"/radio-length.aac", tt.known, 0, false)
+			if err != nil {
+				t.Fatalf("buildSource() error = %v", err)
+			}
+			defer tp.close()
+			if tp.livePrefetch == nil {
+				t.Fatal("ICY response was not prefetched")
+			}
+
+			// Wait until the prefetch has read the decoder to its EOF, before
+			// any read here can order the two goroutines.
+			select {
+			case <-tp.livePrefetch.fillDone:
+			case <-time.After(2 * time.Second):
+				t.Fatal("prefetched source did not end")
+			}
+			buf := make([][2]float64, 512)
+			for i := 0; ; i++ {
+				if _, ok := tp.stream.Stream(buf); !ok {
+					break
+				}
+				if i == 2 {
+					t.Fatal("prefetched source still streams after its EOF")
+				}
+			}
+			if err := tp.livePrefetch.Err(); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Err() = %v at EOF, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // TestBuildPipelineSendsFFmpegFormatsPastNativeDecoders checks that every
 // extension that needs ffmpeg takes an ffmpeg route before the native
 // decoders, for local, HTTP and SSH sources.
@@ -542,7 +601,7 @@ func TestBuildPipelineSendsFFmpegFormatsPastNativeDecoders(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(ext+"/"+tt.name, func(t *testing.T) {
 				p := &Player{sr: beep.SampleRate(44100), bitDepth: 16, resampleQuality: 1}
-				tp, err := p.buildPipeline(tt.path)
+				tp, err := p.buildPipeline(tt.path, 0)
 				if tt.wantErr != "" {
 					if tp != nil {
 						tp.close()
