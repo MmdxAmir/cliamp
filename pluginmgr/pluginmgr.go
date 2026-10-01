@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/bjarneo/cliamp/internal/appdir"
 	"github.com/bjarneo/cliamp/internal/fileutil"
@@ -72,6 +73,14 @@ func List() error {
 		}
 	}
 
+	// The metadata comes from plugin code that may be untrusted. Drop its
+	// control characters, so it cannot move the cursor or hide text.
+	for i := range plugins {
+		plugins[i].Name = printable(plugins[i].Name)
+		plugins[i].Version = printable(plugins[i].Version)
+		plugins[i].Description = printable(plugins[i].Description)
+	}
+
 	// Calculate column widths.
 	nameW, typeW, verW := 4, 4, 7 // "NAME", "TYPE", "VERSION"
 	for _, p := range plugins {
@@ -94,6 +103,16 @@ func List() error {
 		return manifestError(dir, trustErr)
 	}
 	return nil
+}
+
+// printable returns s without control characters, such as ESC or a newline.
+func printable(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // manifestError explains how to recover from a trust manifest that does not

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/bjarneo/cliamp/internal/plugintrust"
 	"github.com/bjarneo/cliamp/luaplugin"
@@ -591,5 +592,34 @@ func TestBadTrustManifest(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// cliamp plugins list prints metadata from plugin code that may be
+// untrusted. It drops control characters, so the metadata cannot clear the
+// screen, move the cursor or add lines.
+func TestListDropsControlCharacters(t *testing.T) {
+	tests := []struct {
+		name  string
+		field string
+	}{
+		{"name", `name = "evil\27[2J\nfake"`},
+		{"version", `version = "1.0\27[8m"`},
+		{"description", `description = "hidden\r\27]52;c;aGk=\7"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			installForTest(t, "evil", `plugin.register({ type = "hook", `+tt.field+` })`)
+			out := silenceOutput(t)
+			if err := List(); err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if i := strings.IndexFunc(out.String(), func(r rune) bool { return unicode.IsControl(r) && r != '\n' }); i >= 0 {
+				t.Errorf("List output = %q, has a control character at %d", out.String(), i)
+			}
+			if lines := strings.Count(out.String(), "\n"); lines != 2 {
+				t.Errorf("List output = %q, want 2 lines", out.String())
+			}
+		})
 	}
 }
