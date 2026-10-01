@@ -491,3 +491,46 @@ func TestSaveDuplicateTopLevelKey(t *testing.T) {
 		})
 	}
 }
+
+// TestSaveKeepsCommentAboveFirstSection checks that a new top-level key does
+// not land between a section header and the comment above that header.
+func TestSaveKeepsCommentAboveFirstSection(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial string
+		want    string
+	}{
+		{
+			name:    "after the last top-level key",
+			initial: "volume = 0\n\n# Destination for saves\n[downloads]\ndirectory = \"\"\n",
+			want:    "volume = 0\nhide_help_bar = true\n\n# Destination for saves\n[downloads]\ndirectory = \"\"\n",
+		},
+		{
+			name:    "after the last key, past comments",
+			initial: "# Volume\nvolume = 0\n# shuffle = true\n\n# Destination for saves\n[downloads]\n",
+			want:    "# Volume\nvolume = 0\nhide_help_bar = true\n# shuffle = true\n\n# Destination for saves\n[downloads]\n",
+		},
+		{
+			name:    "no top-level key",
+			initial: "# Destination for saves\n[downloads]\ndirectory = \"\"\n",
+			want:    "hide_help_bar = true\n# Destination for saves\n[downloads]\ndirectory = \"\"\n",
+		},
+		{
+			name:    "no top-level key, blank lines and comments",
+			initial: "# cliamp\n\n# Destination for saves\n[downloads]\n",
+			want:    "hide_help_bar = true\n# cliamp\n\n# Destination for saves\n[downloads]\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := withHome(t)
+			writeConfig(t, home, tt.initial)
+			if err := SaveBool("hide_help_bar", true); err != nil {
+				t.Fatalf("SaveBool: %v", err)
+			}
+			if got := readConfig(t, home); got != tt.want {
+				t.Errorf("config = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

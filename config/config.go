@@ -1097,6 +1097,7 @@ func save(key, value string) error {
 	// Load uses the last line of a duplicate key, so replace every line.
 	lines := strings.Split(string(data), "\n")
 	found := false
+	lastKey, header := -1, -1 // indexes of the last top-level key and the first header
 	for i, l := range lines {
 		trimmed := strings.TrimSpace(l)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -1105,33 +1106,43 @@ func save(key, value string) error {
 		// Stop searching once we hit a section header — the key
 		// belongs in the top-level scope only.
 		if _, ok := sectionHeader(trimmed); ok {
+			header = i
 			break
 		}
 		k, _, ok := strings.Cut(trimmed, "=")
-		if ok && strings.TrimSpace(k) == key {
+		if !ok {
+			continue
+		}
+		lastKey = i
+		if strings.TrimSpace(k) == key {
 			lines[i] = line
 			found = true
 		}
 	}
-	if !found {
-		// Insert before the first section header to keep top-level keys together.
-		inserted := false
-		for i, l := range lines {
-			if _, ok := sectionHeader(strings.TrimSpace(l)); ok {
-				lines = append(lines[:i], append([]string{line}, lines[i:]...)...)
-				inserted = true
+	switch {
+	case found:
+	case header >= 0 && lastKey >= 0:
+		// Keep top-level keys together.
+		lines = slices.Insert(lines, lastKey+1, line)
+	case header >= 0:
+		// The comment and blank lines above the first header describe the
+		// section, so the key goes above them.
+		at := header
+		for at > 0 {
+			if t := strings.TrimSpace(lines[at-1]); t != "" && !strings.HasPrefix(t, "#") {
 				break
 			}
+			at--
 		}
-		if !inserted {
-			// A final newline leaves an empty last element. The key goes
-			// before it, so it does not land after a blank line.
-			end := len(lines)
-			if lines[end-1] == "" {
-				end--
-			}
-			lines = slices.Insert(lines, end, line)
+		lines = slices.Insert(lines, at, line)
+	default:
+		// A final newline leaves an empty last element. The key goes
+		// before it, so it does not land after a blank line.
+		end := len(lines)
+		if lines[end-1] == "" {
+			end--
 		}
+		lines = slices.Insert(lines, end, line)
 	}
 	if lines[len(lines)-1] != "" {
 		lines = append(lines, "") // end the file with one newline
