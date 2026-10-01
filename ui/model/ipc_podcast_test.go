@@ -65,7 +65,7 @@ func TestIPCPodcastTrackActions(t *testing.T) {
 					info := ipcTrackInfo(playlist.Track{
 						Path: feedURL, Title: "Podcast", Feed: true,
 						ProviderMeta: map[string]string{"kind": "album", "albumID": feedURL},
-					}, 0, 0)
+					}, 0, 0, false)
 					params, err := json.Marshal(ipc.Request{Track: &info})
 					if err != nil {
 						t.Fatal(err)

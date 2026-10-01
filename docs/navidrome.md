@@ -80,7 +80,19 @@ Press `N` at any time, or from the provider panel, to open the full-screen Navid
 | `Enter` | Append selected track to playlist |
 | `a` | Append all tracks to playlist |
 | `R` | Replace playlist with all tracks and start playing |
+| `f` | Toggle the favorite ♥ on the selected track |
 | `Esc` / `←` | Back |
+
+### Favorites and stars
+
+Press `f` on a Navidrome track to toggle its favorite ♥. cliamp saves the
+favorite locally and also stars the song on the server with the Subsonic `star`
+call. Press `f` again to remove the favorite and unstar the song. The key works
+in the playlist, the playlist manager, and the browser track list.
+
+The local favorite is the source of truth. If the server rejects the call, the
+local favorite stays and the status bar shows a warning. A song that you star in
+the Navidrome web UI does not appear as a favorite in cliamp.
 
 ### Album sort order
 

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/bjarneo/cliamp/external/local"
 	"github.com/bjarneo/cliamp/history"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
@@ -67,8 +69,8 @@ func (p *daemonCatalogProvider) ToggleFavorite(id string) (bool, string, error) 
 }
 
 type daemonWritableProvider struct {
-	created, renamed, deleted, added, bookmarked string
-	removed                                      int
+	created, renamed, deleted, added string
+	removed                          int
 }
 
 func (*daemonWritableProvider) Name() string                                { return "Writable" }
@@ -94,9 +96,20 @@ func (p *daemonWritableProvider) AddTrackToPlaylist(_ context.Context, name stri
 	p.added = name + ":" + track.Path
 	return nil
 }
-func (*daemonWritableProvider) SetBookmark(string, int) error { return nil }
-func (p *daemonWritableProvider) SetBookmarkByPath(name, path string) error {
-	p.bookmarked = name + ":" + path
+
+// daemonFavoriteProvider is a fake provider.TrackFavoriter for URIs with the
+// "fake:" prefix.
+type daemonFavoriteProvider struct {
+	daemonWritableProvider
+	calls chan string
+}
+
+func (p *daemonFavoriteProvider) CanFavoriteTrack(track playlist.Track) bool {
+	return strings.HasPrefix(track.Path, "fake:")
+}
+
+func (p *daemonFavoriteProvider) SetTrackFavorite(_ context.Context, track playlist.Track, favorite bool) error {
+	p.calls <- fmt.Sprintf("%s=%v", track.Path, favorite)
 	return nil
 }
 
@@ -156,11 +169,53 @@ func TestDaemonQueueListIncludesMetadata(t *testing.T) {
 }
 
 func TestTrackInfoConversion(t *testing.T) {
-	track := playlist.Track{Path: "https://example.com/stream", Title: "Stream", Artist: "Artist", Realtime: true, Bookmark: true}
-	info := trackInfo(track, 3, 2)
+	track := playlist.Track{Path: "https://example.com/stream", Title: "Stream", Artist: "Artist", Realtime: true}
+	info := (&daemon{}).trackInfo(track, 3, 2)
 	converted := trackFromInfo(info)
-	if info.Index != 3 || info.QueuePosition != 2 || converted.Path != track.Path || !converted.Stream || !converted.Realtime || !converted.Bookmark {
+	if info.Index != 3 || info.QueuePosition != 2 || converted.Path != track.Path || !converted.Stream || !converted.Realtime {
 		t.Fatalf("conversion lost metadata: info=%#v converted=%#v", info, converted)
+	}
+}
+
+// The bookmark JSON field reports the ♥ favorite state, not the legacy flag.
+func TestTrackInfoBookmarkReportsFavorite(t *testing.T) {
+	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+	localProv := local.New()
+	if _, err := localProv.ToggleFavorite(playlist.Track{Path: "/fav.flac", Title: "Fav"}); err != nil {
+		t.Fatal(err)
+	}
+	pl := playlist.New()
+	pl.Add(playlist.Track{Path: "/fav.flac"}, playlist.Track{Path: "/legacy.flac", Bookmark: true})
+	d := &daemon{localProv: localProv, playlist: pl}
+	d.refreshFavoritePaths()
+
+	for _, tc := range []struct {
+		name string
+		info ipc.TrackInfo
+		want bool
+	}{
+		{name: "favorite", info: d.trackInfo(playlist.Track{Path: "/fav.flac"}, 0, 0), want: true},
+		{name: "legacy bookmark only", info: d.trackInfo(playlist.Track{Path: "/legacy.flac", Bookmark: true}, 0, 0)},
+		{name: "queue favorite", info: d.queueResponse().Tracks[0], want: true},
+		{name: "queue legacy bookmark", info: d.queueResponse().Tracks[1]},
+	} {
+		if tc.info.Bookmark != tc.want {
+			t.Errorf("%s: bookmark = %v, want %v", tc.name, tc.info.Bookmark, tc.want)
+		}
+	}
+	if trackFromInfo(ipc.TrackInfo{Path: "/fav.flac", Bookmark: true}).Bookmark {
+		t.Error("a favorite from IPC must not set the legacy bookmark flag")
+	}
+
+	// The playlist.bookmark alias refreshes the cached state.
+	reply := make(chan ipc.Response, 1)
+	d.providers = []model.ProviderEntry{{Key: "local", Name: "Local", Provider: localProv}}
+	d.handleLibrary(ipc.LibraryRequestMsg{Op: "playlist.bookmark", Provider: "local", Track: &ipc.TrackInfo{Path: "/fav.flac"}, Reply: reply})
+	if response := <-reply; !response.OK {
+		t.Fatal(response.Error)
+	}
+	if d.trackInfo(playlist.Track{Path: "/fav.flac"}, 0, 0).Bookmark {
+		t.Error("bookmark still true after the favorite was removed")
 	}
 }
 
@@ -205,7 +260,6 @@ func TestDaemonPlaylistMutations(t *testing.T) {
 		{Op: "playlist.delete", Provider: "local", Playlist: "Old"},
 		{Op: "playlist.remove", Provider: "local", Playlist: "Mix", Index: 3},
 		{Op: "playlist.add", Provider: "local", Playlist: "Mix", Track: &track},
-		{Op: "playlist.bookmark", Provider: "local", Playlist: "Mix", Track: &track},
 	}
 	for _, request := range requests {
 		request.Reply = make(chan ipc.Response, 1)
@@ -214,8 +268,59 @@ func TestDaemonPlaylistMutations(t *testing.T) {
 			t.Fatalf("%s failed: %s", request.Op, response.Error)
 		}
 	}
-	if provider.created != "Mix" || provider.renamed != "Mix:New" || provider.deleted != "Old" || provider.removed != 3 || provider.added != "Mix:/song.flac" || provider.bookmarked != "Mix:/song.flac" {
+	if provider.created != "Mix" || provider.renamed != "Mix:New" || provider.deleted != "Old" || provider.removed != 3 || provider.added != "Mix:/song.flac" {
 		t.Fatalf("mutations were not forwarded: %#v", provider)
+	}
+}
+
+// playlist.bookmark is a legacy alias: it toggles the ♥ favorite and copies
+// the change to the provider that owns the track.
+func TestDaemonBookmarkAliasTogglesFavorite(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		wantLast string // the final state the provider receives
+	}{
+		{name: "local file", path: "/song.flac"},
+		{name: "provider track", path: "fake:track:1", wantLast: "fake:track:1=false"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
+			localProv := local.New()
+			fake := &daemonFavoriteProvider{calls: make(chan string, 2)}
+			d := &daemon{localProv: localProv, providers: []model.ProviderEntry{
+				{Key: "local", Name: "Local", Provider: localProv},
+				{Key: "fake", Name: "Fake", Provider: fake},
+			}}
+			track := ipc.TrackInfo{Path: tt.path, Title: "Song"}
+			for _, want := range []bool{true, false} {
+				reply := make(chan ipc.Response, 1)
+				d.handleLibrary(ipc.LibraryRequestMsg{Op: "playlist.bookmark", Provider: "local", Playlist: "Mix", Track: &track, Reply: reply})
+				if response := <-reply; !response.OK {
+					t.Fatalf("playlist.bookmark failed: %s", response.Error)
+				}
+				if got := localProv.IsFavorited(tt.path); got != want {
+					t.Fatalf("favorited = %v, want %v", got, want)
+				}
+			}
+			// The first call can be skipped because a newer change exists,
+			// but the provider always receives the last state.
+			if tt.wantLast != "" {
+				for got := ""; got != tt.wantLast; {
+					select {
+					case got = <-fake.calls:
+					case <-time.After(5 * time.Second):
+						t.Fatalf("sync %q did not arrive", tt.wantLast)
+					}
+				}
+			}
+			select {
+			case got := <-fake.calls:
+				t.Fatalf("unexpected sync %q after the last state", got)
+			case <-time.After(50 * time.Millisecond):
+			}
+		})
 	}
 }
 

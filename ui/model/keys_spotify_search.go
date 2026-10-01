@@ -134,7 +134,10 @@ func (m *Model) handleSpotSearchResultsKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "f":
 		if !m.spotSearchBusy() && m.spotSearch.cursor >= 0 && m.spotSearch.cursor < count {
 			track := m.spotSearch.results[m.spotSearch.cursor]
-			if track.IsAlbum() && m.toggleFavorite(m.spotSearch.prov, track.AlbumID()) && m.isActiveProvider(m.spotSearch.prov.Name()) {
+			if !track.IsAlbum() {
+				return m.favoriteTrackKey(track)
+			}
+			if m.toggleFavorite(m.spotSearch.prov, track.AlbumID()) && m.isActiveProvider(m.spotSearch.prov.Name()) {
 				return m.fetchProviderPlaylists()
 			}
 		}

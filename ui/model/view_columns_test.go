@@ -253,9 +253,9 @@ func TestMarkerColumnsReserveOnlyWhatIsUsed(t *testing.T) {
 			want:  markerColumns{queue: true, favorite: true},
 		},
 		{
-			name:  "bookmarked track",
+			name:  "legacy bookmark reserves nothing",
 			setup: func(m *Model) { m.playlist.ToggleBookmark(1) },
-			want:  markerColumns{bookmark: true, favorite: true},
+			want:  markerColumns{favorite: true},
 		},
 		{
 			name:  "favorite track",
@@ -263,13 +263,12 @@ func TestMarkerColumnsReserveOnlyWhatIsUsed(t *testing.T) {
 			want:  markerColumns{favorite: true},
 		},
 		{
-			name: "all three",
+			name: "queue and favorite",
 			setup: func(m *Model) {
 				m.playlist.Queue(1)
-				m.playlist.ToggleBookmark(2)
 				m.favSet = map[string]struct{}{"/tmp/track-3.mp3": {}}
 			},
-			want: markerColumns{queue: true, bookmark: true, favorite: true},
+			want: markerColumns{queue: true, favorite: true},
 		},
 	}
 
@@ -320,15 +319,14 @@ func TestPlaylistTitleColumnTightensWhenUnused(t *testing.T) {
 
 	full := newLayoutTestModel(100, 30)
 	full.playlist.Queue(1)
-	full.playlist.ToggleBookmark(2)
 	full.favSet = map[string]struct{}{"/tmp/track-3.mp3": {}}
 	used := titleColumn(full)
 
 	if plain >= used {
 		t.Fatalf("plain playlist starts at column %d, want left of the used one at %d", plain, used)
 	}
-	if want := used - 2; plain != want {
-		t.Fatalf("plain playlist starts at column %d, want %d (two columns reclaimed)", plain, want)
+	if want := used - 1; plain != want {
+		t.Fatalf("plain playlist starts at column %d, want %d (one column reclaimed)", plain, want)
 	}
 }
 
@@ -361,12 +359,16 @@ func TestFavoriteToggleKeepsTitleColumnStable(t *testing.T) {
 // TestPlaylistHeaderDropsBadgesThatDoNotFit checks that a narrow pane sheds
 // whole badges off the tail instead of letting one be sliced mid-token.
 func TestPlaylistHeaderDropsBadgesThatDoNotFit(t *testing.T) {
-	// Enough badges that they cannot all fit a 45-column playlist pane.
+	// Enough badges that they cannot all fit a 45-column playlist pane. A
+	// six-digit favorite count makes the heart badge wide.
+	favSet := make(map[string]struct{}, 100000)
+	for i := range 100000 {
+		favSet[fmt.Sprintf("/tmp/fav-%d.mp3", i)] = struct{}{}
+	}
 	withBadges := func(width, height int) Model {
 		m := newColumnTestModel(width, height)
 		m.playlist.Queue(1)
-		m.playlist.ToggleBookmark(2)
-		m.favSet = map[string]struct{}{"/tmp/track-3.mp3": {}}
+		m.favSet = favSet
 		return m
 	}
 	headerAt := func(m Model, width int) string {

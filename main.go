@@ -180,6 +180,12 @@ func run(overrides config.Overrides, positional []string, daemon, visualizer60FP
 		SaveCountry: config.SaveRadioCountry,
 	})
 	localProv := local.New()
+	// Bookmarks became favorites. Copy the old bookmarks one time.
+	if added, err := localProv.MigrateBookmarks(); err != nil {
+		applog.Warn("bookmark migration: %v", err)
+	} else if added > 0 {
+		applog.Info("copied %d bookmarks into favorites", added)
+	}
 
 	var providers []model.ProviderEntry
 	// The cliamp radio channels come first: they are the view cliamp opens on.

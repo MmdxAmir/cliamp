@@ -133,7 +133,7 @@ as a signal chain: the source (`SRC`), then volume (`VOL`) and the EQ preset
 with its ten bands, then how the list plays — shuffle (`SHF`), repeat (`RPT`),
 and speed (`SPD`) — and last the live network counters for a stream (`NET`).
 Shuffle and repeat move out of the playlist header here, which keeps its
-counts: queue, bookmarks, favorites, and position. The rows those
+counts: queue, favorites, and position. The rows those
 controls used to occupy above and below the playlist go to the playlist itself.
 The title, track line, time, visualizer, seek bar, and hint bar stay full width.
 Narrower terminals, simplified mode, overlays, and list views keep the stacked

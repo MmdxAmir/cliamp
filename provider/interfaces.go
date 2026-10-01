@@ -288,8 +288,9 @@ type PlaylistDocumenter interface {
 	RestorePlaylistDocument(name string, data []byte) error
 }
 
-// BookmarkSetter is implemented by providers that support toggling
-// track bookmarks and persisting them.
+// BookmarkSetter is implemented by providers that can toggle the legacy
+// per-playlist bookmark flag. Favorites replace bookmarks, so the UI, the CLI,
+// and IPC do not call it.
 type BookmarkSetter interface {
 	SetBookmark(playlistName string, idx int) error
 	SetBookmarkByPath(playlistName string, path string) error
@@ -313,6 +314,19 @@ type CustomStreamer interface {
 	URISchemes() []string
 	// NewStreamer creates a decoder for the given URI.
 	NewStreamer(uri string) (beep.StreamSeekCloser, beep.Format, time.Duration, error)
+}
+
+// TrackFavoriter is implemented by providers that keep a favorite state for
+// tracks on their own service, such as liked or starred songs. The local
+// favorites store stays the source of truth. The UI copies each change to the
+// provider that owns the track.
+type TrackFavoriter interface {
+	// CanFavoriteTrack reports whether track belongs to this provider. It must
+	// not do I/O because the UI calls it on the Update goroutine.
+	CanFavoriteTrack(track playlist.Track) bool
+	// SetTrackFavorite sets or clears the favorite state of track on the
+	// provider's service.
+	SetTrackFavorite(ctx context.Context, track playlist.Track, favorite bool) error
 }
 
 // FavoriteToggler is implemented by providers that support marking items

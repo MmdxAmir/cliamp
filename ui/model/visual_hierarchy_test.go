@@ -18,7 +18,7 @@ func TestPlaylistStateMarkersStayVisibleWithoutColor(t *testing.T) {
 
 	p := playlist.New()
 	p.Add(
-		playlist.Track{Title: "Playing", Bookmark: true},
+		playlist.Track{Path: "/playing.mp3", Title: "Playing"},
 		playlist.Track{Title: "Unavailable", Unplayable: true},
 	)
 	p.Queue(0)
@@ -29,11 +29,12 @@ func TestPlaylistStateMarkersStayVisibleWithoutColor(t *testing.T) {
 		focus:     focusPlaylist,
 		plCursor:  0,
 		plVisible: 2,
+		favSet:    map[string]struct{}{"/playing.mp3": {}},
 	}
 
 	plain := ansi.Strip(m.renderPlaylist())
-	if !strings.Contains(plain, ">▶Q★") {
-		t.Fatalf("playlist markers = %q, want cursor, playback, queue, and bookmark columns", plain)
+	if !strings.Contains(plain, ">▶Q"+favHeart) {
+		t.Fatalf("playlist markers = %q, want cursor, playback, queue, and favorite columns", plain)
 	}
 	if !strings.Contains(plain, "!") {
 		t.Fatalf("playlist markers = %q, want unavailable marker", plain)

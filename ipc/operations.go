@@ -173,7 +173,7 @@ func DefaultOperationRegistry() *OperationRegistry {
 		{Name: "playlist.add_many", Description: "add tracks to a saved playlist", Async: true, Parameters: []string{"provider", "playlist", "tracks"}},
 		{Name: "playlist.replace", Description: "replace ordered saved playlist tracks", Async: true, Parameters: []string{"provider", "playlist", "tracks"}},
 		{Name: "playlist.remove", Description: "remove a saved playlist track", Async: true, Parameters: []string{"provider", "playlist", "index"}},
-		{Name: "playlist.bookmark", Description: "toggle a saved track bookmark", Async: true, Parameters: []string{"provider", "playlist", "track"}},
+		{Name: "playlist.bookmark", Description: "toggle a track favorite (legacy name)", Async: true, Parameters: []string{"provider", "playlist", "track"}},
 		{Name: "lyrics", Description: "fetch lyrics", Async: true},
 		{Name: "history", Description: "read history", Async: true, Parameters: []string{"limit"}},
 		{Name: "history.clear", Description: "clear history", Async: true},

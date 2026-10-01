@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/bjarneo/cliamp/external/local"
+	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/internal/sshurl"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
@@ -532,9 +533,10 @@ func PlaylistImport(path, name string) error {
 	return nil
 }
 
-// PlaylistBookmark toggles the bookmark flag on a track by index.
-func PlaylistBookmark(name string, index int) error {
-	prov, err := newProvider()
+// PlaylistFavorite toggles the ♥ favorite of a track by index. The
+// "playlist bookmark" command is an alias of this command.
+func PlaylistFavorite(name string, index int) error {
+	prov, err := newFavoritesProvider()
 	if err != nil {
 		return err
 	}
@@ -546,64 +548,54 @@ func PlaylistBookmark(name string, index int) error {
 	if index-1 < 0 || index-1 >= len(tracks) {
 		return fmt.Errorf("track index %d out of range (playlist has %d tracks)", index, len(tracks))
 	}
-	original := tracks[index-1]
+	track := tracks[index-1]
 
-	if err := prov.SetBookmark(name, index-1); err != nil {
-		return fmt.Errorf("toggling bookmark: %w", err)
-	}
-
-	// Reload and report the toggled track. Bookmarking a directory-sourced
-	// track materializes it, which can move it within the expanded list, so
-	// match by path rather than by index.
-	tracks, err = prov.Tracks(name)
+	favorite, err := prov.ToggleFavorite(track)
 	if err != nil {
-		return fmt.Errorf("reloading playlist %q: %w", name, err)
+		return fmt.Errorf("toggling favorite: %w", err)
 	}
-	for _, t := range tracks {
-		if t.Path == original.Path {
-			if t.Bookmark {
-				fmt.Printf("★ %s\n", t.DisplayName())
-			} else {
-				fmt.Printf("☆ %s\n", t.DisplayName())
-			}
-			return nil
-		}
+	if favorite {
+		fmt.Printf("♥ %s\n", track.DisplayName())
+	} else {
+		fmt.Printf("Removed ♥ %s\n", track.DisplayName())
 	}
-	return fmt.Errorf("track %d no longer exists in playlist (now has %d tracks)", index, len(tracks))
+	return nil
 }
 
-// PlaylistBookmarks lists all bookmarked tracks across all playlists.
-func PlaylistBookmarks() error {
-	prov, err := newProvider()
+// PlaylistFavorites lists the ♥ favorites. The "playlist bookmarks" command
+// is an alias of this command.
+func PlaylistFavorites() error {
+	prov, err := newFavoritesProvider()
 	if err != nil {
 		return err
 	}
 
-	lists, err := prov.Playlists()
+	tracks, err := prov.Tracks(favorites.PlaylistName)
 	if err != nil {
-		return fmt.Errorf("listing playlists: %w", err)
+		return fmt.Errorf("loading favorites: %w", err)
 	}
-
-	total := 0
-	for _, pl := range lists {
-		tracks, err := prov.Tracks(pl.Name)
-		if err != nil {
-			continue
-		}
-		for i, t := range tracks {
-			if t.Bookmark {
-				fmt.Printf("  ★ [%s] %d. %s\n", pl.Name, i+1, t.DisplayName())
-				total++
-			}
-		}
+	if len(tracks) == 0 {
+		fmt.Println("No favorites yet. Press f on a track to favorite it.")
+		return nil
 	}
-
-	if total == 0 {
-		fmt.Println("No bookmarks yet. Press f on a track to bookmark it.")
-	} else {
-		fmt.Printf("\n  %d bookmarks across %d playlists.\n", total, len(lists))
+	for i, t := range tracks {
+		fmt.Printf("  ♥ %d. %s\n", i+1, t.DisplayName())
 	}
+	fmt.Printf("\n  %d favorites.\n", len(tracks))
 	return nil
+}
+
+// newFavoritesProvider returns the local provider after the one-time copy of
+// old bookmarks into favorites.
+func newFavoritesProvider() (*local.Provider, error) {
+	prov, err := newProvider()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := prov.MigrateBookmarks(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+	}
+	return prov, nil
 }
 
 // PlaylistEnrich probes duration and derives album metadata for SSH tracks.

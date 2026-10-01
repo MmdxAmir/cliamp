@@ -3,6 +3,7 @@ package favorites
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/bjarneo/cliamp/internal/fileutil"
@@ -268,5 +269,75 @@ func TestRealtimeAndProviderMetaPersistAcrossReload(t *testing.T) {
 	}
 	if tracks[0].ProviderMeta["provider"] != "navidrome" {
 		t.Fatalf("ProviderMeta provider lost on reload: %+v", tracks[0].ProviderMeta)
+	}
+}
+
+func TestImport(t *testing.T) {
+	tests := []struct {
+		name      string
+		existing  []playlist.Track
+		imported  []playlist.Track
+		wantAdded int
+		wantPaths []string
+	}{
+		{
+			name:      "empty store",
+			imported:  []playlist.Track{{Path: "/a.mp3"}, {Path: "/b.mp3"}},
+			wantAdded: 2,
+			wantPaths: []string{"/a.mp3", "/b.mp3"},
+		},
+		{
+			name:      "keeps existing favorites first",
+			existing:  []playlist.Track{{Path: "/old.mp3"}},
+			imported:  []playlist.Track{{Path: "/a.mp3"}},
+			wantAdded: 1,
+			wantPaths: []string{"/old.mp3", "/a.mp3"},
+		},
+		{
+			name:      "skips favorites that exist",
+			existing:  []playlist.Track{{Path: "/a.mp3", Title: "Kept"}},
+			imported:  []playlist.Track{{Path: "/a.mp3", Title: "New"}},
+			wantPaths: []string{"/a.mp3"},
+		},
+		{
+			name:      "skips repeated and empty paths",
+			imported:  []playlist.Track{{Path: "/a.mp3"}, {Path: " "}, {Path: "/a.mp3"}},
+			wantAdded: 1,
+			wantPaths: []string{"/a.mp3"},
+		},
+		{
+			name: "no tracks",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStore(t)
+			for _, track := range tt.existing {
+				if _, err := s.Favorite(track); err != nil {
+					t.Fatal(err)
+				}
+			}
+			added, err := s.Import(tt.imported)
+			if err != nil {
+				t.Fatalf("Import: %v", err)
+			}
+			if added != tt.wantAdded {
+				t.Fatalf("added = %d, want %d", added, tt.wantAdded)
+			}
+			tracks, err := s.Tracks()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var paths []string
+			for _, track := range tracks {
+				paths = append(paths, track.Path)
+			}
+			if !slices.Equal(paths, tt.wantPaths) {
+				t.Fatalf("paths = %v, want %v", paths, tt.wantPaths)
+			}
+			if len(tt.existing) > 0 && tracks[0].Title != tt.existing[0].Title {
+				t.Fatalf("existing entry changed: %+v", tracks[0])
+			}
+		})
 	}
 }

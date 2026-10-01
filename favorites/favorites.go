@@ -127,6 +127,47 @@ func (s *Store) Favorite(track playlist.Track) (bool, error) {
 	return true, s.saveLocked(entries)
 }
 
+// Import adds each track that is not yet a favorite and writes the file once.
+// The new entries go after the existing ones, in the order given. Tracks with
+// an empty path and repeated paths are skipped. Returns the number of tracks
+// added.
+func (s *Store) Import(tracks []playlist.Track) (int, error) {
+	if s == nil || len(tracks) == 0 {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	unlock, err := s.lockFile()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = unlock() }()
+
+	entries, err := s.loadLocked()
+	if err != nil {
+		return 0, fmt.Errorf("load favorites: %w", err)
+	}
+	seen := make(map[string]bool, len(entries)+len(tracks))
+	for _, e := range entries {
+		seen[e.Track.Path] = true
+	}
+	now := time.Now()
+	added := 0
+	for _, track := range tracks {
+		if strings.TrimSpace(track.Path) == "" || seen[track.Path] {
+			continue
+		}
+		seen[track.Path] = true
+		entries = append(entries, Entry{Track: track, FavoritedAt: now})
+		added++
+	}
+	if added == 0 {
+		return 0, nil
+	}
+	return added, s.saveLocked(entries)
+}
+
 // Remove unfavorites a track by path. Returns true when the track was present
 // and removed.
 func (s *Store) Remove(path string) (bool, error) {

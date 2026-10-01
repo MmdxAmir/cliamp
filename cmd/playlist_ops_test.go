@@ -410,7 +410,7 @@ func TestPlaylistExportInvalidFormatDoesNotTruncateOutput(t *testing.T) {
 	}
 }
 
-func TestPlaylistBookmarkToggle(t *testing.T) {
+func TestPlaylistFavoriteToggle(t *testing.T) {
 	home := setupTestEnv(t)
 	audio := filepath.Join(home, "a.mp3")
 	writeAudioFile(t, audio)
@@ -418,52 +418,74 @@ func TestPlaylistBookmarkToggle(t *testing.T) {
 		t.Fatalf("PlaylistCreate: %v", err)
 	}
 
-	// Bookmark on.
-	out, err := captureStdout(t, func() error { return PlaylistBookmark("mix", 1) })
-	if err != nil {
-		t.Fatalf("PlaylistBookmark: %v", err)
-	}
-	if !strings.Contains(out, "★") {
-		t.Errorf("first bookmark output = %q, want '★'", out)
+	for _, step := range []struct {
+		name         string
+		wantToggle   string
+		wantListing  string
+		rejectToggle string
+	}{
+		{name: "favorite", wantToggle: "♥ ", wantListing: "1 favorites", rejectToggle: "Removed"},
+		{name: "unfavorite", wantToggle: "Removed ♥ ", wantListing: "No favorites yet"},
+	} {
+		t.Run(step.name, func(t *testing.T) {
+			out, err := captureStdout(t, func() error { return PlaylistFavorite("mix", 1) })
+			if err != nil {
+				t.Fatalf("PlaylistFavorite: %v", err)
+			}
+			if !strings.Contains(out, step.wantToggle) || (step.rejectToggle != "" && strings.Contains(out, step.rejectToggle)) {
+				t.Errorf("toggle output = %q, want %q", out, step.wantToggle)
+			}
+			out, err = captureStdout(t, PlaylistFavorites)
+			if err != nil {
+				t.Fatalf("PlaylistFavorites: %v", err)
+			}
+			if !strings.Contains(out, step.wantListing) {
+				t.Errorf("listing = %q, want %q", out, step.wantListing)
+			}
+		})
 	}
 
-	// Bookmark off.
-	out, err = captureStdout(t, func() error { return PlaylistBookmark("mix", 1) })
+	// The playlist file keeps no bookmark flag.
+	data, err := os.ReadFile(filepath.Join(home, ".config", "cliamp", "playlists", "mix.toml"))
 	if err != nil {
-		t.Fatalf("PlaylistBookmark toggle: %v", err)
+		t.Fatal(err)
 	}
-	if !strings.Contains(out, "☆") {
-		t.Errorf("second bookmark output = %q, want '☆'", out)
+	if strings.Contains(string(data), "bookmark") {
+		t.Errorf("playlist file changed:\n%s", data)
 	}
 }
 
-func TestPlaylistBookmarksEmpty(t *testing.T) {
-	setupTestEnv(t)
-	out, err := captureStdout(t, PlaylistBookmarks)
-	if err != nil {
-		t.Fatalf("PlaylistBookmarks: %v", err)
-	}
-	if !strings.Contains(out, "No bookmarks") {
-		t.Errorf("output = %q, want 'No bookmarks...'", out)
-	}
-}
-
-func TestPlaylistBookmarksShowsStars(t *testing.T) {
+func TestPlaylistFavoriteOutOfRange(t *testing.T) {
 	home := setupTestEnv(t)
 	audio := filepath.Join(home, "a.mp3")
 	writeAudioFile(t, audio)
 	if err := PlaylistCreate("mix", []string{audio}, "", nil); err != nil {
 		t.Fatalf("PlaylistCreate: %v", err)
 	}
-	// Bookmark (captureStdout silences the toggle output).
-	_, _ = captureStdout(t, func() error { return PlaylistBookmark("mix", 1) })
-
-	out, err := captureStdout(t, PlaylistBookmarks)
-	if err != nil {
-		t.Fatalf("PlaylistBookmarks: %v", err)
+	for _, index := range []int{0, 2} {
+		if err := PlaylistFavorite("mix", index); err == nil {
+			t.Errorf("PlaylistFavorite(%d) should fail", index)
+		}
 	}
-	if !strings.Contains(out, "★") {
-		t.Errorf("bookmarks output = %q, want '★'", out)
+}
+
+// Old bookmarks show up as favorites the first time the CLI reads them.
+func TestPlaylistFavoritesMigratesBookmarks(t *testing.T) {
+	home := setupTestEnv(t)
+	dir := filepath.Join(home, ".config", "cliamp", "playlists")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "[[track]]\npath = \"/old.mp3\"\ntitle = \"Old Song\"\nbookmark = true\n"
+	if err := os.WriteFile(filepath.Join(dir, "mix.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := captureStdout(t, PlaylistFavorites)
+	if err != nil {
+		t.Fatalf("PlaylistFavorites: %v", err)
+	}
+	if !strings.Contains(out, "Old Song") || !strings.Contains(out, "1 favorites") {
+		t.Errorf("output = %q, want the migrated bookmark", out)
 	}
 }
 

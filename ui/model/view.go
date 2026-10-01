@@ -850,9 +850,6 @@ func (m Model) renderPlaybackHeader() string {
 	if qLen := m.playlist.QueueLen(); qLen > 0 {
 		badges = append(badges, activeToggle.Render(fmt.Sprintf("[Queue: %d]", qLen)))
 	}
-	if starCount := m.playlistStarCount(); starCount > 0 {
-		badges = append(badges, activeToggle.Render(fmt.Sprintf("[★ %d]", starCount)))
-	}
 	// Render from the cached favSet: the render path must not hit disk.
 	if count := len(m.favSet); count > 0 {
 		badges = append(badges, activeToggle.Render(fmt.Sprintf("[%s %d]", favHeart, count)))
@@ -1150,17 +1147,9 @@ func (m Model) renderPlaylist() string {
 			markers += mark
 			styledMarkers += activeToggle.Render(mark)
 		}
-		if cols.bookmark {
-			mark := " "
-			if m.playlistTrackStarred(t) {
-				mark = "★"
-			}
-			markers += mark
-			styledMarkers += activeToggle.Render(mark)
-		}
 		if cols.favorite {
 			mark := " "
-			if _, ok := m.favSet[t.Path]; ok {
+			if m.playlistTrackFavorited(t) {
 				mark = favHeart
 			}
 			markers += mark

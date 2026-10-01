@@ -120,8 +120,7 @@ and `Esc` clears it.
 
 | Key | Action |
 |---|---|
-| `f` | Toggle bookmark ★ on the selected track. For directory radio stations outside saved local playlists, toggle Radio Favorites from the browser or playback playlist, including country and genre results. In the country browser, pin the selected country or region. On a podcast show, subscribe or unsubscribe. |
-| `n` | Toggle favorite ♥ on the selected track while the playback playlist has focus. Favorited tracks appear in the cross-playlist "Favorites" virtual playlist. |
+| `f` | Toggle the favorite ♥ on the selected track. Favorites appear in the "Favorites" virtual playlist, and cliamp also saves them on Spotify and Navidrome. For directory radio stations outside saved local playlists, toggle Radio Favorites from the browser or playback playlist, including country and genre results. In the country browser, pin the selected country or region. On a podcast show, subscribe or unsubscribe. |
 | `Ctrl+F` | Search with the active provider (Podcasts, Spotify, Qobuz, Tidal, Navidrome, Lyrion, Jellyfin, Emby, Plex, Audiobookshelf, Mixcloud, NetEase, Local), or search YouTube. Available in playlist and provider-browser views. The search line names the source. See [Search and filter modes](#search-and-filter-modes). |
 | `u` | Load URL (stream/playlist) |
 | `d` | Open the audio device picker |
@@ -218,6 +217,7 @@ reordered, so `p` leaves them alone and reports them as skipped.
 | `w` | List: save the current queue with the playlist picker. Tracks: copy marked or selected tracks to another playlist. |
 | `Space` | Tracks: mark/unmark highlighted track and advance |
 | `[` `]` | Tracks: move highlighted track and save the playlist |
+| `f` | Tracks: toggle the favorite ♥ on the highlighted track. In "Favorites", an unfavorite removes the row. |
 | `s` | Tracks: sort and save, cycling `track`, `title`, `artist`, `album`, `artist+album`, `path` |
 | `o` | Tracks: open file browser to add files to this playlist |
 | `D` | List: open the file browser to add `[[dir]]` sources to the selected playlist. Tracks: open the directory-sources screen. |
@@ -280,7 +280,7 @@ the provider pane.
 | `↑` `↓` / `j` `k` | Move cursor (wraps from top to bottom) |
 | `←` `→` / `h` `l` | Go back; open the selected item |
 | `/` | Filter the visible list, including Radio's complete genre/tag index. In the Mixcloud Genres list, `Enter` searches the complete server-side genre/tag catalog. |
-| `f` | In the Mixcloud Genres list, favorite or unfavorite the selected genre locally. Update `[mixcloud].styles`. On a podcast show, subscribe or unsubscribe. |
+| `f` | On a track, toggle its favorite ♥. In the Mixcloud Genres list, favorite or unfavorite the selected genre locally. Update `[mixcloud].styles`. On a podcast show, subscribe or unsubscribe. |
 | `l` | Provider list, on a podcast show row only: append its newest episode and add it to the end of the queue, without replacing the playlist. Elsewhere in the browser `l` opens the selected item. |
 | `a` | Append all visible tracks to the queue. Provider list, on a podcast show row only: append every episode without replacing the playlist. |
 | `Enter` | Open the selected artist or album. A Radio tag loads up to 200 matching stations; a selected track plays and queues the rest of the visible list. |
@@ -349,7 +349,7 @@ search and the results list is open:
 | `Enter` | Play the selected track now |
 | `a` | Append the selected track to the playlist |
 | `q` | Queue the selected track to play next |
-| `f` | Subscribe or unsubscribe from the selected podcast show |
+| `f` | Toggle the favorite ♥ on the selected track. On a podcast show, subscribe or unsubscribe. |
 | `p` | (Spotify only) Save the selected track to a Spotify playlist |
 | `Esc` `Backspace` | Back to the search input |
 

@@ -322,7 +322,6 @@ func (m *Model) refreshFavSet() {
 // SetRadioFavorites shares the Radio provider's local station favorites store.
 func (m *Model) SetRadioFavorites(favorites *radio.Favorites) {
 	m.radioFavorites = favorites
-	m.radioMarkers = &radioMarkerCache{}
 }
 
 // SetDownloadsDirectory selects the destination for saved tracks.

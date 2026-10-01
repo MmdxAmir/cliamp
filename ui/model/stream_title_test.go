@@ -118,7 +118,7 @@ func TestIPCTrackInfoKeepsAlbum(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			info := ipcTrackInfo(tc.track, 0, 0)
+			info := ipcTrackInfo(tc.track, 0, 0, false)
 			for _, f := range []struct{ field, got, want string }{
 				{"Title", info.Title, tc.track.Title},
 				{"Artist", info.Artist, tc.track.Artist},

@@ -119,6 +119,16 @@ For OAuth setups, cliamp samples a video from each playlist and checks its YouTu
 
 For cookie-backed providers (`cookies_from`), cliamp adds all custom playlists to both YouTube Music and YouTube results without category classification. It does not create `ytmusic_classification.json`. It stores results and tracks in memory for the current session. Press `Ctrl+R` to refresh them.
 
+## Favorites
+
+Press `f` on a YouTube or YouTube Music track to toggle its favorite ♥. cliamp
+keeps the favorite in its local "Favorites" playlist only. It does not like the
+video on YouTube, so the track does not appear in **Liked Music**.
+
+The OAuth client asks only for the `youtube.readonly` scope, which cannot set a
+like. The cookie mode reads playlists through yt-dlp, which also cannot set a
+like. See issue [#541](https://github.com/bjarneo/cliamp/issues/541).
+
 ## Troubleshooting
 
 - **Linux Keyring / Cookie Decryption (`cannot decrypt v11 cookies: no key found`)**: On Linux desktops or window managers, such as Hyprland, Sway, and i3, Chromium/Chrome can encrypt cookies with GNOME Keyring or KWallet. Append the keyring name to `cookies_from`:

@@ -212,7 +212,12 @@ func (c *NavidromeClient) buildURL(endpoint string, params url.Values) string {
 // httpGet performs a GET with the same User-Agent the stream download uses, so
 // Navidrome registers a single player for cliamp instead of one per User-Agent.
 func (c *NavidromeClient) httpGet(rawURL string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	return c.httpGetContext(context.Background(), rawURL)
+}
+
+// httpGetContext is httpGet with a context that can cancel the request.
+func (c *NavidromeClient) httpGetContext(ctx context.Context, rawURL string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +228,13 @@ func (c *NavidromeClient) httpGet(rawURL string) (*http.Response, error) {
 // subsonicGet performs a GET to the Subsonic API endpoint, decodes the JSON
 // response into result, and checks for both HTTP and API-level errors.
 func (c *NavidromeClient) subsonicGet(endpoint string, params url.Values, result any) error {
-	resp, err := c.httpGet(c.buildURL(endpoint, params))
+	return c.subsonicGetContext(context.Background(), endpoint, params, result)
+}
+
+// subsonicGetContext is subsonicGet with a context that can cancel the
+// request.
+func (c *NavidromeClient) subsonicGetContext(ctx context.Context, endpoint string, params url.Values, result any) error {
+	resp, err := c.httpGetContext(ctx, c.buildURL(endpoint, params))
 	if err != nil {
 		return fmt.Errorf("navidrome: %s: %w", endpoint, err)
 	}

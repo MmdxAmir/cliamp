@@ -372,7 +372,7 @@ func TestPlMgrDeleteGuardsRecentlyPlayed(t *testing.T) {
 	}
 }
 
-func TestPlMgrNKeyRemovesRowFromFavoritesScreen(t *testing.T) {
+func TestPlMgrFKeyRemovesRowFromFavoritesScreen(t *testing.T) {
 	prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
 	if _, err := prov.ToggleFavorite(playlist.Track{Path: "/a.mp3", Title: "A"}); err != nil {
 		t.Fatal(err)
@@ -384,10 +384,10 @@ func TestPlMgrNKeyRemovesRowFromFavoritesScreen(t *testing.T) {
 	m.plManager.selPlaylist = favorites.PlaylistName
 	m.plMgrLoadTracks([]playlist.Track{{Path: "/a.mp3"}, {Path: "/b.mp3"}})
 
-	cmd := m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "n"})
+	cmd := m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "f"})
 
 	if prov.IsFavorited("/a.mp3") {
-		t.Fatal("n should unfavorite the highlighted track")
+		t.Fatal("f should unfavorite the highlighted track")
 	}
 	if len(m.plManager.tracks) != 1 || m.plManager.tracks[0].Path != "/b.mp3" {
 		t.Fatalf("tracks = %+v, want only /b.mp3", m.plManager.tracks)
@@ -408,7 +408,7 @@ func TestPlMgrNKeyRemovesRowFromFavoritesScreen(t *testing.T) {
 	}
 }
 
-func TestNKeyFromQueueRefreshesFavoritesCount(t *testing.T) {
+func TestFKeyFromQueueRefreshesFavoritesCount(t *testing.T) {
 	prov := &dirSourceTestProvider{commandsTestProvider: commandsTestProvider{name: "Local"}}
 	m := newDirsScreenTestModel(prov)
 	m.focus = focusPlaylist
@@ -420,11 +420,11 @@ func TestNKeyFromQueueRefreshesFavoritesCount(t *testing.T) {
 	m.plManager.screen = plMgrScreenList
 	m.plManager.playlists = nil
 
-	if cmd := m.handleKey(tea.KeyPressMsg{Text: "n"}); cmd == nil {
+	if cmd := m.handleKey(tea.KeyPressMsg{Text: "f"}); cmd == nil {
 		t.Fatal("expected a provider-playlist refresh command")
 	}
 	if !prov.IsFavorited("/song.mp3") {
-		t.Fatal("track should be favorited after n")
+		t.Fatal("track should be favorited after f")
 	}
 	// Opening the manager must show the updated Favorites count.
 	m.openPlaylistManager()
@@ -860,7 +860,7 @@ func TestPlMgrReloadTracksResetsScrollWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestNKeyTogglesFavorite(t *testing.T) {
+func TestFKeyTogglesFavorite(t *testing.T) {
 	prov := &dirSourceTestProvider{
 		commandsTestProvider: commandsTestProvider{name: "Local"},
 	}
@@ -873,10 +873,16 @@ func TestNKeyTogglesFavorite(t *testing.T) {
 	m.plManager.visible = false
 	m.favSet = nil
 
-	// Toggle on.
+	// n is no longer a favorite key.
 	m.handleKey(tea.KeyPressMsg{Text: "n"})
+	if prov.IsFavorited("/song.mp3") {
+		t.Fatal("n must not favorite a track")
+	}
+
+	// Toggle on.
+	m.handleKey(tea.KeyPressMsg{Text: "f"})
 	if !prov.IsFavorited("/song.mp3") {
-		t.Fatal("track should be favorited after n")
+		t.Fatal("track should be favorited after f")
 	}
 	if m.favSet == nil {
 		t.Fatal("favSet should be populated after toggle")
@@ -886,9 +892,9 @@ func TestNKeyTogglesFavorite(t *testing.T) {
 	}
 
 	// Toggle off.
-	m.handleKey(tea.KeyPressMsg{Text: "n"})
+	m.handleKey(tea.KeyPressMsg{Text: "f"})
 	if prov.IsFavorited("/song.mp3") {
-		t.Fatal("track should be unfavorited after second n")
+		t.Fatal("track should be unfavorited after second f")
 	}
 	if m.favSet != nil {
 		if _, ok := m.favSet["/song.mp3"]; ok {
@@ -897,7 +903,7 @@ func TestNKeyTogglesFavorite(t *testing.T) {
 	}
 }
 
-func TestNKeyNoopWithoutFavMgr(t *testing.T) {
+func TestFKeyNoopWithoutFavMgr(t *testing.T) {
 	plain := commandsTestProvider{name: "Local"}
 	m := newDirsScreenTestModel(&dirSourceTestProvider{})
 	m.localProvider = plain
@@ -909,7 +915,7 @@ func TestNKeyNoopWithoutFavMgr(t *testing.T) {
 	m.playlist.Add(playlist.Track{Path: "/song.mp3", Title: "Song"})
 	m.plCursor = 0
 
-	m.handleKey(tea.KeyPressMsg{Text: "n"})
+	m.handleKey(tea.KeyPressMsg{Text: "f"})
 
 	// No crash, no status change.
 	if m.status.text != "" {

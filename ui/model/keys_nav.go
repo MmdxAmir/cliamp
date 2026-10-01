@@ -604,6 +604,10 @@ func (m *Model) handleNavTrackListKey(msg tea.KeyPressMsg) tea.Cmd {
 			}
 			return m.rearmPreload()
 		}
+	case "f":
+		if idx := m.selectedNavRawIndex(len(m.navBrowser.tracks)); idx >= 0 {
+			return m.favoriteTrackKey(m.navBrowser.tracks[idx])
+		}
 	case "esc", "h", "left", "backspace":
 		// Navigate back one level depending on the mode and how we got here.
 		m.navClearSearch()

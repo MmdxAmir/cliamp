@@ -89,6 +89,20 @@ Saved albums appear under a **Saved albums** section, labelled `Artist - Album` 
 
 In the <kbd>Ctrl+F</kbd> results, select a track and press `p`. The picker lists only the playlists that you own or collaborate on. Select `+ New Playlist...` to create a private playlist. If the add fails, the error shows on the picker.
 
+## Favorites and Liked Songs
+
+Press `f` on a Spotify track to toggle its favorite ♥. cliamp saves the favorite
+locally and also saves the track to **Liked Songs**. Press `f` again to remove
+the favorite and remove the track from Liked Songs. The key works in the
+playlist, the playlist manager, and `Ctrl+F` results.
+
+cliamp calls `PUT` and `DELETE /v1/me/library` with the `user-library-modify`
+scope, which cliamp requests at sign-in. The local favorite is the source of
+truth. If Spotify rejects the call, the local favorite stays and the status bar
+shows a warning. To fix a scope error, run `cliamp spotify reset` and sign in
+again. A like that you add in the Spotify app does not appear as a favorite in
+cliamp. Episodes stay local favorites only.
+
 ## Podcasts
 
 Podcast episodes work as tracks. Press `Ctrl+F` to search Spotify. Matching episodes, such as "Joe Rogan", appear with songs. Press `Enter` to play. Playlists can load and play both songs and episodes.

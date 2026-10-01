@@ -9,7 +9,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/bjarneo/cliamp/external/radio"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
@@ -173,76 +172,28 @@ func wrapText(s string, maxW int) []string {
 }
 
 // markerColumns says which optional state columns the playlist rows reserve.
-// The cursor and playing/unavailable cells are always drawn. Queue, bookmark,
-// and played cost a column of title width each, so they are reserved only once
-// the playlist has something to put in them. The favorite column is always
+// The cursor and playing/unavailable cells are always drawn. Queue and played
+// cost a column of title width each, so they are reserved only once the
+// playlist has something to put in them. The favorite column is always
 // reserved: toggling the first/last favorite would otherwise shift every title
 // by one cell.
 type markerColumns struct {
 	queue    bool
-	bookmark bool
 	favorite bool
 	played   bool
 }
 
 // markerColumns decides the reserved marker columns for one render pass. It is
 // a per-pass decision, not a per-row one: a row-by-row choice would shift the
-// title column as you scrolled. With no queue, bookmarks, or playback state
-// the titles start three columns further left; the favorite cell stays put so
-// favoriting never moves the titles.
+// title column as you scrolled. With no queue or playback state the titles
+// start two columns further left; the favorite cell stays put so favoriting
+// never moves the titles.
 func (m Model) markerColumns() markerColumns {
 	return markerColumns{
 		queue:    m.playlist.QueueLen() > 0,
-		bookmark: m.playlistStarCount() > 0,
 		favorite: true,
 		played:   m.hasPlaybackState(),
 	}
-}
-
-// playlistStarCount uses the same meaning of a star as the individual rows.
-func (m Model) playlistStarCount() int {
-	if m.radioFavorites == nil {
-		return m.playlist.BookmarkCount()
-	}
-	return m.radioMarkers.starCount(m)
-}
-
-// radioMarkerCache memoizes the whole-playlist star count without copying tracks
-// every frame. Input revisions also cover mutations made outside key handlers.
-type radioMarkerCache struct {
-	key   radioMarkerKey
-	count int
-}
-
-type radioMarkerKey struct {
-	playlist          *playlist.Playlist
-	playlistRevision  uint64
-	favorites         *radio.Favorites
-	favoritesRevision uint64
-	savedPlaylist     bool
-}
-
-func (c *radioMarkerCache) starCount(m Model) int {
-	key := radioMarkerKey{
-		playlist: m.playlist, playlistRevision: m.playlist.Revision(),
-		favorites: m.radioFavorites, favoritesRevision: m.radioFavorites.Revision(),
-		savedPlaylist: m.loadedPlaylist != "",
-	}
-	if c.key == key {
-		return c.count
-	}
-	count := m.playlist.BookmarkCount()
-	if !key.savedPlaylist && (count > 0 || m.radioFavorites.Count() > 0) {
-		count = 0
-		for i := range m.playlist.Len() {
-			track, ok := m.playlist.Track(i)
-			if ok && m.playlistTrackStarred(track) {
-				count++
-			}
-		}
-	}
-	c.key, c.count = key, count
-	return count
 }
 
 // cursorLine renders a list item with "> " prefix when active, "  " otherwise.

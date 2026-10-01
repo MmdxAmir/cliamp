@@ -89,3 +89,23 @@ func TestRadioCommandFlags(t *testing.T) {
 		t.Errorf("--globe --json error = %v", err)
 	}
 }
+
+// The bookmark commands stay as aliases of the favorite commands so old
+// scripts keep working.
+func TestPlaylistBookmarkAliases(t *testing.T) {
+	playlistCmd := buildApp().Command("playlist")
+	if playlistCmd == nil {
+		t.Fatal("playlist command not registered")
+	}
+	for _, tt := range []struct{ alias, name string }{
+		{alias: "bookmark", name: "favorite"},
+		{alias: "bookmarks", name: "favorites"},
+	} {
+		t.Run(tt.alias, func(t *testing.T) {
+			got := playlistCmd.Command(tt.alias)
+			if got == nil || got.Name != tt.name {
+				t.Fatalf("playlist %s = %v, want the %s command", tt.alias, got, tt.name)
+			}
+		})
+	}
+}

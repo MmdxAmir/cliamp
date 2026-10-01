@@ -10,7 +10,8 @@ enter the list.
 Open the **Local Playlists** provider. After cliamp records at least one play,
 a virtual `Recently Played` entry appears at the top. Open it like any other
 playlist. Tracks are newest first. The list is read-only. cliamp rejects
-bookmark, track removal, and playlist deletion requests with an error.
+track removal and playlist deletion requests with an error. `f` still toggles
+the favorite of a track.
 
 To clear the list, run `cliamp history clear`.
 
