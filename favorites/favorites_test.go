@@ -56,34 +56,6 @@ func TestToggleRemove(t *testing.T) {
 	}
 }
 
-func TestFavoriteIdempotent(t *testing.T) {
-	s := newTestStore(t)
-	track := playlist.Track{Path: "/a.mp3", Title: "A"}
-
-	added, _ := s.Favorite(track)
-	if !added {
-		t.Fatal("first Favorite should return true")
-	}
-	added, _ = s.Favorite(track)
-	if added {
-		t.Fatal("second Favorite should return false (already present)")
-	}
-	if s.Count() != 1 {
-		t.Fatalf("count = %d, want 1", s.Count())
-	}
-}
-
-func TestRemoveNonexistent(t *testing.T) {
-	s := newTestStore(t)
-	removed, err := s.Remove("/nope.mp3")
-	if err != nil {
-		t.Fatalf("Remove: %v", err)
-	}
-	if removed {
-		t.Fatal("Remove of nonexistent track should return false")
-	}
-}
-
 func TestTracksOrdering(t *testing.T) {
 	s := newTestStore(t)
 
@@ -126,27 +98,6 @@ func TestPersistAcrossInstances(t *testing.T) {
 	}
 	if tr.Year != 2026 || tr.DurationSecs != 180 {
 		t.Errorf("numeric meta lost: year=%d dur=%d", tr.Year, tr.DurationSecs)
-	}
-}
-
-func TestClearRemovesFile(t *testing.T) {
-	s := newTestStore(t)
-	s.Toggle(playlist.Track{Path: "/a.mp3", Title: "A"})
-	if err := s.Clear(); err != nil {
-		t.Fatalf("Clear: %v", err)
-	}
-	if _, err := os.Stat(s.Path()); !os.IsNotExist(err) {
-		t.Fatalf("file should be gone after Clear, err = %v", err)
-	}
-	if s.Count() != 0 {
-		t.Fatalf("count after Clear = %d, want 0", s.Count())
-	}
-}
-
-func TestClearMissingFileNoError(t *testing.T) {
-	s := newTestStore(t)
-	if err := s.Clear(); err != nil {
-		t.Fatalf("Clear on missing file: %v", err)
 	}
 }
 
@@ -215,9 +166,6 @@ func TestNilStoreSafe(t *testing.T) {
 	}
 	if s.Count() != 0 {
 		t.Errorf("nil Count = %d, want 0", s.Count())
-	}
-	if err := s.Clear(); err != nil {
-		t.Errorf("nil Clear: %v", err)
 	}
 }
 
@@ -315,7 +263,7 @@ func TestImport(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := newTestStore(t)
 			for _, track := range tt.existing {
-				if _, err := s.Favorite(track); err != nil {
+				if _, err := s.Toggle(track); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -458,10 +406,7 @@ func TestWritesCreateMissingConfigDir(t *testing.T) {
 		fn   func(s *Store) error
 	}{
 		{"Toggle", func(s *Store) error { _, err := s.Toggle(track); return err }},
-		{"Favorite", func(s *Store) error { _, err := s.Favorite(track); return err }},
 		{"Import", func(s *Store) error { _, err := s.Import([]playlist.Track{track}); return err }},
-		{"Remove", func(s *Store) error { _, err := s.Remove(track.Path); return err }},
-		{"Clear", func(s *Store) error { return s.Clear() }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

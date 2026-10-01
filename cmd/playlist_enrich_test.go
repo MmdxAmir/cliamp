@@ -160,8 +160,8 @@ func TestPlaylistEnrich(t *testing.T) {
 // fails before it probes any track.
 func TestPlaylistEnrichVirtualPlaylist(t *testing.T) {
 	setupTestEnv(t)
-	if _, err := favorites.New().Favorite(playlist.Track{Path: "/music/Blue Album/a.mp3", Title: "A"}); err != nil {
-		t.Fatalf("Favorite: %v", err)
+	if _, err := favorites.New().Toggle(playlist.Track{Path: "/music/Blue Album/a.mp3", Title: "A"}); err != nil {
+		t.Fatalf("Toggle: %v", err)
 	}
 	logFile := fakeFFprobe(t, "", "")
 	for _, name := range []string{favorites.PlaylistName, history.PlaylistName} {

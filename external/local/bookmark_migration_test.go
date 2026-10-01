@@ -74,7 +74,7 @@ func TestMigrateBookmarks(t *testing.T) {
 				}
 			}
 			for _, track := range tt.existing {
-				if _, err := p.favorites.Favorite(track); err != nil {
+				if _, err := p.favorites.Toggle(track); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -138,8 +138,8 @@ func TestMigrateBookmarksRunsOnce(t *testing.T) {
 
 	// An unfavorite after the migration must stick, and a later bookmark is
 	// not copied again.
-	if _, err := p.favorites.Remove("/a.mp3"); err != nil {
-		t.Fatal(err)
+	if on, err := p.favorites.Toggle(playlist.Track{Path: "/a.mp3"}); err != nil || on {
+		t.Fatalf("unfavorite = %v, %v; want false, nil", on, err)
 	}
 	write("[[track]]\npath = \"/a.mp3\"\ntitle = \"A\"\nbookmark = true\n\n[[track]]\npath = \"/b.mp3\"\ntitle = \"B\"\nbookmark = true\n")
 	if added, err := p.MigrateBookmarks(); err != nil || added != 0 {
@@ -153,8 +153,8 @@ func TestMigrateBookmarksRunsOnce(t *testing.T) {
 	if err := os.Remove(marker); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.favorites.Favorite(playlist.Track{Path: "/a.mp3"}); err != nil {
-		t.Fatal(err)
+	if on, err := p.favorites.Toggle(playlist.Track{Path: "/a.mp3"}); err != nil || !on {
+		t.Fatalf("favorite = %v, %v; want true, nil", on, err)
 	}
 	if added, err := p.MigrateBookmarks(); err != nil || added != 1 {
 		t.Fatalf("rerun = %d, %v; want 1, nil", added, err)

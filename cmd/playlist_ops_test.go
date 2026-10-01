@@ -417,8 +417,8 @@ func TestPlaylistDoctorFixPrunesMissing(t *testing.T) {
 				t.Fatalf("SavePlaylist: %v", err)
 			}
 			if tt.missingFavorite {
-				if _, err := favorites.New().Favorite(playlist.Track{Path: missing, Title: "Missing"}); err != nil {
-					t.Fatalf("Favorite: %v", err)
+				if _, err := favorites.New().Toggle(playlist.Track{Path: missing, Title: "Missing"}); err != nil {
+					t.Fatalf("Toggle: %v", err)
 				}
 			}
 			out, err := captureStdout(t, func() error { return PlaylistDoctor(tt.doctor, true) })

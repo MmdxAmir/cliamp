@@ -1034,8 +1034,9 @@ func (p *Provider) RenamePlaylist(oldName, newName string) error {
 }
 
 // DeletePlaylist removes the TOML file for the named playlist.
-// The virtual playlists cannot be deleted. Clear them with history.Store.Clear
-// or favorites.Store.Clear.
+// The virtual playlists cannot be deleted. Clear Recently Played with
+// history.Store.Clear. A track leaves Favorites only through
+// favorites.Store.Toggle.
 func (p *Provider) DeletePlaylist(name string) error {
 	if err := writable(name); err != nil {
 		return err

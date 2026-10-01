@@ -96,36 +96,6 @@ func (s *Store) Toggle(track playlist.Track) (bool, error) {
 	return true, s.saveLocked(entries)
 }
 
-// Favorite adds a track to favorites. No-op if already present.
-// Returns true when the track was newly added.
-func (s *Store) Favorite(track playlist.Track) (bool, error) {
-	if s == nil || strings.TrimSpace(track.Path) == "" {
-		return false, nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	unlock, err := s.lockFile()
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = unlock() }()
-
-	entries, err := s.loadLocked()
-	if err != nil {
-		return false, fmt.Errorf("load favorites: %w", err)
-	}
-
-	if slices.ContainsFunc(entries, func(e Entry) bool {
-		return e.Track.Path == track.Path
-	}) {
-		return false, nil
-	}
-
-	entry := Entry{Track: track, FavoritedAt: time.Now()}
-	entries = append([]Entry{entry}, entries...)
-	return true, s.saveLocked(entries)
-}
-
 // Import adds each track that is not yet a favorite and writes the file once.
 // The new entries go after the existing ones, in the order given. Tracks with
 // an empty path and repeated paths are skipped. Returns the number of tracks
@@ -165,36 +135,6 @@ func (s *Store) Import(tracks []playlist.Track) (int, error) {
 		return 0, nil
 	}
 	return added, s.saveLocked(entries)
-}
-
-// Remove unfavorites a track by path. Returns true when the track was present
-// and removed.
-func (s *Store) Remove(path string) (bool, error) {
-	if s == nil || strings.TrimSpace(path) == "" {
-		return false, nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	unlock, err := s.lockFile()
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = unlock() }()
-
-	entries, err := s.loadLocked()
-	if err != nil {
-		return false, fmt.Errorf("load favorites: %w", err)
-	}
-
-	idx := slices.IndexFunc(entries, func(e Entry) bool {
-		return e.Track.Path == path
-	})
-	if idx < 0 {
-		return false, nil
-	}
-
-	entries = slices.Delete(entries, idx, idx+1)
-	return true, s.saveLocked(entries)
 }
 
 // IsFavorited reports whether the given path is in the favorites store.
@@ -249,28 +189,6 @@ func (s *Store) Tracks() ([]playlist.Track, error) {
 		out[i] = e.Track
 	}
 	return out, nil
-}
-
-// Clear deletes the favorites file. Returns nil if the file does not exist.
-func (s *Store) Clear() error {
-	if s == nil {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	unlock, err := s.lockFile()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = unlock() }()
-	err = os.Remove(s.path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("remove favorites: %w", err)
-	}
-	return nil
 }
 
 // lockFile serializes writers across cliamp processes: the per-instance
