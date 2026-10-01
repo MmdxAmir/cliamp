@@ -186,17 +186,20 @@ func (p *TidalProvider) Refresh() {
 	p.mu.Unlock()
 }
 
-// mapErr translates client errors into provider-level errors: a revoked
+// mapErr translates errors of client c into provider-level errors: a revoked
 // refresh token drops the cached client so the next access runs the
-// interactive sign-in instead of failing forever.
-func (p *TidalProvider) mapErr(err error) error {
+// interactive sign-in instead of failing forever. It drops the client only
+// when it is still c, so a slow request keeps the client of a newer sign-in.
+func (p *TidalProvider) mapErr(c *client, err error) error {
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, errAuthRevoked) {
-		applog.UserWarn("tidal: session revoked, sign in again")
 		p.mu.Lock()
-		p.client = nil
+		if p.client == c {
+			p.client = nil
+			applog.UserWarn("tidal: session revoked, sign in again")
+		}
 		p.mu.Unlock()
 		return playlist.ErrNeedsAuth
 	}
@@ -224,7 +227,7 @@ func (p *TidalProvider) Playlists() ([]playlist.PlaylistInfo, error) {
 
 	pls, err := c.userPlaylists(ctx)
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 
 	lists := []playlist.PlaylistInfo{
@@ -295,7 +298,7 @@ func (p *TidalProvider) Tracks(playlistID string) ([]playlist.Track, error) {
 		apiTracks, err = c.playlistTracks(ctx, playlistID)
 	}
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 
 	tracks := tracksFromAPI(apiTracks, nil)
@@ -336,7 +339,7 @@ func (p *TidalProvider) SearchTracks(ctx context.Context, query string, limit in
 	}()
 	wg.Wait()
 	if trackErr != nil {
-		return nil, p.mapErr(trackErr)
+		return nil, p.mapErr(c, trackErr)
 	}
 	if albumErr != nil {
 		// Tracks still answer the query; degrade to a track-only result.
@@ -364,7 +367,7 @@ func (p *TidalProvider) Artists() ([]provider.ArtistInfo, error) {
 
 	artists, err := c.favoriteArtists(ctx)
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 	out := make([]provider.ArtistInfo, 0, len(artists))
 	for _, a := range artists {
@@ -387,7 +390,7 @@ func (p *TidalProvider) ArtistAlbums(artistID string) ([]provider.AlbumInfo, err
 
 	albums, err := c.artistAlbums(ctx, artistID)
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 	out := make([]provider.AlbumInfo, 0, len(albums))
 	for _, a := range albums {
@@ -408,7 +411,7 @@ func (p *TidalProvider) AlbumList(_ string, offset, size int) ([]provider.AlbumI
 
 	albums, err := c.favoriteAlbums(ctx, offset, size)
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 	out := make([]provider.AlbumInfo, 0, len(albums))
 	for _, a := range albums {
@@ -450,10 +453,10 @@ func (p *TidalProvider) AlbumTracks(albumID string) ([]playlist.Track, error) {
 	}()
 	wg.Wait()
 	if albumErr != nil {
-		return nil, p.mapErr(albumErr)
+		return nil, p.mapErr(c, albumErr)
 	}
 	if tracksErr != nil {
-		return nil, p.mapErr(tracksErr)
+		return nil, p.mapErr(c, tracksErr)
 	}
 	return tracksFromAPI(tracks, &album), nil
 }
@@ -518,7 +521,7 @@ func (p *TidalProvider) ResolveSource(uri string) (streamURL string, segments []
 	requested := requestQuality(p.quality)
 	pi, err := c.playbackInfo(ctx, trackID, requested)
 	if err != nil {
-		return "", nil, p.mapErr(err)
+		return "", nil, p.mapErr(c, err)
 	}
 	src, err := streamSourceFromManifest(pi)
 	if err != nil {

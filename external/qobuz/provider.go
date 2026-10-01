@@ -173,17 +173,20 @@ func (p *QobuzProvider) Refresh() {
 	p.mu.Unlock()
 }
 
-// mapErr translates client errors into provider-level errors. A rejected
-// user_auth_token drops the cached client, so the next access asks for
-// sign-in instead of failing until restart.
-func (p *QobuzProvider) mapErr(err error) error {
+// mapErr translates errors of client c into provider-level errors. A
+// rejected user_auth_token drops the cached client, so the next access asks
+// for sign-in instead of failing until restart. It drops the client only
+// when it is still c, so a slow request keeps the client of a newer sign-in.
+func (p *QobuzProvider) mapErr(c *client, err error) error {
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, errUnauthorized) {
-		applog.UserWarn("qobuz: session expired, sign in again")
 		p.mu.Lock()
-		p.client = nil
+		if p.client == c {
+			p.client = nil
+			applog.UserWarn("qobuz: session expired, sign in again")
+		}
 		p.mu.Unlock()
 		return playlist.ErrNeedsAuth
 	}
@@ -211,7 +214,7 @@ func (p *QobuzProvider) Playlists() ([]playlist.PlaylistInfo, error) {
 
 	pls, err := c.userPlaylists(ctx)
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 
 	lists := []playlist.PlaylistInfo{
@@ -272,7 +275,7 @@ func (p *QobuzProvider) Tracks(playlistID string) ([]playlist.Track, error) {
 		apiTracks, err = c.playlistTracks(ctx, playlistID)
 	}
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 
 	tracks := tracksFromAPI(apiTracks, nil)
@@ -365,7 +368,7 @@ func (p *QobuzProvider) SearchTracks(ctx context.Context, query string, limit in
 	}
 	apiTracks, err := c.searchTracks(ctx, query, limit)
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 	return tracksFromAPI(apiTracks, nil), nil
 }
@@ -383,7 +386,7 @@ func (p *QobuzProvider) Artists() ([]provider.ArtistInfo, error) {
 	for offset := 0; ; offset += favoritesPageSize {
 		page, err := c.favoriteArtists(ctx, offset, favoritesPageSize)
 		if err != nil {
-			return nil, p.mapErr(err)
+			return nil, p.mapErr(c, err)
 		}
 		for _, a := range page {
 			artists = append(artists, provider.ArtistInfo{
@@ -410,7 +413,7 @@ func (p *QobuzProvider) ArtistAlbums(artistID string) ([]provider.AlbumInfo, err
 
 	albums, err := c.artistAlbums(ctx, artistID)
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 	out := make([]provider.AlbumInfo, 0, len(albums))
 	for _, a := range albums {
@@ -434,7 +437,7 @@ func (p *QobuzProvider) AlbumList(_ string, offset, size int) ([]provider.AlbumI
 
 	albums, err := c.favoriteAlbums(ctx, offset, size)
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 	out := make([]provider.AlbumInfo, 0, len(albums))
 	for _, a := range albums {
@@ -458,7 +461,7 @@ func (p *QobuzProvider) AlbumTracks(albumID string) ([]playlist.Track, error) {
 
 	album, err := c.albumGet(ctx, albumID)
 	if err != nil {
-		return nil, p.mapErr(err)
+		return nil, p.mapErr(c, err)
 	}
 	var tracks []apiTrack
 	if album.Tracks != nil {
@@ -527,7 +530,7 @@ func (p *QobuzProvider) ResolveSource(uri string) (string, error) {
 
 	file, err := c.trackFileURL(ctx, trackID, p.quality, "")
 	if err != nil {
-		return "", p.mapErr(err)
+		return "", p.mapErr(c, err)
 	}
 	if file.URL == "" {
 		return "", fmt.Errorf("qobuz: no stream URL for track %s", trackID)
