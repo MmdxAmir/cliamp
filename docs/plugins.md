@@ -566,6 +566,7 @@ handle:alive()                            -- --> boolean
 - A line is limited to 1 MiB. After a longer line, cliamp silently drops the rest of that stream. The process continues to run.
 - Each plugin can run up to 4 processes at one time.
 - cliamp kills every plugin-owned process when the plugin unloads and when cliamp exits.
+- On Linux and macOS, a cancel or a timeout kills the process and the child processes that it started, such as the `ffmpeg` of `yt-dlp`. cliamp closes the output pipes 0.5 seconds later, so a child that left the process group cannot keep `on_exit` from running.
 - Negative `on_exit` codes indicate cancellation or timeout (`-1`), or a start failure (`-2`).
 - Each call of `on_stdout`, `on_stderr`, or `on_exit` times out after 5 seconds.
 

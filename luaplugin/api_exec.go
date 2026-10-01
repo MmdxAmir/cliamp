@@ -29,6 +29,12 @@ const execMaxPerPlugin = 4
 // Hard timeout cap. Plugins may pass a smaller value; larger values clamp.
 const execMaxTimeout = 30 * time.Minute
 
+// execPipeGrace is the time that the output pipes stay open after a cancel or
+// a timeout. A process that left the process group of the binary can hold
+// them open. Then the exec manager closes them, so the readers end and
+// stopAll does not wait for that process.
+const execPipeGrace = 500 * time.Millisecond
+
 // execEntry tracks a single running subprocess.
 type execEntry struct {
 	id     int64
@@ -225,6 +231,7 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 		// read any variable with os.getenv and pass it in argv. yt-dlp and
 		// ffmpeg both run fine with a minimal env.
 		cmd.Env = minimalExecEnv()
+		killProcessGroup(cmd)
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
@@ -280,8 +287,24 @@ func (m *Manager) registerExecAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) 
 		go func() { defer wg.Done(); pipeStream(stdout, onStdout, "exec on_stdout") }()
 		go func() { defer wg.Done(); pipeStream(stderr, onStderr, "exec on_stderr") }()
 
+		readersDone := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-readersDone:
+				return
+			}
+			select {
+			case <-time.After(execPipeGrace):
+				stdout.Close()
+				stderr.Close()
+			case <-readersDone:
+			}
+		}()
+
 		go func() {
 			wg.Wait()
+			close(readersDone)
 			waitErr := cmd.Wait()
 			ctxErr := ctx.Err()
 			cancel()
