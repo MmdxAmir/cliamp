@@ -167,6 +167,10 @@ colors.
 It also accepts `Custom` to restore the saved custom curve. An unknown
 preset name fails the job and does not change the EQ.
 
+`shuffle` and `mono` take the `name` `on`, `off` or `toggle`. `repeat` takes
+`off`, `all`, `one` or `cycle`. With no `name`, they toggle or cycle. Any
+other name fails the job with `invalid_params` and changes nothing.
+
 `playlist.bookmark` keeps its name for existing scripts. It toggles the favorite
 ♥ of `track`, as `f` does in the TUI. It needs a known `provider` key, but it
 does not change the playlist. A radio station toggles its station favorite,

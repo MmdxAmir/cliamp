@@ -472,42 +472,68 @@ func (m *Model) handleV2EQ(jobs *ipc.JobStore, jobID string, request ipc.Request
 	return nil
 }
 
+// handleV2Mode sets shuffle, repeat or mono. Shuffle and mono take on, off
+// or toggle, and repeat takes off, all, one or cycle. No name toggles or
+// cycles. Any other name is an error and changes nothing.
 func (m *Model) handleV2Mode(jobs *ipc.JobStore, jobID string, request ipc.Request) tea.Cmd {
 	name := strings.ToLower(request.Name)
 	switch request.Cmd {
 	case "shuffle":
-		on := !m.playlist.Shuffled()
-		switch name {
-		case "on":
-			on = true
-		case "off":
-			on = false
+		on, ok := switchValue(name, m.playlist.Shuffled())
+		if !ok {
+			m.failV2Job(jobs, jobID, v2InvalidParamsError())
+			return nil
 		}
 		cmd := m.setShuffle(on)
 		value := m.playlist.Shuffled()
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Shuffle: &value})
 		return cmd
 	case "repeat":
-		mode := (m.playlist.Repeat() + 1) % (playlist.RepeatOne + 1)
+		var mode playlist.RepeatMode
 		switch name {
+		case "", "cycle":
+			mode = (m.playlist.Repeat() + 1) % (playlist.RepeatOne + 1)
 		case "off":
 			mode = playlist.RepeatOff
 		case "all":
 			mode = playlist.RepeatAll
 		case "one":
 			mode = playlist.RepeatOne
+		default:
+			m.failV2Job(jobs, jobID, v2InvalidParamsError())
+			return nil
 		}
 		cmd := m.setRepeat(mode)
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Repeat: m.playlist.Repeat().String()})
 		return cmd
 	case "mono":
-		if (name == "on" && !m.player.Mono()) || (name == "off" && m.player.Mono()) || (name != "on" && name != "off") {
+		on, ok := switchValue(name, m.player.Mono())
+		if !ok {
+			m.failV2Job(jobs, jobID, v2InvalidParamsError())
+			return nil
+		}
+		if on != m.player.Mono() {
 			m.player.ToggleMono()
 		}
 		value := m.player.Mono()
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Mono: &value})
 	}
 	return nil
+}
+
+// switchValue returns the new state of an on and off setting that is now
+// current. name is on, off, toggle or empty, in lower case. ok is false for
+// any other name.
+func switchValue(name string, current bool) (on, ok bool) {
+	switch name {
+	case "on":
+		return true, true
+	case "off":
+		return false, true
+	case "", "toggle":
+		return !current, true
+	}
+	return false, false
 }
 
 func (m *Model) handleV2LibraryRequest(ctx context.Context, jobs *ipc.JobStore, jobID string, request ipc.Request) tea.Cmd {

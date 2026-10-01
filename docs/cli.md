@@ -286,6 +286,8 @@ cliamp remote events runtime.state      # v2 event stream
 
 Each command waits up to 30 seconds for its result. `cliamp load` waits up to 5 minutes and `cliamp plugins call` up to 6 minutes. After that time the command fails with an error, and cliamp continues the operation. `cliamp remote call --wait` waits until the job ends.
 
+`cliamp shuffle`, `cliamp repeat` and `cliamp mono` accept only the values in brackets, in any letter case. Another value gives an error and changes nothing.
+
 `cliamp queue` accepts a relative path. It sends the absolute path of a local file, because the running cliamp has its own working directory. A URL or another URI, such as `spotify:track:...`, goes unchanged. A missing file or a directory gives an error.
 
 `cliamp theme list` reads the theme files itself, so it works when cliamp is not running. It prints each theme file that it skips on stderr.
