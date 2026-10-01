@@ -450,3 +450,44 @@ func TestSaveRejectsLineBreaks(t *testing.T) {
 		})
 	}
 }
+
+// TestSaveDuplicateTopLevelKey checks that a save reaches Load when the file
+// holds a top-level key twice. Load uses the last line, so save must change
+// every line of the key.
+func TestSaveDuplicateTopLevelKey(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial string
+		want    string
+	}{
+		{
+			name:    "two lines",
+			initial: "theme = \"a\"\ntheme = \"b\"\n",
+			want:    "theme = \"c\"\ntheme = \"c\"\n",
+		},
+		{
+			name:    "lines apart, and a key in a section",
+			initial: "theme = \"a\"\nvolume = -6\ntheme = \"b\"\n[radio]\ntheme = \"x\"\n",
+			want:    "theme = \"c\"\nvolume = -6\ntheme = \"c\"\n[radio]\ntheme = \"x\"\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := withHome(t)
+			writeConfig(t, home, tt.initial)
+			if err := SaveString("theme", "c"); err != nil {
+				t.Fatalf("SaveString: %v", err)
+			}
+			if got := readConfig(t, home); got != tt.want {
+				t.Errorf("config = %q, want %q", got, tt.want)
+			}
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.Theme != "c" {
+				t.Errorf("Load Theme = %q, want c", cfg.Theme)
+			}
+		})
+	}
+}

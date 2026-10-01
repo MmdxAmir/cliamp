@@ -1094,6 +1094,7 @@ func save(key, value string) error {
 
 	// Scan existing lines and replace the matching key in-place,
 	// but only in the top-level scope (before any [section] header).
+	// Load uses the last line of a duplicate key, so replace every line.
 	lines := strings.Split(string(data), "\n")
 	found := false
 	for i, l := range lines {
@@ -1110,7 +1111,6 @@ func save(key, value string) error {
 		if ok && strings.TrimSpace(k) == key {
 			lines[i] = line
 			found = true
-			break
 		}
 	}
 	if !found {
