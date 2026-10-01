@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1077,6 +1078,63 @@ func TestMigrateFavoritesFile(t *testing.T) {
 				if _, err := os.Stat(p.dir + ".lock"); !errors.Is(err, fs.ErrNotExist) {
 					t.Errorf("the migration took the playlist lock with no file to move: %v", err)
 				}
+			}
+		})
+	}
+}
+
+// TestRebuildDocDuplicatePaths verifies that rebuildDoc matches the caller's
+// tracks onto the original slots by occurrence, so a path that the document
+// lists more than once keeps every copy. Titles tell the copies apart.
+func TestRebuildDocDuplicatePaths(t *testing.T) {
+	a1 := playlist.Track{Path: "/x/a.mp3", Title: "a1"}
+	a2 := playlist.Track{Path: "/x/a.mp3", Title: "a2"}
+	b := playlist.Track{Path: "/x/b.mp3", Title: "b"}
+	c := playlist.Track{Path: "/x/c.mp3", Title: "c"}
+	music := playlist.DirSource{Path: "/music", Recursive: true}
+	plain := &playlistDoc{tracks: []playlist.Track{a1, b, a2}, order: []uint8{itemTrack, itemTrack, itemTrack}}
+	withDir := &playlistDoc{
+		tracks: []playlist.Track{a1, b, a2},
+		dirs:   []playlist.DirSource{music},
+		order:  []uint8{itemTrack, itemDir, itemTrack, itemTrack},
+	}
+	tests := []struct {
+		name     string
+		doc      *playlistDoc
+		explicit []playlist.Track
+		want     []string // track titles, or "dir" for a [[dir]] section
+	}{
+		{name: "no-op", doc: plain, explicit: []playlist.Track{a1, b, a2}, want: []string{"a1", "b", "a2"}},
+		{name: "add at the end", doc: plain, explicit: []playlist.Track{a1, b, a2, c}, want: []string{"a1", "b", "a2", "c"}},
+		{name: "add between the copies", doc: plain, explicit: []playlist.Track{a1, b, c, a2}, want: []string{"a1", "b", "c", "a2"}},
+		{name: "add a third copy", doc: plain, explicit: []playlist.Track{a1, b, a2, a1}, want: []string{"a1", "b", "a2", "a1"}},
+		{name: "remove the other track", doc: plain, explicit: []playlist.Track{a1, a2}, want: []string{"a1", "a2"}},
+		{name: "remove the first copy", doc: plain, explicit: []playlist.Track{b, a2}, want: []string{"b", "a2"}},
+		{name: "remove the second copy", doc: plain, explicit: []playlist.Track{a1, b}, want: []string{"a1", "b"}},
+		{name: "reorder", doc: plain, explicit: []playlist.Track{b, a1, a2}, want: []string{"b", "a1", "a2"}},
+		{name: "dir stays anchored on a no-op", doc: withDir, explicit: []playlist.Track{a1, b, a2}, want: []string{"a1", "dir", "b", "a2"}},
+		{name: "dir stays anchored on a removal", doc: withDir, explicit: []playlist.Track{a1, a2}, want: []string{"a1", "dir", "a2"}},
+		{name: "dir stays anchored on an addition", doc: withDir, explicit: []playlist.Track{a1, b, c, a2}, want: []string{"a1", "dir", "b", "c", "a2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracks, dirs, order := rebuildDoc(tt.doc, tt.explicit)
+			var got []string
+			ti, di := 0, 0
+			for _, kind := range order {
+				if kind == itemDir {
+					got = append(got, "dir")
+					di++
+					continue
+				}
+				got = append(got, tracks[ti].Title)
+				ti++
+			}
+			if ti != len(tracks) || di != len(dirs) {
+				t.Fatalf("order has %d tracks and %d dirs, want %d and %d", ti, di, len(tracks), len(dirs))
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("sections = %v, want %v", got, tt.want)
 			}
 		})
 	}

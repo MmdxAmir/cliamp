@@ -18,8 +18,9 @@ func TestUpdatePlaylist(t *testing.T) {
 		name      string
 		list      string
 		fn        func([]playlist.Track) ([]playlist.Track, error)
-		wantErr   error // nil when UpdatePlaylist must succeed
-		anyErr    bool  // UpdatePlaylist must fail with any error
+		wantErr   error    // nil when UpdatePlaylist must succeed
+		anyErr    bool     // UpdatePlaylist must fail with any error
+		initial   []string // track paths of Mix before the update. nil means /a.mp3 and /b.mp3
 		wantPaths []string
 		wantSame  bool // the file keeps its bytes
 	}{
@@ -59,6 +60,40 @@ func TestUpdatePlaylist(t *testing.T) {
 			wantPaths: []string{"/a.mp3", "/b.mp3"},
 			wantSame:  true,
 		},
+		{
+			name:    "duplicate path, add a track",
+			list:    "Mix",
+			initial: []string{"/a.mp3", "/b.mp3", "/a.mp3"},
+			fn: func(tracks []playlist.Track) ([]playlist.Track, error) {
+				return append(tracks, playlist.Track{Path: "/c.mp3"}), nil
+			},
+			wantPaths: []string{"/a.mp3", "/b.mp3", "/a.mp3", "/c.mp3"},
+		},
+		{
+			name:    "duplicate path, remove the other track",
+			list:    "Mix",
+			initial: []string{"/a.mp3", "/b.mp3", "/a.mp3"},
+			fn: func(tracks []playlist.Track) ([]playlist.Track, error) {
+				return slices.Delete(tracks, 1, 2), nil
+			},
+			wantPaths: []string{"/a.mp3", "/a.mp3"},
+		},
+		{
+			name:    "duplicate path, remove the first copy",
+			list:    "Mix",
+			initial: []string{"/a.mp3", "/b.mp3", "/a.mp3"},
+			fn: func(tracks []playlist.Track) ([]playlist.Track, error) {
+				return slices.Delete(tracks, 0, 1), nil
+			},
+			wantPaths: []string{"/b.mp3", "/a.mp3"},
+		},
+		{
+			name:      "duplicate path, no-op update",
+			list:      "Mix",
+			initial:   []string{"/a.mp3", "/b.mp3", "/a.mp3"},
+			wantPaths: []string{"/a.mp3", "/b.mp3", "/a.mp3"},
+			wantSame:  true,
+		},
 		{name: "missing playlist", list: "Nope", anyErr: true, wantPaths: []string{"/a.mp3", "/b.mp3"}, wantSame: true},
 		{name: "favorites", list: favorites.PlaylistName, wantErr: errReservedFavoritesName, wantPaths: []string{"/a.mp3", "/b.mp3"}, wantSame: true},
 		{name: "history", list: history.PlaylistName, wantErr: errReservedHistoryName, wantPaths: []string{"/a.mp3", "/b.mp3"}, wantSame: true},
@@ -66,7 +101,14 @@ func TestUpdatePlaylist(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := newTestProvider(t)
-			if err := p.SavePlaylist("Mix", []playlist.Track{{Path: "/a.mp3", Title: "A"}, {Path: "/b.mp3", Title: "B"}}); err != nil {
+			initial := []playlist.Track{{Path: "/a.mp3", Title: "A"}, {Path: "/b.mp3", Title: "B"}}
+			if tt.initial != nil {
+				initial = nil
+				for _, path := range tt.initial {
+					initial = append(initial, playlist.Track{Path: path})
+				}
+			}
+			if err := p.SavePlaylist("Mix", initial); err != nil {
 				t.Fatal(err)
 			}
 			before, err := os.ReadFile(filepath.Join(p.dir, "Mix.toml"))
@@ -153,5 +195,65 @@ func TestUpdatePlaylistKeepsDirSources(t *testing.T) {
 	}
 	if got := paths(tracks); !slices.Equal(got, []string{"/a.mp3", filepath.Join(music, "dir.mp3"), "/b.mp3"}) {
 		t.Fatalf("tracks = %v, want the directory track between /a.mp3 and /b.mp3", got)
+	}
+}
+
+// TestDuplicateTrackWrites verifies that every write to an existing playlist
+// keeps a track path that the playlist lists more than once.
+func TestDuplicateTrackWrites(t *testing.T) {
+	a, b, c := "/a.mp3", "/b.mp3", "/c.mp3"
+	tests := []struct {
+		name      string
+		write     func(p *Provider) error
+		wantPaths []string
+	}{
+		{
+			name: "AddTracks",
+			write: func(p *Provider) error {
+				_, _, err := p.AddTracks("Mix", []playlist.Track{{Path: c}})
+				return err
+			},
+			wantPaths: []string{a, b, a, c},
+		},
+		{
+			name:      "RemoveTrack of the other track",
+			write:     func(p *Provider) error { return p.RemoveTrack("Mix", 1) },
+			wantPaths: []string{a, a},
+		},
+		{
+			name:      "RemoveTrack of the first copy",
+			write:     func(p *Provider) error { return p.RemoveTrack("Mix", 0) },
+			wantPaths: []string{b, a},
+		},
+		{
+			name:      "RemoveTrack of the second copy",
+			write:     func(p *Provider) error { return p.RemoveTrack("Mix", 2) },
+			wantPaths: []string{a, b},
+		},
+		{
+			name: "SavePlaylist with the same tracks",
+			write: func(p *Provider) error {
+				return p.SavePlaylist("Mix", []playlist.Track{{Path: a}, {Path: b}, {Path: a}})
+			},
+			wantPaths: []string{a, b, a},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestProvider(t)
+			if err := p.SavePlaylist("Mix", []playlist.Track{{Path: a}, {Path: b}, {Path: a}}); err != nil {
+				t.Fatal(err)
+			}
+			if err := tt.write(p); err != nil {
+				t.Fatal(err)
+			}
+			tracks, err := p.Tracks("Mix")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := paths(tracks); !slices.Equal(got, tt.wantPaths) {
+				t.Fatalf("tracks = %v, want %v", got, tt.wantPaths)
+			}
+		})
 	}
 }
