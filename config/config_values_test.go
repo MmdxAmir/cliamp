@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 )
@@ -218,7 +219,8 @@ func TestSectionHeader(t *testing.T) {
 		{"[plugins.lastfm]", "plugins.lastfm", true},
 		{"[navidrome] # my server", "navidrome", true},
 		{"[navidrome]\t# my server", "navidrome", true},
-		{"[navidrome]# no space", "", false},
+		{"[navidrome]# no space", "navidrome", true},
+		{"[navidrome]x", "", false},
 		{"[[dir]]", "[dir]", true},
 		{"navidrome]", "", false},
 		{"[navidrome", "", false},
@@ -272,6 +274,35 @@ func TestIsComment(t *testing.T) {
 		t.Run(tt.in, func(t *testing.T) {
 			if got := isComment(tt.in); got != tt.want {
 				t.Fatalf("isComment(%q) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestQuotedItemsAndCommentsAfterClose checks that a comma inside a quoted
+// list item does not split the item, and that a # comment may follow a
+// closing quote or bracket with no whitespace before it.
+func TestQuotedItemsAndCommentsAfterClose(t *testing.T) {
+	tests := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"comment after a double quote", unquote(`"Nord"#x`), "Nord"},
+		{"comment after a single quote", unquote(`'Nord'#x`), "Nord"},
+		{"text after a quote", unquote(`"Nord"x`), `"Nord"x`},
+		{"comma in a quoted item", parseStringSlice(`["a,b", "c"]`), []string{"a,b", "c"}},
+		{"comma in a single-quoted item", parseStringSlice(`['a, b', c]`), []string{"a, b", "c"}},
+		{"comma in a quoted item without brackets", parseStringSlice(`"a,b", c`), []string{"a,b", "c"}},
+		{"escaped quote and comma in an item", parseStringSlice(`["a\",b", c]`), []string{`a",b`, "c"}},
+		{"apostrophe in an unquoted item", parseStringSlice(`Jazz's, Rock`), []string{"Jazz's", "Rock"}},
+		{"list comment after the bracket", parseStringSlice(`["Music"]#x`), []string{"Music"}},
+		{"eq comment after the bracket", parseEQ(`[1,2,3]#c`), [10]float64{1, 2, 3}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !reflect.DeepEqual(tt.got, tt.want) {
+				t.Fatalf("got %#v, want %#v", tt.got, tt.want)
 			}
 		})
 	}

@@ -358,9 +358,9 @@ func TestParseEQ(t *testing.T) {
 			want: [10]float64{1, 2, 3, 0, 0, 0, 0, 0, 0, 0},
 		},
 		{
-			name: "comment without whitespace is not a comment",
+			name: "comment without whitespace after the bracket",
 			val:  "[1, 2]#x",
-			want: [10]float64{1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			want: [10]float64{1, 2, 0, 0, 0, 0, 0, 0, 0, 0},
 		},
 	}
 	for _, tt := range tests {
@@ -389,7 +389,8 @@ func TestParseStringSlice(t *testing.T) {
 		{name: "escaped quote inside an item", val: `["a\"]", "c"] # two`, want: []string{`a"]`, "c"}},
 		{name: "comment after a quoted last item", val: `Music, "Jazz" # two`, want: []string{"Music", "Jazz"}},
 		{name: "unquoted last item keeps its hash", val: `Music, Jazz # two`, want: []string{"Music", "Jazz # two"}},
-		{name: "comment without whitespace is not a comment", val: `["Music"]#x`, want: []string{`"Music"]#x`}},
+		{name: "comment without whitespace after the bracket", val: `["Music"]#x`, want: []string{"Music"}},
+		{name: "unquoted last item keeps a hash without whitespace", val: `Music, Jazz#x`, want: []string{"Music", "Jazz#x"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

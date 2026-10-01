@@ -66,8 +66,9 @@ func EnvRef(s string) (name string, ok bool) {
 // unquote removes one pair of matching quotes from s. Inside double quotes it
 // decodes \\ and \", the escapes QuoteString writes, and keeps every other
 // backslash as typed, so "D:\new" stays a Windows path. Single quotes are
-// literal. A # comment after the closing quote is dropped. A value that does
-// not start with a quote is returned unchanged, # included.
+// literal. A # comment after the closing quote is dropped, with or without
+// whitespace before it. A value that does not start with a quote is returned
+// unchanged, # included.
 func unquote(s string) string {
 	if len(s) < 2 || (s[0] != '"' && s[0] != '\'') {
 		return s
@@ -83,7 +84,7 @@ func unquote(s string) string {
 			continue
 		}
 		if c == q {
-			if isComment(s[i+1:]) {
+			if afterClose(s[i+1:]) {
 				return b.String()
 			}
 			closed = true
@@ -113,6 +114,14 @@ func isComment(rest string) bool {
 		return true
 	}
 	return len(trimmed) < len(rest) && trimmed[0] == '#'
+}
+
+// afterClose reports whether rest, the text after a closing quote or
+// bracket, is empty or a # comment. The value cannot hold that #, so the
+// comment needs no whitespace before it.
+func afterClose(rest string) bool {
+	rest = strings.TrimLeft(rest, " \t")
+	return rest == "" || rest[0] == '#'
 }
 
 var quoteEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
@@ -894,7 +903,7 @@ func sectionHeader(line string) (string, bool) {
 	if !strings.HasPrefix(line, "[") {
 		return "", false
 	}
-	if end := strings.IndexByte(line, ']'); end > 0 && isComment(line[end+1:]) {
+	if end := strings.IndexByte(line, ']'); end > 0 && afterClose(line[end+1:]) {
 		return line[1:end], true
 	}
 	if strings.HasSuffix(line, "]") {
@@ -1422,13 +1431,13 @@ func abs(x int) int {
 
 // listItems returns the items of a list value without the square brackets
 // and without a # comment after the closing bracket. The list ends at the
-// first ] outside quotes, and whitespace must separate the comment from it.
-// A value that does not start with [ is returned unchanged.
+// first ] outside quotes. A value that does not start with [ is returned
+// unchanged.
 func listItems(val string) string {
 	if !strings.HasPrefix(val, "[") {
 		return val
 	}
-	if end := listEnd(val); end > 0 && isComment(val[end+1:]) {
+	if end := listEnd(val); end > 0 && afterClose(val[end+1:]) {
 		return val[1:end]
 	}
 	return strings.Trim(val, "[]")
@@ -1456,12 +1465,39 @@ func listEnd(val string) int {
 	return -1
 }
 
+// splitItems splits the items of a list on each comma outside quotes. An
+// item that starts with a quote ends its quoted text at the matching quote.
+// A quote inside an unquoted item is text, as in Jazz's. A backslash inside
+// double quotes hides the next byte, as in unquote.
+func splitItems(items string) []string {
+	var parts []string
+	start, atStart := 0, true
+	for i := 0; i < len(items); i++ {
+		switch c := items[i]; {
+		case c == ',':
+			parts = append(parts, items[start:i])
+			start, atStart = i+1, true
+		case c == ' ' || c == '\t':
+		case atStart && (c == '"' || c == '\''):
+			for i++; i < len(items) && items[i] != c; i++ {
+				if c == '"' && items[i] == '\\' {
+					i++
+				}
+			}
+			atStart = false
+		default:
+			atStart = false
+		}
+	}
+	return append(parts, items[start:])
+}
+
 // parseStringSlice parses a comma-separated list of strings, optionally
 // wrapped in square brackets (e.g. `["Music", "Jazz"]` or `Music, Jazz`).
 // Each element is trimmed and unquoted like a single string value.
 func parseStringSlice(val string) []string {
 	val = listItems(val)
-	parts := strings.Split(val, ",")
+	parts := splitItems(val)
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = unquote(strings.TrimSpace(p))

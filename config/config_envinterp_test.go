@@ -49,7 +49,7 @@ func TestParseStringEnvInterpolation(t *testing.T) {
 		{"comment after single quotes", `'abc'  # mine`, "abc"},
 		{"# inside quotes kept", `"a # b"`, "a # b"},
 		{"escaped quote before #", `"x\" # y"`, `x" # y`},
-		{"comment needs whitespace", `"abc"# mine`, `"abc"# mine`},
+		{"comment without whitespace after the quote", `"abc"# mine`, "abc"},
 		{"comment after env reference", `"${CLIAMP_TEST_VAR}" # from env`, "from-env"},
 	}
 
