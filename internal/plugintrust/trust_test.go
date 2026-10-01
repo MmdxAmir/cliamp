@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 )
 
@@ -80,7 +81,7 @@ func TestRevoke(t *testing.T) {
 				if err := os.WriteFile(path, []byte(name), 0o600); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := Approve(dir, name, path); err != nil {
+				if err := ApproveHash(dir, name, path, Hash([]byte(name)), []string{"control"}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -94,20 +95,24 @@ func TestRevoke(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(m.Plugins) != len(tt.want) {
-				t.Fatalf("approvals = %v, want %v", m.Plugins, tt.want)
+			if len(m.Plugins) != len(tt.want) || len(m.Permissions) != len(tt.want) {
+				t.Fatalf("approvals = %v, permissions = %v, want %v", m.Plugins, m.Permissions, tt.want)
 			}
 			for _, name := range tt.want {
 				if _, ok := m.Plugins[name]; !ok {
 					t.Errorf("approval of %s is gone, want it kept", name)
+				}
+				if _, ok := m.Permissions[name]; !ok {
+					t.Errorf("permissions of %s are gone, want them kept", name)
 				}
 			}
 		})
 	}
 }
 
-// ApproveHash approves only the content that the user saw. A change to the
-// file after the hash was shown leaves the manifest as it was.
+// ApproveHash approves only the content and the permissions that the user
+// saw. A change to the file after the hash was shown leaves the manifest as
+// it was.
 func TestApproveHash(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -125,7 +130,7 @@ func TestApproveHash(t *testing.T) {
 				t.Fatal(err)
 			}
 			shown := Hash([]byte("shown"))
-			if err := ApproveHash(dir, "example", path, shown); !errors.Is(err, tt.wantErr) {
+			if err := ApproveHash(dir, "example", path, shown, []string{"exec"}); !errors.Is(err, tt.wantErr) {
 				t.Fatalf("ApproveHash() = %v, want %v", err, tt.wantErr)
 			}
 			m, err := Load(dir)
@@ -136,6 +141,33 @@ func TestApproveHash(t *testing.T) {
 			if approved != (tt.wantErr == nil) || (approved && got != shown) {
 				t.Errorf("manifest approval = %q, %v, want the shown hash only without an error", got, approved)
 			}
+			perms, recorded := m.Permissions["example"]
+			if recorded != approved || (recorded && !slices.Equal(perms, []string{"exec"})) {
+				t.Errorf("recorded permissions = %v, %v, want [exec] only with the approval", perms, recorded)
+			}
 		})
+	}
+}
+
+// Approve records no permissions, so it drops a list that an earlier
+// approval recorded. The player then reads the permissions from the content.
+func TestApproveDropsRecordedPermissions(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "example.lua")
+	if err := os.WriteFile(path, []byte("content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ApproveHash(dir, "example", path, Hash([]byte("content")), []string{"exec"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Approve(dir, "example", path); err != nil {
+		t.Fatal(err)
+	}
+	m, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perms, ok := m.Permissions["example"]; ok {
+		t.Errorf("recorded permissions = %v, want none", perms)
 	}
 }

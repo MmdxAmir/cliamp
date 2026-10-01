@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -684,5 +685,58 @@ func TestTrustApprovesShownContent(t *testing.T) {
 				t.Errorf("manifest approves p: %v, want %v", approved, tt.trust)
 			}
 		})
+	}
+}
+
+// install and trust record the permissions that their prompt showed. The
+// player loads the plugin only with these permissions.
+func TestApprovalRecordsShownPermissions(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{"no permissions", `plugin.register({ name = "p", type = "hook" })`, []string{}},
+		{"permissions", `plugin.register({ name = "p", type = "hook", permissions = {"keymap", "control"} })`, []string{"keymap", "control"}},
+	}
+	approvals := []struct {
+		name    string
+		approve func(t *testing.T, source string) string // returns the plugin dir
+	}{
+		{"trust", func(t *testing.T, source string) string {
+			pluginDir, _ := installForTest(t, "p", source)
+			if err := Trust("p", true); err != nil {
+				t.Fatalf("Trust: %v", err)
+			}
+			return pluginDir
+		}},
+		{"install", func(t *testing.T, source string) string {
+			home := withTempHome(t)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(source))
+			}))
+			t.Cleanup(srv.Close)
+			installTestClient(t, srv.URL)
+			if err := Install(srv.URL+"/p.lua", true); err != nil {
+				t.Fatalf("Install: %v", err)
+			}
+			return filepath.Join(home, ".config", "cliamp", "plugins")
+		}},
+	}
+	for _, approval := range approvals {
+		for _, tt := range tests {
+			t.Run(approval.name+"/"+tt.name, func(t *testing.T) {
+				silenceOutput(t)
+				pluginDir := approval.approve(t, tt.source)
+				m, err := plugintrust.Load(pluginDir)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, ok := m.Permissions["p"]
+				if !ok || !slices.Equal(got, tt.want) {
+					t.Errorf("recorded permissions = %v, %v, want %v", got, ok, tt.want)
+				}
+			})
+		}
 	}
 }

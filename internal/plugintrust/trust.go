@@ -24,6 +24,10 @@ var (
 type Manifest struct {
 	Version int               `json:"version"`
 	Plugins map[string]string `json:"plugins"`
+	// Permissions holds the permissions that the approval prompt showed for
+	// each plugin. An approval from Approve or from an older cliamp has no
+	// entry.
+	Permissions map[string][]string `json:"permissions,omitempty"`
 }
 
 // ManifestPath returns the path of the trust manifest in the plugin dir.
@@ -78,22 +82,31 @@ func Save(dir string, m Manifest) error {
 	return fileutil.WriteFileAtomic(ManifestPath(dir), data, 0o600)
 }
 
-// Approve approves the current content of the plugin file at path.
+// Approve approves the current content of the plugin file at path. It
+// records no permissions, so the player reads them from the content, as for
+// an approval from an older cliamp.
 func Approve(dir, name, path string) (string, error) {
 	hash, err := HashFile(path)
 	if err != nil {
 		return "", err
 	}
-	if err := ApproveHash(dir, name, path, hash); err != nil {
+	if err := approve(dir, name, path, hash, nil); err != nil {
 		return "", err
 	}
 	return hash, nil
 }
 
-// ApproveHash approves the content with hash, the hash that the user saw. It
-// fails with ErrHashMismatch when the file at path no longer has that hash.
-// Thus a change to the file while the prompt waits is not approved.
-func ApproveHash(dir, name, path, hash string) error {
+// ApproveHash approves the content with hash and the permissions that the
+// user saw. It fails with ErrHashMismatch when the file at path no longer has
+// that hash. Thus a change to the file while the prompt waits is not
+// approved.
+func ApproveHash(dir, name, path, hash string, permissions []string) error {
+	return approve(dir, name, path, hash, append([]string{}, permissions...))
+}
+
+// approve records hash for name. It records permissions when they are not
+// nil, and removes the recorded permissions otherwise.
+func approve(dir, name, path, hash string, permissions []string) error {
 	got, err := HashFile(path)
 	if err != nil {
 		return err
@@ -106,6 +119,14 @@ func ApproveHash(dir, name, path, hash string) error {
 		return err
 	}
 	m.Plugins[name] = hash
+	if permissions == nil {
+		delete(m.Permissions, name)
+	} else {
+		if m.Permissions == nil {
+			m.Permissions = make(map[string][]string)
+		}
+		m.Permissions[name] = permissions
+	}
 	return Save(dir, m)
 }
 
@@ -120,6 +141,7 @@ func Revoke(dir, name string) error {
 		return nil
 	}
 	delete(m.Plugins, name)
+	delete(m.Permissions, name)
 	return Save(dir, m)
 }
 

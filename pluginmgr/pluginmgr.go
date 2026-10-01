@@ -190,7 +190,7 @@ func Install(source string, assumeYes ...bool) error {
 	if err := fileutil.WriteFileAtomic(dest, body, 0o600); err != nil {
 		return fmt.Errorf("writing plugin: %w", err)
 	}
-	if err := plugintrust.ApproveHash(dir, name, dest, hash); err != nil {
+	if err := plugintrust.ApproveHash(dir, name, dest, hash, md.Permissions); err != nil {
 		_ = os.Remove(dest)
 		return fmt.Errorf("recording plugin trust: %w", err)
 	}
@@ -244,7 +244,7 @@ func Trust(name string, assumeYes bool) error {
 			return errors.New("plugin trust not approved")
 		}
 	}
-	if err := plugintrust.ApproveHash(dir, name, path, hash); err != nil {
+	if err := plugintrust.ApproveHash(dir, name, path, hash, md.Permissions); err != nil {
 		if errors.Is(err, plugintrust.ErrHashMismatch) {
 			return fmt.Errorf("plugin %q changed after cliamp showed it; run `cliamp plugins trust %s` again", name, name)
 		}

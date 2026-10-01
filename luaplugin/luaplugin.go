@@ -40,6 +40,7 @@ type Plugin struct {
 	logger       *pluginLogger     // the Manager's logger; nil in tests
 	config       map[string]string // per-plugin config from config.toml
 	perms        map[string]bool   // declared permissions (e.g. "control")
+	approved     map[string]bool   // permissions that the user approved; see loadPlugin
 	installName  string            // installed name; see the type comment
 	namespace    string            // installName reduced to one event topic segment
 	namespaceErr error             // set when another plugin claimed that namespace first
@@ -237,7 +238,7 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher, reser
 			continue
 		}
 
-		if _, err := m.loadPlugin(f.Path, f.Name, cfg); err != nil {
+		if _, err := m.loadPlugin(f.Path, f.Name, cfg, approvedPermissions(trustManifest, f)); err != nil {
 			loadErrs = append(loadErrs, fmt.Sprintf("%s: %v", f.Name, err))
 		}
 	}
@@ -248,6 +249,27 @@ func New(pluginCfg map[string]map[string]string, publisher EventPublisher, reser
 		return m, fmt.Errorf("plugin load errors: %s", strings.Join(loadErrs, "; "))
 	}
 	return m, nil
+}
+
+// approvedPermissions returns the permissions that the user approved for f.
+// install and trust record the permissions that their prompt showed. An
+// approval without that record, such as one from an older cliamp, approves
+// what ReadMetadata finds in the file. The hash matches the approval, so that
+// is what the prompt showed for this content.
+func approvedPermissions(manifest plugintrust.Manifest, f PluginFile) map[string]bool {
+	perms, ok := manifest.Permissions[f.Name]
+	if !ok {
+		if data, err := os.ReadFile(f.Path); err == nil {
+			if md, err := ReadMetadata(string(data)); err == nil {
+				perms = md.Permissions
+			}
+		}
+	}
+	approved := make(map[string]bool, len(perms))
+	for _, permission := range perms {
+		approved[permission] = true
+	}
+	return approved
 }
 
 // newManager returns a Manager with no plugins and no logger. allowed is the
@@ -276,8 +298,10 @@ func newManager(allowed []string, publisher EventPublisher) *Manager {
 // loadPlugin creates an isolated Lua VM, registers the cliamp API,
 // and executes the plugin file. Returns nil (no error) if the file
 // doesn't call plugin.register(). On success it adds the plugin to m.plugins
-// and starts its queue worker, so Close always stops the worker.
-func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin, error) {
+// and starts its queue worker, so Close always stops the worker. approved
+// holds the permissions that the user approved. A plugin.register() call
+// with another permission fails.
+func (m *Manager) loadPlugin(path, name string, cfg map[string]string, approved map[string]bool) (*Plugin, error) {
 	L := lua.NewState(lua.Options{
 		SkipOpenLibs: false,
 	})
@@ -289,6 +313,7 @@ func (m *Manager) loadPlugin(path, name string, cfg map[string]string) (*Plugin,
 		namespace:   eventNamespace(name),
 		L:           L,
 		config:      cfg,
+		approved:    approved,
 		queue:       make(chan func(), eventQueueSize),
 		logger:      m.logger,
 	}
@@ -416,6 +441,11 @@ func (m *Manager) registerPluginAPI(L *lua.LState, p *Plugin) {
 		// from a hook, must not grant other permissions.
 		if p.Type != "" {
 			L.RaiseError("%v", errRegisteredTwice)
+		}
+		for _, permission := range md.Permissions {
+			if !p.approved[permission] {
+				L.RaiseError("permission %q is not approved; run `cliamp plugins trust %s`", permission, p.installName)
+			}
 		}
 		name := md.Name
 		if name == "" {

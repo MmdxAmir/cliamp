@@ -57,7 +57,7 @@ func loadTestPluginWithConfig(t *testing.T, m *Manager, name, code string, cfg m
 	if err := os.WriteFile(path, []byte(code), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	p, err := m.loadPlugin(path, name, cfg)
+	p, err := m.loadPlugin(path, name, cfg, knownPermissions)
 	if err != nil {
 		t.Fatalf("loadPlugin(%s): %v", name, err)
 	}
@@ -71,7 +71,7 @@ func loadTestPluginExpectError(t *testing.T, m *Manager, name, code string) {
 	if err := os.WriteFile(path, []byte(code), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.loadPlugin(path, name, nil); err == nil {
+	if _, err := m.loadPlugin(path, name, nil, knownPermissions); err == nil {
 		t.Fatalf("expected error for %s", name)
 	}
 }
@@ -135,7 +135,7 @@ func TestRegisterWithoutTypeReportsError(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.code), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			p, err := m.loadPlugin(path, "y", nil)
+			p, err := m.loadPlugin(path, "y", nil, knownPermissions)
 			if p != nil {
 				t.Errorf("loadPlugin() plugin = %+v, want nil", p)
 			}
@@ -214,7 +214,7 @@ func TestDuplicateDisplayNameRejected(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.second.code), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			p, err := m.loadPlugin(path, tt.second.name, nil)
+			p, err := m.loadPlugin(path, tt.second.name, nil, knownPermissions)
 			if tt.wantErr != "" {
 				if p != nil || err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("loadPlugin() = %v, %v, want an error with %q", p, err, tt.wantErr)
@@ -241,7 +241,7 @@ func TestLoadPluginSyntaxError(t *testing.T) {
 	path := filepath.Join(dir, "bad.lua")
 	os.WriteFile(path, []byte(`this is not valid lua!!!`), 0o644)
 
-	_, err := m.loadPlugin(path, "bad", nil)
+	_, err := m.loadPlugin(path, "bad", nil, knownPermissions)
 	if err == nil {
 		t.Fatal("expected error for invalid Lua syntax")
 	}
@@ -340,7 +340,7 @@ func TestLoadFailureWithPendingExecDoesNotHang(t *testing.T) {
 
 			done := make(chan error, 1)
 			go func() {
-				_, err := m.loadPlugin(path, "failing", nil)
+				_, err := m.loadPlugin(path, "failing", nil, knownPermissions)
 				done <- err
 			}()
 			select {
@@ -381,7 +381,7 @@ func TestLoadTimesOut(t *testing.T) {
 			}
 			done := make(chan error, 1)
 			go func() {
-				_, err := m.loadPlugin(path, "slow", nil)
+				_, err := m.loadPlugin(path, "slow", nil, knownPermissions)
 				done <- err
 			}()
 			select {
@@ -478,7 +478,7 @@ func TestRegisterOnlyOnce(t *testing.T) {
 		if err := os.WriteFile(path, []byte(code), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := m.loadPlugin(path, "twice", nil); err == nil || !strings.Contains(err.Error(), errRegisteredTwice.Error()) {
+		if _, err := m.loadPlugin(path, "twice", nil, knownPermissions); err == nil || !strings.Contains(err.Error(), errRegisteredTwice.Error()) {
 			t.Fatalf("loadPlugin() error = %v, want %v", err, errRegisteredTwice)
 		}
 	})
@@ -1685,6 +1685,66 @@ func TestNewTreatsBadTrustManifestAsUntrusted(t *testing.T) {
 			log, _ := os.ReadFile(filepath.Join(cfg, pluginLogName))
 			if got := strings.Contains(string(log), "trust manifest"); got != tt.bad {
 				t.Errorf("plugins.log = %q, want the manifest error: %v", log, tt.bad)
+			}
+		})
+	}
+}
+
+// The player loads a plugin only with the permissions that the approval
+// prompt showed. ReadMetadata runs the plugin against stubs, so a plugin can
+// detect the stubs and register other permissions at runtime. An approval
+// without a recorded list approves what ReadMetadata finds in the file.
+func TestNewEnforcesApprovedPermissions(t *testing.T) {
+	const (
+		control     = `plugin.register({name = "p", type = "hook", permissions = {"control"}})`
+		stubAware   = `if cliamp.player.state() == nil then plugin.register({name = "p", type = "hook"}) else plugin.register({name = "p", type = "hook", permissions = {"exec"}}) end`
+		notApproved = `permission %q is not approved`
+	)
+	tests := []struct {
+		name     string
+		code     string
+		recorded []string // nil approves with plugintrust.Approve, which records no list
+		wantErr  string
+	}{
+		{"recorded list with the permission", control, []string{"control"}, ""},
+		{"recorded list without the permission", control, []string{}, fmt.Sprintf(notApproved, "control")},
+		{"no recorded list", control, nil, ""},
+		{"stub-aware plugin with a recorded list", stubAware, []string{}, fmt.Sprintf(notApproved, "exec")},
+		{"stub-aware plugin without a recorded list", stubAware, nil, fmt.Sprintf(notApproved, "exec")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			dir := filepath.Join(home, ".config", "cliamp", "plugins")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "p.lua")
+			if err := os.WriteFile(path, []byte(tt.code), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tt.recorded == nil {
+				if _, err := plugintrust.Approve(dir, "p", path); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := plugintrust.ApproveHash(dir, "p", path, plugintrust.Hash([]byte(tt.code)), tt.recorded); err != nil {
+				t.Fatal(err)
+			}
+
+			m, err := New(nil, nil, nil)
+			if m == nil {
+				t.Fatal("New returned a nil Manager")
+			}
+			defer m.Close()
+			if tt.wantErr == "" {
+				if err != nil || m.PluginCount() != 1 {
+					t.Fatalf("New() = %d plugins, %v, want the plugin", m.PluginCount(), err)
+				}
+				return
+			}
+			if m.PluginCount() != 0 || err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("New() = %d plugins, %v, want an error with %q", m.PluginCount(), err, tt.wantErr)
 			}
 		})
 	}
