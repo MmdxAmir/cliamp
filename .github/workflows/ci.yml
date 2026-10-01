@@ -37,10 +37,17 @@ jobs:
           sudo install -m 755 "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
           shellcheck --version
       - run: make tools
-      - run: make ci
+      - name: make ci
+        # shell: bash sets pipefail, so a failure of make ci fails the step.
+        shell: bash
+        run: make ci TESTFLAGS=-v 2>&1 | tee "$RUNNER_TEMP/ci.log"
       - name: List skipped tests
-        # The ubuntu-24.04 runner image ships jq.
-        run: go test -count=1 -json ./... | jq -r 'select(.Action=="skip" and .Test) | .Package+" "+.Test'
+        # make ci ran the tests once with -v. Each package prints its tests
+        # and then its ok line, so each skip gets the package of that line.
+        run: >-
+          awk '/^[[:space:]]*--- SKIP: / { skips[n++] = $3 }
+          /^ok[[:space:]]/ { for (i = 0; i < n; i++) print $2 " " skips[i]; n = 0 }'
+          "$RUNNER_TEMP/ci.log"
 
   build:
     strategy:

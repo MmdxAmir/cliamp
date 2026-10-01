@@ -48,8 +48,12 @@ security:
 	@command -v govulncheck >/dev/null 2>&1 || { echo "govulncheck is required. Run make tools."; exit 1; }
 	govulncheck ./...
 
+# TESTFLAGS adds flags to the test run of make ci. CI passes -v to list
+# the skipped tests from the same run.
+TESTFLAGS ?=
+
 ci: fmt-check tidy-check vet staticcheck security
-	go test -count=1 -race -coverprofile=coverage.out ./...
+	go test -count=1 -race $(TESTFLAGS) -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out
 	shellcheck site/install.sh
 	git diff --exit-code
