@@ -26,11 +26,14 @@ func dialErr(ip string, errno syscall.Errno) error {
 	}
 }
 
-// wrappedDialErr builds the chain of an httpclient.NewAPI client. Its dialer
-// wraps the *net.OpError once more before http.Client.Do wraps it.
+// wrappedDialErr builds the chain of an httpclient.Streaming request.
+// dialWithDecision and the transport dial function each wrap the
+// *net.OpError before http.Client.Do wraps it. A NewAPI client has no such
+// wrapper and gives the chain of dialErr.
 func wrappedDialErr(ip string, errno syscall.Errno) error {
 	u := dialErr(ip, errno).(*url.Error)
-	u.Err = fmt.Errorf("dial %s directly: %w", ip, u.Err)
+	addr := net.JoinHostPort(ip, "32400")
+	u.Err = fmt.Errorf("dial %s: %w", addr, fmt.Errorf("dial %s directly: %w", addr, u.Err))
 	return u
 }
 
