@@ -641,7 +641,10 @@ func (p *Player) muteYTDLSeekSource(cur *trackPipeline, gen int64) (time.Duratio
 	}
 	p.gapless.Replace(nil)
 	p.gaplessAdvance.Store(false)
-	return cur.format.SampleRate.D(cur.decoder.Position()) + cur.streamOffset, true
+	// The decoder of a prefetched pipeline reads ahead of the speaker. Seek
+	// from the audio that played, as the Position that the caller read does.
+	pos, _ := cur.positionAndDuration()
+	return pos, true
 }
 
 // commitYTDLSeek swaps in a rebuilt seek pipeline only when it still belongs
@@ -724,10 +727,8 @@ func (p *Player) PositionAndDuration() (time.Duration, time.Duration) {
 }
 
 // positionAndDurationLocked is the rule of Position, Duration and
-// PositionAndDuration. The caller holds the speaker lock, so the audio
-// goroutine cannot move the decoder during the read. A live prefetch reports
-// the audio that the speaker took from it, and the duration that the decoder
-// had before the prefetch started when no metadata duration is known.
+// PositionAndDuration: the clock of the current pipeline. The caller holds
+// the speaker lock.
 func (p *Player) positionAndDurationLocked() (time.Duration, time.Duration) {
 	p.mu.Lock()
 	cur := p.current
@@ -735,18 +736,7 @@ func (p *Player) positionAndDurationLocked() (time.Duration, time.Duration) {
 	if cur == nil {
 		return 0, 0
 	}
-	if cur.livePrefetch != nil {
-		dur := cur.knownDuration
-		if dur <= 0 {
-			dur = cur.decodedDuration
-		}
-		return cur.livePrefetch.Position() + cur.streamOffset, dur
-	}
-	pos := cur.format.SampleRate.D(cur.decoder.Position()) + cur.streamOffset
-	if n := cur.decoder.Len(); n > 0 {
-		return pos, cur.format.SampleRate.D(n)
-	}
-	return pos, cur.knownDuration
+	return cur.positionAndDuration()
 }
 
 // SetVolumeMin sets the minimum volume floor in dB, clamped to [-90, 0].

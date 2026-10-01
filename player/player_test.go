@@ -149,6 +149,42 @@ func TestMuteYTDLSeekSource(t *testing.T) {
 	}
 }
 
+// The decoder of a prefetched yt-dlp page reads ahead of the speaker. A seek
+// by restart must start from the audio that played, as Position reports it.
+func TestMuteYTDLSeekSourceReadsPlayedPosition(t *testing.T) {
+	tests := []struct {
+		name     string
+		prefetch *livePrefetchStreamer
+		want     time.Duration
+	}{
+		{name: "direct decoder", want: 3*time.Second + time.Minute},
+		{name: "prefetched decoder", prefetch: &livePrefetchStreamer{sampleRate: 100, consumed: 100}, want: time.Second + time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// The decoder has read 3 s of audio.
+			decoder := &ytdlPipeStreamer{pipeReport: pipeReport{state: newPipeStreamState(300)}}
+			cur := &trackPipeline{
+				decoder:      decoder,
+				stream:       decoder,
+				format:       beep.Format{SampleRate: 100, NumChannels: 2, Precision: 2},
+				ytdlSeek:     true,
+				streamOffset: time.Minute,
+				livePrefetch: tt.prefetch,
+			}
+			p := &Player{gapless: &gaplessStreamer{}, current: cur}
+
+			got, ok := p.muteYTDLSeekSource(cur, p.seekGen.Load())
+			if !ok || got != tt.want {
+				t.Fatalf("muteYTDLSeekSource() = (%v, %v), want (%v, true)", got, ok, tt.want)
+			}
+			if pos := p.Position(); pos != tt.want {
+				t.Fatalf("Position() = %v, want %v", pos, tt.want)
+			}
+		})
+	}
+}
+
 func TestPlayPipelineForGenerationDiscardsStaleStart(t *testing.T) {
 	p := newTestPlayer()
 	p.SetPlaybackGeneration(2)

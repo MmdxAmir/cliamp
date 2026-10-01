@@ -375,7 +375,10 @@ func (p *Player) buildYTDLPipeline(pageURL string, startSec int) (*trackPipeline
 			continue
 		}
 
-		return &trackPipeline{
+		// The prefetch reads the pipe away from the speaker callback. A
+		// stalled download then plays silence and does not hold the speaker
+		// lock, which would freeze every control.
+		return p.prefetchNetworkPipeline(&trackPipeline{
 			decoder:      decoder,
 			stream:       decoder,
 			format:       format,
@@ -383,7 +386,7 @@ func (p *Player) buildYTDLPipeline(pageURL string, startSec int) (*trackPipeline
 			path:         pageURL,
 			ytdlSeek:     true,
 			streamOffset: time.Duration(startSec) * time.Second,
-		}, nil
+		}, true), nil
 	}
 }
 
@@ -423,10 +426,9 @@ func (p *Player) buildYTDLSource(pageURL string, knownDuration time.Duration, pr
 
 func prefillYTDLPipe(decoder *ytdlPipeStreamer) error {
 	// Pre-fill: block until yt-dlp + ffmpeg produce initial audio data.
-	// This runs in a tea.Cmd goroutine (not the UI thread), ensuring the
-	// speaker goroutine won't block on an empty pipe and hold its lock
-	// (which would freeze the UI). A 30s timeout prevents hanging when
-	// yt-dlp is slow to produce output.
+	// This runs in a tea.Cmd goroutine (not the UI thread), so a chain that
+	// fails before its first byte reports why before the track starts. A 30s
+	// timeout prevents hanging when yt-dlp is slow to produce output.
 	stop := func() { decoder.Close() }
 	return peekWithTimeout(decoder.reader, 1, ytdlPipeTimeout, stop, func(err error) error {
 		// The audio pipe closed before producing a byte. Prefer the real

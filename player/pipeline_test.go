@@ -395,8 +395,9 @@ printf 'page bytes'
 
 		wantDecoder  string
 		wantYTDL     bool
+		wantPrefetch bool
 		wantDuration time.Duration
-		wantPosition int
+		wantPosition time.Duration
 	}{
 		{
 			name:         "yt-dlp page keeps its known duration",
@@ -406,6 +407,7 @@ printf 'page bytes'
 			register:     func(_ *testing.T, p *Player) { claimPage(p) },
 			wantDecoder:  "*player.ytdlPipeStreamer",
 			wantYTDL:     true,
+			wantPrefetch: true,
 			wantDuration: 3 * time.Minute,
 		},
 		{
@@ -415,14 +417,16 @@ printf 'page bytes'
 			register:     func(_ *testing.T, p *Player) { claimPage(p) },
 			wantDecoder:  "*player.ytdlPipeStreamer",
 			wantYTDL:     true,
+			wantPrefetch: true,
 			wantDuration: 90 * time.Second,
 		},
 		{
-			name:        "yt-dlp preload does not probe",
-			path:        page,
-			register:    func(_ *testing.T, p *Player) { claimPage(p) },
-			wantDecoder: "*player.ytdlPipeStreamer",
-			wantYTDL:    true,
+			name:         "yt-dlp preload does not probe",
+			path:         page,
+			register:     func(_ *testing.T, p *Player) { claimPage(p) },
+			wantDecoder:  "*player.ytdlPipeStreamer",
+			wantYTDL:     true,
+			wantPrefetch: true,
 		},
 		{
 			name:  "yt-dlp page ignores the offset",
@@ -433,6 +437,7 @@ printf 'page bytes'
 			register:     func(_ *testing.T, p *Player) { claimPage(p) },
 			wantDecoder:  "*player.ytdlPipeStreamer",
 			wantYTDL:     true,
+			wantPrefetch: true,
 			wantDuration: time.Minute,
 		},
 		{
@@ -445,8 +450,9 @@ printf 'page bytes'
 				})
 				claimPage(p)
 			},
-			wantDecoder: "*player.ytdlPipeStreamer",
-			wantYTDL:    true,
+			wantDecoder:  "*player.ytdlPipeStreamer",
+			wantYTDL:     true,
+			wantPrefetch: true,
 		},
 		{
 			name:    "page that no matcher claims opens over http",
@@ -461,7 +467,7 @@ printf 'page bytes'
 			register:     func(_ *testing.T, p *Player) { claimPage(p) },
 			wantDecoder:  "*wav.decoder",
 			wantDuration: time.Minute,
-			wantPosition: 220,
+			wantPosition: beep.SampleRate(44100).D(220),
 		},
 		{
 			name:    "pipeline error names the offset",
@@ -493,10 +499,11 @@ printf 'page bytes'
 			}
 			defer tp.close()
 
-			got := fmt.Sprintf("decoder=%T ytdl=%v duration=%v position=%d",
-				tp.decoder, tp.ytdlSeek, tp.knownDuration, tp.decoder.Position())
-			want := fmt.Sprintf("decoder=%s ytdl=%v duration=%v position=%d",
-				tt.wantDecoder, tt.wantYTDL, tt.wantDuration, tt.wantPosition)
+			position, _ := tp.positionAndDuration()
+			got := fmt.Sprintf("decoder=%T ytdl=%v prefetch=%v duration=%v position=%v",
+				tp.decoder, tp.ytdlSeek, tp.livePrefetch != nil, tp.knownDuration, position)
+			want := fmt.Sprintf("decoder=%s ytdl=%v prefetch=%v duration=%v position=%v",
+				tt.wantDecoder, tt.wantYTDL, tt.wantPrefetch, tt.wantDuration, tt.wantPosition)
 			if got != want {
 				t.Errorf("pipeline:\n got %s\nwant %s", got, want)
 			}

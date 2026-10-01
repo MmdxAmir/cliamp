@@ -37,8 +37,29 @@ type trackPipeline struct {
 	live bool
 
 	// livePrefetch is set when stream is wrapped in a livePrefetchStreamer
-	// (live/non-seekable HTTP sources). close() stops its fill goroutine.
+	// (non-seekable HTTP sources and yt-dlp pages). close() stops its fill
+	// goroutine.
 	livePrefetch *livePrefetchStreamer
+}
+
+// positionAndDuration is the clock of the pipeline. The caller holds the
+// speaker lock, so the audio goroutine cannot move the decoder during the
+// read. A live prefetch reports the audio that the speaker took from it, and
+// the duration that the decoder had before the prefetch started when no
+// metadata duration is known.
+func (tp *trackPipeline) positionAndDuration() (time.Duration, time.Duration) {
+	if tp.livePrefetch != nil {
+		dur := tp.knownDuration
+		if dur <= 0 {
+			dur = tp.decodedDuration
+		}
+		return tp.livePrefetch.Position() + tp.streamOffset, dur
+	}
+	pos := tp.format.SampleRate.D(tp.decoder.Position()) + tp.streamOffset
+	if n := tp.decoder.Len(); n > 0 {
+		return pos, tp.format.SampleRate.D(n)
+	}
+	return pos, tp.knownDuration
 }
 
 // countingReader wraps an io.ReadCloser and atomically counts bytes read.
