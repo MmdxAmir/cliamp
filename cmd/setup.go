@@ -1,8 +1,8 @@
 // Package cmd implements interactive subcommands invoked from the CLI.
 // setup.go contains the provider onboarding wizard reachable via
 // `cliamp setup`. It walks the user through configuring each remote
-// provider (Navidrome, Plex, Jellyfin, Spotify, Qobuz, Tidal, Mixcloud,
-// NetEase, YouTube Music),
+// provider (Navidrome, Lyrion, Plex, Jellyfin, Emby, Audiobookshelf,
+// Spotify, Qobuz, Tidal, NetEase, Mixcloud, YouTube Music),
 // validates the connection where possible, and writes the resulting
 // TOML section to ~/.config/cliamp/config.toml.
 //

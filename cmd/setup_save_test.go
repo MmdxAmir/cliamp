@@ -30,6 +30,13 @@ func TestSetupRewriteKeepsUserLines(t *testing.T) {
 			want:    "volume = -6\n\n# Home server\n[navidrome]\nurl = \"https://new\"\nuser = \"bob\"\npassword = \"pw2\"\n# byYear is the default\nbrowse_sort = \"alphabeticalByName\"\nformat = \"mp3\"\n\n[plex]\nurl = \"http://plex\"\n",
 		},
 		{
+			name:    "a rewritten key line drops its end comment",
+			section: "navidrome",
+			values:  map[string]string{"url": "https://new", "user": "bob", "password": "pw"},
+			initial: "[navidrome]\nurl = \"https://old\" # old box\nuser = \"bob\"\npassword = \"pw\"\nformat = \"mp3\" # keep\n",
+			want:    "[navidrome]\nurl = \"https://new\"\nuser = \"bob\"\npassword = \"pw\"\nformat = \"mp3\" # keep\n",
+		},
+		{
 			name:    "youtube section is edited in place",
 			section: "ytmusic",
 			values:  map[string]string{keyYTMusicMode: "cookies", "cookies_from": "firefox"},

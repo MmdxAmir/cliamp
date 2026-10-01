@@ -512,6 +512,32 @@ func TestMixcloudSetupBody(t *testing.T) {
 	}
 }
 
+// TestSetupValidateMatchesDocs checks the providers that docs/configuration.md
+// and docs/cli.md name as checked during setup.
+func TestSetupValidateMatchesDocs(t *testing.T) {
+	want := map[string]bool{
+		"navidrome": true, "lyrion": true, "plex": true, "jellyfin": true,
+		"emby": true, "audiobookshelf": true, "netease": true,
+		"spotify": false, "qobuz": false, "tidal": false, "mixcloud": false,
+		"ytmusic": false,
+	}
+	specs := providers()
+	if len(specs) != len(want) {
+		t.Fatalf("setup has %d providers, the table has %d", len(specs), len(want))
+	}
+	for _, spec := range specs {
+		t.Run(spec.section, func(t *testing.T) {
+			wantValidate, ok := want[spec.section]
+			if !ok {
+				t.Fatalf("section %q is missing from the table", spec.section)
+			}
+			if got := spec.validate != nil; got != wantValidate {
+				t.Fatalf("validate set = %v, want %v", got, wantValidate)
+			}
+		})
+	}
+}
+
 func TestNetEasePickerSelectionFiltersFields(t *testing.T) {
 	base := newSetupModel()
 	neteaseIdx := -1

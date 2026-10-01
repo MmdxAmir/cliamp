@@ -21,6 +21,8 @@ func TestParseBool(t *testing.T) {
 		{"False", false, true},
 		{"FALSE", false, true},
 		{"0", false, true},
+		{"t", true, true},
+		{"F", false, true},
 		{"", false, false},
 		{"yes", false, false},
 		{`"true"`, false, false},

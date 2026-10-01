@@ -6,7 +6,9 @@ Use the interactive wizard to configure remote providers. Supported providers ar
 cliamp setup
 ```
 
-The wizard writes the provider keys into their section. It keeps your other keys and comments, and it leaves the rest of your config unchanged. It validates server credentials during setup when the provider supports it: Navidrome, Lyrion, Plex, Jellyfin, and Emby. OAuth providers such as Spotify, Qobuz, and Tidal sign in later in the player. Tidal uses a `link.tidal.com` device code. Mixcloud checks optional browser-session or OAuth credentials when you use them. See [cli.md](cli.md#setup-wizard) for details.
+The wizard writes the provider keys into their section. It keeps your other keys and comments, and it leaves the rest of your config unchanged. The wizard drops the comment at the end of a key line that it rewrites.
+
+The wizard checks the server connection during setup for Navidrome, Lyrion, Plex, Jellyfin, Emby, and Audiobookshelf. For NetEase, it checks the browser session. OAuth providers such as Spotify, Qobuz, and Tidal sign in later in the player. Tidal uses a `link.tidal.com` device code. The wizard does not check Mixcloud credentials. See [cli.md](cli.md#setup-wizard) for details.
 
 ## Config directory
 
@@ -284,7 +286,7 @@ cliamp reads a subset of TOML. These rules apply to every key:
 - Inside double quotes, write `\\` for a backslash and `\"` for a double quote. cliamp keeps every other backslash as you type it, so `"D:\new"` stays a Windows path.
 - Single quotes are literal. cliamp decodes no escapes inside them.
 - An unquoted string also works. cliamp keeps all of its text, including a `#`.
-- A bool is `true` or `false` in any letter case. `1` and `0` also work. cliamp ignores any other value and keeps the default.
+- A bool is `true`, `false`, `t` or `f` in any letter case. `1` and `0` also work. cliamp ignores any other value and keeps the default.
 - A number such as `volume`, `speed` or an `eq` band must be finite. cliamp ignores `nan`, `inf` and any other text and keeps the default.
 - In a list, a comma inside a quoted item stays part of the item, as in `libraries = ["Rock, Pop", "Jazz"]`.
 - To add a comment at the end of a line, put whitespace and then `#`. This works after a quoted string, a number, a bool, a list in square brackets such as `eq` or `libraries`, or a section header such as `[navidrome]`. After a closing quote or a closing square bracket, the whitespace is optional. After an unquoted string, the `#` and the text after it stay part of the value. This rule also applies to an unquoted last string item of a list without square brackets, such as `libraries = Music, Jazz # x`.
