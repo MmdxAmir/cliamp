@@ -38,6 +38,7 @@ func (m *Model) StartInProvider() {
 		m.focus = focusProvider
 		m.resetProviderNav()
 		_, m.openDefaultProviderOnce = m.provider.(provider.DefaultBrowseModeProvider)
+		m.ensureLocalManager()
 		m.recomputeLayout()
 	}
 }
@@ -55,6 +56,9 @@ func (m *Model) switchProvider(idx int) tea.Cmd {
 	m.activeProviderPlaylistID = ""
 	m.resetProviderNav()
 	m.focus = focusProvider
+	// The Local source shows the playlist manager instead of the old
+	// read-only provider pane list.
+	m.ensureLocalManager()
 	listsCmd := m.fetchProviderPlaylists()
 	if _, ok := m.provider.(provider.DefaultBrowseModeProvider); ok {
 		return tea.Batch(listsCmd, m.openDefaultProviderBrowser())
