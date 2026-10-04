@@ -58,6 +58,7 @@ func favRemovedMark() string { return favRemovedStyle.Render(favHeart) }
 // providerEmptyStateHint, keyed by lowercase provider Name(), returns the
 // remediation hint shown under the generic "No playlists in X" message.
 var providerEmptyStateHint = map[string]string{
+	"cliamp radio":        "Press Ctrl+R to reload, or pick another provider with Tab + Source.",
 	"local playlists":     "Add .toml playlists to ~/.config/cliamp/playlists/.",
 	"local":               "Add .toml playlists to ~/.config/cliamp/playlists/.",
 	"spotify":             "Press Ctrl+R to reload, or run `cliamp spotify reset` to sign in again.",
@@ -66,9 +67,12 @@ var providerEmptyStateHint = map[string]string{
 	"emby":                "Verify [emby] url and token or username/password in config.toml.",
 	"audiobookshelf":      "Verify [audiobookshelf] url and token or username/password in config.toml.",
 	"plex":                "Verify [plex] server URL and token or library filter in config.toml.",
+	"youtube":             "Install yt-dlp for video audio, then press Ctrl+R to reload.",
+	"youtube (all)":       "Install yt-dlp for video audio, then press Ctrl+R to reload.",
 	"youtube music":       "Run `cliamp ytmusic-login` to authorize, then refresh.",
 	"ytmusic":             "Run `cliamp ytmusic-login` to authorize, then refresh.",
 	"soundcloud":          "Set [soundcloud] user in config.toml to browse a profile.",
+	"netease":             "Run `cliamp setup` and configure NetEase browser cookies.",
 	"netease cloud music": "Run `cliamp setup` and configure NetEase browser cookies.",
 	"qobuz":               "Press Ctrl+R to retry, or run `cliamp qobuz reset`.",
 	"tidal":               "Press Ctrl+R to retry, or run `cliamp tidal reset`.",
@@ -109,6 +113,8 @@ func (m Model) renderProviderEmptyState(budget int) string {
 	if m.provider != nil {
 		if hint, ok := providerEmptyStateHint[strings.ToLower(m.provider.Name())]; ok {
 			lines = append(lines, dimStyle.Render("  "+hint))
+		} else {
+			lines = append(lines, dimStyle.Render("  Press Ctrl+R to reload, or run `cliamp setup` to configure services."))
 		}
 	}
 	return strings.Join(fitLines(lines, budget), "\n")
@@ -422,9 +428,8 @@ func (m *Model) advanceTitleScroll(now time.Time) {
 }
 
 func (m Model) renderTransient() string {
-	if m.err != nil {
-		return ui.FitRect(errorStyle.Render(fmt.Sprintf("ERR: %s", m.err)), m.layout.panelWidth, 1)
-	}
+	// Fresh status wins over a sticky m.err so confirmations are not masked
+	// by an older network error; the error reappears once status expires.
 	if text := m.save.activityText(); text != "" {
 		return ui.FitRect(feedbackActivityStyle.Render(text), m.layout.panelWidth, 1)
 	}
@@ -442,6 +447,9 @@ func (m Model) renderTransient() string {
 			text = "ERR: " + text
 		}
 		return ui.FitRect(style.Render(text), m.layout.panelWidth, 1)
+	}
+	if m.err != nil {
+		return ui.FitRect(errorStyle.Render(fmt.Sprintf("ERR: %s", m.err)), m.layout.panelWidth, 1)
 	}
 	if n := len(m.logLines); n > 0 {
 		return ui.FitRect(dimStyle.Render(m.logLines[n-1].text), m.layout.panelWidth, 1)

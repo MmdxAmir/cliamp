@@ -12,8 +12,7 @@ type overlaySpec struct {
 	// The paste is then dropped.
 	paste func(*Model, string)
 	// context returns the command mode and the screen name for the help line
-	// and the keymap. It is nil for the full-screen visualizer, which draws
-	// its own help.
+	// and the keymap.
 	context func(*Model) (commandMode, string)
 	// view is zero for the full-screen visualizer, which replaces the whole
 	// frame instead of the playlist region.
@@ -44,8 +43,9 @@ var overlayStack []overlaySpec
 func init() {
 	overlayStack = []overlaySpec{
 		{
-			screen: screenFullVisualizer,
-			key:    (*Model).handleFullVisualizerKey,
+			screen:  screenFullVisualizer,
+			key:     (*Model).handleFullVisualizerKey,
+			context: fixedContext(commandModeFullVis, "Visualizer"),
 		},
 		{
 			screen: screenKeymap,

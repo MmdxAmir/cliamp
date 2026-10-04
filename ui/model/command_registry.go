@@ -49,6 +49,7 @@ const (
 	commandModeProviderSearch
 	commandModeSubs
 	commandModeSubsFilter
+	commandModeFullVis
 )
 
 const commandModeAny = ^commandMode(0)
@@ -338,6 +339,48 @@ var commandRegistry = []commandSpec{
 	{Mode: commandModeFileBrowser, Keys: []string{"D"}, KeyLabel: "D", Label: "Add as dir source", ContextHelp: true, Enabled: func(m Model) bool {
 		return m.fileBrowser.visible && m.fileBrowser.targetPlaylist != ""
 	}},
+	{Mode: commandModeQueue, Keys: []string{"shift+up", "shift+down"}, KeyLabel: "Shift+Up Down", Label: "Reorder", Keymap: true, ContextHelp: true},
+	{Mode: commandModeQueue, Keys: []string{"?"}, KeyLabel: "?", Label: "Help", Keymap: true},
+	{Mode: commandModeFileBrowser, Keys: []string{"/"}, KeyLabel: "/", Label: "Filter", Keymap: true, ContextHelp: true},
+	{Mode: commandModeFileBrowser, Keys: []string{"space"}, KeyLabel: "Space", Label: "Select", Keymap: true, ContextHelp: true},
+	{Mode: commandModeFileBrowser, Keys: []string{"a"}, KeyLabel: "a", Label: "Select all audio", Keymap: true},
+	{Mode: commandModeFileBrowser, Keys: []string{"w"}, KeyLabel: "w", Label: "Save to playlist", Keymap: true, ContextHelp: true},
+	{Mode: commandModePlaylistManager, Keys: []string{"space"}, KeyLabel: "Space", Label: "Mark", ContextHelp: true, Enabled: func(m Model) bool {
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
+	}},
+	{Mode: commandModePlaylistManager, Keys: []string{"a"}, KeyLabel: "a", Label: "Mark all", Keymap: true, Enabled: func(m Model) bool {
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
+	}},
+	{Mode: commandModePlaylistManager, Keys: []string{"s"}, KeyLabel: "s", Label: "Sort", Keymap: true, Enabled: func(m Model) bool {
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
+	}},
+	{Mode: commandModePlaylistManager, Keys: []string{"w"}, KeyLabel: "w", Label: "Save to playlist", Keymap: true, Enabled: func(m Model) bool {
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
+	}},
+	{Mode: commandModePlaylistManager, Keys: []string{"o"}, KeyLabel: "o", Label: "Add files", Keymap: true, ContextHelp: true, Enabled: func(m Model) bool {
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
+	}},
+	{Mode: commandModePlaylistManager, Keys: []string{"d"}, KeyLabel: "d", Label: "Remove", Destructive: true, Keymap: true, ContextHelp: true, Enabled: func(m Model) bool {
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
+	}},
+	{Mode: commandModePlaylistManager, Keys: []string{"u"}, KeyLabel: "u", Label: "Undo", Keymap: true, Enabled: func(m Model) bool {
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
+	}},
+	{Mode: commandModePlaylistManager, Keys: []string{"p"}, KeyLabel: "p", Label: "Play all from top", Keymap: true, Enabled: func(m Model) bool {
+		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
+	}},
+	{Mode: commandModeSearch, Keys: []string{"tab"}, KeyLabel: "Tab", Label: "Toggle queue for result", Keymap: true, ContextHelp: true},
+	{Mode: commandModeFullVis, Keys: []string{"esc", "backspace", "b", "V"}, KeyLabel: "Esc", RunKey: "esc", Label: "Exit visualizer", Keymap: true, ContextHelp: true, Cancel: true},
+	{Mode: commandModeFullVis, Keys: []string{"space"}, KeyLabel: "Space", Label: "Play / Pause", Keymap: true, ContextHelp: true, Primary: true},
+	{Mode: commandModeFullVis, Keys: []string{">", "."}, KeyLabel: "> .", RunKey: ">", Label: "Next track", Keymap: true},
+	{Mode: commandModeFullVis, Keys: []string{"<", ","}, KeyLabel: "< ,", RunKey: "<", Label: "Previous track", Keymap: true},
+	{Mode: commandModeFullVis, Keys: []string{"left", "right"}, KeyLabel: "Left Right", Label: "Seek +/-5s", Keymap: true},
+	{Mode: commandModeFullVis, Keys: []string{"shift+left", "shift+right"}, KeyLabel: "Shift+Left Right", Label: "Seek +/-large step", Keymap: true},
+	{Mode: commandModeFullVis, Keys: []string{"+", "=", "-"}, KeyLabel: "+ -", Label: "Volume up/down", Keymap: true},
+	{Mode: commandModeFullVis, Keys: []string{"v"}, KeyLabel: "v", Label: "Cycle visualizer", Keymap: true},
+	{Mode: commandModeFullVis, Keys: []string{"t"}, KeyLabel: "t", Label: "Hide track info", Keymap: true, ContextHelp: true},
+	{Mode: commandModeFullVis, Keys: []string{"q"}, KeyLabel: "q", Label: "Quit", Keymap: true},
+	{Mode: commandModeFullVis, Keys: []string{"?"}, KeyLabel: "?", Label: "Help", Keymap: true},
 }
 
 func (m Model) commandHelp(mode commandMode) string {
@@ -424,26 +467,42 @@ func renderCommandHelp(commands []commandSpec, width int, m Model) string {
 	}
 	narrow := width < 48
 	var b strings.Builder
+	dropped := 0
 	for _, command := range commands {
 		label := command.label(m)
-		if narrow {
-			switch {
-			case command.Cancel:
-				label = "Back"
-			case command.Primary:
-				label = "Go"
-			case command.Help:
-				label = "Help"
+		var hint string
+		if narrow && !command.Cancel && !command.Primary && !command.Help {
+			// Key pill only (no "Favorite track" text): at ~40 cols even
+			// one full label would eat the whole row, so fill the rest
+			// with keys and let Ctrl+K explain them.
+			hint = helpKeyStyle.Render(" " + command.KeyLabel + " ")
+		} else {
+			if narrow {
+				switch {
+				case command.Cancel:
+					label = "Back"
+				case command.Primary:
+					label = "Go"
+				case command.Help:
+					label = "Help"
+				}
 			}
+			hint = helpKey(command.KeyLabel, label)
 		}
-		hint := helpKey(command.KeyLabel, label)
 		if b.Len() > 0 {
 			hint = " " + hint
 		}
 		if lipgloss.Width(b.String()+hint) > width {
-			break
+			dropped++
+			continue
 		}
 		b.WriteString(hint)
+	}
+	if narrow && dropped > 0 {
+		more := helpStyle.Render(" +…")
+		if lipgloss.Width(b.String()+more) <= width {
+			b.WriteString(more)
+		}
 	}
 	return b.String()
 }

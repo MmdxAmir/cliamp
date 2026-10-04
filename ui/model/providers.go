@@ -380,14 +380,31 @@ func providerKeyForShortcut(key string) string {
 }
 
 // switchToProvider finds a provider by config key and switches to it.
-// Returns nil if the provider is not configured.
+// Returns nil if the provider is not configured, leaving a status hint so
+// a Shift+letter shortcut never dies silently on a fresh config.
 func (m *Model) switchToProvider(key string) tea.Cmd {
 	for i, pe := range m.providers {
 		if pe.Key == key {
 			return m.switchProvider(i)
 		}
 	}
+	m.status.Warning(unconfiguredProviderHint(key), statusTTLLong)
 	return nil
+}
+
+// unconfiguredProviderHint names the setup step for a provider shortcut
+// whose provider did not register (fresh config, missing credentials).
+func unconfiguredProviderHint(key string) string {
+	switch key {
+	case "yt", "youtube", "ytmusic":
+		return "YouTube not configured — run `cliamp ytmusic-login` (needs yt-dlp)"
+	case "spotify":
+		return "Spotify not configured — run `cliamp setup` to sign in"
+	case "local":
+		return "Local source unavailable"
+	default:
+		return "Provider not configured — run `cliamp setup`"
+	}
 }
 
 type browseEntryGroup struct {
