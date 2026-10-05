@@ -266,6 +266,8 @@ func (m *Model) handleProviderPaneKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.answerLocationPrompt(true)
 		case "n", "N", "esc":
 			return m.answerLocationPrompt(false)
+		default:
+			m.status.Show("Answer y for yes, n for no.", statusTTLShort)
 		}
 		return nil
 	}

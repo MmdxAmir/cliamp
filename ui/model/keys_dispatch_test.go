@@ -247,6 +247,9 @@ func TestNavReplacePromptOwnsTheKeys(t *testing.T) {
 			if got := m.provider.Name(); got != "Other" {
 				t.Fatalf("provider = %q, want Other", got)
 			}
+			if m.status.text == "" {
+				t.Error("stray key behind the prompt left no hint; want the valid keys named")
+			}
 		})
 	}
 }
@@ -418,6 +421,40 @@ func TestHandleGlobalKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Stray keys behind a confirm prompt name the valid keys instead of dying
+// silently. The filebrowser replace prompt stays open; the manager delete
+// prompt cancels but says so.
+func TestConfirmPromptsHintOnStrayKeys(t *testing.T) {
+	t.Run("filebrowser replace stays open with a hint", func(t *testing.T) {
+		m := keybindingTestModel()
+		m.fileBrowser.visible = true
+		m.fileBrowser.confirmReplace = true
+
+		m.handleFileBrowserKey(tea.KeyPressMsg{Text: "x"})
+
+		if !m.fileBrowser.confirmReplace {
+			t.Fatal("stray key dismissed the replace prompt; want it open")
+		}
+		if m.status.text == "" {
+			t.Fatal("stray key left no hint; want the valid keys named")
+		}
+	})
+
+	t.Run("manager delete cancels with a hint", func(t *testing.T) {
+		m := keybindingTestModel()
+		m.plManager = plManagerState{visible: true, screen: plMgrScreenList, confirmDel: true}
+
+		m.handlePlaylistManagerKey(tea.KeyPressMsg{Text: "x"})
+
+		if m.plManager.confirmDel {
+			t.Fatal("confirmDel still armed after stray key; want it cancelled")
+		}
+		if m.status.text == "" {
+			t.Fatal("stray key left no hint; want the cancellation named")
+		}
+	})
 }
 
 // q above the main screens closes the top overlay instead of quitting:

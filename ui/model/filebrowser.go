@@ -218,6 +218,8 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.fbConfirm(true)
 		case "esc", "R":
 			m.fileBrowser.confirmReplace = false
+		default:
+			m.status.Show("Enter confirms replace, Esc cancels.", statusTTLShort)
 		}
 		return nil
 	}

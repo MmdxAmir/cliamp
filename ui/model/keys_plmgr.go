@@ -103,6 +103,7 @@ func (m *Model) handlePlMgrListKey(msg tea.KeyPressMsg) tea.Cmd {
 			return refresh
 		default:
 			m.plManager.confirmDel = false
+			m.status.Show("Delete cancelled.", statusTTLShort)
 		}
 		return nil
 	}
