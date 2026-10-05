@@ -108,7 +108,7 @@ func TestFavoriteKeyDispatchByContext(t *testing.T) {
 			},
 			key:      "f",
 			wantPath: "/manager.mp3",
-			wantHelp: "Favorite",
+			wantHelp: "Favorite track",
 		},
 		{
 			name: "browser track list",

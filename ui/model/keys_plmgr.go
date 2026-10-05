@@ -857,7 +857,7 @@ func (m *Model) plMgrRemoveSelectedTracks() {
 		return
 	}
 	if m.plManager.selPlaylist == favorites.PlaylistName {
-		m.status.Warning("Use n to remove tracks from Favorites", statusTTLDefault)
+		m.status.Warning("Use f to remove tracks from Favorites", statusTTLDefault)
 		return
 	}
 	if m.plManager.selPlaylist == history.PlaylistName {

@@ -133,7 +133,7 @@ and `Esc` clears it.
 | `Ctrl+S` | Save track to `[downloads].directory` (default `~/Music/cliamp`) |
 | `w` | Write the highlighted track to a local playlist |
 | `N` | Open the active provider browser. On a selected Mixcloud show, open that creator's Uploads/Favorites. In the radio pane, open the country browser. |
-| `L` | Browse local playlists (with cliamp radio) |
+| `L` | Open Local provider |
 | `R` | Open radio provider |
 | `O` (`Shift+O`) | Open Podcasts provider |
 | `S` | Open Spotify provider |

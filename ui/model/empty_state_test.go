@@ -57,7 +57,7 @@ func TestEmptyStatesNameTheNextStep(t *testing.T) {
 				m.plManager = plManagerState{visible: true, screen: plMgrScreenTracks, selPlaylist: favorites.PlaylistName}
 			},
 			body: (*Model).renderPlMgrTracksBody,
-			want: []string{"Press n on a track in the playlist to add it here."},
+			want: []string{"Press f on a track in the playlist to add it here."},
 		},
 		{
 			name: "new playlist name",
