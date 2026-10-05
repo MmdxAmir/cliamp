@@ -622,6 +622,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.queue.visible = true
 			m.queue.cursor = 0
 			m.queue.scroll = 0
+			m.queue.confirmClear = false
 		}
 
 	case "F":

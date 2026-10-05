@@ -214,6 +214,9 @@ func init() {
 			context: fixedContext(commandModeQueue, "Queue"),
 			view: overlayView{
 				func(m *Model) string {
+					if m.queue.confirmClear {
+						return sepHeader("Clear queue?", m.layout.panelWidth)
+					}
 					return sepHeaderN("Queue", m.queue.cursor+1, m.playlist.QueueLen(), m.layout.panelWidth)
 				},
 				(*Model).renderQueueBody},

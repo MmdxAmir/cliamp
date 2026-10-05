@@ -330,13 +330,18 @@ func (m *Model) handleFileBrowserKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 
 	case "R":
-		if len(m.fileBrowser.selected) > 0 && m.fileBrowser.targetPlaylist == "" {
-			if m.playlist != nil && m.playlist.Len() > 0 {
-				m.fileBrowser.confirmReplace = true
-				return nil
-			}
-			return m.fbConfirm(true)
+		if m.fileBrowser.targetPlaylist != "" {
+			return nil
 		}
+		if len(m.fileBrowser.selected) == 0 {
+			m.status.Warning("Select files first (Space).", statusTTLDefault)
+			return nil
+		}
+		if m.playlist != nil && m.playlist.Len() > 0 {
+			m.fileBrowser.confirmReplace = true
+			return nil
+		}
+		return m.fbConfirm(true)
 
 	case "w":
 		if len(m.fileBrowser.selected) > 0 && m.fileBrowser.targetPlaylist == "" {
