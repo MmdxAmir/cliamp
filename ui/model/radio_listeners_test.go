@@ -77,6 +77,17 @@ func TestRadioListenersFailureShowsNothing(t *testing.T) {
 	}
 }
 
+func TestRadioListenersFailureKeepsPreviousCounts(t *testing.T) {
+	m := channelsListenerTestModel()
+	m.handleRadioListenersLoaded(radioListenersLoadedMsg{counts: map[string]int{"edm": 3}, gen: nextRequest(&m.requests.radioListeners)})
+
+	m.handleRadioListenersLoaded(radioListenersLoadedMsg{gen: nextRequest(&m.requests.radioListeners)})
+
+	if got := m.providerRowLabel("  ", m.provPane.lists[0]); !strings.Contains(got, "● 3 listening now") {
+		t.Errorf("edm row = %q, want the previous count kept", got)
+	}
+}
+
 func TestRadioListenersOptimisticBump(t *testing.T) {
 	newPlaying := func() Model {
 		m := channelsListenerTestModel()

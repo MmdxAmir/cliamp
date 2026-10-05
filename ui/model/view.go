@@ -278,6 +278,29 @@ func trimTrailingEmpty(sections []string) []string {
 	return sections
 }
 
+// frameHasSlackForTransient reports whether an empty transient row still fits
+// in the terminal after rows content rows plus frame padding. Reserving the
+// row only when it fits keeps a message from shifting the frame, without
+// hiding the message on exactly-full screens (where appearing and idle states
+// already share the same top padding).
+func (m Model) frameHasSlackForTransient(rows int) bool {
+	if m.height <= 0 {
+		return true
+	}
+	return rows+1+2*m.layout.paddingV <= m.height
+}
+
+// renderedRows counts the terminal rows that sections paint, including the
+// embedded newlines of multi-line sections such as the spectrum and the
+// playlist body.
+func renderedRows(sections []string) int {
+	rows := 0
+	for _, s := range sections {
+		rows += strings.Count(s, "\n") + 1
+	}
+	return rows
+}
+
 // mainSections builds the stacked rows of the playback screen for the active
 // layout tier, ending with the status line and, unless it is hidden, the hint
 // bar above it.
@@ -288,8 +311,9 @@ func (m Model) mainSections(playlist string, includeTransient, contentFirst bool
 			m.renderTimeStatus(),
 			m.renderSeekBar(),
 		}
+		sections = trimTrailingEmpty(sections)
 		if includeTransient {
-			if line := m.renderTransient(); line != "" {
+			if line := m.renderTransient(); line != "" || m.frameHasSlackForTransient(renderedRows(sections)) {
 				sections = append(sections, line)
 			}
 		}
@@ -389,13 +413,14 @@ func (m Model) mainSections(playlist string, includeTransient, contentFirst bool
 		sections = append(sections, m.renderBottomStatus())
 	}
 
+	sections = trimTrailingEmpty(sections)
 	if includeTransient {
-		if line := m.renderTransient(); line != "" {
+		if line := m.renderTransient(); line != "" || m.frameHasSlackForTransient(renderedRows(sections)) {
 			sections = append(sections, line)
 		}
 	}
 
-	return trimTrailingEmpty(sections)
+	return sections
 }
 
 func (m Model) renderSimplifiedTrackInfo() string {

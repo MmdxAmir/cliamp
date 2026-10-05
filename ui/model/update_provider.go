@@ -50,8 +50,9 @@ func (m *Model) handlePlaylistsLoaded(msg playlistsLoadedMsg) tea.Cmd {
 
 // handleRadioListenersLoaded stores live listener counts for the cliamp
 // radio rows. A stale generation or a provider switch in flight drops the
-// message. Failures arrive as a nil map and only stamp the backoff time, so
-// rows show no counts instead of zero or an error.
+// message. Failures arrive as a nil map: the previous counts stay on screen
+// and only the backoff time is stamped, so rows never go blank on a failed
+// refresh.
 func (m *Model) handleRadioListenersLoaded(msg radioListenersLoadedMsg) {
 	if msg.gen != m.requests.radioListeners {
 		return
@@ -59,7 +60,9 @@ func (m *Model) handleRadioListenersLoaded(msg radioListenersLoadedMsg) {
 	if _, ok := m.provider.(*radio.ChannelProvider); !ok {
 		return
 	}
-	m.radioListeners = msg.counts
+	if msg.counts != nil {
+		m.radioListeners = msg.counts
+	}
 	m.radioListenersAt = time.Now()
 }
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/bjarneo/cliamp/internal/httpclient"
 )
@@ -145,20 +146,34 @@ func summarizeListenerCounts(main Statistics, tracks *TrackStatistics) map[strin
 	return out
 }
 
-// FetchListenerCounts downloads both statistics documents and returns live
-// listeners per channel slug. A failed playlist document still yields the
-// live-stream counts; an error returns only when the main document fails,
-// and callers treat that as "unknown" rather than zero.
+// FetchListenerCounts downloads both statistics documents concurrently and
+// returns live listeners per channel slug. Fetching in parallel keeps one
+// slow document from delaying the other. A failed playlist document still
+// yields the live-stream counts; an error returns only when the main
+// document fails, and callers treat that as "unknown" rather than zero.
 func FetchListenerCounts(ctx context.Context) (map[string]int, error) {
-	main, _, err := FetchStatistics(ctx)
-	if err != nil {
-		return nil, err
+	var mainDoc Statistics
+	var mainErr error
+	var tracksDoc TrackStatistics
+	var tracksErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		mainDoc, _, mainErr = FetchStatistics(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		tracksDoc, tracksErr = FetchTrackStatistics(ctx)
+	}()
+	wg.Wait()
+	if mainErr != nil {
+		return nil, mainErr
 	}
-	tracks, err := FetchTrackStatistics(ctx)
-	if err != nil {
-		return summarizeListenerCounts(main, nil), nil
+	if tracksErr != nil {
+		return summarizeListenerCounts(mainDoc, nil), nil
 	}
-	return summarizeListenerCounts(main, &tracks), nil
+	return summarizeListenerCounts(mainDoc, &tracksDoc), nil
 }
 
 // Summary is Statistics boiled down to what the statistics views show.
