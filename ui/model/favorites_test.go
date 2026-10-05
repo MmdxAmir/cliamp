@@ -330,6 +330,25 @@ func TestTrackFavoriteSyncKeepsLastState(t *testing.T) {
 	}
 }
 
+// Toggling a local favorite reports through the status line, on and off.
+func TestTrackFavoriteToggleReports(t *testing.T) {
+	m, _ := favoriteKeyTestModel(t)
+	track := playlist.Track{Path: "/playlist.mp3", Title: "Song"}
+
+	if _, err := m.toggleTrackFavorite(track); err != nil {
+		t.Fatal(err)
+	}
+	if m.status.text != "Favorited: Song" {
+		t.Errorf("status = %q, want the favorite named", m.status.text)
+	}
+	if _, err := m.toggleTrackFavorite(track); err != nil {
+		t.Fatal(err)
+	}
+	if m.status.text != "Unfavorited: Song" {
+		t.Errorf("status = %q, want the unfavorite named", m.status.text)
+	}
+}
+
 // fixedTracksProvider returns the same tracks for every playlist.
 type fixedTracksProvider struct {
 	commandsTestProvider
