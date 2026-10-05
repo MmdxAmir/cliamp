@@ -265,7 +265,7 @@ func (m Model) plMgrTrackLabel(realIdx int) string {
 	t := m.plManager.tracks[realIdx]
 	mark := "  "
 	if m.plManager.marked[realIdx] {
-		mark = "* "
+		mark = "✓ "
 	}
 	missing := ""
 	if realIdx < len(m.plManager.missingLocal) && m.plManager.missingLocal[realIdx] {
