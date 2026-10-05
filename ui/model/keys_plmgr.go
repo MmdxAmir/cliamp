@@ -381,8 +381,11 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	case "space":
 		realIdx := m.plMgrTrackRealIndex(m.plManager.cursor)
+		wasMarked := m.plManager.marked[realIdx]
 		m.plMgrToggleMark(realIdx)
-		if m.plManager.cursor < count-1 {
+		// Advance only when checking: the walk-down rhythm keeps going while
+		// marking, and unchecking stays on the row under review.
+		if !wasMarked && m.plManager.cursor < count-1 {
 			m.plManager.cursor++
 			m.plMgrTracksMaybeAdjustScroll(m.effectivePlaylistVisible())
 		}

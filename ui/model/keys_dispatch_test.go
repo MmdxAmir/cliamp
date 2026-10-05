@@ -520,6 +520,57 @@ func TestOverlayQCloses(t *testing.T) {
 	}
 }
 
+// Space in the manager tracks screen advances only when marking: checking
+// walks down the list, unchecking stays on the row under review.
+func TestManagerSpaceAdvanceOnMarkOnly(t *testing.T) {
+	newTracksModel := func() *Model {
+		m := keybindingTestModel()
+		m.plManager = plManagerState{visible: true, screen: plMgrScreenTracks, selPlaylist: "music"}
+		m.plMgrLoadTracks([]playlist.Track{
+			{Path: "/one.mp3", Title: "One"},
+			{Path: "/two.mp3", Title: "Two"},
+		})
+		return &m
+	}
+	space := tea.KeyPressMsg{Code: tea.KeySpace}
+
+	t.Run("marking advances", func(t *testing.T) {
+		m := newTracksModel()
+		m.handlePlaylistManagerKey(space)
+		if !m.plManager.marked[0] {
+			t.Fatal("track 0 not marked after space")
+		}
+		if m.plManager.cursor != 1 {
+			t.Fatalf("cursor = %d, want 1 (advance on mark)", m.plManager.cursor)
+		}
+	})
+
+	t.Run("unmarking stays", func(t *testing.T) {
+		m := newTracksModel()
+		m.handlePlaylistManagerKey(space)
+		m.plManager.cursor = 0
+		m.handlePlaylistManagerKey(space)
+		if m.plManager.marked[0] {
+			t.Fatal("track 0 still marked after second space")
+		}
+		if m.plManager.cursor != 0 {
+			t.Fatalf("cursor = %d, want 0 (stay on unmark)", m.plManager.cursor)
+		}
+	})
+
+	t.Run("last row clamps", func(t *testing.T) {
+		m := newTracksModel()
+		m.plManager.cursor = 1
+		m.handlePlaylistManagerKey(space)
+		if !m.plManager.marked[1] {
+			t.Fatal("track 1 not marked after space")
+		}
+		if m.plManager.cursor != 1 {
+			t.Fatalf("cursor = %d, want 1 (clamp on last row)", m.plManager.cursor)
+		}
+	})
+}
+
 // q on a manager tracks screen steps back to the list, like Esc does.
 func TestManagerTracksQBacksToList(t *testing.T) {
 	m := keybindingTestModel()
