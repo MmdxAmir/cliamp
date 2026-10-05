@@ -109,7 +109,7 @@ func (m *Model) handleQueueKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.queue.confirmClear = true
 		m.status.Showf(statusTTLDefault, "Clear %d queued tracks? Press c again to confirm, Esc to cancel.", qLen)
-	case "esc", "A":
+	case "esc", "A", "q":
 		m.queue.confirmClear = false
 		m.queue.visible = false
 	}

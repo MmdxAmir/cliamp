@@ -221,7 +221,7 @@ func (m *Model) handlePlMgrListKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.plManager.confirmDel = true
 	case "u":
 		return m.plMgrUndoLast()
-	case "esc", "p":
+	case "esc", "p", "q":
 		if m.plManager.filter != "" {
 			// First Esc clears an active filter rather than closing.
 			m.plMgrResetFilter()
@@ -431,7 +431,7 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.plMgrRemoveSelectedTracks()
 	case "u":
 		return m.plMgrUndoLast()
-	case "esc", "backspace", "h", "left":
+	case "esc", "backspace", "h", "left", "q":
 		if m.plManager.filter != "" {
 			m.plMgrResetFilter()
 			return nil
@@ -575,7 +575,7 @@ func (m *Model) handlePlMgrDirsKey(msg tea.KeyPressMsg) tea.Cmd {
 				m.status.Showf(statusTTLDefault, "Set %q %s", src.Path, mode)
 			}
 		}
-	case "esc", "backspace", "h", "left":
+	case "esc", "backspace", "h", "left", "q":
 		// Back to the tracks screen; reload tracks so dir changes are shown.
 		m.plMgrEnterTrackList(m.plManager.selPlaylist)
 	}

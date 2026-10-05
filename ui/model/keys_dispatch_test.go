@@ -480,7 +480,8 @@ func TestOverlayProviderShortcutMissHintsSetup(t *testing.T) {
 }
 
 // q above the main screens closes the top overlay instead of quitting:
-// keymap, file browser, theme/visualizer pickers and the playlist picker.
+// keymap, file browser, theme/visualizer pickers, playlist picker and
+// manager, and the queue.
 func TestOverlayQCloses(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -492,6 +493,10 @@ func TestOverlayQCloses(t *testing.T) {
 		{name: "theme picker", setup: func(m *Model) { m.themePicker.visible = true }, isOpen: func(m *Model) bool { return m.themePicker.visible }},
 		{name: "visualizer picker", setup: func(m *Model) { m.visPicker.visible = true }, isOpen: func(m *Model) bool { return m.visPicker.visible }},
 		{name: "playlist picker", setup: func(m *Model) { m.plPicker.visible = true }, isOpen: func(m *Model) bool { return m.plPicker.visible }},
+		{name: "playlist manager list", setup: func(m *Model) {
+			m.plManager = plManagerState{visible: true, screen: plMgrScreenList}
+		}, isOpen: func(m *Model) bool { return m.plManager.visible }},
+		{name: "queue", setup: func(m *Model) { m.queue.visible = true }, isOpen: func(m *Model) bool { return m.queue.visible }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -509,6 +514,25 @@ func TestOverlayQCloses(t *testing.T) {
 				t.Error("quitting = true, want false (q must not quit)")
 			}
 		})
+	}
+}
+
+// q on a manager tracks screen steps back to the list, like Esc does.
+func TestManagerTracksQBacksToList(t *testing.T) {
+	m := keybindingTestModel()
+	m.localProvider = &localInlineFake{commandsTestProvider: commandsTestProvider{name: "Local"}}
+	m.plManager = plManagerState{visible: true, screen: plMgrScreenTracks, selPlaylist: "music"}
+
+	m.handleKey(tea.KeyPressMsg{Text: "q"})
+
+	if !m.plManager.visible {
+		t.Fatal("manager closed; want it open on the list screen")
+	}
+	if m.plManager.screen != plMgrScreenList {
+		t.Fatalf("screen = %v, want plMgrScreenList", m.plManager.screen)
+	}
+	if m.quitting {
+		t.Error("quitting = true, want false (q must not quit)")
 	}
 }
 

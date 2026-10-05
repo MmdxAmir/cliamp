@@ -229,8 +229,8 @@ reordered, so `p` leaves them alone and reports them as skipped.
 | `d` | List: delete playlist (confirms; `Recently Played` cannot be deleted). Tracks: remove marked tracks, or highlighted track when none are marked |
 | `A` | List: append the selected playlist to the current one, keeping what is loaded. Tracks: append the marked tracks, or the highlighted one. |
 | `u` | Undo the last manager edit |
-| `←` `Backspace` `h` | Tracks screen: go back to the list |
-| `Esc` | Close the playlist or go back |
+| `←` `Backspace` `h` `q` | Tracks screen: go back to the list |
+| `Esc` `q` | Close the playlist or go back |
 
 Shift-letter keys switch providers. Playlist-manager track actions use lowercase
 or punctuation keys. `D` is the exception. It opens the directory-sources
