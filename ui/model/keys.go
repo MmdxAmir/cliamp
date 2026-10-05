@@ -755,7 +755,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 // handleInfoKey processes key presses while the track info overlay is open.
 func (m *Model) handleInfoKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "esc", "i":
+	case "esc", "i", "q":
 		m.info.visible = false
 	case "ctrl+i":
 		m.info.visible = false
@@ -774,7 +774,7 @@ func (m *Model) handleInfoKey(msg tea.KeyPressMsg) tea.Cmd {
 // handleLyricsKey processes key presses while the lyrics overlay is open.
 func (m *Model) handleLyricsKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "esc", "y":
+	case "esc", "y", "q":
 		nextRequest(&m.requests.lyrics)
 		m.lyrics.loading = false
 		m.lyrics.query = ""

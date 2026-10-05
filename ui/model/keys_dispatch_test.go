@@ -497,6 +497,9 @@ func TestOverlayQCloses(t *testing.T) {
 			m.plManager = plManagerState{visible: true, screen: plMgrScreenList}
 		}, isOpen: func(m *Model) bool { return m.plManager.visible }},
 		{name: "queue", setup: func(m *Model) { m.queue.visible = true }, isOpen: func(m *Model) bool { return m.queue.visible }},
+		{name: "info", setup: func(m *Model) { m.info.visible = true }, isOpen: func(m *Model) bool { return m.info.visible }},
+		{name: "lyrics", setup: func(m *Model) { m.lyrics.visible = true }, isOpen: func(m *Model) bool { return m.lyrics.visible }},
+		{name: "device picker", setup: func(m *Model) { m.devicePicker.visible = true }, isOpen: func(m *Model) bool { return m.devicePicker.visible }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
