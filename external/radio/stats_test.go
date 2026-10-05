@@ -234,6 +234,37 @@ func TestSummaryWithPlaylists(t *testing.T) {
 	}
 }
 
+func TestSummarizeListenerCounts(t *testing.T) {
+	main := Statistics{Stations: map[string]StationStats{
+		"edm":     {ActiveListeners: 2},
+		"quiet":   {ActiveListeners: 0},
+		"omarchy": {ActiveListeners: 1},
+	}}
+	playlists := &TrackStatistics{Stations: map[string]TrackStationStats{
+		"edm": {ActiveListeners: 3},
+	}}
+
+	t.Run("both documents add up", func(t *testing.T) {
+		got := summarizeListenerCounts(main, playlists)
+		want := map[string]int{"edm": 5, "quiet": 0, "omarchy": 1}
+		if len(got) != len(want) {
+			t.Fatalf("counts = %+v, want %+v", got, want)
+		}
+		for slug, n := range want {
+			if got[slug] != n {
+				t.Errorf("counts[%q] = %d, want %d", slug, got[slug], n)
+			}
+		}
+	})
+
+	t.Run("missing playlist document keeps live counts", func(t *testing.T) {
+		got := summarizeListenerCounts(main, nil)
+		if got["edm"] != 2 || got["omarchy"] != 1 {
+			t.Errorf("counts = %+v, want edm 2 and omarchy 1", got)
+		}
+	})
+}
+
 func TestFetchTrackStatistics(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/tracks/statistics" {

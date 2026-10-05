@@ -3,6 +3,7 @@ package model
 import (
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -12,6 +13,11 @@ import (
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
+
+// radioListenersTTL is how long fetched listener counts stay fresh. A failed
+// fetch stamps the same time, so an offline start does not retry on every
+// pane load; Ctrl+R forces a refresh through refreshActiveProvider.
+const radioListenersTTL = 5 * time.Minute
 
 // resetProviderNav resets provider navigation and search state to the top.
 func (m *Model) resetProviderNav() {
@@ -77,6 +83,23 @@ func (m *Model) fetchProviderPlaylists() tea.Cmd {
 		return m.refreshRadioLists()
 	}
 	return fetchPlaylistsCmd(m.provider, gen)
+}
+
+// maybeFetchRadioListeners starts one listener-counts fetch for the cliamp
+// radio channel rows when the cache is missing or stale. It returns nil for
+// every other provider, in headless mode, and while fresh, so failures stay
+// silent and rows simply show no counts.
+func (m *Model) maybeFetchRadioListeners() tea.Cmd {
+	if m.headless {
+		return nil
+	}
+	if _, ok := m.provider.(*radio.ChannelProvider); !ok {
+		return nil
+	}
+	if time.Since(m.radioListenersAt) < radioListenersTTL {
+		return nil
+	}
+	return fetchRadioListenersCmd(nextRequest(&m.requests.radioListeners))
 }
 
 // refreshRadioLists projects local Radio state on the Update owner. Only
@@ -203,6 +226,9 @@ func (m *Model) refreshActiveProvider(tracksOnly bool) tea.Cmd {
 	nextRequest(&m.requests.catalog)
 	m.catalogBatch = catalogBatchState{}
 	m.provPane.loading = true
+	// A manual refresh also refreshes the listener counts: the next lists
+	// arrival finds a stale cache and refetches.
+	m.radioListenersAt = time.Time{}
 	m.status.Activityf(statusTTLShort, "Refreshing %s…", m.provider.Name())
 	if inPlace {
 		return m.fetchProviderTracks(m.activeProviderPlaylistID)

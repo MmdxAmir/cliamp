@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/bjarneo/cliamp/external/radio"
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
@@ -143,6 +144,55 @@ func (m Model) isProviderRowActive(p playlist.PlaylistInfo) bool {
 		return true
 	}
 	return false
+}
+
+// providerRowLabel formats a provider-list row, appending live listener
+// counts on cliamp radio channel rows. Any other provider renders the plain
+// playlist label.
+func (m Model) providerRowLabel(prefix string, p playlist.PlaylistInfo) string {
+	if _, ok := m.provider.(*radio.ChannelProvider); !ok {
+		return playlistLabel(prefix, p)
+	}
+	if suffix := m.radioListenerSuffix(p.ID); suffix != "" {
+		return playlistLabel(prefix, p) + " · " + suffix
+	}
+	return playlistLabel(prefix, p)
+}
+
+// radioListenerSuffix names the live audience of one cliamp channel: the
+// fetched count plus one optimistic listener while that channel plays, since
+// the server only learns about this listener on its next poll. Unknown
+// counts (never fetched or failed) show nothing, never zero; a known zero
+// reads as quiet.
+func (m Model) radioListenerSuffix(id string) string {
+	count := 0
+	known := false
+	if m.radioListeners != nil {
+		count, known = m.radioListeners[id], true
+	}
+	if m.radioPlayingHere(id) {
+		count++
+		known = true
+	}
+	if !known {
+		return ""
+	}
+	if count > 0 {
+		return fmt.Sprintf("● %d listening now", count)
+	}
+	return "○ quiet right now"
+}
+
+// radioPlayingHere reports whether the given cliamp channel is the audible
+// one. It guards a nil engine so empty test models can render rows.
+func (m Model) radioPlayingHere(id string) bool {
+	if m.activeProviderPlaylistID == "" || m.activeProviderPlaylistID != id {
+		return false
+	}
+	if m.player == nil {
+		return false
+	}
+	return m.player.IsPlaying() || m.buffering
 }
 
 // playlistLabel formats a playlist entry, omitting fields the provider didn't
@@ -929,7 +979,7 @@ func (m Model) renderProviderList() string {
 					idx := m.provSearch.results[j]
 					p := m.provPane.lists[idx]
 					prefix, style := m.providerRowStyle(p, j == m.provSearch.cursor)
-					lines = append(lines, style.Render(playlistLabel(prefix, p)))
+					lines = append(lines, style.Render(m.providerRowLabel(prefix, p)))
 				}
 				lines = append(lines, dimStyle.Render(fmt.Sprintf("  %d/%d playlists", len(m.provSearch.results), len(m.provPane.lists))))
 			}
@@ -991,7 +1041,7 @@ func (m Model) renderProviderList() string {
 			}
 
 			prefix, style := m.providerRowStyle(p, j == m.provPane.cursor)
-			lines = append(lines, style.Render(playlistLabel(prefix, p)))
+			lines = append(lines, style.Render(m.providerRowLabel(prefix, p)))
 		}
 	}
 

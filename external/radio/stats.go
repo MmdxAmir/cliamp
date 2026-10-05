@@ -130,6 +130,37 @@ func fetchStatistics(ctx context.Context, client *http.Client, u string) (Statis
 	return stats, raw, nil
 }
 
+// summarizeListenerCounts reduces both statistics documents to live
+// listeners per channel slug. A nil tracks document keeps the live-stream
+// counts. Pure, so the website-identical aggregation is unit-testable.
+func summarizeListenerCounts(main Statistics, tracks *TrackStatistics) map[string]int {
+	sum := main.Summarize(nil)
+	if tracks != nil {
+		sum = sum.WithPlaylists(*tracks, nil)
+	}
+	out := make(map[string]int, len(sum.Channels))
+	for _, c := range sum.Channels {
+		out[c.Slug] = c.Listeners
+	}
+	return out
+}
+
+// FetchListenerCounts downloads both statistics documents and returns live
+// listeners per channel slug. A failed playlist document still yields the
+// live-stream counts; an error returns only when the main document fails,
+// and callers treat that as "unknown" rather than zero.
+func FetchListenerCounts(ctx context.Context) (map[string]int, error) {
+	main, _, err := FetchStatistics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tracks, err := FetchTrackStatistics(ctx)
+	if err != nil {
+		return summarizeListenerCounts(main, nil), nil
+	}
+	return summarizeListenerCounts(main, &tracks), nil
+}
+
 // Summary is Statistics boiled down to what the statistics views show.
 type Summary struct {
 	Listeners int              // listeners right now, all channels, live streams and playlists
