@@ -313,11 +313,15 @@ func (m *Model) fetchCatalogBatch(loader provider.CatalogLoader) tea.Cmd {
 // quickSwitchProvider closes any browser overlays and jumps to the provider
 // matched by key. It takes every key of providerKeyForShortcut, N included.
 // ok is false when key is no shortcut. A shortcut of a provider that is not
-// configured still closes the overlays, and cmd is nil then.
+// configured leaves the overlays alone: there is nowhere to land, so only
+// the setup hint applies.
 func (m *Model) quickSwitchProvider(key string) (cmd tea.Cmd, ok bool) {
 	provKey := providerKeyForShortcut(key)
 	if provKey == "" {
 		return nil, false
+	}
+	if !m.hasProvider(provKey) {
+		return m.switchToProvider(provKey), true
 	}
 	// Close any open overlays so the user lands on the provider pane.
 	m.cancelNavRequests()
@@ -390,6 +394,16 @@ func (m *Model) switchToProvider(key string) tea.Cmd {
 	}
 	m.status.Warning(unconfiguredProviderHint(key), statusTTLLong)
 	return nil
+}
+
+// hasProvider reports whether a provider with the config key registered.
+func (m Model) hasProvider(key string) bool {
+	for _, pe := range m.providers {
+		if pe.Key == key {
+			return true
+		}
+	}
+	return false
 }
 
 // unconfiguredProviderHint names the setup step for a provider shortcut

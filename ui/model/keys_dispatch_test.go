@@ -74,7 +74,8 @@ func TestProviderShortcutsSwitchFromEveryFocus(t *testing.T) {
 
 // quickSwitchProvider takes every key that providerKeyForShortcut maps, so an
 // overlay returns after the switch even when the switch has no command. A
-// provider that is not configured only closes the overlays.
+// provider that is not configured keeps the overlays open: there is nowhere
+// to land, so only the setup hint applies.
 func TestQuickSwitchProviderTakesEveryShortcut(t *testing.T) {
 	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
 	// A Radio with an active search starts no catalog load, so the switch to
@@ -88,14 +89,15 @@ func TestQuickSwitchProviderTakesEveryShortcut(t *testing.T) {
 		wantOK       bool
 		wantCmd      bool
 		wantProvider string
+		wantOpen     bool // overlays stay open
 	}{
 		{name: "configured provider", key: "S", wantOK: true, wantCmd: true, wantProvider: "spotify"},
 		{name: "N names Navidrome", key: "N", wantOK: true, wantCmd: true, wantProvider: "navidrome"},
 		{name: "switch with no command", key: "R", wantOK: true, wantProvider: "Radio"},
-		{name: "provider not configured", key: "T", drop: "tidal", wantOK: true, wantProvider: "Other"},
-		{name: "lowercase letter", key: "s", wantProvider: "Other"},
-		{name: "other key", key: "ctrl+f", wantProvider: "Other"},
-		{name: "empty key", key: "", wantProvider: "Other"},
+		{name: "provider not configured keeps overlays", key: "T", drop: "tidal", wantOK: true, wantProvider: "Other", wantOpen: true},
+		{name: "lowercase letter", key: "s", wantProvider: "Other", wantOpen: true},
+		{name: "other key", key: "ctrl+f", wantProvider: "Other", wantOpen: true},
+		{name: "empty key", key: "", wantProvider: "Other", wantOpen: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -118,9 +120,8 @@ func TestQuickSwitchProviderTakesEveryShortcut(t *testing.T) {
 			if got := m.provider.Name(); got != tt.wantProvider {
 				t.Errorf("provider = %q, want %q", got, tt.wantProvider)
 			}
-			open := !tt.wantOK
-			if m.navBrowser.visible != open || m.plManager.visible != open || m.fileBrowser.visible != open {
-				t.Errorf("overlays visible = %v %v %v, want %v", m.navBrowser.visible, m.plManager.visible, m.fileBrowser.visible, open)
+			if m.navBrowser.visible != tt.wantOpen || m.plManager.visible != tt.wantOpen || m.fileBrowser.visible != tt.wantOpen {
+				t.Errorf("overlays visible = %v %v %v, want %v", m.navBrowser.visible, m.plManager.visible, m.fileBrowser.visible, tt.wantOpen)
 			}
 		})
 	}
@@ -165,14 +166,14 @@ func TestOverlayProviderShortcuts(t *testing.T) {
 		wantReplace  bool
 	}{
 		{name: "nav menu N switches to Navidrome", open: nav(navBrowseModeMenu, navBrowseScreenList), key: "N", wantProvider: "navidrome"},
-		{name: "nav menu N without Navidrome", open: nav(navBrowseModeMenu, navBrowseScreenList), key: "N", drop: "navidrome", wantProvider: "Other"},
+		{name: "nav menu N without Navidrome keeps the browser", open: nav(navBrowseModeMenu, navBrowseScreenList), key: "N", drop: "navidrome", wantProvider: "Other", wantOpen: true},
 		{name: "nav album list R switches to Radio", open: nav(navBrowseModeByAlbum, navBrowseScreenList), key: "R", wantProvider: "radio"},
 		{name: "nav track screen R asks to replace", open: nav(navBrowseModeByAlbum, navBrowseScreenTracks), key: "R", wantProvider: "Other", wantOpen: true, wantReplace: true},
-		{name: "nav S without Spotify", open: nav(navBrowseModeByAlbum, navBrowseScreenList), key: "S", drop: "spotify", wantProvider: "Other"},
+		{name: "nav S without Spotify keeps the browser", open: nav(navBrowseModeByAlbum, navBrowseScreenList), key: "S", drop: "spotify", wantProvider: "Other", wantOpen: true},
 		{name: "nav replace prompt keeps S", open: navPrompt, key: "S", wantProvider: "Other", wantOpen: true, wantReplace: true},
 		{name: "nav replace prompt keeps S without Spotify", open: navPrompt, key: "S", drop: "spotify", wantProvider: "Other", wantOpen: true, wantReplace: true},
 		{name: "manager list R switches to Radio", open: manager(plMgrScreenList), key: "R", wantProvider: "radio"},
-		{name: "manager tracks S without Spotify", open: manager(plMgrScreenTracks), key: "S", drop: "spotify", wantProvider: "Other"},
+		{name: "manager tracks S without Spotify keeps the manager", open: manager(plMgrScreenTracks), key: "S", drop: "spotify", wantProvider: "Other", wantOpen: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -455,6 +456,27 @@ func TestConfirmPromptsHintOnStrayKeys(t *testing.T) {
 			t.Fatal("stray key left no hint; want the cancellation named")
 		}
 	})
+}
+
+// A shortcut to an unconfigured provider keeps the browser open and names
+// the setup step, instead of closing the browser onto nothing.
+func TestOverlayProviderShortcutMissHintsSetup(t *testing.T) {
+	m := shortcutTestModel()
+	m.playlist.Add(playlist.Track{Path: "existing.mp3"})
+	m.providers = slices.DeleteFunc(m.providers, func(e provider.Entry) bool { return e.Key == "spotify" })
+	m.navBrowser = navBrowserState{
+		prov: commandsTestProvider{name: "Browse"}, visible: true, mode: navBrowseModeByAlbum, screen: navBrowseScreenTracks,
+		tracks: []playlist.Track{{Path: "replacement.mp3"}},
+	}
+
+	m.handleNavBrowserKey(tea.KeyPressMsg{Text: "S"})
+
+	if !m.navBrowser.visible {
+		t.Fatal("nav browser closed for an unconfigured provider; want it open")
+	}
+	if m.status.text == "" {
+		t.Fatal("no setup hint; want the status to name the setup step")
+	}
 }
 
 // q above the main screens closes the top overlay instead of quitting:
