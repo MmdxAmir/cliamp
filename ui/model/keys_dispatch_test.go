@@ -418,3 +418,34 @@ func TestHandleGlobalKey(t *testing.T) {
 		})
 	}
 }
+
+// q in the full-screen visualizer exits back to the player instead of
+// quitting the app; quitting there stays on Ctrl+C.
+func TestFullVisualizerExitKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		key  tea.KeyPressMsg
+	}{
+		{name: "q", key: tea.KeyPressMsg{Text: "q"}},
+		{name: "esc", key: tea.KeyPressMsg{Code: tea.KeyEscape}},
+		{name: "backspace", key: tea.KeyPressMsg{Code: tea.KeyBackspace}},
+		{name: "b", key: tea.KeyPressMsg{Text: "b"}},
+		{name: "V", key: tea.KeyPressMsg{Text: "V"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := keybindingTestModel()
+			m.fullVis = true
+
+			if cmd := m.handleKey(tt.key); cmd != nil {
+				t.Errorf("cmd = non-nil, want nil (no quit command)")
+			}
+			if m.fullVis {
+				t.Error("fullVis = true, want false (exit the visualizer)")
+			}
+			if m.quitting {
+				t.Error("quitting = true, want false (q must not quit)")
+			}
+		})
+	}
+}

@@ -370,7 +370,7 @@ var commandRegistry = []commandSpec{
 		return m.plManager.visible && m.plManager.screen == plMgrScreenTracks
 	}},
 	{Mode: commandModeSearch, Keys: []string{"tab"}, KeyLabel: "Tab", Label: "Toggle queue for result", Keymap: true, ContextHelp: true},
-	{Mode: commandModeFullVis, Keys: []string{"esc", "backspace", "b", "V"}, KeyLabel: "Esc", RunKey: "esc", Label: "Exit visualizer", Keymap: true, ContextHelp: true, Cancel: true},
+	{Mode: commandModeFullVis, Keys: []string{"esc", "backspace", "b", "V", "q"}, KeyLabel: "Esc", RunKey: "esc", Label: "Exit visualizer", Keymap: true, ContextHelp: true, Cancel: true},
 	{Mode: commandModeFullVis, Keys: []string{"space"}, KeyLabel: "Space", Label: "Play / Pause", Keymap: true, ContextHelp: true, Primary: true},
 	{Mode: commandModeFullVis, Keys: []string{">", "."}, KeyLabel: "> .", RunKey: ">", Label: "Next track", Keymap: true},
 	{Mode: commandModeFullVis, Keys: []string{"<", ","}, KeyLabel: "< ,", RunKey: "<", Label: "Previous track", Keymap: true},
@@ -379,7 +379,6 @@ var commandRegistry = []commandSpec{
 	{Mode: commandModeFullVis, Keys: []string{"+", "=", "-"}, KeyLabel: "+ -", Label: "Volume up/down", Keymap: true},
 	{Mode: commandModeFullVis, Keys: []string{"v"}, KeyLabel: "v", Label: "Cycle visualizer", Keymap: true},
 	{Mode: commandModeFullVis, Keys: []string{"t"}, KeyLabel: "t", Label: "Hide track info", Keymap: true, ContextHelp: true},
-	{Mode: commandModeFullVis, Keys: []string{"q"}, KeyLabel: "q", Label: "Quit", Keymap: true},
 	{Mode: commandModeFullVis, Keys: []string{"?"}, KeyLabel: "?", Label: "Help", Keymap: true},
 }
 

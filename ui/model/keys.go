@@ -810,9 +810,7 @@ func (m *Model) exitFullVisualizer() {
 
 func (m *Model) handleFullVisualizerKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "q":
-		return m.quit()
-	case "esc", "backspace", "b", "V":
+	case "esc", "backspace", "b", "V", "q":
 		m.exitFullVisualizer()
 	case "space":
 		return m.togglePlayPause()
