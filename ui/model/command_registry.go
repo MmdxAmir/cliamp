@@ -173,7 +173,7 @@ var commandRegistry = []commandSpec{
 	{Mode: commandModeMain, Keys: []string{"ctrl+j"}, KeyLabel: "Ctrl+J", Label: "Jump to time", Keymap: true},
 	{Mode: commandModeMain, Keys: []string{"p"}, KeyLabel: "p", Label: "Playlist", Keymap: true},
 	{Mode: commandModeProvider, Keys: []string{"p"}, KeyLabel: "p", Label: "Playlist", Keymap: true, ContextHelp: true, Enabled: func(m Model) bool {
-		return m.activeProviderKey() == providerKeyLocal && m.localProvider != nil
+		return m.localProvider != nil
 	}},
 	{Mode: commandModeMain, Keys: []string{"ctrl+h"}, KeyLabel: "Ctrl+H", Label: "Toggle album headers", Keymap: true},
 	{Mode: commandModeMain, Keys: []string{"ctrl+g"}, KeyLabel: "Ctrl+G", Label: "Toggle key-binding hint bar", Keymap: true},
