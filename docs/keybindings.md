@@ -113,7 +113,7 @@ list.
 | `Ctrl+B` | Open/close the settings pane (remembered in `hide_settings_pane`) |
 
 Theme and visualizer pickers support `/` filtering. While you browse, arrow
-keys preview the selected option. `Enter` keeps it. `Esc` restores the option
+keys preview the selected option. `Enter` keeps it. `Esc` or `q` restores the option
 active when the picker opened. While you type a filter, `Enter` completes it
 and `Esc` clears it.
 
@@ -258,7 +258,7 @@ other key cancels. The Shift-letter keys do not switch providers then.
 | `w` | Write selected files to a local playlist |
 | `D` | Add selected folders as live `[[dir]]` sources to the target playlist. If none are selected, add the selected folder or the open directory. The browser stays open. |
 | `~` `.` | Jump to home / current working directory |
-| `Esc` `o` | Close file browser |
+| `Esc` `q` `o` | Close file browser |
 
 When the browser adds to a playlist, selected folders become `[[dir]]` sources.
 Selected audio files become explicit tracks. This mode starts when you open the
@@ -387,7 +387,7 @@ services control matching rules.
 
 | Key | Action |
 |---|---|
-| `?` / `Ctrl+K` | Show keymap. `Enter` runs the selected command. |
+| `?` / `Ctrl+K` | Show keymap. `Enter` runs the selected command. `Esc` or `q` closes it. |
 | `q` / `Ctrl+C` | Quit |
 
 cliamp also quits as the `q` key does when it gets `SIGINT`, `SIGTERM` or `SIGHUP`. It then saves the resume position. The terminal sends `SIGHUP` when you close its window.

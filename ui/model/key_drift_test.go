@@ -365,9 +365,9 @@ var listKeys = []string{"up", "down", "k", "j", "pgup", "pgdown", "ctrl+u", "ctr
 // delete it here.
 var unlistedKeys = map[string][]string{
 	"handleDeviceKey":               {"d"},
-	"handleFileBrowserKey":          {"o", "q", "right", "l", "backspace", "left", "h", "~", "."},
+	"handleFileBrowserKey":          {"o", "right", "l", "backspace", "left", "h", "~", "."},
 	"handleInfoKey":                 {"i"},
-	"handleKeymapKey":               {"?", "q", "backspace", "h", "l"},
+	"handleKeymapKey":               {"?", "backspace", "h", "l"},
 	"handleLyricsKey":               {"y"},
 	"handleNavAlbumListKey":         {"l", "right", "s", "h", "left", "backspace"},
 	"handleNavArtistListKey":        {"l", "right", "h", "left", "backspace"},
@@ -382,7 +382,7 @@ var unlistedKeys = map[string][]string{
 	"handlePlMgrListKey":            {"y", "Y", "/", "l", "right", "r"},
 	"handlePlMgrTracksKey":          {"ctrl+h", "/", "backspace", "h", "left"},
 	"handlePlaylistManagerKey":      {"S", "N", "P", "J", "E", "B", "Y", "C", "X", "M", "Q", "T", "L", "R", "O"},
-	"handlePlaylistPickerKey":       {"backspace", "q"},
+	"handlePlaylistPickerKey":       {"backspace"},
 	"handleProvPillKey":             {"left", "h", "right", "l", "space"},
 	"handleProvSearchKey":           {"ctrl+n", "ctrl+p"},
 	"handleProviderPaneKey":         {"y", "Y", "n", "space", "/", "o", "ctrl+j", "ctrl+f", "S", "P", "J", "E", "B", "C", "X", "M", "Q", "T", "L", "R", "O"},
@@ -391,8 +391,8 @@ var unlistedKeys = map[string][]string{
 	"handleSpeedKey":                {"l", "h", "esc", "backspace"},
 	"handleSearchOverlayResultsKey": {"ctrl+p", "ctrl+n", "a", "q", "p"},
 	"handleSubsKey":                 {"?"},
-	"handleThemeKey":                {"q", "t"},
-	"handleVisPickerKey":            {"q", "ctrl+v"},
+	"handleThemeKey":                {"t"},
+	"handleVisPickerKey":            {"ctrl+v"},
 }
 
 // keyHandlerModes returns the command mode of each handler that an overlay

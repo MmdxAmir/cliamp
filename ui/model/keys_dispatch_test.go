@@ -9,6 +9,7 @@ import (
 	"github.com/bjarneo/cliamp/external/radio"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
+	"github.com/bjarneo/cliamp/ui"
 )
 
 // shortcutTestModel registers a provider for every Shift+letter shortcut,
@@ -414,6 +415,39 @@ func TestHandleGlobalKey(t *testing.T) {
 			}
 			if got := m.playlist.Len(); got != wantLen {
 				t.Errorf("playlist.Len() = %d, want %d", got, wantLen)
+			}
+		})
+	}
+}
+
+// q above the main screens closes the top overlay instead of quitting:
+// keymap, file browser, theme/visualizer pickers and the playlist picker.
+func TestOverlayQCloses(t *testing.T) {
+	tests := []struct {
+		name   string
+		setup  func(*Model)
+		isOpen func(*Model) bool
+	}{
+		{name: "keymap", setup: func(m *Model) { m.keymap.visible = true }, isOpen: func(m *Model) bool { return m.keymap.visible }},
+		{name: "file browser", setup: func(m *Model) { m.fileBrowser.visible = true }, isOpen: func(m *Model) bool { return m.fileBrowser.visible }},
+		{name: "theme picker", setup: func(m *Model) { m.themePicker.visible = true }, isOpen: func(m *Model) bool { return m.themePicker.visible }},
+		{name: "visualizer picker", setup: func(m *Model) { m.visPicker.visible = true }, isOpen: func(m *Model) bool { return m.visPicker.visible }},
+		{name: "playlist picker", setup: func(m *Model) { m.plPicker.visible = true }, isOpen: func(m *Model) bool { return m.plPicker.visible }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := keybindingTestModel()
+			m.vis = ui.NewVisualizer(48000)
+			tt.setup(&m)
+
+			if cmd := m.handleKey(tea.KeyPressMsg{Text: "q"}); cmd != nil {
+				t.Errorf("cmd = non-nil, want nil (close, not quit)")
+			}
+			if tt.isOpen(&m) {
+				t.Error("overlay still open, want closed")
+			}
+			if m.quitting {
+				t.Error("quitting = true, want false (q must not quit)")
 			}
 		})
 	}
