@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/bjarneo/cliamp/favorites"
 	"github.com/bjarneo/cliamp/history"
 )
@@ -228,7 +230,46 @@ func (m Model) renderPlMgrTracksBody() string {
 		}
 		lines = append(lines, cursorLine(m.plMgrTrackLabel(row.Index), row.Index == m.plManager.cursor))
 	}
-	return bodyLines(lines, budget)
+	if !m.plManager.sortMenuOpen {
+		return bodyLines(lines, budget)
+	}
+	return m.renderPlMgrTracksWithSortMenu(lines, budget)
+}
+
+func (m Model) renderPlMgrTracksWithSortMenu(trackLines []string, budget int) string {
+	const menuWidth = 24
+	leftWidth := m.layout.panelWidth - menuWidth - 3
+	if leftWidth < 10 {
+		return bodyLines(trackLines, budget)
+	}
+
+	menuLines := make([]string, 0, len(plMgrSortModes)+1)
+	menuLines = append(menuLines, playlistSelectedStyle.Render("Sort"))
+	for i, mode := range plMgrSortModes {
+		if i == m.plManager.sortMenuCursor {
+			menuLines = append(menuLines, playlistSelectedStyle.Render("> "+mode))
+		} else {
+			menuLines = append(menuLines, dimStyle.Render("  "+mode))
+		}
+	}
+
+	rows := max(len(trackLines), len(menuLines))
+	combined := make([]string, 0, min(rows, budget))
+	for i := 0; i < rows && len(combined) < budget; i++ {
+		left := ""
+		if i < len(trackLines) {
+			left = ansi.Truncate(trackLines[i], leftWidth, "…")
+		}
+		right := ""
+		if i < len(menuLines) {
+			right = menuLines[i]
+		}
+		if right != "" {
+			right = lipgloss.NewStyle().Width(menuWidth).Render(right)
+		}
+		combined = append(combined, left+dimStyle.Render(" │ ")+right)
+	}
+	return bodyLines(combined, budget)
 }
 
 // renderPlMgrDirsBody renders the [[dir]] directory sources for the open
