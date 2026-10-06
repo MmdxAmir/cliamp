@@ -203,6 +203,8 @@ type plManagerState struct {
 	inputErr      string
 	marked        map[int]bool // real track indices marked on the tracks screen
 	sortMode      int
+	sortMenuOpen  bool
+	sortMenuCursor int
 	undo          plManagerUndo
 
 	// Filter (`/`) state. Reset on screen change. `filtered` indexes into
