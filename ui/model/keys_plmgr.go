@@ -309,6 +309,35 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.handlePlMgrFilterKey(msg)
 	}
 
+	if m.plManager.sortMenuOpen {
+		switch msg.String() {
+		case "up", "k":
+			if m.plManager.sortMenuCursor > 0 {
+				m.plManager.sortMenuCursor--
+			} else {
+				m.plManager.sortMenuCursor = len(plMgrSortModes) - 1
+			}
+			return nil
+		case "down", "j":
+			if m.plManager.sortMenuCursor < len(plMgrSortModes)-1 {
+				m.plManager.sortMenuCursor++
+			} else {
+				m.plManager.sortMenuCursor = 0
+			}
+			return nil
+		case "enter":
+			mode := plMgrSortModes[m.plManager.sortMenuCursor]
+			m.plMgrSortTracks(mode)
+			m.plManager.sortMenuOpen = false
+			return nil
+		case "esc", "s":
+			m.plManager.sortMenuOpen = false
+			return nil
+		default:
+			return nil
+		}
+	}
+
 	count := m.plMgrTracksViewCount()
 	switch msg.String() {
 	case "ctrl+h":
@@ -394,7 +423,12 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "A":
 		return m.plMgrAppendSelectedTracks()
 	case "s":
-		m.plMgrSortTracks()
+		m.plManager.sortMenuOpen = true
+		if m.plManager.sortMode > 0 {
+			m.plManager.sortMenuCursor = (m.plManager.sortMode - 1) % len(plMgrSortModes)
+		} else {
+			m.plManager.sortMenuCursor = 0
+		}
 	case "w":
 		tracks := m.plMgrSelectedTracks()
 		if len(tracks) > 0 {
@@ -935,13 +969,12 @@ func (m *Model) plMgrMoveTrack(delta int) {
 
 var plMgrSortModes = []string{"track", "title", "artist", "album", "artist+album", "path"}
 
-func (m *Model) plMgrSortTracks() {
+func (m *Model) plMgrSortTracks(mode string) {
 	if len(m.plManager.tracks) < 2 {
 		return
 	}
 	m.plMgrSetTrackUndo()
-	mode := plMgrSortModes[m.plManager.sortMode%len(plMgrSortModes)]
-	m.plManager.sortMode++
+	previousSortMode := m.plManager.sortMode
 	order := make([]int, len(m.plManager.tracks))
 	for i := range order {
 		order[i] = i
@@ -959,10 +992,12 @@ func (m *Model) plMgrSortTracks() {
 	m.plManager.missingLocal = missingLocal
 	m.plManager.marked = make(map[int]bool)
 	if m.plMgrSaveOrder(fmt.Sprintf("Sorted %q by %s", m.plManager.selPlaylist, mode)) {
+		m.plManager.sortMode = m.plManager.sortMenuCursor + 1
 		m.plManager.cursor = 0
 		m.plManager.scroll = 0
 		m.plMgrRecomputeFilter()
 	} else {
+		m.plManager.sortMode = previousSortMode
 		m.plMgrRestoreTracks(m.plManager.undo.tracks, m.plManager.undo.missingLocal)
 	}
 }
