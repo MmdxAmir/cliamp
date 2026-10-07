@@ -100,6 +100,7 @@ func (m Model) renderSettingsPane(rows int) string {
 	for _, r := range pane {
 		lines = append(lines, r.line)
 	}
+	lines = append(lines, m.renderSortPane()...)
 	lines = append(lines, m.renderMetadataPane(metadataRows)...)
 	return bodyLines(lines, rows)
 }
