@@ -30,13 +30,15 @@ type searchState struct {
 // is stale and the undo is refused. When persisted, the edit took the track
 // removed from index savedIdx of the loaded playlist file.
 type playlistUndo struct {
-	active    bool
-	snapshot  playlist.Snapshot
-	revision  uint64
-	loaded    string
-	persisted bool
-	removed   playlist.Track
-	savedIdx  int
+	active      bool
+	snapshot    playlist.Snapshot
+	revision    uint64
+	loaded      string
+	persisted   bool
+	removed     playlist.Track
+	savedIdx    int
+	orderEdit   bool
+	beforeOrder []playlist.Track
 }
 
 // netSearchScreenType identifies which screen of the net search overlay is active.
