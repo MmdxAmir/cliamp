@@ -127,7 +127,13 @@ func (m Model) settingsPaneRows(rows int) []paneRow {
 	add(rankControl, focusSpeed, m.settingsSpeed())
 	add(rankInfo, focusPlaylist, m.settingsNetwork(w))
 	if m.playbackSortMenuOpen {
-		add(rankControl, focusSort, m.renderSortPane()...)
+		sortLines := m.renderSortPane()
+		if len(sortLines) > 0 {
+			pane = append(pane, paneRow{line: sortLines[0], rank: rankControl, focus: focusSort})
+			for _, line := range sortLines[1:] {
+				pane = append(pane, paneRow{line: line, rank: rankControl, focus: focusPlaylist})
+			}
+		}
 	}
 
 	for rank := rankInfo; rank > rankControl && len(pane) > rows; rank-- {
