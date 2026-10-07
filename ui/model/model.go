@@ -125,10 +125,18 @@ func (m Model) mainFocusAreas() []focusArea {
 	}
 	if m.layout.twoColumn {
 		rows := m.effectivePlaylistVisible()
-		for _, row := range m.settingsPaneRows(rows - m.metadataPaneRows(rows)) {
+		metadataRows := m.metadataPaneRows(rows)
+		sortRows := 0
+		if m.playbackSortMenuOpen {
+			sortRows = sortPaneRows
+		}
+		for _, row := range m.settingsPaneRows(rows - metadataRows - sortRows) {
 			if row.focus != focusPlaylist {
 				areas = append(areas, row.focus)
 			}
+		}
+		if m.playbackSortMenuOpen {
+			areas = append(areas, focusSort)
 		}
 		return areas
 	}
