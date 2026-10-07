@@ -329,7 +329,7 @@ func (m *Model) handlePlMgrTracksKey(msg tea.KeyPressMsg) tea.Cmd {
 			mode := plMgrSortModes[m.plManager.sortMenuCursor]
 			m.plMgrSortTracks(mode)
 			return nil
-		case "esc", "s":
+		case "esc", "backspace", "s":
 			m.plManager.sortMenuOpen = false
 			return nil
 		default:
