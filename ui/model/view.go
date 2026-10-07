@@ -1277,7 +1277,46 @@ func (m Model) renderPlaylist() string {
 		lines = append(lines, line)
 	}
 
+	if m.focus == focusPlaylist && m.playbackSortMenuOpen {
+		return m.renderPlaybackPlaylistWithSortMenu(lines, budget)
+	}
 	return strings.Join(padLines(lines, budget, len(lines)), "\n")
+}
+
+func (m Model) renderPlaybackPlaylistWithSortMenu(trackLines []string, budget int) string {
+	const menuWidth = 24
+	leftWidth := m.layout.panelWidth - menuWidth - 3
+	if leftWidth < 10 {
+		return strings.Join(padLines(trackLines, budget, len(trackLines)), "\n")
+	}
+
+	menuLines := make([]string, 0, len(playlistSortModes)+1)
+	menuLines = append(menuLines, dimStyle.Render(labeledSeparator("", "Sort", menuWidth)))
+	for i, mode := range playlistSortModes {
+		if i == m.playbackSortMenuCursor {
+			menuLines = append(menuLines, playlistSelectedStyle.Render("> "+mode))
+		} else {
+			menuLines = append(menuLines, dimStyle.Render("  "+mode))
+		}
+	}
+
+	rows := max(len(trackLines), len(menuLines))
+	combined := make([]string, 0, min(rows, budget))
+	for i := 0; i < rows && len(combined) < budget; i++ {
+		left := ""
+		if i < len(trackLines) {
+			left = ansi.Truncate(trackLines[i], leftWidth, "…")
+		}
+		right := ""
+		if i < len(menuLines) {
+			right = menuLines[i]
+		}
+		if right != "" {
+			right = lipgloss.NewStyle().Width(menuWidth).Render(right)
+		}
+		combined = append(combined, left+dimStyle.Render(" │ ")+right)
+	}
+	return strings.Join(padLines(combined, budget, len(combined)), "\n")
 }
 
 // renderHelp renders the key hints of what owns the keys.
