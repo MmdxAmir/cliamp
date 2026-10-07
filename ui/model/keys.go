@@ -394,6 +394,32 @@ func (m *Model) handleProvPillKey(msg tea.KeyPressMsg) tea.Cmd {
 // handleMainKey processes a key press for the playlist and the focused
 // playback controls. It forwards the keys that it does not handle to plugins.
 func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
+	if m.focus == focusPlaylist && m.playbackSortMenuOpen {
+		switch msg.String() {
+		case "up", "k":
+			if m.playbackSortMenuCursor > 0 {
+				m.playbackSortMenuCursor--
+			} else {
+				m.playbackSortMenuCursor = len(playlistSortModes) - 1
+			}
+			return nil
+		case "down", "j":
+			if m.playbackSortMenuCursor < len(playlistSortModes)-1 {
+				m.playbackSortMenuCursor++
+			} else {
+				m.playbackSortMenuCursor = 0
+			}
+			return nil
+		case "enter":
+			return m.sortLoadedPlaylistByMode(playlistSortModes[m.playbackSortMenuCursor])
+		case "esc", "backspace", "s":
+			m.playbackSortMenuOpen = false
+			return nil
+		default:
+			return nil
+		}
+	}
+
 	// Vim-style count prefix: a digit primes a pending percentage; the next `j`
 	// jumps there (e.g. `7j` → 70%). Any other key cancels and runs normally.
 	if s := msg.String(); m.focus == focusPlaylist && len(s) == 1 && s[0] >= '0' && s[0] <= '9' {
@@ -467,6 +493,15 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.togglePlayPause()
 
 	case "s":
+		if m.focus == focusPlaylist {
+			m.playbackSortMenuOpen = true
+			if m.playbackSortMode > 0 {
+				m.playbackSortMenuCursor = m.playbackSortMode - 1
+			} else {
+				m.playbackSortMenuCursor = 0
+			}
+			return nil
+		}
 		m.stopByUser()
 		return nil
 
