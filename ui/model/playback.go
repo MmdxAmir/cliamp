@@ -360,6 +360,26 @@ func (m *Model) undoPlaylistMutation() tea.Cmd {
 		m.status.Warning("Can't undo: the playlist changed since the edit", statusTTLDefault)
 		return nil
 	}
+	if undo.orderEdit {
+		updater, ok := m.localProvider.(playlistUpdater)
+		if !ok {
+			m.status.Warning("Undo unavailable", statusTTLDefault)
+			return nil
+		}
+		if err := updater.UpdatePlaylist(undo.loaded, func(tracks []playlist.Track) ([]playlist.Track, error) {
+			return orderByRows(tracks, undo.beforeOrder), nil
+		}); err != nil {
+			m.status.Errorf(statusTTLDefault, "Undo failed: %s", err)
+			return nil
+		}
+		m.playlist.Restore(undo.snapshot)
+		m.normalizeQueueOverlay()
+		m.playlistUndo = playlistUndo{}
+		m.adjustScroll()
+		m.status.Show("Restored previous playlist order", statusTTLDefault)
+		return m.rearmStalePreload()
+	}
+
 	if undo.persisted {
 		// Put back only the removed track in one locked update, so a track
 		// that another writer added since the edit is kept.
