@@ -80,6 +80,7 @@ const (
 	focusShuffle
 	focusRepeat
 	focusSpeed
+	focusSort
 	focusSearch
 	focusProvider
 	focusNetSearch
@@ -99,6 +100,8 @@ func (f focusArea) label() string {
 		return "Repeat"
 	case focusSpeed:
 		return "Speed"
+	case focusSort:
+		return "Sort"
 	case focusProvPill:
 		return "Source"
 	case focusProvider:
@@ -188,7 +191,7 @@ func (m Model) previousMainFocus(current focusArea) focusArea {
 func (m *Model) normalizeMainFocus() {
 	for _, focus := range []*focusArea{&m.focus, &m.prevFocus} {
 		switch *focus {
-		case focusProvPill, focusVolume, focusEQ, focusShuffle, focusRepeat, focusSpeed:
+		case focusProvPill, focusVolume, focusEQ, focusShuffle, focusRepeat, focusSpeed, focusSort:
 			if !m.mainFocusAllowed(*focus) {
 				*focus = focusPlaylist
 			}
