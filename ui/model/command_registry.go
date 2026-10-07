@@ -105,7 +105,12 @@ func (c commandSpec) label(m Model) string {
 // table so the keymap cannot drift from plugin key reservations.
 var commandRegistry = []commandSpec{
 	{Mode: commandModeMain | commandModeEQ | commandModeSpeed, Keys: []string{"space"}, KeyLabel: "Space", Label: "Play / Pause", Keymap: true, ContextHelp: true, Primary: true},
-	{Mode: commandModeMain, Keys: []string{"s"}, KeyLabel: "s", Label: "Stop", Keymap: true},
+	{Mode: commandModeMain, Keys: []string{"s"}, KeyLabel: "s", Label: "Stop", LabelFor: func(m Model) string {
+		if m.focus == focusPlaylist {
+			return "Sort"
+		}
+		return "Stop"
+	}, Keymap: true},
 	{Mode: commandModeMain, Keys: []string{">", "."}, KeyLabel: "> .", RunKey: ">", Label: "Next track", Keymap: true},
 	{Mode: commandModeMain, Keys: []string{"<", ","}, KeyLabel: "< ,", RunKey: "<", Label: "Previous track", Keymap: true},
 	{Mode: commandModeMain, Keys: []string{"left", "right"}, KeyLabel: "Left Right", Label: "Seek +/-5s", Keymap: true},
