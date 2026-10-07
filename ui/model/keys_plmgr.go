@@ -966,7 +966,7 @@ func (m *Model) plMgrMoveTrack(delta int) {
 	}
 }
 
-var plMgrSortModes = []string{"track", "title", "artist", "album", "artist+album", "path"}
+var plMgrSortModes = playlistSortModes
 
 func (m *Model) plMgrSortTracks(mode string) {
 	if len(m.plManager.tracks) < 2 {
@@ -974,21 +974,7 @@ func (m *Model) plMgrSortTracks(mode string) {
 	}
 	m.plMgrSetTrackUndo()
 	previousSortMode := m.plManager.sortMode
-	order := make([]int, len(m.plManager.tracks))
-	for i := range order {
-		order[i] = i
-	}
-	sort.SliceStable(order, func(i, j int) bool {
-		return compareUITracks(m.plManager.tracks[order[i]], m.plManager.tracks[order[j]], mode) < 0
-	})
-	tracks := make([]playlist.Track, len(order))
-	missingLocal := make([]bool, len(order))
-	for i, idx := range order {
-		tracks[i] = m.plManager.tracks[idx]
-		missingLocal[i] = m.plManager.missingLocal[idx]
-	}
-	m.plManager.tracks = tracks
-	m.plManager.missingLocal = missingLocal
+	m.plManager.tracks = sortTracksByMode(m.plManager.tracks, mode)
 	m.plManager.marked = make(map[int]bool)
 	if m.plMgrSaveOrder(fmt.Sprintf("Sorted %q by %s", m.plManager.selPlaylist, mode)) {
 		m.plManager.sortMode = m.plManager.sortMenuCursor + 1
@@ -998,34 +984,6 @@ func (m *Model) plMgrSortTracks(mode string) {
 	} else {
 		m.plManager.sortMode = previousSortMode
 		m.plMgrRestoreTracks(m.plManager.undo.tracks, m.plManager.undo.missingLocal)
-	}
-}
-
-func compareUITracks(a, b playlist.Track, mode string) int {
-	cmpString := func(x, y string) int {
-		return strings.Compare(strings.ToLower(x), strings.ToLower(y))
-	}
-	first := func(values ...int) int {
-		for _, v := range values {
-			if v != 0 {
-				return v
-			}
-		}
-		return 0
-	}
-	switch mode {
-	case "track":
-		return first(a.TrackNumber-b.TrackNumber, cmpString(a.Title, b.Title), cmpString(a.Path, b.Path))
-	case "artist":
-		return first(cmpString(a.Artist, b.Artist), cmpString(a.Album, b.Album), a.TrackNumber-b.TrackNumber, cmpString(a.Title, b.Title), cmpString(a.Path, b.Path))
-	case "album":
-		return first(cmpString(a.Album, b.Album), a.TrackNumber-b.TrackNumber, cmpString(a.Title, b.Title), cmpString(a.Path, b.Path))
-	case "artist+album":
-		return first(cmpString(a.Artist, b.Artist), cmpString(a.Album, b.Album), a.TrackNumber-b.TrackNumber, cmpString(a.Title, b.Title), cmpString(a.Path, b.Path))
-	case "path":
-		return cmpString(a.Path, b.Path)
-	default:
-		return first(cmpString(a.Title, b.Title), cmpString(a.Artist, b.Artist), cmpString(a.Path, b.Path))
 	}
 }
 
