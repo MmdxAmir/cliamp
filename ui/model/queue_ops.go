@@ -236,6 +236,11 @@ var playlistSortModes = []string{"track", "title", "artist", "album", "artist+al
 // sortTracksByMode returns a stable copy of tracks ordered by the shared
 // playlist sort rules used by both the playlist manager and the playback list.
 func sortTracksByMode(tracks []playlist.Track, mode string) []playlist.Track {
+	out, _ := sortTrackRows(tracks, nil, mode)
+	return out
+}
+
+func sortTrackRows(tracks []playlist.Track, missing []bool, mode string) ([]playlist.Track, []bool) {
 	order := make([]int, len(tracks))
 	for i := range order {
 		order[i] = i
@@ -244,10 +249,14 @@ func sortTracksByMode(tracks []playlist.Track, mode string) []playlist.Track {
 		return comparePlaylistTracks(tracks[order[i]], tracks[order[j]], mode) < 0
 	})
 	out := make([]playlist.Track, len(order))
+	missingOut := make([]bool, len(order))
 	for i, idx := range order {
 		out[i] = tracks[idx]
+		if idx < len(missing) {
+			missingOut[i] = missing[idx]
+		}
 	}
-	return out
+	return out, missingOut
 }
 
 func comparePlaylistTracks(a, b playlist.Track, mode string) int {
