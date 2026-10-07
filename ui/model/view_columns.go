@@ -100,7 +100,6 @@ func (m Model) renderSettingsPane(rows int) string {
 	for _, r := range pane {
 		lines = append(lines, r.line)
 	}
-	lines = append(lines, m.renderSortPane()...)
 	lines = append(lines, m.renderMetadataPane(metadataRows)...)
 	return bodyLines(lines, rows)
 }
@@ -127,6 +126,9 @@ func (m Model) settingsPaneRows(rows int) []paneRow {
 	add(rankMode, focusRepeat, m.settingsRepeat())
 	add(rankControl, focusSpeed, m.settingsSpeed())
 	add(rankInfo, focusPlaylist, m.settingsNetwork(w))
+	if m.playbackSortMenuOpen {
+		add(rankControl, focusSort, m.renderSortPane()...)
+	}
 
 	for rank := rankInfo; rank > rankControl && len(pane) > rows; rank-- {
 		pane = slices.DeleteFunc(pane, func(r paneRow) bool { return r.rank == rank })
