@@ -974,7 +974,7 @@ func (m *Model) plMgrSortTracks(mode string) {
 	}
 	m.plMgrSetTrackUndo()
 	previousSortMode := m.plManager.sortMode
-	m.plManager.tracks = sortTracksByMode(m.plManager.tracks, mode)
+	m.plManager.tracks, m.plManager.missingLocal = sortTrackRows(m.plManager.tracks, m.plManager.missingLocal, mode)
 	m.plManager.marked = make(map[int]bool)
 	if m.plMgrSaveOrder(fmt.Sprintf("Sorted %q by %s", m.plManager.selPlaylist, mode)) {
 		m.plManager.sortMode = m.plManager.sortMenuCursor + 1
