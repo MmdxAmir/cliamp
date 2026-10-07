@@ -244,7 +244,7 @@ func (m Model) renderPlMgrTracksWithSortMenu(trackLines []string, budget int) st
 	}
 
 	menuLines := make([]string, 0, len(plMgrSortModes)+1)
-	menuLines = append(menuLines, playlistSelectedStyle.Render("Sort"))
+	menuLines = append(menuLines, dimStyle.Render(labeledSeparator("", "Sort", menuWidth)))
 	for i, mode := range plMgrSortModes {
 		if i == m.plManager.sortMenuCursor {
 			menuLines = append(menuLines, playlistSelectedStyle.Render("> "+mode))
