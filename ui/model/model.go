@@ -424,6 +424,11 @@ type Model struct {
 	// Write-backs read writableLoadedPlaylist, which excludes Favorites.
 	loadedPlaylist string
 
+	// playbackSortMenu controls the sort picker shown in the main track list.
+	playbackSortMenuOpen   bool
+	playbackSortMenuCursor int
+	playbackSortMode       int
+
 	// playlistSource names the provider list that an IPC load put in the
 	// queue, as key:id or key:album:id, when loadedPlaylist is empty. Only
 	// the runtime snapshot reads it.
