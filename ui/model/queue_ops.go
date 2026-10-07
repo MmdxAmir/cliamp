@@ -61,6 +61,7 @@ func (m *Model) sortLoadedPlaylistByMode(mode string) tea.Cmd {
 	if err := m.persistLoadedPlaylistOrder(sorted); err != nil {
 		return nil
 	}
+	beforeSnapshot := m.playlist.Snapshot()
 
 	// Reorder the live Playlist using its existing Move operation so current
 	// playback, queue positions and the current track remain coherent.
@@ -84,7 +85,7 @@ func (m *Model) sortLoadedPlaylistByMode(mode string) tea.Cmd {
 	m.recordPlaylistUndo(playlistUndo{
 		orderEdit:   true,
 		persisted:   true,
-		snapshot:    m.playlist.Snapshot(),
+		snapshot:    beforeSnapshot,
 		beforeOrder: tracks,
 	})
 	m.playbackSortMode = sortModeIndex(mode)
