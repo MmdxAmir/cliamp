@@ -394,7 +394,7 @@ func (m *Model) handleProvPillKey(msg tea.KeyPressMsg) tea.Cmd {
 // handleMainKey processes a key press for the playlist and the focused
 // playback controls. It forwards the keys that it does not handle to plugins.
 func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
-	if m.focus == focusPlaylist && m.playbackSortMenuOpen {
+	if m.focus == focusSort && m.playbackSortMenuOpen {
 		switch msg.String() {
 		case "up", "k":
 			if m.playbackSortMenuCursor > 0 {
@@ -414,6 +414,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.sortLoadedPlaylistByMode(playlistSortModes[m.playbackSortMenuCursor])
 		case "esc", "backspace", "s":
 			m.playbackSortMenuOpen = false
+			m.focus = focusPlaylist
 			return nil
 		default:
 			return nil
@@ -495,6 +496,7 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "s":
 		if m.focus == focusPlaylist {
 			m.playbackSortMenuOpen = true
+			m.focus = focusSort
 			if m.playbackSortMode > 0 {
 				m.playbackSortMenuCursor = m.playbackSortMode - 1
 			} else {
