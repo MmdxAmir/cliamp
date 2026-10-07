@@ -30,6 +30,79 @@ var (
 // the first one. The queue then mirrors no saved playlist, and the album
 // header counters include the new tracks. The caller starts playback or
 // re-arms the preload, because that depends on why the tracks came.
+// sortLoadedPlaylistByMode sorts the currently loaded writable playlist and
+// mirrors the same order into the playback list. It records one undo snapshot
+// for the whole edit rather than one per track move.
+func (m *Model) sortLoadedPlaylistByMode(mode string) tea.Cmd {
+	loaded := m.writableLoadedPlaylist()
+	if loaded == "" {
+		m.status.Warning("The current playlist cannot be sorted here", statusTTLDefault)
+		return nil
+	}
+	tracks := m.playlist.Tracks()
+	if len(tracks) < 2 {
+		return nil
+	}
+	order := sortTrackIndices(tracks, mode)
+	alreadySorted := true
+	for i, idx := range order {
+		if i != idx {
+			alreadySorted = false
+			break
+		}
+	}
+	if alreadySorted {
+		return nil
+	}
+	sorted := make([]playlist.Track, len(order))
+	for i, idx := range order {
+		sorted[i] = tracks[idx]
+	}
+	if err := m.persistLoadedPlaylistOrder(sorted); err != nil {
+		return nil
+	}
+
+	// Reorder the live Playlist using its existing Move operation so current
+	// playback, queue positions and the current track remain coherent.
+	ids := make([]int, len(tracks))
+	for i := range ids {
+		ids[i] = i
+	}
+	for target, wanted := range order {
+		current := target
+		for current < len(ids) && ids[current] != wanted {
+			current++
+		}
+		if current == len(ids) {
+			continue
+		}
+		if current != target {
+			m.playlist.Move(current, target)
+			ids[current], ids[target] = ids[target], ids[current]
+		}
+	}
+	m.recordPlaylistUndo(playlistUndo{
+		orderEdit:   true,
+		persisted:   true,
+		snapshot:    m.playlist.Snapshot(),
+		beforeOrder: tracks,
+	})
+	m.playbackSortMode = sortModeIndex(mode)
+	m.plCursor = min(m.plCursor, max(0, m.playlist.Len()-1))
+	m.adjustScroll()
+	m.status.Showf(statusTTLDefault, "Sorted %q by %s (Ctrl+Z to undo)", loaded, mode)
+	return m.rearmStalePreload()
+}
+
+func sortModeIndex(mode string) int {
+	for i, candidate := range playlistSortModes {
+		if candidate == mode {
+			return i + 1
+		}
+	}
+	return 0
+}
+
 func (m *Model) appendTracks(tracks ...playlist.Track) int {
 	first := m.playlist.Len()
 	m.playlist.Add(tracks...)
@@ -236,11 +309,15 @@ var playlistSortModes = []string{"track", "title", "artist", "album", "artist+al
 // sortTracksByMode returns a stable copy of tracks ordered by the shared
 // playlist sort rules used by both the playlist manager and the playback list.
 func sortTracksByMode(tracks []playlist.Track, mode string) []playlist.Track {
-	out, _ := sortTrackRows(tracks, nil, mode)
+	order := sortTrackIndices(tracks, mode)
+	out := make([]playlist.Track, len(order))
+	for i, idx := range order {
+		out[i] = tracks[idx]
+	}
 	return out
 }
 
-func sortTrackRows(tracks []playlist.Track, missing []bool, mode string) ([]playlist.Track, []bool) {
+func sortTrackIndices(tracks []playlist.Track, mode string) []int {
 	order := make([]int, len(tracks))
 	for i := range order {
 		order[i] = i
@@ -248,6 +325,11 @@ func sortTrackRows(tracks []playlist.Track, missing []bool, mode string) ([]play
 	sort.SliceStable(order, func(i, j int) bool {
 		return comparePlaylistTracks(tracks[order[i]], tracks[order[j]], mode) < 0
 	})
+	return order
+}
+
+func sortTrackRows(tracks []playlist.Track, missing []bool, mode string) ([]playlist.Track, []bool) {
+	order := sortTrackIndices(tracks, mode)
 	out := make([]playlist.Track, len(order))
 	missingOut := make([]bool, len(order))
 	for i, idx := range order {
