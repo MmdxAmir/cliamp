@@ -11,7 +11,10 @@ import (
 	"github.com/bjarneo/cliamp/playlist"
 )
 
-const metadataPaneMaxRows = 8
+const (
+	metadataPaneMaxRows = 8
+	sortPaneRows = 7
+)
 
 type metadataField struct {
 	label string
@@ -100,10 +103,31 @@ func (m Model) metadataPaneRows(rows int) int {
 		controls++
 	}
 	available := rows - controls
+	if m.playbackSortMenuOpen {
+		available -= sortPaneRows
+	}
 	if available < 3 {
 		return 0
 	}
 	return min(metadataPaneMaxRows, available)
+}
+
+func (m Model) renderSortPane() []string {
+	if !m.playbackSortMenuOpen {
+		return nil
+	}
+	w := m.layout.settingsWidth
+	lines := []string{fillSeparator(sepHeader("Sort", m.layout.panelWidth), w)}
+	for i, mode := range playlistSortModes {
+		prefix := "  "
+		style := dimStyle
+		if i == m.playbackSortMenuCursor {
+			prefix = "▸ "
+			style = playlistSelectedStyle
+		}
+		lines = append(lines, style.Render(prefix+mode))
+	}
+	return lines
 }
 
 func (m Model) renderMetadataPane(rows int) []string {
