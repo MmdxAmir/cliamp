@@ -1277,9 +1277,6 @@ func (m Model) renderPlaylist() string {
 		lines = append(lines, line)
 	}
 
-	if m.focus == focusPlaylist && m.playbackSortMenuOpen {
-		return m.renderPlaybackPlaylistWithSortMenu(lines, budget)
-	}
 	return strings.Join(padLines(lines, budget, len(lines)), "\n")
 }
 
