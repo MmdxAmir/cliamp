@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -226,4 +228,52 @@ func (m *Model) persistLoadedPlaylistOrder(queue []playlist.Track) error {
 	}
 	m.status.Showf(statusTTLDefault, "Reordered %q", name)
 	return nil
+}
+
+
+var playlistSortModes = []string{"track", "title", "artist", "album", "artist+album", "path"}
+
+// sortTracksByMode returns a stable copy of tracks ordered by the shared
+// playlist sort rules used by both the playlist manager and the playback list.
+func sortTracksByMode(tracks []playlist.Track, mode string) []playlist.Track {
+	order := make([]int, len(tracks))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return comparePlaylistTracks(tracks[order[i]], tracks[order[j]], mode) < 0
+	})
+	out := make([]playlist.Track, len(order))
+	for i, idx := range order {
+		out[i] = tracks[idx]
+	}
+	return out
+}
+
+func comparePlaylistTracks(a, b playlist.Track, mode string) int {
+	cmpString := func(x, y string) int {
+		return strings.Compare(strings.ToLower(x), strings.ToLower(y))
+	}
+	first := func(values ...int) int {
+		for _, v := range values {
+			if v != 0 {
+				return v
+			}
+		}
+		return 0
+	}
+	switch mode {
+	case "track":
+		return first(a.TrackNumber-b.TrackNumber, cmpString(a.Title, b.Title), cmpString(a.Path, b.Path))
+	case "artist":
+		return first(cmpString(a.Artist, b.Artist), cmpString(a.Album, b.Album), a.TrackNumber-b.TrackNumber, cmpString(a.Title, b.Title), cmpString(a.Path, b.Path))
+	case "album":
+		return first(cmpString(a.Album, b.Album), a.TrackNumber-b.TrackNumber, cmpString(a.Title, b.Title), cmpString(a.Path, b.Path))
+	case "artist+album":
+		return first(cmpString(a.Artist, b.Artist), cmpString(a.Album, b.Album), a.TrackNumber-b.TrackNumber, cmpString(a.Title, b.Title), cmpString(a.Path, b.Path))
+	case "path":
+		return cmpString(a.Path, b.Path)
+	default:
+		return first(cmpString(a.Title, b.Title), cmpString(a.Artist, b.Artist), cmpString(a.Path, b.Path))
+	}
 }
