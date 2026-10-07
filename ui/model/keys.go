@@ -412,6 +412,12 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		case "enter":
 			return m.sortLoadedPlaylistByMode(playlistSortModes[m.playbackSortMenuCursor])
+		case "tab":
+			m.focus = m.nextMainFocus(focusSort)
+			return nil
+		case "shift+tab":
+			m.focus = m.previousMainFocus(focusSort)
+			return nil
 		case "esc", "backspace", "s":
 			m.playbackSortMenuOpen = false
 			m.focus = focusPlaylist
